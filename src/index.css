@@ -1,0 +1,417 @@
+/* BiKitchen Food - Línea Gráfica Oficial */
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ========================================
+   BiKitchen Brand Variables - Modo Claro
+   ======================================== */
+:root {
+  /* Colores Primarios */
+  --color-primary: #FF671D;
+  --color-primary-light: #FF8A4D;
+  --color-primary-dark: #E85A15;
+  
+  /* Colores Secundarios */
+  --color-secondary: #B18978;
+  --color-secondary-light: #C4A08E;
+  --color-secondary-dark: #9A7262;
+  
+  /* Fondos */
+  --color-bg: #FDFBF9;
+  --color-bg-secondary: #F5F3F1;
+  --color-surface: #FFFFFF;
+  
+  /* Texto */
+  --color-text: #2A2A2A;
+  --color-text-muted: #9A9590;
+  
+  /* Bordes */
+  --color-border: #E8E4E0;
+  
+  /* Acentos */
+  --color-accent: #FF671D;
+  --color-accent-soft: rgba(255, 103, 29, 0.1);
+  
+  /* Sombras */
+  --shadow-sm: 0 1px 2px rgba(42, 42, 42, 0.05);
+  --shadow-md: 0 4px 16px rgba(42, 42, 42, 0.1);
+  --shadow-lg: 0 8px 24px rgba(42, 42, 42, 0.12);
+  --shadow-glow: 0 0 20px rgba(255, 103, 29, 0.3);
+  
+  /* Tipografía */
+  --font-sans: 'Montserrat', sans-serif;
+  --font-display: 'Montserrat', sans-serif;
+  
+  /* Radios */
+  --radius: 12px;
+  --radius-lg: 20px;
+}
+
+/* ========================================
+   BiKitchen Brand Variables - Modo Oscuro
+   ======================================== */
+html.dark,
+:root.dark,
+.dark {
+  --color-bg: #1F1E1E;
+  --color-bg-secondary: #2A2A2A;
+  --color-surface: #3B3A39;
+  
+  --color-text: #F5F3F1;
+  --color-text-muted: #9A9590;
+  
+  --color-border: #4A4847;
+  
+  /* Mantener identidad naranja en modo oscuro */
+  --color-primary: #FF671D;
+  --color-accent: #FF671D;
+  --color-accent-soft: rgba(255, 103, 29, 0.15);
+  
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
+  --shadow-glow: 0 0 30px rgba(255, 103, 29, 0.4);
+}
+
+/* Compatibilidad con tema anterior */
+html.theme-night,
+:root.theme-night {
+  --color-bg: #1F1E1E;
+  --color-bg-secondary: #2A2A2A;
+  --color-surface: #3B3A39;
+  --color-text: #F5F3F1;
+  --color-text-muted: #9A9590;
+  --color-border: #4A4847;
+  --color-primary: #FF671D;
+  --color-accent: #FF671D;
+}
+
+
+
+/* ========================================
+   Base Styles
+   ======================================== */
+html, body {
+  height: 100%;
+  overflow-x: hidden;
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  position: relative;
+  transition: background-color 0.3s ease, color 0.3s ease;
+  /* Asegurar scroll nativo */
+  overflow-y: auto !important;
+}
+
+/* Fondo base que cambia con el tema */
+html {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+}
+
+html.dark {
+  background-color: #1F1E1E;
+  color: #F5F3F1;
+}
+
+/* Smooth theme transitions */
+* {
+  transition-property: background-color, border-color, color, fill, stroke;
+  transition-duration: 0.2s;
+  transition-timing-function: ease;
+}
+
+/* Preserve specific animation transitions */
+*[class*="animate-"],
+*[class*="transition-"] {
+  transition-property: all;
+}
+
+/* Tipografía */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+/* ========================================
+   BiKitchen Button Styles
+   ======================================== */
+.btn {
+  @apply inline-flex items-center justify-center px-6 py-3 font-semibold transition-all duration-300;
+  border-radius: var(--radius);
+}
+
+/* Botón Primario - Naranja BiKitchen */
+.btn-primary {
+  background: linear-gradient(135deg, #FF671D 0%, #E85A15 100%);
+  color: white;
+  box-shadow: 0 4px 14px rgba(255, 103, 29, 0.3);
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, #E85A15 0%, #B18978 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(255, 103, 29, 0.4);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+/* Botón Secundario - Outline Naranja */
+.btn-secondary {
+  background: transparent;
+  color: #FF671D;
+  border: 2px solid #FF671D;
+}
+
+.btn-secondary:hover {
+  background: rgba(255, 103, 29, 0.1);
+  transform: translateY(-1px);
+}
+
+/* Botón Accent - Marrón */
+.btn-accent {
+  background: linear-gradient(135deg, #B18978 0%, #9A7262 100%);
+  color: white;
+  box-shadow: 0 4px 14px rgba(177, 137, 120, 0.3);
+}
+
+.btn-accent:hover {
+  background: linear-gradient(135deg, #9A7262 0%, #7D5C4F 100%);
+  transform: translateY(-2px);
+}
+
+/* ========================================
+   Card Styles
+   ======================================== */
+.card-hover {
+  @apply transition-all duration-300;
+  border-radius: var(--radius-lg);
+}
+
+.card-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+}
+
+.card-bikitchen {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+  transition: all 0.3s ease;
+}
+
+.card-bikitchen:hover {
+  box-shadow: var(--shadow-md);
+  border-color: var(--color-primary);
+}
+
+/* ========================================
+   Glass Panel (para overlays)
+   ======================================== */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+.dark .glass-panel {
+  background: rgba(31, 30, 30, 0.85);
+  border: 1px solid rgba(74, 72, 71, 0.5);
+}
+
+/* ========================================
+   Gradient Backgrounds
+   ======================================== */
+.bg-bikitchen-gradient {
+  background: linear-gradient(135deg, #FF671D 0%, #B18978 100%);
+}
+
+.bg-bikitchen-warm {
+  background: linear-gradient(180deg, #FDFBF9 0%, #F5F3F1 100%);
+}
+
+.dark .bg-bikitchen-warm {
+  background: linear-gradient(180deg, #1F1E1E 0%, #2A2A2A 100%);
+}
+
+/* ========================================
+   Text Utilities
+   ======================================== */
+.text-bikitchen-orange {
+  color: #FF671D;
+}
+
+.text-bikitchen-brown {
+  color: #B18978;
+}
+
+/* ========================================
+   Scrollbar Styling
+   ======================================== */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg-secondary);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-secondary);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-secondary) var(--color-bg-secondary);
+}
+
+/* Animations for components */
+@keyframes shine {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes grain {
+
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+
+  10% {
+    transform: translate(-5%, -10%);
+  }
+
+  20% {
+    transform: translate(-15%, 5%);
+  }
+
+  30% {
+    transform: translate(7%, -25%);
+  }
+
+  40% {
+    transform: translate(-5%, 25%);
+  }
+
+  50% {
+    transform: translate(-15%, 10%);
+  }
+
+  60% {
+    transform: translate(15%, 0%);
+  }
+
+  70% {
+    transform: translate(0%, 15%);
+  }
+
+  80% {
+    transform: translate(3%, 35%);
+  }
+
+  90% {
+    transform: translate(-10%, 10%);
+  }
+}
+
+@keyframes float {
+
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes pulse-glow {
+
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+.animate-shine {
+  animation: shine 1.5s ease-in-out infinite;
+}
+
+.animate-grain {
+  animation: grain 8s steps(10) infinite;
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+@keyframes marquee {
+  0% {
+    transform: translateX(0);
+  }
+
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee {
+  animation: marquee 30s linear infinite;
+}
+
+@keyframes scan {
+  0% {
+    top: 0%;
+    opacity: 0;
+  }
+
+  10% {
+    opacity: 1;
+  }
+
+  90% {
+    opacity: 1;
+  }
+
+  100% {
+    top: 100%;
+    opacity: 0;
+  }
+}
+
+.animate-scan {
+  animation: scan 2s linear infinite;
+}
