@@ -163,7 +163,7 @@ export default function MenusView() {
             >
               <div className="flex items-start justify-between mb-4 gap-4">
                 <div>
-                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold mb-1">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-50 text-orange-600 text-xs font-semibold mb-1">
                     <Sparkles size={14} />
                     Vista previa para la web
                   </div>
@@ -244,13 +244,13 @@ export default function MenusView() {
                           initial={{ opacity: 0, y: 6 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ duration: 0.2, delay: index * 0.03 + idx * 0.02 }}
-                          className="bg-white/90 backdrop-blur-sm rounded-xl border border-gray-100 p-3 text-xs space-y-1 shadow-sm flex flex-col justify-between min-h-[120px] hover:shadow-md hover:border-emerald-100 transition-all"
+                          className="bg-white/90 backdrop-blur-sm rounded-xl border border-gray-100 p-3 text-xs space-y-1 shadow-sm flex flex-col justify-between min-h-[120px] hover:shadow-md hover:border-orange-100 transition-all"
                         >
                           <div className="flex items-center justify-between mb-1">
                             <p className="font-semibold text-orange-500 text-[13px]">
                               Plato {p.numero || '-'}
                             </p>
-                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100">
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-orange-50 text-orange-600 border border-orange-100">
                               Menú del día
                             </span>
                           </div>

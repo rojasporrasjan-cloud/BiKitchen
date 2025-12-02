@@ -15,8 +15,9 @@ export default {
         },
         extend: {
             colors: {
-                // BiKitchen Brand Colors
+                // BiKitchen Brand Colors (Línea Gráfica Oficial)
                 bikitchen: {
+                    // Colores principales
                     orange: '#FF671D',
                     'orange-light': '#FF8A4D',
                     'orange-dark': '#E85A15',
@@ -28,6 +29,17 @@ export default {
                     charcoal: '#2A2A2A',
                     'charcoal-light': '#3B3A39',
                     'charcoal-dark': '#1F1E1E',
+                    // Paleta Primaria (de la línea gráfica)
+                    teal: '#3D7A7A',
+                    gold: '#E9A84A',
+                    coral: '#E8734A',
+                    // Paleta Secundaria
+                    'light-blue': '#A8D5D8',
+                    olive: '#7A8C3C',
+                    peach: '#E89B7A',
+                    'dark-teal': '#3D6B6B',
+                    lime: '#B8D43C',
+                    sky: '#5BC0DE',
                 },
                 // Legacy compatibility colors
                 bg: '#FDFBF9',

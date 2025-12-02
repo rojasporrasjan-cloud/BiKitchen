@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <circle cx="50" cy="50" r="48" fill="#FF671D"/>
+  <text x="50" y="38" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="white">BiKitchen</text>
+  <text x="50" y="58" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">Food</text>
+  <line x1="20" y1="68" x2="80" y2="68" stroke="white" stroke-width="2" stroke-linecap="round"/>
+</svg>

@@ -46,7 +46,7 @@ export default function MenuTabs({ value, onChange }) {
             {active && (
               <motion.span
                 layoutId="menuTabHighlight"
-                className="absolute inset-0 rounded-xl bg-gradient-to-r from-emerald-500 to-lime-500 shadow-sm"
+                className="absolute inset-0 rounded-xl bg-gradient-to-r from-orange-500 to-orange-400 shadow-sm"
                 transition={{ type: 'spring', bounce: 0.25, duration: 0.3 }}
               />
             )}

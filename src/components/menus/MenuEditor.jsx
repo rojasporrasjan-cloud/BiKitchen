@@ -56,7 +56,7 @@ export default function MenuEditor({ platos, onChange }) {
           >
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-orange-500">Plato {plato.numero}</h3>
-              <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100">
+              <span className="text-[11px] px-2 py-0.5 rounded-full bg-orange-50 text-orange-600 border border-orange-100">
                 Menú del día
               </span>
             </div>
@@ -70,7 +70,7 @@ export default function MenuEditor({ platos, onChange }) {
                   type="text"
                   value={plato.proteina || ''}
                   onChange={(e) => handleFieldChange(index, 'proteina', e.target.value)}
-                  className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-500"
+                  className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-500"
                   placeholder="Ej: Pollo BBQ"
                 />
               </div>
@@ -83,7 +83,7 @@ export default function MenuEditor({ platos, onChange }) {
                   type="text"
                   value={plato.vegetal || ''}
                   onChange={(e) => handleFieldChange(index, 'vegetal', e.target.value)}
-                  className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-500"
+                  className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-500"
                   placeholder="Ej: Ensalada criolla"
                 />
               </div>
@@ -96,7 +96,7 @@ export default function MenuEditor({ platos, onChange }) {
                   type="text"
                   value={plato.carbo || ''}
                   onChange={(e) => handleFieldChange(index, 'carbo', e.target.value)}
-                  className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-500"
+                  className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-500"
                   placeholder="Ej: Puré de papa"
                 />
               </div>
@@ -108,7 +108,7 @@ export default function MenuEditor({ platos, onChange }) {
       <button
         type="button"
         onClick={addPlato}
-        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-dashed border-emerald-300 text-emerald-700 text-sm bg-emerald-50 hover:bg-emerald-100 transition-colors"
+        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-dashed border-orange-300 text-orange-600 text-sm bg-orange-50 hover:bg-orange-100 transition-colors"
       >
         <Plus size={16} />
         Agregar plato
