@@ -128,8 +128,8 @@ export default function InventoryView() {
                 </div>
             </div>
 
-            {/* Inventory Table */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            {/* Inventory Table - Desktop */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hidden md:block">
                 <div className="overflow-x-auto">
                     <table className="w-full min-w-[800px]">
                         <thead className="bg-gray-50 border-b border-gray-100">
@@ -196,6 +196,70 @@ export default function InventoryView() {
                         </tbody>
                     </table>
                 </div>
+            </div>
+
+            {/* Inventory Cards - Mobile */}
+            <div className="md:hidden space-y-3">
+                <AnimatePresence>
+                    {filteredInventory.map((item) => {
+                        const statusBadge = getStatusBadge(item.status);
+                        const StatusIcon = statusBadge.icon;
+
+                        return (
+                            <motion.div
+                                key={item.id}
+                                initial={{ opacity: 0, y: 8 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -8 }}
+                                className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex flex-col gap-3"
+                            >
+                                <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                        <div className="text-sm font-semibold text-gray-900">{item.name}</div>
+                                        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                                            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">
+                                                {item.category}
+                                            </span>
+                                            <span className="text-xs text-gray-400">
+                                                Proveedor: <span className="text-gray-600">{item.supplier}</span>
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${statusBadge.bg} ${statusBadge.text}`}>
+                                        <StatusIcon size={12} />
+                                        {statusBadge.label}
+                                    </span>
+                                </div>
+
+                                <div className="flex items-center justify-between text-sm">
+                                    <div>
+                                        <div className="font-bold text-gray-900">
+                                            {item.stock} {item.unit}
+                                        </div>
+                                        <div className="text-xs text-gray-400">Mín: {item.min}</div>
+                                    </div>
+                                    <div className="text-right">
+                                        <div className="text-[11px] uppercase text-gray-400">Valor total</div>
+                                        <div className="font-bold text-gray-900 text-sm">
+                                            ₡{(item.stock * item.cost).toLocaleString('es-CR')}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center justify-end gap-2 pt-1 border-t border-gray-100 mt-1">
+                                    <button className="px-3 py-1.5 text-xs flex items-center gap-1 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+                                        <Edit2 size={14} />
+                                        Editar
+                                    </button>
+                                    <button className="px-3 py-1.5 text-xs flex items-center gap-1 text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                                        <Trash2 size={14} />
+                                        Eliminar
+                                    </button>
+                                </div>
+                            </motion.div>
+                        );
+                    })}
+                </AnimatePresence>
             </div>
 
             {filteredInventory.length === 0 && (

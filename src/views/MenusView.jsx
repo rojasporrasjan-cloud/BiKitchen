@@ -219,7 +219,7 @@ export default function MenusView() {
                   >
                     <div className="flex items-center justify-between mb-3 gap-2">
                       <div>
-                        <h3 className="text-sm font-semibold text-gray-900 tracking-wide">
+                        <h3 className="text-sm font-semibold text-orange-500 tracking-wide">
                           {title}
                         </h3>
                         {subtitle && (
@@ -247,7 +247,7 @@ export default function MenusView() {
                           className="bg-white/90 backdrop-blur-sm rounded-xl border border-gray-100 p-3 text-xs space-y-1 shadow-sm flex flex-col justify-between min-h-[120px] hover:shadow-md hover:border-emerald-100 transition-all"
                         >
                           <div className="flex items-center justify-between mb-1">
-                            <p className="font-semibold text-gray-900 text-[13px]">
+                            <p className="font-semibold text-orange-500 text-[13px]">
                               Plato {p.numero || '-'}
                             </p>
                             <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100">

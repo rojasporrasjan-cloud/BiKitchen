@@ -292,8 +292,8 @@ export default function OrdersView() {
                 </div>
             </div>
 
-            {/* Orders Table */}
-            <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            {/* Orders Table - Desktop */}
+            <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hidden md:block">
                 <div className="overflow-x-auto">
                     <table className="w-full">
                         <thead className="bg-gray-50 border-b border-gray-100">
@@ -373,6 +373,95 @@ export default function OrdersView() {
                         </tbody>
                     </table>
                 </div>
+            </div>
+
+            {/* Orders Cards - Mobile */}
+            <div className="md:hidden mt-4 space-y-3">
+                <AnimatePresence>
+                    {loading ? (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 text-center text-gray-500"
+                        >
+                            Cargando pedidos...
+                        </motion.div>
+                    ) : sortedOrders.length === 0 ? (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 text-center text-gray-500"
+                        >
+                            <Package size={40} className="mx-auto mb-3 text-gray-300" />
+                            <p>No hay pedidos que mostrar</p>
+                        </motion.div>
+                    ) : (
+                        sortedOrders.map(order => {
+                            const status = ORDER_STATUS[order.status] || ORDER_STATUS.new;
+                            const StatusIcon = status.icon;
+
+                            return (
+                                <motion.div
+                                    key={order.id}
+                                    initial={{ opacity: 0, y: 8 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: -8 }}
+                                    className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex flex-col gap-3 cursor-pointer"
+                                    onClick={() => setSelectedOrder(order)}
+                                >
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div>
+                                            <div className="text-xs text-gray-400 uppercase">Pedido</div>
+                                            <div className="text-sm font-semibold text-gray-900">{order.displayId}</div>
+                                            <div className="mt-1 text-sm font-medium text-gray-900 flex items-center gap-1">
+                                                <User size={14} className="text-gray-400" />
+                                                {order.client}
+                                            </div>
+                                            <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-1">
+                                                <Phone size={12} className="text-gray-400" />
+                                                {order.details?.phone || 'Sin teléfono'}
+                                            </div>
+                                        </div>
+                                        <div className="text-right space-y-1">
+                                            <div className="text-[11px] uppercase text-gray-400">Total</div>
+                                            <div className="text-sm font-bold text-orange-500">{formatTotal(order)}</div>
+                                            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium ${status.color}`}>
+                                                <StatusIcon size={11} />
+                                                {status.label}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center justify-between text-xs text-gray-500 mt-1">
+                                        <div className="flex-1 pr-2 truncate">
+                                            <span className="font-medium text-gray-600">{order.plan}</span>
+                                            {order.items && (
+                                                <span className="ml-1 text-gray-400">· {order.items}</span>
+                                            )}
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                            <Clock size={12} className="text-gray-400" />
+                                            <span>{formatDate(order.createdAt)}</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center justify-end gap-2 pt-1 border-t border-gray-100 mt-1">
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setSelectedOrder(order);
+                                            }}
+                                            className="px-3 py-1.5 text-xs flex items-center gap-1 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
+                                        >
+                                            <Eye size={14} />
+                                            Ver detalle
+                                        </button>
+                                    </div>
+                                </motion.div>
+                            );
+                        })
+                    )}
+                </AnimatePresence>
             </div>
 
             {/* Order Detail Modal */}

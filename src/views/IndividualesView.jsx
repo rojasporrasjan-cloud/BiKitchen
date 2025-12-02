@@ -3,7 +3,8 @@ import ReactDOM from 'react-dom';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import PageTransition from '../components/PageTransition';
-import { INDIVIDUALES_CATEGORIES, individualesData } from '../data/individualesData';
+import { INDIVIDUALES_CATEGORIES, CATEGORY_ICONS, individualesData } from '../data/individualesData';
+import { Search } from 'lucide-react';
 import IndividualCard from '../components/IndividualCard';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCart } from '../context/CartContext';
@@ -13,6 +14,7 @@ import { ShoppingCart, X, Plus, Minus, MessageSquare, ChevronDown, Check } from 
 export default function IndividualesView() {
   const { addToCart } = useCart();
   const [categoriaActiva, setCategoriaActiva] = useState('Todos');
+  const [busqueda, setBusqueda] = useState('');
   const [productoSeleccionado, setProductoSeleccionado] = useState(null);
   const [tamano, setTamano] = useState('500'); // '500' o '1000'
   const [cantidad, setCantidad] = useState(1);
@@ -36,6 +38,16 @@ export default function IndividualesView() {
     []
   );
 
+  // Filtrar productos por búsqueda
+  const productosFiltrados = useMemo(() => {
+    if (!busqueda.trim()) return individualesData;
+    const termino = busqueda.toLowerCase().trim();
+    return individualesData.filter((p) =>
+      p.nombre.toLowerCase().includes(termino) ||
+      p.categoria.toLowerCase().includes(termino)
+    );
+  }, [busqueda]);
+
   const productosPorCategoria = useMemo(() => {
     const base = categoriaActiva === 'Todos'
       ? INDIVIDUALES_CATEGORIES
@@ -43,9 +55,14 @@ export default function IndividualesView() {
 
     return base.map((categoria) => ({
       categoria,
-      productos: individualesData.filter((p) => p.categoria === categoria)
+      productos: productosFiltrados.filter((p) => p.categoria === categoria)
     }));
-  }, [categoriaActiva]);
+  }, [categoriaActiva, productosFiltrados]);
+
+  // Contar total de resultados
+  const totalResultados = useMemo(() => {
+    return productosPorCategoria.reduce((acc, cat) => acc + cat.productos.length, 0);
+  }, [productosPorCategoria]);
 
   const abrirModal = (producto) => {
     setProductoSeleccionado(producto);
@@ -103,17 +120,50 @@ export default function IndividualesView() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4 }}
-                className="max-w-3xl mb-8"
+                className="max-w-3xl mb-6"
               >
                 <h1 className="text-4xl sm:text-5xl font-bold text-gray-900 dark:text-white mb-3">
-                  Platos Individuales
+                  🍽️ Platos Individuales
                 </h1>
                 <p className="text-gray-600 dark:text-gray-300 text-sm sm:text-base max-w-xl">
                   Elegí tus comidas favoritas por porción o por kilo. Ideal para complementar tus packs o armar tu propia semana BiKitchen.
                 </p>
               </motion.div>
 
-              {/* Filtros de categoría */}
+              {/* Buscador */}
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.05, duration: 0.3 }}
+                className="mb-6"
+              >
+                <div className="relative max-w-md">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" size={20} />
+                  <input
+                    type="text"
+                    value={busqueda}
+                    onChange={(e) => setBusqueda(e.target.value)}
+                    placeholder="Buscar platos... (ej: pollo, pasta, ensalada)"
+                    className="w-full pl-12 pr-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 transition-all shadow-sm"
+                  />
+                  {busqueda && (
+                    <button
+                      type="button"
+                      onClick={() => setBusqueda('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                    >
+                      <X size={18} />
+                    </button>
+                  )}
+                </div>
+                {busqueda && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                    {totalResultados} resultado{totalResultados !== 1 ? 's' : ''} para "{busqueda}"
+                  </p>
+                )}
+              </motion.div>
+
+              {/* Filtros de categoría con emojis */}
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -125,28 +175,37 @@ export default function IndividualesView() {
                     key={cat}
                     type="button"
                     onClick={() => setCategoriaActiva(cat)}
-                    className={`px-4 py-2 rounded-full text-xs sm:text-sm font-semibold border transition-all ${
+                    className={`px-4 py-2 rounded-full text-xs sm:text-sm font-semibold border transition-all flex items-center gap-1.5 ${
                       categoriaActiva === cat
-                        ? 'bg-[#FF671D] text-white border-[#FF671D] shadow-sm'
-                        : 'bg-white/70 dark:bg-gray-900/60 text-gray-700 dark:text-gray-200 border-[#F3E2D7] dark:border-gray-700 hover:bg-[#FFF4EC] dark:hover:bg-gray-800'
+                        ? 'bg-[#FF671D] text-white border-[#FF671D] shadow-md shadow-orange-500/20'
+                        : 'bg-white/70 dark:bg-gray-900/60 text-gray-700 dark:text-gray-200 border-[#F3E2D7] dark:border-gray-700 hover:bg-[#FFF4EC] dark:hover:bg-gray-800 hover:border-orange-300'
                     }`}
                   >
+                    {cat !== 'Todos' && <span>{CATEGORY_ICONS[cat] || '📦'}</span>}
                     {cat}
                   </button>
                 ))}
               </motion.div>
 
               {/* Secciones por categoría */}
-              <div className="space-y-10 pb-16">
+              <div className="space-y-12 pb-16">
                 {productosPorCategoria.map(({ categoria, productos }) => (
                   productos.length === 0 ? null : (
-                    <section key={categoria} className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                    <motion.section 
+                      key={categoria} 
+                      className="space-y-5"
+                      initial={{ opacity: 0, y: 20 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true, margin: "-50px" }}
+                      transition={{ duration: 0.4 }}
+                    >
+                      <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-700 pb-3">
+                        <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                          <span className="text-3xl">{CATEGORY_ICONS[categoria] || '📦'}</span>
                           {categoria}
                         </h2>
-                        <span className="text-xs text-gray-500 dark:text-gray-400">
-                          {productos.length} platos
+                        <span className="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded-full">
+                          {productos.length} plato{productos.length !== 1 ? 's' : ''}
                         </span>
                       </div>
 
@@ -164,14 +223,33 @@ export default function IndividualesView() {
                           />
                         ))}
                       </motion.div>
-                    </section>
+                    </motion.section>
                   )
                 ))}
 
                 {productosPorCategoria.every((c) => c.productos.length === 0) && (
-                  <div className="text-center text-gray-500 dark:text-gray-400 text-sm py-10">
-                    No hay productos en esta categoría por el momento.
-                  </div>
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="text-center py-16"
+                  >
+                    <div className="text-6xl mb-4">🔍</div>
+                    <p className="text-gray-500 dark:text-gray-400 text-lg font-medium">
+                      No se encontraron platos
+                    </p>
+                    <p className="text-gray-400 dark:text-gray-500 text-sm mt-1">
+                      Intenta con otra búsqueda o categoría
+                    </p>
+                    {busqueda && (
+                      <button
+                        type="button"
+                        onClick={() => setBusqueda('')}
+                        className="mt-4 px-4 py-2 text-sm text-orange-500 hover:text-orange-600 font-medium"
+                      >
+                        Limpiar búsqueda
+                      </button>
+                    )}
+                  </motion.div>
                 )}
               </div>
             </div>

@@ -161,7 +161,8 @@ export default function PurchasesView() {
                 </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            {/* Purchases Table - Desktop */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hidden md:block">
                 <div className="overflow-x-auto">
                     <table className="w-full min-w-[800px]">
                         <thead className="bg-gray-50 border-b border-gray-100">
@@ -224,6 +225,73 @@ export default function PurchasesView() {
                         </tbody>
                     </table>
                 </div>
+            </div>
+
+            {/* Purchases Cards - Mobile */}
+            <div className="md:hidden space-y-3">
+                <AnimatePresence>
+                    {filteredPurchases.map((purchase) => (
+                        <motion.div
+                            key={purchase.id}
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -8 }}
+                            className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex flex-col gap-3"
+                        >
+                            <div className="flex items-start justify-between gap-3">
+                                <div>
+                                    <div className="text-xs text-gray-400 uppercase">Fecha</div>
+                                    <div className="text-sm font-semibold text-gray-900">
+                                        {new Date(purchase.fecha).toLocaleDateString('es-CR')}
+                                    </div>
+                                    <div className="mt-1 text-sm font-medium text-gray-900">
+                                        {purchase.proveedor}
+                                    </div>
+                                    {purchase.factura && (
+                                        <div className="text-xs text-gray-500 font-mono mt-0.5">Factura: {purchase.factura}</div>
+                                    )}
+                                </div>
+                                <div className="text-right">
+                                    <div className="text-[11px] uppercase text-gray-400">Total</div>
+                                    <div className="text-sm font-bold text-gray-900">
+                                        ₡{purchase.costoTotal?.toLocaleString('es-CR')}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {purchase.productos?.length > 0 && (
+                                <div className="border-t border-gray-100 pt-2 mt-1">
+                                    <div className="text-[11px] uppercase text-gray-400 mb-1">Productos</div>
+                                    <div className="flex flex-wrap gap-1">
+                                        {purchase.productos.slice(0, 3).map((prod, idx) => (
+                                            <span
+                                                key={idx}
+                                                className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full"
+                                            >
+                                                {prod.nombre}
+                                            </span>
+                                        ))}
+                                        {purchase.productos.length > 3 && (
+                                            <span className="text-xs text-gray-400">
+                                                +{purchase.productos.length - 3} más
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="flex items-center justify-end gap-2 pt-1">
+                                <button
+                                    onClick={() => handleDeletePurchase(purchase.id)}
+                                    className="px-3 py-1.5 text-xs flex items-center gap-1 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                >
+                                    <Trash2 size={14} />
+                                    Eliminar
+                                </button>
+                            </div>
+                        </motion.div>
+                    ))}
+                </AnimatePresence>
             </div>
 
             {filteredPurchases.length === 0 && !loading && (

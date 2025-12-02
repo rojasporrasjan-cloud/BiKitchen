@@ -55,7 +55,7 @@ export default function MenuEditor({ platos, onChange }) {
             className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3"
           >
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-gray-900">Plato {plato.numero}</h3>
+              <h3 className="text-sm font-semibold text-orange-500">Plato {plato.numero}</h3>
               <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100">
                 Menú del día
               </span>

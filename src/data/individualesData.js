@@ -1,11 +1,33 @@
+// Categorías con emojis para mostrar en la UI
 export const INDIVIDUALES_CATEGORIES = [
   'Pollo',
   'Res',
   'Cerdo',
   'Pescado',
   'Vegetariano',
-  'Otros'
+  'Leguminosas',
+  'Arroces',
+  'Pastas',
+  'Sopas',
+  'Ensaladas',
+  'Complementos'
 ];
+
+// Mapeo de categorías a emojis
+export const CATEGORY_ICONS = {
+  'Pollo': '🍗',
+  'Res': '🥩',
+  'Cerdo': '🐖',
+  'Pescado': '🐟',
+  'Vegetariano': '🥬',
+  'Leguminosas': '🫘',
+  'Arroces': '🍚',
+  'Pastas': '🍝',
+  'Sopas': '🥣',
+  'Ensaladas': '🥗',
+  'Complementos': '🍽️',
+  'Otros': '📦'
+};
 
 export const individualesData = [
   // POLLO
@@ -603,14 +625,14 @@ export const individualesData = [
     imagen: 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=800&q=80'
   },
 
-  // ARROCES Y PASTAS (Otros)
+  // ARROCES
   {
     id: 'arroz-con-pollo',
     nombre: 'Arroz con pollo',
     descripcion: '',
     precio500: 7850,
     precio1kg: 14925,
-    categoria: 'Otros',
+    categoria: 'Arroces',
     imagen: 'https://images.unsplash.com/photo-1466637574441-749b8f19452f?auto=format&fit=crop&w=800&q=80'
   },
   {
@@ -619,7 +641,7 @@ export const individualesData = [
     descripcion: '',
     precio500: 8500,
     precio1kg: 16150,
-    categoria: 'Otros',
+    categoria: 'Arroces',
     imagen: 'https://images.unsplash.com/photo-1466637574441-749b8f19452f?auto=format&fit=crop&w=800&q=80'
   },
   {
@@ -628,7 +650,7 @@ export const individualesData = [
     descripcion: '',
     precio500: 8500,
     precio1kg: 16150,
-    categoria: 'Otros',
+    categoria: 'Arroces',
     imagen: 'https://images.unsplash.com/photo-1466637574441-749b8f19452f?auto=format&fit=crop&w=800&q=80'
   },
   {
@@ -637,7 +659,7 @@ export const individualesData = [
     descripcion: '',
     precio500: 9950,
     precio1kg: 18950,
-    categoria: 'Otros',
+    categoria: 'Arroces',
     imagen: 'https://images.unsplash.com/photo-1525755662778-989d0524087e?auto=format&fit=crop&w=800&q=80'
   },
   {
@@ -646,7 +668,7 @@ export const individualesData = [
     descripcion: '',
     precio500: 8500,
     precio1kg: 16150,
-    categoria: 'Otros',
+    categoria: 'Arroces',
     imagen: 'https://images.unsplash.com/photo-1525755662778-989d0524087e?auto=format&fit=crop&w=800&q=80'
   },
   {
@@ -655,7 +677,7 @@ export const individualesData = [
     descripcion: '',
     precio500: 7850,
     precio1kg: 14925,
-    categoria: 'Otros',
+    categoria: 'Arroces',
     imagen: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=800&q=80'
   },
   {
@@ -664,7 +686,7 @@ export const individualesData = [
     descripcion: '',
     precio500: 7850,
     precio1kg: 14925,
-    categoria: 'Otros',
+    categoria: 'Arroces',
     imagen: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=800&q=80'
   },
   {
@@ -673,7 +695,7 @@ export const individualesData = [
     descripcion: '',
     precio500: 8950,
     precio1kg: 17000,
-    categoria: 'Otros',
+    categoria: 'Pastas',
     imagen: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=800&q=80'
   },
   {
@@ -682,7 +704,7 @@ export const individualesData = [
     descripcion: '',
     precio500: 9950,
     precio1kg: 18950,
-    categoria: 'Otros',
+    categoria: 'Pastas',
     imagen: 'https://images.unsplash.com/photo-1525755662778-989d0524087e?auto=format&fit=crop&w=800&q=80'
   },
   {
@@ -691,7 +713,7 @@ export const individualesData = [
     descripcion: '',
     precio500: 8950,
     precio1kg: 17000,
-    categoria: 'Otros',
+    categoria: 'Pastas',
     imagen: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=800&q=80'
   },
   {
@@ -700,7 +722,7 @@ export const individualesData = [
     descripcion: '',
     precio500: 9950,
     precio1kg: 18950,
-    categoria: 'Otros',
+    categoria: 'Pastas',
     imagen: 'https://images.unsplash.com/photo-1551183053-bf91b1d3116c?auto=format&fit=crop&w=800&q=80'
   },
   {
@@ -709,7 +731,7 @@ export const individualesData = [
     descripcion: '',
     precio500: 9950,
     precio1kg: 18950,
-    categoria: 'Otros',
+    categoria: 'Pastas',
     imagen: 'https://images.unsplash.com/photo-1551183053-bf91b1d3116c?auto=format&fit=crop&w=800&q=80'
   },
   {
@@ -718,7 +740,7 @@ export const individualesData = [
     descripcion: '',
     precio500: 9250,
     precio1kg: 17850,
-    categoria: 'Otros',
+    categoria: 'Pastas',
     imagen: 'https://images.unsplash.com/photo-1551183053-bf91b1d3116c?auto=format&fit=crop&w=800&q=80'
   },
   {
@@ -727,18 +749,18 @@ export const individualesData = [
     descripcion: '',
     precio500: 8950,
     precio1kg: 17000,
-    categoria: 'Otros',
+    categoria: 'Pastas',
     imagen: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=800&q=80'
   },
 
-  // OTROS Y COMPLEMENTOS (Otros)
+  // COMPLEMENTOS
   {
     id: 'pure-papa',
     nombre: 'Puré de papa',
     descripcion: '',
     precio500: 3950,
     precio1kg: 7450,
-    categoria: 'Otros',
+    categoria: 'Complementos',
     imagen: 'https://images.unsplash.com/photo-1504753793650-d4a2b783c15e?auto=format&fit=crop&w=800&q=80'
   },
   {
@@ -747,7 +769,7 @@ export const individualesData = [
     descripcion: '',
     precio500: 3950,
     precio1kg: 7450,
-    categoria: 'Otros',
+    categoria: 'Complementos',
     imagen: 'https://images.unsplash.com/photo-1504753793650-d4a2b783c15e?auto=format&fit=crop&w=800&q=80'
   },
   {
@@ -756,7 +778,7 @@ export const individualesData = [
     descripcion: '',
     precio500: 3950,
     precio1kg: 7450,
-    categoria: 'Otros',
+    categoria: 'Complementos',
     imagen: 'https://images.unsplash.com/photo-1504753793650-d4a2b783c15e?auto=format&fit=crop&w=800&q=80'
   },
   {
@@ -765,7 +787,7 @@ export const individualesData = [
     descripcion: '',
     precio500: 4450,
     precio1kg: 8350,
-    categoria: 'Otros',
+    categoria: 'Complementos',
     imagen: 'https://images.unsplash.com/photo-1504753793650-d4a2b783c15e?auto=format&fit=crop&w=800&q=80'
   },
   {
@@ -774,7 +796,7 @@ export const individualesData = [
     descripcion: '',
     precio500: 3950,
     precio1kg: 7450,
-    categoria: 'Otros',
+    categoria: 'Complementos',
     imagen: 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=800&q=80'
   },
   {
@@ -783,7 +805,7 @@ export const individualesData = [
     descripcion: '',
     precio500: 3950,
     precio1kg: 7450,
-    categoria: 'Otros',
+    categoria: 'Ensaladas',
     imagen: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=800&q=80'
   },
   {
@@ -792,7 +814,7 @@ export const individualesData = [
     descripcion: '',
     precio500: 4450,
     precio1kg: 8350,
-    categoria: 'Otros',
+    categoria: 'Complementos',
     imagen: 'https://images.unsplash.com/photo-1504753793650-d4a2b783c15e?auto=format&fit=crop&w=800&q=80'
   },
   {
@@ -801,7 +823,7 @@ export const individualesData = [
     descripcion: '',
     precio500: 3950,
     precio1kg: 7450,
-    categoria: 'Otros',
+    categoria: 'Complementos',
     imagen: 'https://images.unsplash.com/photo-1504753793650-d4a2b783c15e?auto=format&fit=crop&w=800&q=80'
   },
   {
@@ -810,7 +832,7 @@ export const individualesData = [
     descripcion: '',
     precio500: 4450,
     precio1kg: 8350,
-    categoria: 'Otros',
+    categoria: 'Complementos',
     imagen: 'https://images.unsplash.com/photo-1504753793650-d4a2b783c15e?auto=format&fit=crop&w=800&q=80'
   },
   {
@@ -819,7 +841,7 @@ export const individualesData = [
     descripcion: '',
     precio500: 4450,
     precio1kg: 8350,
-    categoria: 'Otros',
+    categoria: 'Complementos',
     imagen: 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=800&q=80'
   },
   {
@@ -828,7 +850,56 @@ export const individualesData = [
     descripcion: '',
     precio500: 3950,
     precio1kg: 7450,
-    categoria: 'Otros',
+    categoria: 'Ensaladas',
     imagen: 'https://images.unsplash.com/photo-1504753793650-d4a2b783c15e?auto=format&fit=crop&w=800&q=80'
+  },
+
+  // ============================================================
+  // LEGUMINOSAS (Precios: 4 tazas / 6 tazas)
+  // ============================================================
+  {
+    id: 'frijoles-rojos-arreglados',
+    nombre: 'Frijoles rojos arreglados',
+    descripcion: '4 tazas / 6 tazas',
+    precio500: 5500,
+    precio1kg: 8250,
+    categoria: 'Leguminosas',
+    imagen: 'https://images.unsplash.com/photo-1515543904323-87f7c5c0e0e9?auto=format&fit=crop&w=800&q=80'
+  },
+  {
+    id: 'chili-con-carne',
+    nombre: 'Chili con carne',
+    descripcion: '4 tazas / 6 tazas',
+    precio500: 8500,
+    precio1kg: 12750,
+    categoria: 'Leguminosas',
+    imagen: 'https://images.unsplash.com/photo-1455619452474-d2be8b1e70cd?auto=format&fit=crop&w=800&q=80'
+  },
+  {
+    id: 'cubaces-carne-cerdo-pollo',
+    nombre: 'Cubaces con carne de cerdo o pollo',
+    descripcion: '4 tazas / 6 tazas',
+    precio500: 9850,
+    precio1kg: 13750,
+    categoria: 'Leguminosas',
+    imagen: 'https://images.unsplash.com/photo-1515543904323-87f7c5c0e0e9?auto=format&fit=crop&w=800&q=80'
+  },
+  {
+    id: 'frijoles-blancos-carne-cerdo-pollo',
+    nombre: 'Frijoles blancos con carne de cerdo o pollo',
+    descripcion: '4 tazas / 6 tazas',
+    precio500: 9500,
+    precio1kg: 14250,
+    categoria: 'Leguminosas',
+    imagen: 'https://images.unsplash.com/photo-1515543904323-87f7c5c0e0e9?auto=format&fit=crop&w=800&q=80'
+  },
+  {
+    id: 'garbanzos-pollo-cerdo',
+    nombre: 'Garbanzos con pollo o carne de cerdo',
+    descripcion: '4 tazas / 6 tazas',
+    precio500: 9500,
+    precio1kg: 14250,
+    categoria: 'Leguminosas',
+    imagen: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80'
   }
 ];
