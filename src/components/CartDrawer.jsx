@@ -1,83 +1,38 @@
 import React, { useState } from 'react';
-import { X, Trash2, Plus, Minus, ShoppingCart, ArrowRight } from 'lucide-react';
+import { X, Trash2, Plus, Minus, ShoppingCart, ArrowRight, Tag, Loader2, CheckCircle, XCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCart } from '../context/CartContext';
-import { useOrders } from '../context/OrdersContext';
-import { db } from '../firebase/config';
-import { collection, getDocs, query, updateDoc, doc, increment, addDoc } from 'firebase/firestore';
+import { useAuth } from '../context/AuthContext';
+import CheckoutSteps from './CheckoutSteps';
 
 export default function CartDrawer() {
-    const { cart, isCartOpen, setIsCartOpen, removeFromCart, updateQuantity, getTotalPrice, clearCart } = useCart();
-    const { addOrder } = useOrders();
-    const [showCheckout, setShowCheckout] = useState(false);
-    const [loading, setLoading] = useState(false);
+    const { 
+        cart, 
+        isCartOpen, 
+        setIsCartOpen, 
+        removeFromCart, 
+        updateQuantity, 
+        getSubtotal,
+        getDiscount,
+        getTotalPrice, 
+        appliedCoupon,
+        couponLoading,
+        couponError,
+        applyCoupon,
+        removeCoupon,
+        shippingDiscount
+    } = useCart();
+    const { currentUser } = useAuth();
+    const [couponCode, setCouponCode] = useState('');
+    const [showCouponInput, setShowCouponInput] = useState(false);
+    const [showStepsCheckout, setShowStepsCheckout] = useState(false);
 
-    const handleCheckout = async (e) => {
-        e.preventDefault();
-        setLoading(true);
-
-        const formData = new FormData(e.target);
-
-        try {
-            console.log('[Checkout] Inicio envío de pedido');
-            // Datos del cliente
-            const customerData = {
-                name: formData.get('nombre'),
-                phone: formData.get('telefono'),
-                email: formData.get('correo'),
-                address: formData.get('direccion'),
-                plan: formData.get('plan'),
-                deliveryDate: formData.get('fecha_entrega'),
-                notes: formData.get('observaciones') || ''
-            };
-
-            // Pedido operativo para hojas de producción (colección "pedidos")
-            const productionOrder = {
-                cliente: formData.get('nombre'),
-                telefono: formData.get('telefono'),
-                correo: formData.get('correo'),
-                direccion: formData.get('direccion'),
-                plan: formData.get('plan'),
-                fecha_entrega: formData.get('fecha_entrega'),
-                observaciones: formData.get('observaciones') || '',
-                menu: cart.map(item => ({
-                    nombre: item.name,
-                    proteina: item.protein || '150g',
-                    carbo: item.carbs || '100g',
-                    ensalada: item.veggies || '80g',
-                    cantidad: item.quantity
-                })),
-                total: `₡${getTotalPrice().toLocaleString('es-CR')}`,
-                status: 'new',
-                createdAt: new Date().toISOString()
-            };
-
-            // Guardar en colección usada por SheetsView
-            console.log('[Checkout] Guardando en colección "pedidos"...', productionOrder);
-            await addDoc(collection(db, 'pedidos'), productionOrder);
-            console.log('[Checkout] Documento creado en "pedidos"');
-
-            // Crear registro para panel de administración / estadísticas
-            console.log('[Checkout] Creando registro en "orders" via OrdersContext...', customerData);
-            await addOrder(cart, customerData);
-            console.log('[Checkout] Pedido registrado en "orders"');
-
-            // Descontar del inventario (simulado - en producción sería más específico)
-            // Aquí podrías implementar la lógica de descuento de inventario
-
-            // Limpiar carrito
-            clearCart();
-            setShowCheckout(false);
-            setIsCartOpen(false);
-
-            // Mostrar confirmación
-            alert('¡Pedido creado exitosamente! Recibirás una confirmación por WhatsApp.');
-
-        } catch (error) {
-            console.error('Error creating order:', error);
-            alert('Hubo un error al crear el pedido. Por favor intenta de nuevo. Revisa la consola para más detalles.');
-        } finally {
-            setLoading(false);
+    const handleApplyCoupon = async () => {
+        if (!couponCode.trim()) return;
+        const result = await applyCoupon(couponCode.trim(), currentUser?.uid);
+        if (result.success) {
+            setCouponCode('');
+            setShowCouponInput(false);
         }
     };
 
@@ -91,7 +46,7 @@ export default function CartDrawer() {
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         onClick={() => setIsCartOpen(false)}
-                        className="fixed inset-0 bg-black/50 z-50"
+                        className="fixed inset-0 bg-black/50 z-[60]"
                     />
 
                     {/* Drawer */}
@@ -100,7 +55,7 @@ export default function CartDrawer() {
                         animate={{ x: 0 }}
                         exit={{ x: '100%' }}
                         transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                        className="fixed right-0 top-0 h-full w-full sm:w-96 bg-white shadow-2xl z-50 flex flex-col"
+                        className="fixed right-0 top-0 h-full w-full sm:w-96 bg-white shadow-2xl z-[60] flex flex-col"
                     >
                         {/* Header */}
                         <div className="flex items-center justify-between p-6 border-b border-gray-200">
@@ -117,7 +72,7 @@ export default function CartDrawer() {
                         </div>
 
                         {/* Cart Items */}
-                        <div className="flex-1 overflow-y-auto p-6">
+                        <div className="flex-1 overflow-y-auto p-4 pt-2">
                             {cart.length === 0 ? (
                                 <div className="text-center py-12 text-gray-400">
                                     <ShoppingCart size={48} className="mx-auto mb-4 opacity-50" />
@@ -132,13 +87,24 @@ export default function CartDrawer() {
                                             initial={{ opacity: 0, y: 20 }}
                                             animate={{ opacity: 1, y: 0 }}
                                             exit={{ opacity: 0, y: -20 }}
-                                            className="flex gap-4 p-4 bg-gray-50 rounded-lg"
+                                            className="flex gap-3 p-3 bg-gray-50 rounded-xl"
                                         >
-                                            <img
-                                                src={item.image}
-                                                alt={item.name}
-                                                className="w-20 h-20 object-cover rounded-lg"
-                                            />
+                                            <div className="w-20 h-20 rounded-lg overflow-hidden bg-gray-200 flex-shrink-0">
+                                                {item.image ? (
+                                                    <img
+                                                        src={item.image}
+                                                        alt={item.name}
+                                                        className="w-full h-full object-cover"
+                                                        onError={(e) => {
+                                                            e.target.style.display = 'none';
+                                                            e.target.nextSibling.style.display = 'flex';
+                                                        }}
+                                                    />
+                                                ) : null}
+                                                <div className={`w-full h-full items-center justify-center bg-gradient-to-br from-bikitchen-orange/20 to-bikitchen-gold/20 ${item.image ? 'hidden' : 'flex'}`}>
+                                                    <span className="text-2xl">🍽️</span>
+                                                </div>
+                                            </div>
                                             <div className="flex-1 min-w-0">
                                                 <h3 className="font-semibold text-gray-900 truncate">{item.name}</h3>
                                                 {item.planLabel && (
@@ -153,10 +119,10 @@ export default function CartDrawer() {
                                                 )}
                                                 <div className="mt-2 flex items-center justify-between">
                                                     <span className="text-xs text-gray-500">
-                                                        Precio unitario: <span className="font-semibold">₡{item.price.toLocaleString('es-CR')}</span>
+                                                        Precio unitario: <span className="font-semibold">₡{(Number(item.price) || 0).toLocaleString('es-CR')}</span>
                                                     </span>
                                                     <span className="text-xs font-bold text-orange-500">
-                                                        Subtotal: ₡{(item.price * item.quantity).toLocaleString('es-CR')}
+                                                        Subtotal: ₡{((Number(item.price) || 0) * (Number(item.quantity) || 0)).toLocaleString('es-CR')}
                                                     </span>
                                                 </div>
                                                 <div className="flex items-center gap-2 mt-2">
@@ -189,140 +155,128 @@ export default function CartDrawer() {
 
                         {/* Footer */}
                         {cart.length > 0 && (
-                            <div className="border-t border-gray-200 p-6 space-y-4">
-                                <div className="flex justify-between items-center text-lg font-bold">
-                                    <span>Total:</span>
-                                    <span className="text-orange-500">₡{getTotalPrice().toLocaleString('es-CR')}</span>
+                            <div className="border-t border-gray-200 p-4 sm:p-6 space-y-3">
+                                {/* Sección de Cupón */}
+                                <div className="space-y-2">
+                                    {appliedCoupon ? (
+                                        <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                                            <div className="flex items-center gap-2">
+                                                <CheckCircle size={16} className="text-green-600" />
+                                                <div>
+                                                    <span className="text-sm font-semibold text-green-700">{appliedCoupon.code}</span>
+                                                    <p className="text-xs text-green-600">{appliedCoupon.discountText}</p>
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={removeCoupon}
+                                                className="text-green-600 hover:text-green-800 p-1"
+                                            >
+                                                <X size={16} />
+                                            </button>
+                                        </div>
+                                    ) : showCouponInput ? (
+                                        <div className="space-y-2">
+                                            <div className="flex gap-2">
+                                                <input
+                                                    type="text"
+                                                    value={couponCode}
+                                                    onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                                                    placeholder="Código de cupón"
+                                                    className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 uppercase"
+                                                    onKeyDown={(e) => e.key === 'Enter' && handleApplyCoupon()}
+                                                />
+                                                <button
+                                                    onClick={handleApplyCoupon}
+                                                    disabled={couponLoading || !couponCode.trim()}
+                                                    className="px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                                                >
+                                                    {couponLoading ? <Loader2 size={16} className="animate-spin" /> : 'Aplicar'}
+                                                </button>
+                                            </div>
+                                            {couponError && (
+                                                <div className="flex items-center gap-2 text-red-600 text-xs">
+                                                    <XCircle size={14} />
+                                                    {couponError}
+                                                </div>
+                                            )}
+                                            <button
+                                                onClick={() => {
+                                                    setShowCouponInput(false);
+                                                    setCouponCode('');
+                                                }}
+                                                className="text-xs text-gray-500 hover:text-gray-700"
+                                            >
+                                                Cancelar
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <button
+                                            onClick={() => setShowCouponInput(true)}
+                                            className="flex items-center gap-2 text-sm text-orange-600 hover:text-orange-700 font-medium"
+                                        >
+                                            <Tag size={16} />
+                                            ¿Tienes un cupón de descuento?
+                                        </button>
+                                    )}
                                 </div>
-                                <button
-                                    onClick={() => setShowCheckout(true)}
-                                    className="w-full py-3 bg-orange-500 text-white rounded-lg font-medium hover:bg-orange-600 transition-colors flex items-center justify-center gap-2"
-                                >
-                                    Finalizar Compra
-                                    <ArrowRight size={18} />
-                                </button>
+
+                                {/* Resumen de precios */}
+                                <div className="space-y-1 pt-2 border-t border-gray-100">
+                                    <div className="flex justify-between text-sm text-gray-600">
+                                        <span>Subtotal</span>
+                                        <span>₡{getSubtotal().toLocaleString('es-CR')}</span>
+                                    </div>
+                                    {appliedCoupon && getDiscount() > 0 && (
+                                        <div className="flex justify-between text-sm text-green-600">
+                                            <span>Descuento ({appliedCoupon.code})</span>
+                                            <span>-₡{getDiscount().toLocaleString('es-CR')}</span>
+                                        </div>
+                                    )}
+                                    {shippingDiscount > 0 && (
+                                        <div className="flex justify-between text-sm text-blue-600">
+                                            <span>🚚 Envío</span>
+                                            <span className="font-medium">Pagas solo {100 - shippingDiscount}%</span>
+                                        </div>
+                                    )}
+                                    <div className="flex justify-between items-center text-lg font-bold pt-1">
+                                        <span>Total:</span>
+                                        <span className="text-orange-500">₡{getTotalPrice().toLocaleString('es-CR')}</span>
+                                    </div>
+                                    <p className="text-xs text-gray-400 text-center">+ envío según zona</p>
+                                </div>
+
+                                {/* Botones de checkout */}
+                                <div className="space-y-2 pt-2">
+                                    <button
+                                        onClick={() => setShowStepsCheckout(true)}
+                                        className="w-full py-3 bg-bikitchen-orange text-white rounded-lg font-medium hover:bg-bikitchen-orange-dark transition-colors flex items-center justify-center gap-2"
+                                    >
+                                        Finalizar Pedido
+                                        <ArrowRight size={18} />
+                                    </button>
+                                </div>
+
+                                {/* Métodos de pago aceptados */}
+                                <div className="pt-3 border-t border-gray-100">
+                                    <p className="text-xs text-gray-400 text-center mb-2">Aceptamos</p>
+                                    <div className="flex items-center justify-center gap-3 flex-wrap">
+                                        <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-1 rounded">SINPE Móvil</span>
+                                        <span className="text-xs font-semibold text-purple-600 bg-purple-50 px-2 py-1 rounded">Transferencia</span>
+                                        <span className="text-xs font-semibold text-green-600 bg-green-50 px-2 py-1 rounded">WhatsApp</span>
+                                    </div>
+                                </div>
                             </div>
                         )}
                     </motion.div>
 
-                    {/* Checkout Modal */}
-                    <AnimatePresence>
-                        {showCheckout && (
-                            <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50">
-                                <motion.div
-                                    initial={{ opacity: 0, scale: 0.9 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    exit={{ opacity: 0, scale: 0.9 }}
-                                    className="bg-white rounded-xl p-6 max-w-md w-full max-h-[90vh] overflow-y-auto"
-                                    onClick={(e) => e.stopPropagation()}
-                                >
-                                    <h2 className="text-2xl font-bold text-gray-900 mb-4">Finalizar Pedido</h2>
-                                    <form onSubmit={handleCheckout} className="space-y-4">
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                                Nombre Completo *
-                                            </label>
-                                            <input
-                                                name="nombre"
-                                                type="text"
-                                                required
-                                                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/20"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                                Teléfono *
-                                            </label>
-                                            <input
-                                                name="telefono"
-                                                type="tel"
-                                                required
-                                                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/20"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                                Correo Electrónico *
-                                            </label>
-                                            <input
-                                                name="correo"
-                                                type="email"
-                                                required
-                                                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/20"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                                Dirección de Entrega *
-                                            </label>
-                                            <textarea
-                                                name="direccion"
-                                                required
-                                                rows="2"
-                                                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/20"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                                Plan *
-                                            </label>
-                                            <select
-                                                name="plan"
-                                                required
-                                                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/20"
-                                            >
-                                                <option value="">Selecciona un plan</option>
-                                                <option value="Semanal">Semanal</option>
-                                                <option value="Quincenal">Quincenal</option>
-                                                <option value="Mensual">Mensual</option>
-                                                <option value="Personalizado">Personalizado</option>
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                                Fecha de Entrega *
-                                            </label>
-                                            <input
-                                                name="fecha_entrega"
-                                                type="date"
-                                                required
-                                                min={new Date().toISOString().split('T')[0]}
-                                                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/20"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                                Observaciones
-                                            </label>
-                                            <textarea
-                                                name="observaciones"
-                                                rows="2"
-                                                placeholder="Alergias, preferencias, etc."
-                                                className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/20"
-                                            />
-                                        </div>
-
-                                        <div className="flex gap-3 pt-4">
-                                            <button
-                                                type="button"
-                                                onClick={() => setShowCheckout(false)}
-                                                className="flex-1 py-2 px-4 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
-                                            >
-                                                Cancelar
-                                            </button>
-                                            <button
-                                                type="submit"
-                                                disabled={loading}
-                                                className="flex-1 py-2 px-4 bg-orange-500 text-white rounded-lg font-medium hover:bg-orange-600 transition-colors disabled:bg-gray-300"
-                                            >
-                                                {loading ? 'Procesando...' : 'Confirmar Pedido'}
-                                            </button>
-                                        </div>
-                                    </form>
-                                </motion.div>
-                            </div>
-                        )}
-                    </AnimatePresence>
+                    {/* Step-by-Step Checkout */}
+                    <CheckoutSteps 
+                        isOpen={showStepsCheckout} 
+                        onClose={() => {
+                            setShowStepsCheckout(false);
+                            setIsCartOpen(false);
+                        }} 
+                    />
                 </>
             )}
         </AnimatePresence>

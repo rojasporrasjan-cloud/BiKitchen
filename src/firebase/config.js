@@ -1,20 +1,30 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+import { initializeFirestore, memoryLocalCache } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 import { getAnalytics } from "firebase/analytics";
+import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
-    apiKey: "AIzaSyAJqCEGTB3ezOPfXrNlHsw6rLJioTAd6_o",
-    authDomain: "bikitchen-app.firebaseapp.com",
-    projectId: "bikitchen-app",
-    storageBucket: "bikitchen-app.firebasestorage.app",
-    messagingSenderId: "597611402552",
-    appId: "1:597611402552:web:d4bb1a0804e1f3b791ddcd",
-    measurementId: "G-VJBDBGPHV6"
+    apiKey: "AIzaSyD6ZUpIYtXhTFp9lZGZgLX4mPp959H0PCo",
+    authDomain: "bikitchen-food.firebaseapp.com",
+    projectId: "bikitchen-food",
+    storageBucket: "bikitchen-food.firebasestorage.app",
+    messagingSenderId: "281700974825",
+    appId: "1:281700974825:web:0b45828ccc7745b340b078"
 };
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
-export const db = getFirestore(app);
+let analytics;
+try {
+    analytics = getAnalytics(app);
+} catch (e) { }
+
+// Configurar Firestore SIN caché persistente para evitar problemas en móviles
+// Esto asegura que siempre se obtengan datos frescos del servidor
+export const db = initializeFirestore(app, {
+    localCache: memoryLocalCache()
+});
+
 export const auth = getAuth(app);
+export const storage = getStorage(app);

@@ -10,29 +10,64 @@ const MENU_LABELS = {
   fullPack: 'Full Pack',
   keto: 'Keto',
   bajoCalorias: 'Bajo Calorías',
-  ceroCarbos: 'Sin Carbos',
   sinCarbos: 'Sin Carbos',
   regular: 'Regular',
   vegetariano: 'Vegetariano',
   casaditos: 'Casaditos'
 };
 
-// Opciones de proteína preferida con precio adicional para algunas
-const PROTEIN_OPTIONS = [
-  { id: 'default', label: 'Según menú', icon: '🍽️', price: 0 },
-  { id: 'pollo', label: 'Pollo', icon: '🍗', price: 0 },
-  { id: 'res', label: 'Res', icon: '🥩', price: 500 },
-  { id: 'cerdo', label: 'Cerdo', icon: '🥓', price: 0 },
-  { id: 'pescado', label: 'Pescado', icon: '🐟', price: 800 }
-];
-
-// Opciones de extras con precio
-const EXTRAS_OPTIONS = [
-  { id: 'proteina_extra', label: 'Proteína extra (+50g)', price: 1500, icon: '🥩', desc: 'Porción adicional de proteína' },
-  { id: 'doble_proteina', label: 'Doble proteína (+100g)', price: 2500, icon: '💪', desc: 'El doble de proteína en tu plato' },
-  { id: 'carbos_extra', label: 'Carbohidratos extra', price: 800, icon: '🍚', desc: 'Porción adicional de carbos' },
-  { id: 'vegetales_extra', label: 'Vegetales extra', price: 600, icon: '🥦', desc: 'Más vegetales frescos' }
-];
+// Información de porciones por tipo de pack
+const PACK_PORTIONS = {
+  fullPack: {
+    protein: '150g',
+    carbos: 3,
+    veggies: 2,
+    description: 'Porción completa con máxima variedad',
+    color: 'from-purple-500 to-indigo-500'
+  },
+  regular: {
+    protein: '100g',
+    carbos: 2,
+    veggies: 1,
+    description: 'Porción balanceada ideal para el día a día',
+    color: 'from-blue-500 to-cyan-500'
+  },
+  bajoCalorias: {
+    protein: '120g',
+    carbos: 1,
+    veggies: 2,
+    description: 'Más vegetales, menos carbohidratos',
+    color: 'from-green-500 to-emerald-500'
+  },
+  sinCarbos: {
+    protein: '120g',
+    carbos: 0,
+    veggies: 3,
+    description: 'Sin carbohidratos, máximos vegetales',
+    color: 'from-red-500 to-orange-500'
+  },
+  keto: {
+    protein: '200g',
+    carbos: 0,
+    veggies: 3,
+    description: 'Alto en proteína y grasas saludables',
+    color: 'from-amber-500 to-yellow-500'
+  },
+  vegetariano: {
+    protein: 'Vegetal',
+    carbos: 2,
+    veggies: 2,
+    description: 'Proteína 100% vegetal',
+    color: 'from-lime-500 to-green-500'
+  },
+  casaditos: {
+    protein: '100g',
+    carbos: 2,
+    veggies: 1,
+    description: 'Estilo tradicional costarricense',
+    color: 'from-orange-500 to-amber-500'
+  }
+};
 
 // Menús oficiales de la semana 2024-11-22 (fuente única de verdad para fallback)
 const OFFICIAL_MENUS_2024_11_22 = {
@@ -94,8 +129,6 @@ export default function MenuDetailsModal({ menuKey, isOpen, onClose, packInfo })
   const scrollContainerRef = useRef(null);
   
   // Estados para personalización
-  const [selectedProtein, setSelectedProtein] = useState('default');
-  const [selectedExtras, setSelectedExtras] = useState([]);
   const [quantity, setQuantity] = useState(1);
   const [notes, setNotes] = useState('');
   const [showNotes, setShowNotes] = useState(false);
@@ -103,59 +136,29 @@ export default function MenuDetailsModal({ menuKey, isOpen, onClose, packInfo })
   // Cart context
   const { addToCart } = useCart();
   
-  // Calcular precio de proteína seleccionada
-  const proteinPrice = PROTEIN_OPTIONS.find(p => p.id === selectedProtein)?.price || 0;
-  
-  // Calcular precio de extras
-  const extrasTotal = selectedExtras.reduce((sum, extraId) => {
-    const extra = EXTRAS_OPTIONS.find(e => e.id === extraId);
-    return sum + (extra?.price || 0);
-  }, 0);
-  
   // Precio base del pack
   const basePrice = packInfo?.numericPrice || 0;
   
-  // Precio total por unidad
-  const unitPrice = basePrice + proteinPrice + extrasTotal;
+  // Precio total por unidad (sin extras de proteína)
+  const unitPrice = basePrice;
   
   // Precio total con cantidad
   const totalPrice = unitPrice * quantity;
   
-  // Toggle extra
-  const toggleExtra = (extraId) => {
-    // Si selecciona doble proteína, quitar proteína extra y viceversa
-    if (extraId === 'doble_proteina' && selectedExtras.includes('proteina_extra')) {
-      setSelectedExtras(prev => prev.filter(id => id !== 'proteina_extra').concat(extraId));
-    } else if (extraId === 'proteina_extra' && selectedExtras.includes('doble_proteina')) {
-      setSelectedExtras(prev => prev.filter(id => id !== 'doble_proteina').concat(extraId));
-    } else {
-      setSelectedExtras(prev => 
-        prev.includes(extraId) 
-          ? prev.filter(id => id !== extraId)
-          : [...prev, extraId]
-      );
-    }
-  };
   
   // Añadir al carrito
   const handleAddToCart = () => {
-    const protein = PROTEIN_OPTIONS.find(p => p.id === selectedProtein);
-    const extras = selectedExtras.map(id => EXTRAS_OPTIONS.find(e => e.id === id));
-    
     addToCart({
       id: `menu-${menuKey}-${Date.now()}`,
       name: title,
       desc: packInfo?.desc || 'Menú semanal BiKitchen',
       image: packInfo?.image || '/assets/menu-default.jpg',
-      price: `₡${unitPrice.toLocaleString('es-CR')}`,
+      price: unitPrice,
       numericPrice: unitPrice,
       quantity: quantity,
       menuKey,
       plan: packInfo?.plan || 'Semanal',
       customizations: {
-        protein: protein?.id !== 'default' ? protein?.label : null,
-        proteinPrice: proteinPrice,
-        extras: extras.map(e => ({ label: e?.label, price: e?.price })).filter(e => e.label),
         notes: notes.trim()
       }
     });
@@ -168,8 +171,6 @@ export default function MenuDetailsModal({ menuKey, isOpen, onClose, packInfo })
   };
   
   const resetForm = () => {
-    setSelectedProtein('default');
-    setSelectedExtras([]);
     setQuantity(1);
     setNotes('');
     setShowNotes(false);
@@ -189,23 +190,41 @@ export default function MenuDetailsModal({ menuKey, isOpen, onClose, packInfo })
     const load = async () => {
       setLoading(true);
       try {
-        // Cargar menú oficial (sin fechas)
-        const data = await getOfficialMenus();
+        // CRÍTICO: Forzar recarga desde servidor para que los cambios se vean en móviles
+        // y en el pack mensual con desayunos gratis
+        const data = await getOfficialMenus(true);
+        
+        console.log('[MenuDetailsModal] Datos recibidos de Firebase:', {
+          menuKey,
+          hasData: !!data,
+          hasMenuKey: !!data[menuKey],
+          platosCount: data[menuKey]?.length || 0,
+          allKeys: Object.keys(data),
+          firstPlato: data[menuKey]?.[0]
+        });
         
         // Buscar los platos del tipo de menú seleccionado
-        let platos = data[menuKey] || data.ceroCarbos || [];
+        let platos = data[menuKey] || [];
         
-        // Si no hay platos, usar fallback local
-        if (!Array.isArray(platos) || platos.length === 0) {
-          platos = OFFICIAL_MENUS_2024_11_22[menuKey] || OFFICIAL_MENUS_2024_11_22.fullPack || [];
+        console.log('[MenuDetailsModal] Platos encontrados:', {
+          menuKey,
+          platosLength: platos.length,
+          platos: platos.slice(0, 2) // Mostrar primeros 2 platos
+        });
+        
+        // IMPORTANTE: NO usar fallback local - si no hay datos en Firebase, mostrar vacío
+        // Esto asegura que SIEMPRE se vean los datos actuales de Firebase
+        if (!Array.isArray(platos)) {
+          platos = [];
         }
 
         setDishes(platos.slice(0, 5));
       } catch (e) {
         console.error('[MenuDetailsModal] Error loading menu details', e);
-        // Usar fallback local en caso de error
-        const fallback = OFFICIAL_MENUS_2024_11_22[menuKey] || OFFICIAL_MENUS_2024_11_22.fullPack || [];
-        setDishes(fallback.slice(0, 5));
+        // Mostrar mensaje de error al usuario en lugar de fallar silenciosamente
+        alert('Error cargando el menú desde Firebase. Por favor, verifica que los menús estén configurados correctamente en el admin.');
+        // En caso de error, mostrar vacío en lugar de datos antiguos
+        setDishes([]);
       }
       setLoading(false);
     };
@@ -218,6 +237,12 @@ export default function MenuDetailsModal({ menuKey, isOpen, onClose, packInfo })
     const label = MENU_LABELS[menuKey] || menuKey;
     setTitle(`Menú ${label}`);
   }, [menuKey]);
+
+  // Obtener información de porciones del pack actual
+  const portionInfo = PACK_PORTIONS[menuKey] || PACK_PORTIONS.regular;
+  
+  // Detectar si es menú sin carbohidratos (Keto o Sin Carbos)
+  const isNoCarbsMenu = menuKey === 'keto' || menuKey === 'sinCarbos' || menuKey === 'cenaKeto' || menuKey === 'cenaSinCarbos';
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
@@ -252,6 +277,49 @@ export default function MenuDetailsModal({ menuKey, isOpen, onClose, packInfo })
             WebkitOverflowScrolling: 'touch'
           }}
         >
+          {/* Card de información de porciones */}
+          <div className={`bg-gradient-to-r ${portionInfo.color} rounded-2xl p-4 text-white shadow-lg`}>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-lg">📏</span>
+              <h4 className="font-bold text-sm">Cada plato incluye:</h4>
+            </div>
+            
+            <div className="grid grid-cols-3 gap-2 mb-3">
+              {/* Proteína */}
+              <div className="bg-white/20 backdrop-blur-sm rounded-xl p-3 text-center">
+                <div className="text-2xl mb-1">🍗</div>
+                <div className="text-lg font-bold">{portionInfo.protein}</div>
+                <div className="text-xs text-white/80">Proteína</div>
+              </div>
+              
+              {/* Vegetales */}
+              <div className="bg-white/20 backdrop-blur-sm rounded-xl p-3 text-center">
+                <div className="text-2xl mb-1">🥦</div>
+                <div className="text-lg font-bold">{portionInfo.veggies}</div>
+                <div className="text-xs text-white/80">{portionInfo.veggies === 1 ? 'Vegetal' : 'Vegetales'}</div>
+              </div>
+              
+              {/* Carbohidratos - Solo mostrar si NO es menú Keto/Sin Carbos */}
+              {!isNoCarbsMenu ? (
+                <div className="bg-white/20 backdrop-blur-sm rounded-xl p-3 text-center">
+                  <div className="text-2xl mb-1">🍚</div>
+                  <div className="text-lg font-bold">{portionInfo.carbos}</div>
+                  <div className="text-xs text-white/80">{portionInfo.carbos === 1 ? 'Carbo' : 'Carbos'}</div>
+                </div>
+              ) : (
+                <div className="bg-white/20 backdrop-blur-sm rounded-xl p-3 text-center">
+                  <div className="text-2xl mb-1">🚫</div>
+                  <div className="text-lg font-bold">0</div>
+                  <div className="text-xs text-white/80">Sin carbos</div>
+                </div>
+              )}
+            </div>
+            
+            <p className="text-xs text-white/90 text-center italic">
+              ✨ {portionInfo.description}
+            </p>
+          </div>
+
           {loading && (
             <div className="flex items-center justify-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
@@ -291,7 +359,9 @@ export default function MenuDetailsModal({ menuKey, isOpen, onClose, packInfo })
                           <p className="text-sm font-medium text-gray-800">{dish.proteina || '-'}</p>
                           <div className="flex flex-wrap gap-2 text-xs text-gray-600">
                             <span className="bg-white px-2 py-0.5 rounded-full">🥦 {dish.vegetal || '-'}</span>
-                            <span className="bg-white px-2 py-0.5 rounded-full">🍚 {dish.carbo || '-'}</span>
+                            {!isNoCarbsMenu && (
+                              <span className="bg-white px-2 py-0.5 rounded-full">🍚 {dish.carbo || '-'}</span>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -303,103 +373,19 @@ export default function MenuDetailsModal({ menuKey, isOpen, onClose, packInfo })
               {/* Separador */}
               <div className="border-t border-gray-200 pt-4">
                 <h4 className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
-                  <span className="w-6 h-6 bg-orange-500 text-white rounded-lg flex items-center justify-center text-xs">✨</span>
-                  Personaliza tu pedido
+                  <MessageSquare size={18} className="text-orange-500" />
+                  Anotaciones especiales
                 </h4>
                 
-                {/* Selector de proteína preferida */}
-                <div className="mb-4">
-                  <label className="text-xs font-medium text-gray-600 mb-2 block">
-                    Elige tu proteína preferida
-                  </label>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    {PROTEIN_OPTIONS.map(option => (
-                      <button
-                        key={option.id}
-                        onClick={() => setSelectedProtein(option.id)}
-                        className={`relative px-3 py-2.5 rounded-xl text-sm font-medium transition-all border-2 ${
-                          selectedProtein === option.id
-                            ? 'bg-orange-500 text-white border-orange-500 shadow-lg shadow-orange-500/30'
-                            : 'bg-white text-gray-700 border-gray-200 hover:border-orange-300 hover:bg-orange-50'
-                        }`}
-                      >
-                        <span className="text-lg mr-1">{option.icon}</span>
-                        <span>{option.label}</span>
-                        {option.price > 0 && (
-                          <span className={`block text-[10px] mt-0.5 ${selectedProtein === option.id ? 'text-orange-100' : 'text-orange-500'}`}>
-                            +₡{option.price.toLocaleString()}
-                          </span>
-                        )}
-                        {selectedProtein === option.id && (
-                          <div className="absolute -top-1 -right-1 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
-                            <Check size={12} className="text-white" />
-                          </div>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Extras de proteína */}
-                <div className="mb-4">
-                  <label className="text-xs font-medium text-gray-600 mb-2 block">
-                    ¿Quieres más proteína? 💪
-                  </label>
-                  <div className="space-y-2">
-                    {EXTRAS_OPTIONS.map(extra => (
-                      <button
-                        key={extra.id}
-                        onClick={() => toggleExtra(extra.id)}
-                        className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm transition-all border-2 ${
-                          selectedExtras.includes(extra.id)
-                            ? 'bg-orange-50 border-orange-500 shadow-sm'
-                            : 'bg-white border-gray-200 hover:border-orange-300'
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="text-xl">{extra.icon}</span>
-                          <div className="text-left">
-                            <p className={`font-medium ${selectedExtras.includes(extra.id) ? 'text-orange-700' : 'text-gray-800'}`}>
-                              {extra.label}
-                            </p>
-                            <p className="text-xs text-gray-500">{extra.desc}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-orange-600 font-bold">+₡{extra.price.toLocaleString()}</span>
-                          <div className={`w-6 h-6 rounded-full flex items-center justify-center transition-colors ${
-                            selectedExtras.includes(extra.id) 
-                              ? 'bg-orange-500 text-white' 
-                              : 'bg-gray-100 text-gray-400'
-                          }`}>
-                            {selectedExtras.includes(extra.id) ? <Check size={14} /> : <Plus size={14} />}
-                          </div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
                 {/* Anotaciones */}
                 <div>
-                  <button
-                    onClick={() => setShowNotes(!showNotes)}
-                    className="flex items-center gap-2 text-sm text-gray-600 hover:text-orange-500 transition-colors"
-                  >
-                    <MessageSquare size={16} />
-                    <span>Agregar anotaciones especiales</span>
-                    <ChevronDown size={14} className={`transition-transform ${showNotes ? 'rotate-180' : ''}`} />
-                  </button>
-                  
-                  {showNotes && (
-                    <textarea
-                      value={notes}
-                      onChange={(e) => setNotes(e.target.value)}
-                      placeholder="Ej: Sin zanahoria, sin repollo, alergia a mariscos..."
-                      className="mt-2 w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 resize-none"
-                      rows={2}
-                    />
-                  )}
+                  <textarea
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="Ej: Sin zanahoria, sin repollo, alergia a mariscos, preferencia de proteína..."
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 resize-none"
+                    rows={3}
+                  />
                 </div>
               </div>
             </>
@@ -411,21 +397,9 @@ export default function MenuDetailsModal({ menuKey, isOpen, onClose, packInfo })
           {/* Resumen de precio */}
           <div className="space-y-1 mb-3">
             <div className="flex justify-between text-sm text-gray-600">
-              <span>Precio base:</span>
+              <span>Precio por unidad:</span>
               <span>₡{basePrice.toLocaleString()}</span>
             </div>
-            {proteinPrice > 0 && (
-              <div className="flex justify-between text-sm text-gray-600">
-                <span>Proteína ({PROTEIN_OPTIONS.find(p => p.id === selectedProtein)?.label}):</span>
-                <span>+₡{proteinPrice.toLocaleString()}</span>
-              </div>
-            )}
-            {extrasTotal > 0 && (
-              <div className="flex justify-between text-sm text-gray-600">
-                <span>Extras:</span>
-                <span>+₡{extrasTotal.toLocaleString()}</span>
-              </div>
-            )}
             <div className="flex justify-between text-base font-bold text-gray-900 pt-1 border-t border-gray-200">
               <span>Total:</span>
               <span className="text-orange-600">₡{totalPrice.toLocaleString()}</span>

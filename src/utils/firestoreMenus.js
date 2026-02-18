@@ -11,32 +11,34 @@ import { db } from '../firebase/config';
 import {
   doc,
   getDoc,
+  getDocFromServer,
   setDoc,
   serverTimestamp
 } from 'firebase/firestore';
+import { cachedFetch, invalidateCache, invalidateCacheByType, setCache } from './firestoreCache';
 
 // Menú oficial por defecto (plantilla BiKitchen)
-const DEFAULT_MENUS = {
+export const DEFAULT_MENUS = {
   sinCarbos: [
-    { numero: 1, proteina: 'Trocitos de res en salsa de hongos', vegetal: 'Ayotes salteados', carbo: '—' },
-    { numero: 2, proteina: 'Pollo en salsa criolla', vegetal: 'Picadillo mixto', carbo: '—' },
-    { numero: 3, proteina: 'Bistec de cerdo encebollado', vegetal: 'Vegetales asados', carbo: '—' },
-    { numero: 4, proteina: 'Fajitas de pollo encebolladas', vegetal: 'Picadillo mixto', carbo: '—' },
-    { numero: 5, proteina: 'Pollo en salsa BBQ', vegetal: 'Ensalada coleslaw', carbo: '—' }
+    { numero: 1, proteina: 'Pollo en salsa criolla', vegetal: 'Picadillo de zucchini', carbo: '—' },
+    { numero: 2, proteina: 'Lomo de cerdo en salsa gravy', vegetal: 'Vegetales salteados', carbo: '—' },
+    { numero: 3, proteina: 'Pollo al pesto', vegetal: 'Crema de vegetales', carbo: '—' },
+    { numero: 4, proteina: 'Fajitas de lomo con chimichurri', vegetal: 'Picadillo de vainica y zanahoria', carbo: '—' },
+    { numero: 5, proteina: 'Pollo en salsa de hongos', vegetal: 'Chayotes gratinados', carbo: '—' }
   ],
   bajoCalorias: [
-    { numero: 1, proteina: 'Canelones relleno de carne molida', vegetal: 'Ayotes salteados', carbo: 'Arroz blanco' },
-    { numero: 2, proteina: 'Pollo en salsa criolla', vegetal: 'Guiso de chayote con maíz dulce', carbo: 'Arroz blanco' },
-    { numero: 3, proteina: 'Bistec de cerdo encebollado', vegetal: 'Vegetales asados', carbo: 'Puré de papa' },
-    { numero: 4, proteina: 'Fajitas de pollo encebolladas', vegetal: 'Picadillo mixto', carbo: 'Arroz jardinero' },
-    { numero: 5, proteina: 'Pollo en salsa BBQ', vegetal: 'Ensalada coleslaw', carbo: 'Yuca frita' }
+    { numero: 1, proteina: 'Pollo en salsa criolla', vegetal: 'Ensalada fresca', carbo: 'Arroz y frijoles' },
+    { numero: 2, proteina: 'Carne mechada', vegetal: 'Ensalada verde', carbo: 'Picadillo de papa' },
+    { numero: 3, proteina: 'Filet de tilapia al ajillo', vegetal: 'Vegetales salteados', carbo: 'Arroz blanco' },
+    { numero: 4, proteina: 'Pollo en salsa de mostaza', vegetal: 'Ensalada mixta', carbo: 'Picadillo mixto' },
+    { numero: 5, proteina: 'Pollo asado', vegetal: 'Ensalada fresca', carbo: 'Arroz blanco' }
   ],
   regular: [
-    { numero: 1, proteina: 'Canelones relleno de carne molida', vegetal: 'Ayotes salteados', carbo: 'Arroz blanco' },
-    { numero: 2, proteina: 'Pollo en salsa criolla', vegetal: 'Guiso de chayote con maíz dulce', carbo: 'Arroz blanco' },
-    { numero: 3, proteina: 'Bistec de cerdo encebollado', vegetal: 'Vegetales asados', carbo: 'Puré de papa' },
-    { numero: 4, proteina: 'Fajitas de pollo encebolladas', vegetal: 'Picadillo mixto', carbo: 'Arroz jardinero' },
-    { numero: 5, proteina: 'Pollo en salsa BBQ', vegetal: 'Ensalada coleslaw', carbo: 'Yuca frita' }
+    { numero: 1, proteina: 'Pollo en salsa criolla', vegetal: 'Ensalada fresca', carbo: 'Arroz y frijoles' },
+    { numero: 2, proteina: 'Carne mechada', vegetal: 'Ensalada verde', carbo: 'Picadillo de papa' },
+    { numero: 3, proteina: 'Filet de tilapia al ajillo', vegetal: 'Vegetales salteados', carbo: 'Arroz blanco' },
+    { numero: 4, proteina: 'Pollo en salsa de mostaza', vegetal: 'Ensalada mixta', carbo: 'Picadillo mixto' },
+    { numero: 5, proteina: 'Pollo asado', vegetal: 'Ensalada fresca', carbo: 'Arroz blanco' }
   ],
   keto: [
     { numero: 1, proteina: 'Zucchini rellenos con carne molida', vegetal: 'Vegetales salteados', carbo: '—' },
@@ -60,40 +62,135 @@ const DEFAULT_MENUS = {
     { numero: 5, proteina: 'Cerdo en salsa BBQ', vegetal: 'Zanahoria salteada', carbo: 'Arroz integral' }
   ],
   fullPack: [
-    { numero: 1, proteina: 'Pollo en salsa BBQ', vegetal: 'Picadillo mixto', carbo: 'Puré de papa' },
-    { numero: 2, proteina: 'Bistec encebollado', vegetal: 'Vegetales asados', carbo: 'Arroz blanco' },
-    { numero: 3, proteina: 'Fajitas de pollo encebolladas', vegetal: 'Ensalada coleslaw', carbo: 'Yuca frita' },
-    { numero: 4, proteina: 'Carne en salsa criolla', vegetal: 'Ayotes salteados', carbo: 'Arroz jardinero' },
-    { numero: 5, proteina: 'Pollo al curry', vegetal: 'Guiso de chayote con maíz dulce', carbo: 'Arroz blanco' }
-  ]
+    { numero: 1, proteina: 'Pollo en salsa criolla', vegetal: 'Ensalada fresca', carbo: 'Arroz y frijoles' },
+    { numero: 2, proteina: 'Carne mechada', vegetal: 'Ensalada verde', carbo: 'Picadillo de papa' },
+    { numero: 3, proteina: 'Filet de tilapia al ajillo', vegetal: 'Vegetales salteados', carbo: 'Arroz blanco' },
+    { numero: 4, proteina: 'Pollo en salsa de mostaza', vegetal: 'Ensalada mixta', carbo: 'Picadillo mixto' },
+    { numero: 5, proteina: 'Pollo asado', vegetal: 'Ensalada fresca', carbo: 'Arroz blanco' }
+  ],
+  desayuno: [
+    { numero: 1, proteina: 'Gallo pinto con huevos revueltos', vegetal: 'Queso fresco', carbo: 'Tortilla' },
+    { numero: 2, proteina: 'Tostadas francesas con miel', vegetal: 'Frutas frescas', carbo: 'Café o jugo' },
+    { numero: 3, proteina: 'Pastel de tortilla con frijol y queso', vegetal: 'Natilla', carbo: 'Café o jugo' },
+    { numero: 4, proteina: 'Flautas de queso con salsa ranchera', vegetal: 'Frijoles molidos', carbo: 'Café o jugo' },
+    { numero: 5, proteina: 'Gallo pinto con huevo y jamón', vegetal: 'Queso y natilla', carbo: 'Tortilla' }
+  ],
+  familiarPremium: [
+    { numero: 1, proteina: 'Spaguettis en salsa pomodoro con pollo', vegetal: '4 porciones', carbo: '—' },
+    { numero: 2, proteina: 'Salchichas con papas', vegetal: '4 porciones', carbo: '—' },
+    { numero: 3, proteina: 'Trocitos de cerdo en salsa de piña', vegetal: '500 g', carbo: '—' },
+    { numero: 4, proteina: 'Crema de ayote sazón', vegetal: '4 porciones', carbo: '—' },
+    { numero: 5, proteina: 'Tortas de huevo con espinacas', vegetal: '4 porciones', carbo: '—' },
+    { numero: 6, proteina: 'Puré de camote', vegetal: '4 porciones', carbo: '—' }
+  ],
+  familiarDeluxe: [
+    { numero: 1, proteina: 'Arroz con palmito gratinado', vegetal: '4 porciones', carbo: '—' },
+    { numero: 2, proteina: 'Carne mechada en salsa', vegetal: '4 porciones', carbo: '—' },
+    { numero: 3, proteina: 'Pollo con papas achiotado', vegetal: '4 porciones', carbo: '—' },
+    { numero: 4, proteina: 'Picadillo de vainica con zanahoria y carne molida', vegetal: '4 porciones', carbo: '—' },
+    { numero: 5, proteina: 'Filet de tilapia empanizada', vegetal: '4 porciones', carbo: '—' },
+    { numero: 6, proteina: 'Yuca al ajillo', vegetal: '4 porciones', carbo: '—' },
+    { numero: 7, proteina: 'Escabeche de vegetales', vegetal: '4 porciones', carbo: '—' }
+  ],
+  // ========== MENÚS DE CENA (Separados del almuerzo) ==========
+  // Estructura: { menuType: { cena: [...platos] } }
+  cena: {
+    fullPack: [
+      { numero: 1, proteina: 'Fajitas mixtas encebolladas', vegetal: 'Ensalada fresca', carbo: 'Papas salteadas' },
+      { numero: 2, proteina: 'Pollo en salsa criolla', vegetal: 'Vegetales salteados', carbo: 'Puré de papa' },
+      { numero: 3, proteina: 'Pollo en salsa de mostaza', vegetal: 'Ensalada mixta', carbo: 'Arroz blanco' },
+      { numero: 4, proteina: 'Carne en salsa de res', vegetal: 'Ensalada verde', carbo: 'Arroz y frijoles' },
+      { numero: 5, proteina: 'Filet de tilapia al ajillo', vegetal: 'Vegetales al vapor', carbo: 'Arroz blanco' }
+    ],
+    keto: [
+      { numero: 1, proteina: 'Salmón con mantequilla de ajo', vegetal: 'Espárragos envueltos en tocino', carbo: '—' },
+      { numero: 2, proteina: 'Pollo relleno de queso y espinaca', vegetal: 'Coliflor rostizada', carbo: '—' },
+      { numero: 3, proteina: 'Lomo en salsa cremosa', vegetal: 'Ensalada César sin crutones', carbo: '—' },
+      { numero: 4, proteina: 'Camarones al ajillo', vegetal: 'Calabacín en espiral', carbo: '—' },
+      { numero: 5, proteina: 'Bistec con mantequilla de hierbas', vegetal: 'Champiñones salteados', carbo: '—' }
+    ],
+    bajoCalorias: [
+      { numero: 1, proteina: 'Fajitas mixtas encebolladas', vegetal: 'Ensalada fresca', carbo: 'Papas salteadas' },
+      { numero: 2, proteina: 'Pollo en salsa criolla', vegetal: 'Vegetales salteados', carbo: 'Puré de papa' },
+      { numero: 3, proteina: 'Pollo en salsa de mostaza', vegetal: 'Ensalada mixta', carbo: 'Arroz blanco' },
+      { numero: 4, proteina: 'Carne en salsa de res', vegetal: 'Ensalada verde', carbo: 'Arroz y frijoles' },
+      { numero: 5, proteina: 'Filet de tilapia al ajillo', vegetal: 'Vegetales al vapor', carbo: 'Arroz blanco' }
+    ],
+    sinCarbos: [
+      { numero: 1, proteina: 'Cerdo en salsa BBQ', vegetal: 'Picadillo mixto', carbo: '—' },
+      { numero: 2, proteina: 'Pollo en salsa de mostaza', vegetal: 'Vegetales salteados', carbo: '—' },
+      { numero: 3, proteina: 'Filet de tilapia al ajillo', vegetal: 'Picadillo de zucchini', carbo: '—' },
+      { numero: 4, proteina: 'Carne en salsa de res', vegetal: 'Ayotes salteados', carbo: '—' },
+      { numero: 5, proteina: 'Pollo en salsa criolla', vegetal: 'Picadillo de chayote', carbo: '—' }
+    ],
+    regular: [
+      { numero: 1, proteina: 'Fajitas mixtas encebolladas', vegetal: 'Ensalada fresca', carbo: 'Papas salteadas' },
+      { numero: 2, proteina: 'Pollo en salsa criolla', vegetal: 'Vegetales salteados', carbo: 'Puré de papa' },
+      { numero: 3, proteina: 'Pollo en salsa de mostaza', vegetal: 'Ensalada mixta', carbo: 'Arroz blanco' },
+      { numero: 4, proteina: 'Carne en salsa de res', vegetal: 'Ensalada verde', carbo: 'Arroz y frijoles' },
+      { numero: 5, proteina: 'Filet de tilapia al ajillo', vegetal: 'Vegetales al vapor', carbo: 'Arroz blanco' }
+    ],
+    vegetariano: [
+      { numero: 1, proteina: 'Tofu teriyaki', vegetal: 'Edamame y brócoli', carbo: 'Arroz jazmín' },
+      { numero: 2, proteina: 'Hamburguesa de frijol negro', vegetal: 'Ensalada de col', carbo: 'Camote asado' },
+      { numero: 3, proteina: 'Curry de garbanzos', vegetal: 'Espinacas', carbo: 'Arroz basmati' },
+      { numero: 4, proteina: 'Falafel horneado', vegetal: 'Ensalada tabule', carbo: 'Pan pita' },
+      { numero: 5, proteina: 'Pasta primavera', vegetal: 'Vegetales de temporada', carbo: 'Pasta integral' }
+    ],
+    casaditos: [
+      { numero: 1, proteina: 'Pollo guisado', vegetal: 'Ensalada de repollo', carbo: 'Arroz y frijoles' },
+      { numero: 2, proteina: 'Carne en salsa', vegetal: 'Picadillo de papa', carbo: 'Tortillas' },
+      { numero: 3, proteina: 'Cerdo en salsa roja', vegetal: 'Ensalada rusa', carbo: 'Arroz blanco' },
+      { numero: 4, proteina: 'Bistec a la plancha', vegetal: 'Plátano maduro', carbo: 'Arroz y frijoles' },
+      { numero: 5, proteina: 'Pollo frito', vegetal: 'Ensalada verde', carbo: 'Puré de papa' }
+    ]
+  }
 };
 
 /**
  * getOfficialMenus
  * 
  * Obtiene el menú oficial actual. Si no existe en Firestore, retorna la plantilla por defecto.
+ * OPTIMIZADO: Usa caché local para reducir lecturas de Firestore
+ * @param {boolean} forceRefresh - Si es true, ignora el caché y obtiene datos frescos de Firebase
  */
-export async function getOfficialMenus() {
+export async function getOfficialMenus(forceRefresh = false) {
   try {
     const ref = doc(db, 'menus_oficial', 'current');
-    const snap = await getDoc(ref);
-    
-    if (!snap.exists()) {
-      // Si no existe, guardar la plantilla por defecto y retornarla
-      await saveOfficialMenus(DEFAULT_MENUS);
-      return DEFAULT_MENUS;
+    if (forceRefresh) {
+      console.log('[getOfficialMenus] 🔄 Forzando recarga desde servidor...');
+      // Usar getDocFromServer para saltar el caché de Firebase SDK
+      const snap = await getDocFromServer(ref);
+
+      if (!snap.exists()) {
+        console.warn('[getOfficialMenus] ⚠️ No existe documento current');
+        // ELIMINADO: No intentar crear defaults automáticamente en lectura pública
+        // Esto causaba que un error de red o permisos reiniciara la BD
+
+        const error = new Error('No hay menús configurados en Firebase.');
+        error.code = 'NO_MENUS_CONFIGURED';
+        throw error;
+      }
+
+      const data = snap.data();
+      console.log('[getOfficialMenus] ✅ Datos frescos obtenidos:', Object.keys(data));
+      // Actualizar caché local
+      setCache('menus_official_current', data, 'menus_official');
+      return data;
     }
-    
-    const data = snap.data();
-    // Normalizar: asegurar que ceroCarbos exista como alias de sinCarbos
-    if (data.sinCarbos && !data.ceroCarbos) {
-      data.ceroCarbos = data.sinCarbos;
-    }
-    return data;
+
+    return await cachedFetch('menus_official_current', async () => {
+      const snap = await getDoc(ref);
+      if (!snap.exists()) {
+        const error = new Error('No hay menús configurados.');
+        error.code = 'NO_MENUS_CONFIGURED';
+        throw error;
+      }
+      return snap.data();
+    }, 'menus_official');
   } catch (error) {
-    console.error('[Menus] Error obteniendo menú oficial:', error);
-    // En caso de error, retornar plantilla por defecto
-    return DEFAULT_MENUS;
+    console.error('[getOfficialMenus] Error:', error);
+    throw error;
   }
 }
 
@@ -104,18 +201,48 @@ export async function getOfficialMenus() {
  */
 export async function saveOfficialMenus(data, meta = {}) {
   const ref = doc(db, 'menus_oficial', 'current');
-  
-  // Asegurar que ceroCarbos sea alias de sinCarbos
+
+  // Limpiar campos antiguos de cena (cenaFullPack, cenaKeto, etc.)
+  const cleanedData = { ...data };
+  delete cleanedData.cenaFullPack;
+  delete cleanedData.cenaKeto;
+  delete cleanedData.cenaBajoCalorias;
+  delete cleanedData.cenaSinCarbos;
+  delete cleanedData.cenaRegular;
+  delete cleanedData.cenaVegetariano;
+  delete cleanedData.cenaCasaditos;
+
   const payload = {
-    ...data,
-    ceroCarbos: data.sinCarbos || data.ceroCarbos,
+    ...cleanedData,
     meta: {
       lastModifiedAt: serverTimestamp(),
+      lastModifiedTimestamp: Date.now(), // Timestamp para forzar actualización
       ...meta
     }
   };
-  
-  await setDoc(ref, payload, { merge: true });
+
+  console.log('[saveOfficialMenus] Guardando payload.cena:', payload.cena);
+
+  // VALIDACIÓN DE SEGURIDAD
+  const isReset = meta.resetBy === 'admin' || meta.desayunosInitialized;
+  const hasCriticalData = Array.isArray(data.desayuno) && Array.isArray(data.fullPack) && Array.isArray(data.regular);
+
+  if (!isReset && !hasCriticalData && !meta.force) {
+    console.error('❌ BLOQUEO DE SEGURIDAD: Intentando guardar menús incompletos', {
+      hasDesayuno: Array.isArray(data.desayuno),
+      hasFullPack: Array.isArray(data.fullPack),
+      hasRegular: Array.isArray(data.regular)
+    });
+    throw new Error('SAFETY_LOCK: No se pueden guardar menús incompletos/vacíos. Recarga la página.');
+  }
+
+  await setDoc(ref, payload, { merge: false }); // merge: false para sobrescribir completamente
+
+  // CRÍTICO: Invalidar TODO el caché de menús para forzar recarga en móviles
+  invalidateCacheByType('menus_official');
+  invalidateCache('menus_official');
+
+  console.log('[saveOfficialMenus] ✅ Menús guardados y caché invalidado');
 }
 
 /**
@@ -126,6 +253,56 @@ export async function saveOfficialMenus(data, meta = {}) {
 export async function resetToDefaultMenus() {
   await saveOfficialMenus(DEFAULT_MENUS, { resetBy: 'admin' });
   return DEFAULT_MENUS;
+}
+
+/**
+ * ensureDesayunosExist
+ * 
+ * Asegura que los desayunos existan en Firebase (sin usar caché).
+ * Útil para inicialización o cuando se detecta que faltan desayunos.
+ */
+export async function ensureDesayunosExist() {
+  try {
+    const ref = doc(db, 'menus_oficial', 'current');
+    const snap = await getDoc(ref);
+
+    if (!snap.exists()) {
+      // Si no existe el documento, crear con todos los menús por defecto
+      await setDoc(ref, {
+        ...DEFAULT_MENUS,
+        meta: {
+          lastModifiedAt: serverTimestamp(),
+          createdBy: 'system',
+          desayunosInitialized: true
+        }
+      });
+      invalidateCache('menus_official');
+      console.log('✅ Menús inicializados con desayunos');
+      return true;
+    }
+
+    const data = snap.data();
+    if (!data.desayuno || data.desayuno.length === 0) {
+      // Si existe el documento pero no tiene desayunos, agregarlos
+      await setDoc(ref, {
+        desayuno: DEFAULT_MENUS.desayuno,
+        meta: {
+          ...data.meta,
+          lastModifiedAt: serverTimestamp(),
+          desayunosAddedBy: 'system'
+        }
+      }, { merge: true });
+      invalidateCache('menus_official');
+      console.log('✅ Desayunos agregados al menú oficial');
+      return true;
+    }
+
+    console.log('✅ Desayunos ya existen en Firebase');
+    return false;
+  } catch (error) {
+    console.error('❌ Error asegurando desayunos:', error);
+    return false;
+  }
 }
 
 // Funciones legacy para compatibilidad (redirigen al menú oficial)
@@ -153,4 +330,96 @@ export async function setActiveWeek() {
 export async function duplicatePreviousWeek() {
   // Retorna el menú oficial actual
   return getOfficialMenus();
+}
+
+/**
+ * getPackPrices
+ * 
+ * Obtiene los precios de los packs desde Firestore.
+ * OPTIMIZADO: Usa caché local para reducir lecturas de Firestore
+ */
+export async function getPackPrices() {
+  return cachedFetch('pack_prices', async () => {
+    try {
+      const ref = doc(db, 'config', 'pack_prices');
+      const snap = await getDoc(ref);
+
+      if (!snap.exists()) {
+        return null; // Usar precios por defecto
+      }
+
+      return snap.data();
+    } catch (error) {
+      console.error('[Menus] Error obteniendo precios:', error);
+      return null;
+    }
+  }, 'prices');
+}
+
+/**
+ * savePackPrices
+ * 
+ * Guarda los precios de los packs en Firestore.
+ */
+export async function savePackPrices(prices) {
+  const ref = doc(db, 'config', 'pack_prices');
+
+  const payload = {
+    ...prices,
+    lastModifiedAt: serverTimestamp()
+  };
+
+  await setDoc(ref, payload, { merge: true });
+
+  // Invalidar caché
+  invalidateCache('pack_prices');
+}
+
+/**
+ * fixTwoPackPrices
+ * 
+ * Actualiza los precios del Two Pack en Firebase.
+ * El Two Pack tiene 25% de descuento en el pack mensual + 10% de descuento en el envío mensual.
+ */
+export async function fixTwoPackPrices() {
+  try {
+    // IMPORTANTE: Esta función solo debe ejecutarse cuando hay permisos de admin
+    // Si falla, no hacer nada (usuarios sin login no pueden escribir)
+    const ref = doc(db, 'config', 'pack_prices');
+    const snap = await getDoc(ref);
+
+    const currentPrices = snap.exists() ? snap.data() : {};
+
+    // Precios del Two Pack con 25% de descuento en pack mensual (Fórmula: semanal × 4 × 0.75)
+    const twoPackPrices = {
+      'Pack Sin Carbos': { weekly: 49000, biweekly: 91000, monthly: 147000 },
+      'Pack Bajo Calorías': { weekly: 51700, biweekly: 93000, monthly: 155100 },
+      'Pack Regular': { weekly: 55700, biweekly: 100260, monthly: 167100 },
+      'Pack Casaditos': { weekly: 55700, biweekly: 100260, monthly: 167100 },
+      'Full Pack': { weekly: 67800, biweekly: 126000, monthly: 203400 },
+      'Pack Vegetariano': { weekly: 55700, biweekly: 100260, monthly: 167100 },
+      'Pack Keto': { weekly: 67800, biweekly: 126000, monthly: 203400 }
+    };
+
+    const updatedPrices = {
+      ...currentPrices,
+      two_pack: {
+        ...currentPrices.two_pack,
+        packs: twoPackPrices
+      },
+      lastModifiedAt: serverTimestamp()
+    };
+
+    await setDoc(ref, updatedPrices, { merge: true });
+
+    console.log('✅ Precios del Two Pack actualizados con 25% de descuento');
+    return true;
+  } catch (error) {
+    // Silenciar error de permisos - es normal para usuarios sin login
+    if (error.code === 'permission-denied') {
+      return false;
+    }
+    console.error('❌ Error actualizando precios:', error);
+    return false;
+  }
 }

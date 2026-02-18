@@ -1,163 +1,110 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import PageTransition from '../components/PageTransition';
-import { X, ShoppingCart, Check, Eye, Info } from 'lucide-react';
+import { X, ShoppingCart, Check, Eye, Info, Utensils } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCart } from '../context/CartContext';
-import IngredientScanner from '../components/IngredientScanner';
+import { useMenusRefresh } from '../hooks/useMenusRefresh';
+import { usePromoBanner } from '../hooks/usePromoBanner';
+import { Link } from 'react-router-dom';
+import { trackViewContent } from '../services/facebookPixel';
 
-const MOCK_MEALS = [
-    {
-        id: 1,
-        title: "Pollo Limón & Romero",
-        category: "Pollo",
-        goal: "Balance",
-        image: "https://images.unsplash.com/photo-1604908176997-125f25cc6f3d?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
-        calories: 420,
-        protein: "35g",
-        carbs: "25g",
-        fat: "12g",
-        price: 7500,
-        description: "Pechuga de pollo de granja marinada en cítricos y romero fresco, servida sobre una cama de quinoa tricolor y espárragos grillados.",
-        ingredients: ["Pechuga de Pollo", "Limón Real", "Romero", "Quinoa", "Espárragos"]
-    },
-    {
-        id: 2,
-        title: "Filete Teriyaki Artesanal",
-        category: "Res",
-        goal: "Muscle",
-        image: "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
-        calories: 550,
-        protein: "40g",
-        carbs: "45g",
-        fat: "18g",
-        price: 8500,
-        description: "Cortes premium de res en nuestra salsa teriyaki de la casa (sin azúcar refinada), acompañados de brócoli al vapor y arroz jazmín.",
-        ingredients: ["Filete de Res", "Salsa Teriyaki Casera", "Arroz Jazmín", "Brócoli", "Ajonjolí"]
-    },
-    {
-        id: 3,
-        title: "Salmón del Atlántico",
-        category: "Pescado",
-        goal: "Low Carb",
-        image: "https://images.unsplash.com/photo-1467003909585-2f8a7270028d?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
-        calories: 480,
-        protein: "32g",
-        carbs: "20g",
-        fat: "22g",
-        price: 9500,
-        description: "Salmón fresco horneado lentamente para mantener su jugosidad, servido con vegetales de estación y un toque de eneldo.",
-        ingredients: ["Salmón Fresco", "Zanahoria Baby", "Calabacín", "Eneldo", "Aceite de Oliva"]
-    },
-    {
-        id: 4,
-        title: "Lasaña de la Huerta",
-        category: "Veggie",
-        goal: "Balance",
-        image: "https://images.unsplash.com/photo-1551183053-bf91b1d3116c?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
-        calories: 380,
-        protein: "18g",
-        carbs: "42g",
-        fat: "14g",
-        price: 7000,
-        description: "Láminas de pasta integral intercaladas con una rica mezcla de espinacas, champiñones portobello y nuestra salsa pomodoro rústica.",
-        ingredients: ["Pasta Integral", "Espinaca Orgánica", "Portobello", "Tomates", "Ricotta"]
-    },
-    {
-        id: 5,
-        title: "Albóndigas de Pavo",
-        category: "Pollo",
-        goal: "Muscle",
-        image: "https://images.unsplash.com/photo-1529042410759-befb1204b468?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
-        calories: 410,
-        protein: "38g",
-        carbs: "28g",
-        fat: "15g",
-        price: 7800,
-        description: "Albóndigas ligeras de pavo en salsa de chipotle suave, acompañadas de un puré de camote dulce y cremoso.",
-        ingredients: ["Pavo Molido", "Chipotle", "Camote", "Huevo de Campo", "Cilantro"]
-    },
-    {
-        id: 6,
-        title: "Wrap de Atún Fresco",
-        category: "Pescado",
-        goal: "Low Carb",
-        image: "https://images.unsplash.com/photo-1540420773420-3366772f4999?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
-        calories: 320,
-        protein: "28g",
-        carbs: "12g",
-        fat: "10g",
-        price: 6500,
-        description: "Ensalada de atún preparada al momento con vegetales crujientes, envuelta en hojas frescas de lechuga romana.",
-        ingredients: ["Lomo de Atún", "Lechuga Romana", "Pepino", "Apio", "Yogurt Griego"]
-    }
-];
-
-const GOALS = ["Todos", "Balance", "Muscle", "Low Carb"];
+// Categorías de menú disponibles
+const MENU_CATEGORIES = {
+    regular: { name: 'Regular', icon: '🍱', desc: 'Comida completa y balanceada' },
+    bajoCalorias: { name: 'Bajo Calorías', icon: '🥗', desc: 'Ligero y nutritivo' },
+    sinCarbos: { name: 'Sin Carbos', icon: '🥩', desc: 'Proteína + vegetales' },
+    keto: { name: 'Keto', icon: '🥑', desc: 'Alto en grasas saludables' },
+    vegetariano: { name: 'Vegetariano', icon: '🥦', desc: 'Plant-based' },
+    casaditos: { name: 'Casaditos', icon: '🍚', desc: 'Estilo tradicional tico' },
+    fullPack: { name: 'Full Pack', icon: '🍽️', desc: 'Máxima variedad' }
+};
 
 export default function CatalogPage() {
-    const [activeGoal, setActiveGoal] = useState("Todos");
-    const [selectedMeal, setSelectedMeal] = useState(null);
-    const { addToCart } = useCart();
+    const [activeCategory, setActiveCategory] = useState('regular');
+    const showPromoBanner = usePromoBanner();
 
-    const filteredMeals = activeGoal === "Todos"
-        ? MOCK_MEALS
-        : MOCK_MEALS.filter(meal => meal.goal === activeGoal);
+    // Usar el nuevo hook que recarga automáticamente cuando la página vuelve a estar visible
+    const { menus, loading } = useMenusRefresh();
 
-    const handleAddToCart = (meal) => {
-        addToCart({
-            id: `meal-${meal.id}`,
-            name: meal.title,
-            desc: `${meal.calories} Kcal | ${meal.protein} Proteína`,
-            icon: '🍽️',
-            price: meal.price,
-            plan: 'single',
-            planLabel: 'A la Carta'
+    // Track ViewContent cuando se carga la página de menú
+    useEffect(() => {
+        trackViewContent({
+            id: 'menu-page',
+            name: 'Menú Semanal',
+            category: 'Menu',
+            price: 0
         });
-    };
+    }, []);
+
+    const currentMenu = menus?.[activeCategory] || [];
+    const categoryInfo = MENU_CATEGORIES[activeCategory];
 
     return (
         <PageTransition>
-            <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white dark:from-gray-900 dark:to-gray-800">
+            <div className="min-h-screen bg-gradient-to-b from-bikitchen-beige to-white">
                 <Navbar />
 
-                {/* Hero Section - BiKitchen Orange */}
-                <header className="relative pt-32 pb-20 bg-gradient-to-br from-orange-500 via-orange-600 to-amber-600 text-white overflow-hidden">
-                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_70%,rgba(255,255,255,0.1)_1px,transparent_1px)] bg-[length:32px_32px] opacity-30"></div>
-                    <div className="absolute top-0 right-0 w-96 h-96 bg-white/5 rounded-full blur-3xl"></div>
-                    <div className="absolute bottom-0 left-0 w-80 h-80 bg-amber-400/10 rounded-full blur-3xl"></div>
+                {/* Hero Section */}
+                <header
+                    className="relative pt-28 pb-20 md:pt-36 md:pb-24 bg-gradient-to-br from-orange-500 via-amber-500 to-orange-600 text-white overflow-hidden"
+                    style={{
+                        paddingTop: showPromoBanner
+                            ? `calc(var(--promo-banner-height, 0px) + 112px)`
+                            : undefined
+                    }}
+                >
+                    {/* Decorative orbs */}
+                    <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-gradient-to-br from-white/20 to-transparent rounded-full blur-3xl"></div>
+                    <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-gradient-to-tr from-yellow-400/30 to-transparent rounded-full blur-3xl"></div>
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-br from-pink-500/10 via-purple-500/10 to-transparent rounded-full blur-3xl"></div>
+                    {/* Pattern overlay */}
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_70%,rgba(255,255,255,0.15)_1px,transparent_1px)] bg-[length:40px_40px] opacity-40"></div>
 
                     <div className="container relative z-10 text-center">
                         <motion.div
-                            initial={{ opacity: 0, y: -20 }}
+                            initial={{ opacity: 0, y: 30 }}
                             animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.6 }}
+                            transition={{ duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] }}
                         >
-                            <h1 className="text-5xl md:text-6xl font-bold mb-6">
-                                Menú Individual
+                            <motion.span
+                                className="inline-block mb-6 px-6 py-3 bg-white/20 backdrop-blur-md rounded-full text-base font-bold border border-white/30 shadow-xl"
+                                initial={{ scale: 0.9 }}
+                                animate={{ scale: 1 }}
+                                transition={{ delay: 0.2, duration: 0.4 }}
+                            >
+                                🍽️ Menú Semanal BiKitchen
+                            </motion.span>
+                            <h1 className="text-5xl md:text-6xl lg:text-7xl font-black mb-6 drop-shadow-lg leading-tight">
+                                Menú de la Semana
                             </h1>
-                            <p className="text-xl md:text-2xl mb-6 max-w-3xl mx-auto font-light text-white/90">
-                                Elige plato por plato: desayunos y comidas individuales que puedes combinar con tus packs.
+                            <p className="text-xl md:text-2xl mb-8 max-w-3xl mx-auto font-medium text-white/95 leading-relaxed">
+                                Descubre los platos que preparamos esta semana para cada tipo de pack
                             </p>
-                            <p className="text-sm md:text-base mb-8 max-w-2xl mx-auto text-white/70">
-                                Sin carbos, bajo en calorías, regular, vegetariano, keto y más.
-                                <br />Si prefieres que armemos todo por ti, visita la página de <a href="/packs" className="underline font-semibold hover:text-white">packs</a>.
+                            <p className="text-base md:text-lg mb-8 max-w-2xl mx-auto text-white/80 font-medium">
+                                Cada semana renovamos nuestro menú con opciones frescas y variadas.
+                                <br />¿Quieres ordenar? Visita nuestra <Link to="/packs" className="underline font-bold hover:text-white transition-colors">página de packs</Link>.
                             </p>
-                            <div className="flex flex-wrap justify-center gap-3 text-sm">
-                                <div className="flex items-center gap-2 bg-white/20 backdrop-blur-sm px-4 py-2 rounded-xl">
-                                    <Check size={16} />
-                                    <span>100% Natural</span>
+                            <motion.div
+                                className="flex flex-wrap justify-center gap-4 text-base mb-8"
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: 0.3, duration: 0.5 }}
+                            >
+                                <div className="flex items-center gap-2 bg-white/25 backdrop-blur-md px-5 py-3 rounded-2xl border border-white/30 shadow-lg font-semibold">
+                                    <Check size={18} className="flex-shrink-0" />
+                                    <span>Menú Rotativo</span>
                                 </div>
-                                <div className="flex items-center gap-2 bg-white/20 backdrop-blur-sm px-4 py-2 rounded-xl">
-                                    <Check size={16} />
+                                <div className="flex items-center gap-2 bg-white/25 backdrop-blur-md px-5 py-3 rounded-2xl border border-white/30 shadow-lg font-semibold">
+                                    <Check size={18} className="flex-shrink-0" />
                                     <span>Ingredientes Frescos</span>
                                 </div>
-                                <div className="flex items-center gap-2 bg-white/20 backdrop-blur-sm px-4 py-2 rounded-xl">
-                                    <Check size={16} />
-                                    <span>Preparado Diariamente</span>
+                                <div className="flex items-center gap-2 bg-white/25 backdrop-blur-md px-5 py-3 rounded-2xl border border-white/30 shadow-lg font-semibold">
+                                    <Check size={18} className="flex-shrink-0" />
+                                    <span>Preparado con Amor</span>
                                 </div>
-                            </div>
+                            </motion.div>
                         </motion.div>
                     </div>
                 </header>
@@ -165,196 +112,128 @@ export default function CatalogPage() {
                 {/* Main Content */}
                 <main className="container py-16 pb-32">
 
-                    {/* Filters */}
-                    <div className="flex flex-wrap justify-center gap-3 mb-12">
-                        {GOALS.map(goal => (
-                            <button
-                                key={goal}
-                                onClick={() => setActiveGoal(goal)}
-                                className={`px-6 py-2.5 rounded-xl text-sm font-semibold transition-all ${activeGoal === goal
-                                    ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/30'
-                                    : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                    {/* Category Filters */}
+                    <div className="flex flex-wrap justify-center gap-3 mb-16">
+                        {Object.entries(MENU_CATEGORIES).map(([key, cat]) => (
+                            <motion.button
+                                key={key}
+                                onClick={() => setActiveCategory(key)}
+                                className={`px-6 py-3 rounded-2xl text-sm font-bold transition-all flex items-center gap-2 border-2 ${activeCategory === key
+                                    ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-xl shadow-orange-500/30 border-orange-500 scale-105'
+                                    : 'bg-white text-gray-700 hover:bg-orange-50 border-gray-200 hover:border-orange-300'
                                     }`}
+                                whileHover={{ scale: activeCategory === key ? 1.05 : 1.02 }}
+                                whileTap={{ scale: 0.98 }}
                             >
-                                {goal}
-                            </button>
+                                <span className="text-lg">{cat.icon}</span>
+                                {cat.name}
+                            </motion.button>
                         ))}
                     </div>
 
-                    {/* Meals Grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {filteredMeals.map((meal) => (
-                            <motion.div
-                                key={meal.id}
-                                initial={{ opacity: 0, y: 20 }}
-                                whileInView={{ opacity: 1, y: 0 }}
-                                viewport={{ once: true }}
-                                transition={{ duration: 0.5 }}
-                                className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden border border-gray-100 dark:border-gray-700 hover:border-orange-200 group cursor-pointer"
-                                onClick={() => setSelectedMeal(meal)}
-                            >
-                                <IngredientScanner
-                                    className="aspect-[4/3]"
-                                    data={{
-                                        cal: meal.calories,
-                                        protein: parseInt(meal.protein),
-                                        carbs: parseInt(meal.carbs)
-                                    }}
-                                >
-                                    <img
-                                        src={meal.image}
-                                        alt={meal.title}
-                                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                                    />
-                                    <div className="absolute top-4 left-4 bg-orange-500 text-white px-3 py-1 rounded-xl text-xs font-bold z-20">
-                                        {meal.category}
-                                    </div>
-                                    <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-xl text-xs font-bold text-gray-700 z-20">
-                                        {meal.goal}
-                                    </div>
-                                </IngredientScanner>
-
-                                <div className="p-6">
-                                    <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{meal.title}</h3>
-                                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-4 line-clamp-2">{meal.description}</p>
-
-                                    <div className="flex items-center justify-between mb-4">
-                                        <div className="flex gap-3 text-xs text-gray-500 dark:text-gray-400">
-                                            <span>{meal.calories} Kcal</span>
-                                            <span>•</span>
-                                            <span>{meal.protein} Prot</span>
-                                            <span>•</span>
-                                            <span>{meal.carbs} Carbs</span>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-2xl font-bold text-orange-500">
-                                            ₡{meal.price.toLocaleString('es-CR')}
-                                        </span>
-                                        <button className="text-sm text-orange-500 hover:text-orange-600 font-semibold flex items-center gap-2">
-                                            <Eye size={16} />
-                                            Ver detalles
-                                        </button>
-                                    </div>
-                                </div>
-                            </motion.div>
-                        ))}
-                    </div>
-
-                    {/* Info Banner */}
-                    <div className="mt-16 bg-gradient-to-r from-orange-50 to-amber-50 dark:from-gray-800 dark:to-gray-800 border border-orange-200 dark:border-gray-700 rounded-2xl p-6">
-                        <div className="flex items-start gap-3">
-                            <Info size={22} className="text-orange-500 flex-shrink-0 mt-0.5" />
-                            <div>
-                                <h3 className="font-bold text-gray-900 dark:text-white mb-1">Información Importante</h3>
-                                <p className="text-gray-600 dark:text-gray-300 text-sm">
-                                    Estas comidas son ejemplos de lo que incluimos en nuestros packs semanales y mensuales.
-                                    Para ordenar, visita nuestra <a href="/packs" className="text-orange-500 underline font-semibold hover:text-orange-600">página de packs</a>.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </main>
-
-                {/* Modal */}
-                <AnimatePresence>
-                    {selectedMeal && (
-                        <div
-                            className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-                            onClick={() => setSelectedMeal(null)}
+                    {/* Category Info */}
+                    {categoryInfo && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.5 }}
+                            className="text-center mb-14"
                         >
-                            <motion.div
-                                initial={{ opacity: 0, scale: 0.9 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                exit={{ opacity: 0, scale: 0.9 }}
-                                onClick={(e) => e.stopPropagation()}
-                                className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
-                            >
-                                <div className="sticky top-0 bg-gradient-to-r from-orange-500 to-amber-500 text-white p-6 flex items-center justify-between z-10">
-                                    <div className="flex items-center gap-3">
-                                        <span className="text-4xl">🍽️</span>
-                                        <div>
-                                            <h2 className="text-2xl font-bold">{selectedMeal.title}</h2>
-                                            <p className="text-white/80 text-sm">{selectedMeal.category} • {selectedMeal.goal}</p>
-                                        </div>
-                                    </div>
-                                    <button
-                                        onClick={() => setSelectedMeal(null)}
-                                        className="p-2 hover:bg-white/20 rounded-xl transition-colors"
+                            <div className="text-7xl mb-6">{categoryInfo.icon}</div>
+                            <h2 className="text-4xl font-black text-gray-900 mb-3">
+                                Pack {categoryInfo.name}
+                            </h2>
+                            <p className="text-xl text-gray-600 font-medium">{categoryInfo.desc}</p>
+                        </motion.div>
+                    )}
+
+                    {/* Menu Table */}
+                    {loading ? (
+                        <div className="flex justify-center py-20">
+                            <div className="animate-spin rounded-full h-12 w-12 border-4 border-bikitchen-orange border-t-transparent"></div>
+                        </div>
+                    ) : currentMenu.length > 0 ? (
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.5 }}
+                            className="bg-white rounded-3xl shadow-2xl overflow-hidden border-2 border-gray-100"
+                        >
+                            <div className="bg-gradient-to-r from-orange-500 to-amber-500 text-white px-8 py-5">
+                                <h3 className="font-black text-xl flex items-center gap-3">
+                                    <Utensils size={24} />
+                                    Platos de la Semana - {categoryInfo?.name}
+                                </h3>
+                            </div>
+
+                            <div className="divide-y divide-gray-100">
+                                {currentMenu.map((item, idx) => (
+                                    <motion.div
+                                        key={idx}
+                                        initial={{ opacity: 0, x: -20 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        transition={{ delay: idx * 0.05, duration: 0.4 }}
+                                        className="p-7 hover:bg-gradient-to-r hover:from-orange-50 hover:to-amber-50 transition-all"
                                     >
-                                        <X size={24} />
-                                    </button>
-                                </div>
-
-                                <div className="p-6">
-                                    <div className="mb-6">
-                                        <img
-                                            src={selectedMeal.image}
-                                            alt={selectedMeal.title}
-                                            className="w-full h-64 object-cover rounded-xl"
-                                        />
-                                    </div>
-
-                                    <div className="mb-6">
-                                        <h3 className="text-lg font-bold text-gray-900 mb-2">Descripción</h3>
-                                        <p className="text-gray-600 leading-relaxed">{selectedMeal.description}</p>
-                                    </div>
-
-                                    <div className="grid grid-cols-4 gap-4 mb-6 bg-orange-50 p-4 rounded-xl">
-                                        <div className="text-center">
-                                            <span className="block font-bold text-orange-500 text-xl">{selectedMeal.calories}</span>
-                                            <span className="text-xs text-gray-500">Kcal</span>
+                                        <div className="flex items-start gap-5">
+                                            <div className="w-14 h-14 bg-gradient-to-br from-orange-500 to-amber-500 rounded-2xl flex items-center justify-center text-white font-black text-xl flex-shrink-0 shadow-lg">
+                                                #{item.numero}
+                                            </div>
+                                            <div className="flex-1">
+                                                <h4 className="font-black text-gray-900 text-xl mb-3">
+                                                    {item.proteina}
+                                                </h4>
+                                                <div className="flex flex-wrap gap-2">
+                                                    <span className="inline-flex items-center gap-2 px-4 py-2 bg-green-100 text-green-700 text-sm rounded-xl font-bold border border-green-200">
+                                                        🥬 {item.vegetal}
+                                                    </span>
+                                                    {item.carbo && item.carbo !== '—' && (
+                                                        <span className="inline-flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-700 text-sm rounded-xl font-bold border border-amber-200">
+                                                            🍚 {item.carbo}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div className="text-center">
-                                            <span className="block font-bold text-orange-500 text-xl">{selectedMeal.protein}</span>
-                                            <span className="text-xs text-gray-500">Proteína</span>
-                                        </div>
-                                        <div className="text-center">
-                                            <span className="block font-bold text-orange-500 text-xl">{selectedMeal.carbs}</span>
-                                            <span className="text-xs text-gray-500">Carbos</span>
-                                        </div>
-                                        <div className="text-center">
-                                            <span className="block font-bold text-orange-500 text-xl">{selectedMeal.fat}</span>
-                                            <span className="text-xs text-gray-500">Grasas</span>
-                                        </div>
-                                    </div>
-
-                                    <div className="mb-6">
-                                        <h3 className="text-lg font-bold text-gray-900 mb-3">Ingredientes</h3>
-                                        <div className="flex flex-wrap gap-2">
-                                            {selectedMeal.ingredients.map((ing, i) => (
-                                                <span key={i} className="px-3 py-1.5 bg-orange-50 border border-orange-200 text-gray-700 text-xs font-medium rounded-xl">
-                                                    {ing}
-                                                </span>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    <div className="border-t border-gray-100 pt-6">
-                                        <div className="flex items-center justify-between mb-4">
-                                            <span className="text-gray-600">Precio por plato</span>
-                                            <span className="text-3xl font-bold text-orange-500">
-                                                ₡{selectedMeal.price.toLocaleString('es-CR')}
-                                            </span>
-                                        </div>
-
-                                        <button
-                                            onClick={() => {
-                                                handleAddToCart(selectedMeal);
-                                                setSelectedMeal(null);
-                                            }}
-                                            className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-4 px-6 rounded-xl transition-all duration-300 hover:shadow-xl shadow-orange-500/30 flex items-center justify-center gap-2"
-                                        >
-                                            <ShoppingCart size={20} />
-                                            Agregar al Carrito
-                                        </button>
-                                    </div>
-                                </div>
-                            </motion.div>
+                                    </motion.div>
+                                ))}
+                            </div>
+                        </motion.div>
+                    ) : (
+                        <div className="text-center py-20 text-gray-500">
+                            <Utensils size={48} className="mx-auto mb-4 opacity-50" />
+                            <p>No hay menú disponible para esta categoría.</p>
                         </div>
                     )}
-                </AnimatePresence>
+
+                    {/* CTA Banner */}
+                    <motion.div
+                        className="mt-20 bg-gradient-to-r from-orange-50 to-amber-50 border-2 border-orange-200 rounded-3xl p-10 text-center"
+                        initial={{ opacity: 0, y: 20 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: true }}
+                        transition={{ duration: 0.5 }}
+                    >
+                        <h3 className="font-black text-3xl text-gray-900 mb-4">
+                            ¿Te gustó el menú?
+                        </h3>
+                        <p className="text-gray-600 text-lg mb-8 max-w-xl mx-auto font-medium">
+                            Ordena tu pack semanal y recibe estos deliciosos platos directamente en tu puerta
+                        </p>
+                        <motion.div
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                        >
+                            <Link
+                                to="/packs"
+                                className="inline-flex items-center gap-3 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-black py-5 px-10 rounded-2xl transition-all duration-300 shadow-2xl hover:shadow-orange-500/50 text-lg"
+                            >
+                                <ShoppingCart size={24} />
+                                Ver Packs Disponibles
+                            </Link>
+                        </motion.div>
+                    </motion.div>
+                </main>
 
                 <Footer />
             </div>

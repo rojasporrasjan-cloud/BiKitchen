@@ -14,7 +14,7 @@ export default function ThemeToggle() {
     return (
         <button
             onClick={toggleTheme}
-            className="fixed bottom-24 right-8 z-[9999] w-14 h-14 rounded-full bg-gray-800 dark:bg-white backdrop-blur-xl border border-gray-700 dark:border-gray-300 flex items-center justify-center text-white dark:text-gray-800 hover:bg-gray-700 dark:hover:bg-gray-100 transition-all shadow-lg hover:shadow-2xl overflow-hidden group"
+            className="fixed bottom-24 right-8 z-[9999] w-14 h-14 rounded-full bg-gray-800 backdrop-blur-xl border border-gray-700 flex items-center justify-center text-white hover:bg-gray-700:bg-gray-100 transition-all shadow-lg hover:shadow-2xl overflow-hidden group"
             aria-label="Toggle Theme"
         >
             <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-accent/20 opacity-0 group-hover:opacity-100 transition-opacity"></div>

@@ -4,14 +4,14 @@ import React from 'react';
  * MagneticButton Component - Simplificado (sin efectos)
  * Solo renderiza el contenido sin animaciones
  */
-export default function MagneticButton({ children, className = "", onClick, as: Component = "div", ...props }) {
+export default function MagneticButton({ children, className = "", onClick, as: Tag = "div", ...props }) {
     return (
-        <Component
+        <Tag
             className={className}
             onClick={onClick}
             {...props}
         >
             {children}
-        </Component>
+        </Tag>
     );
 }

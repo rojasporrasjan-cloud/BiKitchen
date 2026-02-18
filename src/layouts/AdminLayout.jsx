@@ -1,43 +1,128 @@
-import React, { useState } from 'react';
-import { NavLink, Outlet, Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { NavLink, Outlet, Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Menu as MenuIcon, Search, Bell, LogOut, X, LayoutDashboard, ShoppingBag, Package, Users, FileText, ClipboardList, Truck, PieChart, UtensilsCrossed } from 'lucide-react';
+import { Menu as MenuIcon, LogOut, X, LayoutDashboard, ShoppingBag, Package, Users, ClipboardList, Truck, UtensilsCrossed, Gift, Tag, Search, Bell, Monitor, Smartphone, Image, Upload, MessageCircle, FileText } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { useOrders } from '../context/OrdersContext';
+import '../utils/deleteAllData'; // Importar script de eliminación (disponible en consola)
+
+
+// Hook para detectar si es móvil
+function useIsMobile() {
+    const [isMobile, setIsMobile] = useState(false);
+
+    useEffect(() => {
+        const checkMobile = () => {
+            setIsMobile(window.innerWidth < 1024); // Menos de 1024px = móvil/tablet
+        };
+
+        checkMobile();
+        window.addEventListener('resize', checkMobile);
+        return () => window.removeEventListener('resize', checkMobile);
+    }, []);
+
+    return isMobile;
+}
 
 // Layout principal del panel de administración - BiKitchen Brand
 export default function AdminLayout() {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
+    const { logout, currentUser } = useAuth();
+    const navigate = useNavigate();
+    const isMobile = useIsMobile();
+    const { orders, getStats } = useOrders();
 
+    // Usar OrdersContext para obtener conteo de pedidos pendientes (evita listener duplicado)
+    useEffect(() => {
+        try {
+            const stats = getStats?.();
+            if (stats && typeof stats.pendingOrders === 'number') {
+                setPendingOrdersCount(stats.pendingOrders);
+            }
+        } catch (e) { }
+    }, [orders, getStats]);
+
+    // Bloquear acceso en móviles - DESHABILITADO para permitir acceso a Gina
+    // if (isMobile) {
+    //     return (
+    //         <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-6">
+    //             <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md text-center">
+    //                 <div className="w-20 h-20 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-6">
+    //                     <Monitor size={40} className="text-orange-500" />
+    //                 </div>
+    //                 <h1 className="text-2xl font-bold text-gray-900 mb-3">
+    //                     Panel de Administración
+    //                 </h1>
+    //                 <p className="text-gray-600 mb-6">
+    //                     El panel de administración está optimizado para computadoras. 
+    //                     Por favor, accede desde una laptop o PC para una mejor experiencia.
+    //                 </p>
+    //                 <div className="flex items-center justify-center gap-2 text-sm text-gray-400 mb-6">
+    //                     <Smartphone size={16} />
+    //                     <span>Dispositivo móvil detectado</span>
+    //                 </div>
+    //                 <Link 
+    //                     to="/"
+    //                     className="inline-flex items-center gap-2 px-6 py-3 bg-orange-500 text-white rounded-xl font-medium hover:bg-orange-600 transition-colors"
+    //                 >
+    //                     Volver al Inicio
+    //                 </Link>
+    //             </div>
+    //         </div>
+    //     );
+    // }
+
+    // Menú organizado por flujo de trabajo
     const menuItems = [
+        // 📊 General
         { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
-        { to: '/admin/orders', label: 'Pedidos', icon: ShoppingBag },
-        { to: '/admin/inventory', label: 'Inventario', icon: Package },
+
+        // 🛒 Ventas
+        { to: '/admin/orders', label: 'Pedidos', icon: ShoppingBag, badge: pendingOrdersCount },
         { to: '/admin/clients', label: 'Clientes', icon: Users },
-        { to: '/admin/purchases', label: 'Compras', icon: FileText },
-        { to: '/admin/menus', label: 'Menús Semanales', icon: UtensilsCrossed },
-        { to: '/admin/sheets', label: 'Hojas de Producción', icon: ClipboardList },
-        { to: '/admin/workload', label: 'Carga Laboral', icon: PieChart },
-        { to: '/admin/delivery', label: 'Reparto', icon: Truck }
+
+        // 🍳 Operaciones
+        { to: '/admin/sheets', label: 'Producción', icon: ClipboardList },
+        { to: '/admin/dispatch-sheet', label: 'Hoja de Despacho', icon: FileText },
+        { to: '/admin/delivery', label: 'Reparto', icon: Truck },
+
+        // 📦 Inventario
+        { to: '/admin/inventory', label: 'Inventario', icon: Package },
+
+        // 🎁 Marketing
+        { to: '/admin/menus', label: 'Menús', icon: UtensilsCrossed },
+        { to: '/admin/pack-images', label: 'Imágenes Packs', icon: Image },
+        { to: '/admin/promotions', label: 'Promociones', icon: Gift },
+        { to: '/admin/coupons', label: 'Cupones', icon: Tag },
+        { to: '/admin/notifications', label: 'Notificaciones', icon: Bell },
+        { to: '/admin/imagenes', label: 'Subir Imágenes', icon: Upload },
+
+        // ⚙️ Configuración
+        { to: '/admin/whatsapp-config', label: 'WhatsApp', icon: MessageCircle },
+        { to: '/admin/shipping-discount', label: 'Descuento Envío', icon: Truck },
     ];
 
-    const handleLogout = () => {
-        window.location.href = '/admin/login';
+    const handleLogout = async () => {
+        await logout();
+        navigate('/');
     };
 
     const SidebarContent = ({ mobile = false }) => (
         <>
             {/* Header del Sidebar */}
-            <div className="flex items-center justify-between p-5 border-b border-white/10">
+            <div className="p-5 border-b border-white/10 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex justify-between items-center">
                 <Link to="/" className="flex items-center gap-3 group">
-                    <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-md group-hover:shadow-lg transition-shadow">
+                    <div className="w-12 h-12 bg-gradient-to-br from-orange-500 via-amber-500 to-orange-600 rounded-2xl flex items-center justify-center shadow-lg group-hover:shadow-xl group-hover:scale-105 transition-all duration-300">
                         <img
                             src="/assets/logo.jpg"
                             alt="BiKitchen Food"
-                            className="h-7 w-auto object-contain"
+                            className="h-8 w-auto object-contain"
                         />
                     </div>
                     <div className="flex flex-col">
-                        <span className="text-sm font-bold tracking-wide text-white">BiKitchen</span>
-                        <span className="text-[10px] text-gray-400 tracking-widest uppercase">Panel Admin</span>
+                        <span className="text-base font-bold tracking-wide bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">BiKitchen</span>
+                        <span className="text-[10px] text-orange-400 tracking-widest uppercase font-semibold">Panel Admin</span>
                     </div>
                 </Link>
                 {mobile && (
@@ -50,35 +135,66 @@ export default function AdminLayout() {
                 )}
             </div>
 
-            {/* Navegación con scroll */}
-            <nav className="flex-1 overflow-y-auto p-3 space-y-1">
-                {menuItems.map((item) => (
-                    <NavLink
+            {/* Navegación con scroll - Fixed scroll issue */}
+            <nav className="flex-1 overflow-y-auto overscroll-contain p-3 space-y-1.5" style={{ scrollbarGutter: 'stable' }}>
+                {menuItems.map((item, index) => (
+                    <motion.div
                         key={item.to}
-                        to={item.to}
-                        end={item.end}
-                        onClick={() => mobile && setIsMobileMenuOpen(false)}
-                        className={({ isActive }) =>
-                            `flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 ${
-                                isActive
-                                    ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/30'
-                                    : 'text-gray-400 hover:text-white hover:bg-white/10'
-                            }`
-                        }
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: index * 0.03 }}
                     >
-                        <item.icon size={18} />
-                        <span className="text-sm font-medium">{item.label}</span>
-                    </NavLink>
+                        <NavLink
+                            to={item.to}
+                            end={item.end}
+                            onClick={() => mobile && setIsMobileMenuOpen(false)}
+                            className={({ isActive }) =>
+                                `flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 group ${isActive
+                                    ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg shadow-orange-500/40 scale-105'
+                                    : item.highlight
+                                        ? 'text-bikitchen-gold hover:text-white hover:bg-gradient-to-r hover:from-orange-500/20 hover:to-amber-500/20'
+                                        : 'text-gray-400 hover:text-white hover:bg-white/10 hover:scale-102'
+                                }`
+                            }
+                        >
+                            {({ isActive }) => (
+                                <>
+                                    <div className={`transition-transform duration-300 ${isActive ? 'scale-110' : 'group-hover:scale-110'
+                                        }`}>
+                                        <item.icon size={20} />
+                                    </div>
+                                    <span className="text-sm font-semibold">{item.label}</span>
+                                    {item.badge > 0 && (
+                                        <span className="ml-auto min-w-[22px] h-6 flex items-center justify-center text-[11px] bg-gradient-to-r from-red-500 to-rose-500 text-white px-2 rounded-full font-bold shadow-lg animate-pulse">
+                                            {item.badge}
+                                        </span>
+                                    )}
+                                    {item.highlight && !item.badge && (
+                                        <span className="ml-auto text-[10px] bg-gradient-to-r from-yellow-400 to-orange-400 text-gray-900 px-2 py-1 rounded-full font-bold shadow-md">
+                                            NEW
+                                        </span>
+                                    )}
+                                </>
+                            )}
+                        </NavLink>
+                    </motion.div>
                 ))}
             </nav>
 
             {/* Footer del Sidebar */}
-            <div className="p-3 border-t border-white/10">
+            <div className="p-3 border-t border-white/10 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+                {/* User Info */}
+                {currentUser && (
+                    <div className="px-4 py-3 mb-2 bg-white/5 rounded-xl border border-white/10">
+                        <p className="text-xs text-gray-300 truncate font-medium">{currentUser.email}</p>
+                        <p className="text-[10px] text-orange-400 font-bold uppercase tracking-wider mt-0.5">Administrador</p>
+                    </div>
+                )}
                 <button
                     onClick={handleLogout}
-                    className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-white/60 hover:text-white hover:bg-white/10 w-full transition-all text-sm"
+                    className="flex items-center gap-3 px-4 py-3 rounded-xl text-white/70 hover:text-white hover:bg-gradient-to-r hover:from-red-500/20 hover:to-rose-500/20 w-full transition-all text-sm font-medium group"
                 >
-                    <LogOut size={18} />
+                    <LogOut size={18} className="group-hover:scale-110 transition-transform" />
                     <span>Cerrar Sesión</span>
                 </button>
             </div>
@@ -86,9 +202,9 @@ export default function AdminLayout() {
     );
 
     return (
-        <div className="flex h-screen bg-gray-50 font-sans text-gray-800">
+        <div className="flex h-screen bg-gray-50 font-sans text-gray-800 overflow-hidden">
             {/* Desktop Sidebar */}
-            <aside className="w-64 bg-gray-900 hidden md:flex flex-col shadow-2xl z-20">
+            <aside className="w-64 bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 hidden md:flex flex-col shadow-2xl border-r border-white/5 z-20">
                 <SidebarContent />
             </aside>
 
@@ -111,7 +227,7 @@ export default function AdminLayout() {
                             animate={{ x: 0 }}
                             exit={{ x: -280 }}
                             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                            className="fixed left-0 top-0 bottom-0 w-64 bg-gray-900 text-white flex flex-col shadow-2xl z-50 md:hidden"
+                            className="fixed left-0 top-0 bottom-0 w-72 bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 text-white flex flex-col shadow-2xl border-r border-white/5 z-50 md:hidden"
                         >
                             <SidebarContent mobile />
                         </motion.aside>
@@ -120,40 +236,40 @@ export default function AdminLayout() {
             </AnimatePresence>
 
             {/* Main Content */}
-            <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="flex-1 flex flex-col h-full overflow-hidden relative">
                 {/* Header */}
-                <header className="bg-white shadow-sm p-4 flex justify-between items-center sticky top-0 z-10 border-b border-gray-100">
+                <header className="bg-gradient-to-r from-white via-gray-50 to-white shadow-sm p-3 md:p-4 flex justify-between items-center sticky top-0 z-10 border-b border-gray-200 backdrop-blur-sm shrink-0">
                     <button
                         onClick={() => setIsMobileMenuOpen(true)}
-                        className="md:hidden text-gray-700 hover:text-orange-500 transition-colors"
+                        className="md:hidden p-2.5 text-gray-700 hover:text-orange-500 hover:bg-orange-50 rounded-xl transition-all active:scale-95"
                     >
                         <MenuIcon size={24} />
                     </button>
 
                     {/* Global Search */}
-                    <div className="hidden md:flex items-center bg-gray-100 px-4 py-2 rounded-xl w-96">
-                        <Search size={16} className="text-gray-400 mr-2" />
+                    <div className="hidden md:flex items-center bg-gradient-to-r from-gray-100 to-gray-50 px-4 py-2.5 rounded-2xl w-96 border border-gray-200 hover:border-orange-300 transition-all shadow-sm hover:shadow-md">
+                        <Search size={18} className="text-gray-400 mr-2" />
                         <input
                             type="text"
                             placeholder="Buscar pedidos, clientes o ítems..."
-                            className="bg-transparent border-none outline-none text-sm w-full text-gray-700 placeholder:text-gray-400"
+                            className="bg-transparent border-none outline-none text-sm w-full text-gray-700 placeholder:text-gray-400 font-medium"
                         />
                     </div>
 
-                    <div className="flex items-center gap-4 ml-auto">
+                    <div className="flex items-center gap-3 ml-auto">
                         {/* Notificaciones */}
-                        <button className="relative text-gray-500 hover:text-orange-500 transition-colors p-2 hover:bg-orange-50 rounded-xl">
-                            <Bell size={20} />
-                            <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-orange-500 rounded-full border-2 border-white"></span>
+                        <button className="relative text-gray-500 hover:text-orange-500 transition-all p-2.5 hover:bg-orange-50 rounded-xl group">
+                            <Bell size={20} className="group-hover:scale-110 transition-transform" />
+                            <span className="absolute top-2 right-2 w-2 h-2 bg-gradient-to-r from-orange-500 to-red-500 rounded-full border border-white animate-pulse shadow-sm"></span>
                         </button>
 
                         {/* Usuario */}
-                        <div className="flex items-center gap-3 pl-4 border-l border-gray-200">
+                        <div className="flex items-center gap-3 pl-2 md:pl-4 md:border-l-2 border-gray-200">
                             <div className="text-right hidden sm:block">
                                 <p className="text-sm font-bold text-gray-800">Admin</p>
-                                <p className="text-xs text-gray-500">Super Usuario</p>
+                                <p className="text-xs text-orange-500 font-semibold">Super Usuario</p>
                             </div>
-                            <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-amber-500 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-md">
+                            <div className="w-10 h-10 md:w-11 md:h-11 bg-gradient-to-br from-orange-500 via-amber-500 to-orange-600 rounded-xl md:rounded-2xl flex items-center justify-center text-white font-bold text-sm shadow-lg hover:shadow-xl hover:scale-105 transition-all cursor-pointer">
                                 AU
                             </div>
                         </div>
@@ -161,7 +277,8 @@ export default function AdminLayout() {
                 </header>
 
                 {/* Contenido principal */}
-                <main className="flex-1 overflow-auto p-4 sm:p-6 bg-gray-50">
+                <main className="flex-1 overflow-y-auto overflow-x-hidden p-3 md:p-6 bg-gradient-to-br from-gray-50 via-white to-gray-50">
+
                     <Outlet />
                 </main>
             </div>

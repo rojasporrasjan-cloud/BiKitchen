@@ -1,9 +1,66 @@
 /* BiKitchen Food - Línea Gráfica Oficial */
-@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Raleway:wght@400;500;600;700;800&family=Nunito+Sans:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Animación shimmer para skeleton loaders */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+/* Optimización CRÍTICA de imágenes para eliminar flasheo en móviles */
+img {
+  /* Forzar aceleración por GPU - CRÍTICO para evitar flasheo */
+  transform: translate3d(0, 0, 0);
+  -webkit-transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  
+  /* Forzar rendering continuo */
+  image-rendering: auto;
+  -webkit-image-rendering: auto;
+}
+
+/* NO aplicar transiciones automáticas a imágenes */
+img:not([style*="transition"]) {
+  transition: none !important;
+}
+
+/* Prevenir layout shift */
+img[loading="lazy"],
+img[loading="eager"] {
+  contain-intrinsic-size: auto 500px;
+}
+
+/* Forzar que las imágenes mantengan su espacio */
+img:not([src]) {
+  visibility: hidden;
+}
+
+/* Optimización específica para motion.img de framer-motion */
+.motion-img,
+[class*="motion"] img {
+  transform: translate3d(0, 0, 0);
+  -webkit-transform: translate3d(0, 0, 0);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
 
 /* ========================================
    BiKitchen Brand Variables - Modo Claro
@@ -35,20 +92,29 @@
   --color-accent: #FF671D;
   --color-accent-soft: rgba(255, 103, 29, 0.1);
   
+  /* Colores de identidad (mapeados a paleta original) */
+  --color-turquoise: #FF671D;
+  --color-turquoise-dark: #E85A15;
+  --color-lime-green: #E9A84A;
+  --color-lime-green-dark: #C4A08E;
+  --color-beige: #f9f5eb;
+  
   /* Sombras */
   --shadow-sm: 0 1px 2px rgba(42, 42, 42, 0.05);
   --shadow-md: 0 4px 16px rgba(42, 42, 42, 0.1);
   --shadow-lg: 0 8px 24px rgba(42, 42, 42, 0.12);
   --shadow-glow: 0 0 20px rgba(255, 103, 29, 0.3);
+  --shadow-soft: 0 4px 20px rgba(0, 0, 0, 0.08);
   
   /* Tipografía */
-  --font-sans: 'Montserrat', sans-serif;
-  --font-display: 'Montserrat', sans-serif;
+  --font-sans: 'Raleway', 'Nunito Sans', sans-serif;
+  --font-display: 'Raleway', 'Nunito Sans', sans-serif;
   
   /* Radios */
   --radius: 12px;
   --radius-lg: 20px;
 }
+
 
 /* ========================================
    BiKitchen Brand Variables - Modo Oscuro
@@ -56,24 +122,27 @@
 html.dark,
 :root.dark,
 .dark {
-  --color-bg: #1F1E1E;
+  --color-bg: #1f1f1f;
   --color-bg-secondary: #2A2A2A;
-  --color-surface: #3B3A39;
+  --color-surface: #2d2d2d;
   
-  --color-text: #F5F3F1;
-  --color-text-muted: #9A9590;
+  --color-text: #f9f5eb;
+  --color-text-muted: #a0a0a0;
   
-  --color-border: #4A4847;
+  --color-border: #3d3d3d;
   
-  /* Mantener identidad naranja en modo oscuro */
+  /* Colores de acento para modo oscuro */
   --color-primary: #FF671D;
-  --color-accent: #FF671D;
+  --color-accent: #E9A84A;
   --color-accent-soft: rgba(255, 103, 29, 0.15);
+  --color-turquoise: #FF671D;
+  --color-lime-green: #E9A84A;
   
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
-  --shadow-glow: 0 0 30px rgba(255, 103, 29, 0.4);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 30px rgba(255, 103, 29, 0.3);
+  --shadow-soft: 0 4px 20px rgba(0, 0, 0, 0.3);
 }
 
 /* Compatibilidad con tema anterior */
@@ -116,8 +185,8 @@ html {
 }
 
 html.dark {
-  background-color: #1F1E1E;
-  color: #F5F3F1;
+  background-color: #1f1f1f;
+  color: #f9f5eb;
 }
 
 /* Smooth theme transitions */
@@ -414,4 +483,137 @@ h1, h2, h3, h4, h5, h6 {
 
 .animate-scan {
   animation: scan 2s linear infinite;
+}
+
+/* Navbar slide down animation */
+@keyframes slideDown {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-slideDown {
+  animation: slideDown 0.5s ease-out forwards;
+}
+
+/* ========================================
+   Sidebar Scroll Fix
+   ======================================== */
+/* Allow mouse wheel scrolling without click focus */
+nav[class*="overflow-y-auto"],
+aside[class*="overflow-y-auto"],
+.sidebar-scroll {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
+
+/* Ensure scroll works on hover */
+nav[class*="overflow-y-auto"]:hover,
+aside[class*="overflow-y-auto"]:hover {
+  overflow-y: auto;
+}
+
+/* ========================================
+   Line Clamp Utility
+   ======================================== */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ========================================
+   Hide Scrollbar Utility
+   ======================================== */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* ========================================
+   Promo Banner Animations
+   ======================================== */
+@keyframes marquee {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-marquee {
+  animation: marquee 20s linear infinite;
+}
+
+.animate-shimmer {
+  animation: shimmer 3s ease-in-out infinite;
+}
+
+/* Pausar animación en hover */
+.animate-marquee:hover {
+  animation-play-state: paused;
+}
+
+/* Pulse para el banner */
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(255, 103, 29, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(255, 103, 29, 0.8);
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Gradiente animado horizontal */
+@keyframes gradient-x {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+.animate-gradient-x {
+  background-size: 200% 200%;
+  animation: gradient-x 3s ease infinite;
+}
+
+/* Delays para animaciones */
+.delay-300 {
+  animation-delay: 300ms;
+}
+
+.delay-500 {
+  animation-delay: 500ms;
+}
+
+.delay-700 {
+  animation-delay: 700ms;
 }

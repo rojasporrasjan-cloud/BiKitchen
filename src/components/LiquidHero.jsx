@@ -12,7 +12,6 @@ import React, { useRef } from 'react';
  * @param {string} [props.className] - Additional CSS classes.
  */
 export default function LiquidHero({ src, alt, className }) {
-    const filterRef = useRef(null);
     const turbulenceRef = useRef(null);
 
     const onMouseEnter = () => {

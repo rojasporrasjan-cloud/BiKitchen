@@ -1,27 +1,171 @@
 <!doctype html>
 <html lang="es" translate="no">
-  <head>
-    <meta charset="UTF-8" />
-    <meta http-equiv="Content-Language" content="es" />
-    <meta name="google" content="notranslate" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    
-    <!-- BiKitchen Brand Colors -->
-    <meta name="theme-color" content="#FF671D" />
-    <meta name="msapplication-navbutton-color" content="#FF671D" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="#FF671D" />
-    
-    <!-- Favicon -->
-    <link rel="icon" type="image/svg+xml" href="/bikitchen-icon.svg" />
-    <link rel="apple-touch-icon" href="/bikitchen-icon.svg" />
-    
-    <!-- SEO -->
-    <meta name="description" content="BiKitchen Food - Comida saludable y deliciosa para tu semana. Packs semanales, platos individuales y más." />
-    
-    <title>BiKitchen Food</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+
+<head>
+  <!-- Google Tag Manager -->
+  <script>(function (w, d, s, l, i) {
+      w[l] = w[l] || []; w[l].push({
+        'gtm.start':
+          new Date().getTime(), event: 'gtm.js'
+      }); var f = d.getElementsByTagName(s)[0],
+        j = d.createElement(s), dl = l != 'dataLayer' ? '&l=' + l : ''; j.async = true; j.src =
+          'https://www.googletagmanager.com/gtm.js?id=' + i + dl; f.parentNode.insertBefore(j, f);
+    })(window, document, 'script', 'dataLayer', 'GTM-TXWTND9P');</script>
+  <!-- End Google Tag Manager -->
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Language" content="es" />
+  <meta name="google" content="notranslate" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+  <!-- Facebook Domain Verification -->
+  <meta name="facebook-domain-verification" content="vb9s693n2r48o6emgyzpds4xqwzghz" />
+
+  <!-- Performance: DNS Prefetch for external resources -->
+  <link rel="dns-prefetch" href="https://firebasestorage.googleapis.com" />
+  <link rel="dns-prefetch" href="https://www.googleapis.com" />
+  <link rel="preconnect" href="https://firebasestorage.googleapis.com" crossorigin />
+
+  <!-- BiKitchen Brand Colors -->
+  <meta name="theme-color" content="#FF6B35" />
+  <meta name="msapplication-navbutton-color" content="#FF6B35" />
+  <meta name="msapplication-TileColor" content="#FF6B35" />
+
+  <!-- PWA Meta Tags -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="BiKitchen" />
+  <meta name="application-name" content="BiKitchen" />
+  <meta name="mobile-web-app-capable" content="yes" />
+
+  <!-- Manifest -->
+  <link rel="manifest" href="/manifest.json" />
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="/bikitchen-icon.svg" />
+  <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
+  <link rel="apple-touch-icon" sizes="152x152" href="/icons/icon-152x152.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-192x192.png" />
+  <link rel="apple-touch-icon" sizes="167x167" href="/icons/icon-192x192.png" />
+
+  <!-- SEO -->
+  <meta name="description"
+    content="BiKitchen Food - Comida saludable a domicilio en Costa Rica. Packs semanales, meal prep, platos individuales. ¡Ordena ahora!" />
+  <meta name="keywords"
+    content="comida saludable Costa Rica, meal prep, packs semanales, comida a domicilio, alimentación saludable, BiKitchen" />
+  <meta name="author" content="BiKitchen Food" />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://bikitchencr.com/" />
+
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://bikitchencr.com/" />
+  <meta property="og:title" content="BiKitchen Food - Comida Saludable a Domicilio" />
+  <meta property="og:description"
+    content="Packs semanales de comida saludable y deliciosa. Meal prep listo para tu semana. ¡Ordena ahora!" />
+  <meta property="og:image" content="https://bikitchencr.com/og-image.jpg" />
+  <meta property="og:locale" content="es_CR" />
+  <meta property="og:site_name" content="BiKitchen Food" />
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="BiKitchen Food - Comida Saludable a Domicilio" />
+  <meta name="twitter:description" content="Packs semanales de comida saludable. Meal prep listo para tu semana." />
+  <meta name="twitter:image" content="https://bikitchencr.com/og-image.jpg" />
+
+  <!-- Analytics: Firebase Analytics está configurado en src/firebase/config.js -->
+  <!-- measurementId: G-VJBDBGPHV6 -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-7SB7D326BE"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    gtag('js', new Date());
+    gtag('config', 'G-7SB7D326BE');
+  </script>
+
+  <!-- Meta Pixel Code (Facebook Pixel) -->
+  <script>
+    !function (f, b, e, v, n, t, s) {
+      if (f.fbq) return; n = f.fbq = function () {
+        n.callMethod ?
+        n.callMethod.apply(n, arguments) : n.queue.push(arguments)
+      };
+      if (!f._fbq) f._fbq = n; n.push = n; n.loaded = !0; n.version = '2.0';
+      n.queue = []; t = b.createElement(e); t.async = !0;
+      t.src = v; s = b.getElementsByTagName(e)[0];
+      s.parentNode.insertBefore(t, s)
+    }(window, document, 'script',
+      'https://connect.facebook.net/en_US/fbevents.js');
+  </script>
+  <!-- End Meta Pixel Code -->
+
+  <title>BiKitchen Food | Comida Saludable a Domicilio en Costa Rica</title>
+
+  <!-- Critical CSS for faster first paint -->
+  <style>
+    /* Inline critical CSS for faster LCP */
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #fff;
+    }
+
+    #root {
+      min-height: 100vh;
+    }
+
+    .loading-screen {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: #fff;
+    }
+
+    .loading-spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid #f3f3f3;
+      border-top: 3px solid #FF6B35;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      0% {
+        transform: rotate(0deg);
+      }
+
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Google Tag Manager (noscript) -->
+  <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-TXWTND9P" height="0" width="0"
+      style="display:none;visibility:hidden"></iframe></noscript>
+  <!-- End Google Tag Manager (noscript) -->
+  <!-- Meta Pixel Noscript -->
+  <noscript>
+    <img height="1" width="1" style="display:none"
+      src="https://www.facebook.com/tr?id=825371743662986&ev=PageView&noscript=1" />
+  </noscript>
+
+  <div id="root"></div>
+  <script type="module" src="/src/main.jsx"></script>
+
+  <!-- Register Service Worker -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then(reg => console.log('[App] Service Worker registered:', reg.scope))
+          .catch(err => console.log('[App] Service Worker registration failed:', err));
+      });
+    }
+  </script>
+</body>
+
 </html>

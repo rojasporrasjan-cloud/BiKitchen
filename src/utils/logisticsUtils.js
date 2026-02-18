@@ -124,16 +124,17 @@ export function mapPedidosFromLegacy(rawPedidos) {
         },
         // Carbohidrato puede ir en gramos o tazas
         carbo: {
-          nombre: item.carboNombre || 'Carbohidrato',
+          nombre: item.carboNombre || (item.carbo ? 'Carbohidrato' : null),
           unidad: carboInfo.unidad,
           cantidadPorPorcion: carboInfo.cantidad
         },
         // Vegetal puede ir en gramos o tazas
         vegetal: {
-          nombre: item.ensaladaNombre || 'Vegetales',
+          nombre: item.ensaladaNombre || (item.ensalada ? 'Vegetales' : null),
           unidad: ensaladaInfo.unidad,
           cantidadPorPorcion: ensaladaInfo.cantidad
-        }
+        },
+        descripcion: item.desc || item.descripcion || ''
       });
     });
 
@@ -348,12 +349,16 @@ export function buildKitchenSheetData(pedidos, menus) {
           carbo: {
             nombre: plato.carbo?.nombre,
             totalGramos: 0,
-            totalTazas: 0
+            totalTazas: 0,
+            cantidadBase: 0,
+            unidadBase: 'g'
           },
           vegetal: {
             nombre: plato.vegetal?.nombre,
             totalGramos: 0,
-            totalTazas: 0
+            totalTazas: 0,
+            cantidadBase: 0,
+            unidadBase: 'g'
           },
           totalPlatos: 0
         };
@@ -366,10 +371,15 @@ export function buildKitchenSheetData(pedidos, menus) {
       if (plato.proteina?.gramosPorPorcion) {
         agregado.proteina.totalGramos +=
           (plato.proteina.gramosPorPorcion || 0) * cantidadMenus;
+        // Guardar porción base (asumimos que es la misma para todos si es el mismo plato)
+        agregado.proteina.gramosPorPorcion = plato.proteina.gramosPorPorcion;
       }
 
       // Carbohidrato puede estar en g o tazas
       if (plato.carbo) {
+        agregado.carbo.unidadBase = plato.carbo.unidad;
+        agregado.carbo.cantidadBase = plato.carbo.cantidadPorPorcion || 0;
+
         if (plato.carbo.unidad === 'g') {
           agregado.carbo.totalGramos +=
             (plato.carbo.cantidadPorPorcion || 0) * cantidadMenus;
@@ -381,6 +391,9 @@ export function buildKitchenSheetData(pedidos, menus) {
 
       // Vegetal puede estar en g o tazas
       if (plato.vegetal) {
+        agregado.vegetal.unidadBase = plato.vegetal.unidad;
+        agregado.vegetal.cantidadBase = plato.vegetal.cantidadPorPorcion || 0;
+
         if (plato.vegetal.unidad === 'g') {
           agregado.vegetal.totalGramos +=
             (plato.vegetal.cantidadPorPorcion || 0) * cantidadMenus;
@@ -421,6 +434,8 @@ export function buildPackagingSheetData(pedidos, menus, workloadInfo) {
   const clientes = pedidos.map((p) => ({
     cliente: p.cliente,
     tipoMenu: p.tipoMenu || p.plan || 'Desconocido',
+    plan: p.plan || null, // nombre comercial del pack (Full Pack, Bajo Calorías, etc.)
+    cantidadMenus: p.cantidadMenus || 1, // número de packs de ese menú para este pedido
     observaciones: p.observaciones || '',
     incluyeDesayuno: !!p.incluyeDesayuno,
     platos: p.platos || [],

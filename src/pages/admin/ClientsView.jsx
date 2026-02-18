@@ -9,7 +9,8 @@ import {
     Edit2,
     Trash2,
     Eye,
-    Copy
+    Copy,
+    UserPlus
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { db } from '../../firebase/config';
@@ -19,20 +20,32 @@ import {
     onSnapshot,
     query,
     orderBy,
+    limit,
     deleteDoc,
     doc
 } from 'firebase/firestore';
+import AdminPageHeader from '../../components/admin/AdminPageHeader';
+import { useOrders } from '../../context/OrdersContext';
+import ClientProfileModal from '../../components/admin/ClientProfileModal';
 
 export default function ClientsView() {
+    const { orders } = useOrders(); // Access global orders for CRM history
     const [clients, setClients] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [showAddModal, setShowAddModal] = useState(false);
-    const [selectedClient, setSelectedClient] = useState(null);
+
+    // Modal state for Profile
+    const [showProfileModal, setShowProfileModal] = useState(false);
+    const [profileData, setProfileData] = useState(null);
+    const [profileRelatedOrders, setProfileRelatedOrders] = useState([]);
+    const [profilePoints, setProfilePoints] = useState(null);
+
     const [loading, setLoading] = useState(true);
 
     // Cargar clientes desde Firebase
     useEffect(() => {
-        const q = query(collection(db, "clientes"), orderBy("nombre", "asc"));
+        // LIMITAR LECTITRAS: Solo cargar los primeros 50 clientes por defecto
+        const q = query(collection(db, "clientes"), orderBy("nombre", "asc"), limit(50));
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const clientsData = snapshot.docs.map(doc => ({
@@ -78,69 +91,156 @@ export default function ClientsView() {
         }
     };
 
+    const handleViewClient = async (client) => {
+        // Find related orders using phone (primary) or email/name
+        const cPhone = (client.telefono || '').replace(/[^0-9]/g, '');
+        const cEmail = (client.correo || '').toLowerCase();
+
+        const related = orders.filter(o => {
+            const oPhone = (o.details?.phone || o.telefono || '').replace(/[^0-9]/g, '');
+            const oEmail = (o.details?.email || o.correo || '').toLowerCase();
+
+            if (cPhone && oPhone) return cPhone === oPhone;
+            if (cEmail && oEmail) return cEmail === oEmail;
+            return false;
+        });
+
+        // Calculate Stats
+        const totalOrders = related.length;
+        const totalSpent = related.reduce((acc, o) => {
+            const val = typeof o.totalValue === 'number' ? o.totalValue : (typeof o.total === 'number' ? o.total : 0);
+            return acc + val;
+        }, 0);
+        const deliveredOrders = related.filter(o => ['delivered', 'entregado'].includes(o.status)).length;
+        const coupons = Array.from(new Set(related.map(o => o.cupon || o.coupon).filter(Boolean)));
+
+        // Loyalty (Optional fetch)
+        let puntos = null;
+        // Skipping loyalty fetch for now to keep it snappy, or add it if needed later
+
+        setProfileData({
+            nombre: client.nombre,
+            telefono: client.telefono,
+            correo: client.correo,
+            direccion: client.direccion,
+            totalOrders,
+            totalSpent,
+            deliveredOrders,
+            coupons,
+            clienteDb: client // It IS a registered client
+        });
+        setProfileRelatedOrders(related);
+        setProfilePoints(null); // Placeholder
+        setShowProfileModal(true);
+    };
+
     return (
         <div className="max-w-7xl mx-auto space-y-6">
             {/* Header */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <div>
-                    <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Clientes</h1>
-                    <p className="text-sm text-gray-500 mt-1">Gestión de base de clientes</p>
-                </div>
-                <button
-                    onClick={() => setShowAddModal(true)}
-                    className="w-full sm:w-auto px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600 transition-colors flex items-center justify-center gap-2"
-                >
-                    <Plus size={16} />
-                    Nuevo Cliente
-                </button>
-            </div>
+            <AdminPageHeader
+                icon={Users}
+                title="Clientes"
+                subtitle="Gestión completa de tu base de clientes"
+                gradient="from-blue-500 via-cyan-400 to-teal-400"
+                stats={[
+                    { value: clients.length, label: 'Total' },
+                    { value: clients.filter(c => c.totalPedidos > 0).length, label: 'Activos' },
+                    {
+                        value: clients.filter(c => {
+                            const weekAgo = new Date();
+                            weekAgo.setDate(weekAgo.getDate() - 7);
+                            return new Date(c.fechaRegistro) > weekAgo;
+                        }).length, label: 'Nuevos (7d)'
+                    }
+                ]}
+                actions={[
+                    <button
+                        key="add"
+                        onClick={() => setShowAddModal(true)}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white text-blue-600 text-sm font-semibold hover:bg-blue-50 shadow-md transition-colors"
+                    >
+                        <Plus size={16} /> Nuevo Cliente
+                    </button>
+                ]}
+            />
 
-            {/* Stats */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+            {/* Stats Cards */}
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+                className="grid grid-cols-1 sm:grid-cols-3 gap-4"
+            >
+                <motion.div
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.3 }}
+                    className="bg-gradient-to-br from-white via-blue-50/20 to-white p-6 rounded-3xl shadow-xl border border-gray-100/50 hover:shadow-2xl hover:scale-105 transition-all duration-300"
+                >
                     <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm text-gray-500">Total Clientes</span>
-                        <Users className="text-blue-600" size={20} />
+                        <span className="text-sm text-gray-600 font-medium">Total Clientes</span>
+                        <div className="p-2 bg-gradient-to-br from-blue-400 to-cyan-500 text-white rounded-xl shadow-lg">
+                            <Users size={20} />
+                        </div>
                     </div>
-                    <div className="text-2xl font-bold text-gray-900">{clients.length}</div>
-                </div>
-                <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                    <div className="text-3xl font-bold text-gray-900">{clients.length}</div>
+                </motion.div>
+                <motion.div
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.4 }}
+                    className="bg-gradient-to-br from-white via-green-50/20 to-white p-6 rounded-3xl shadow-xl border border-gray-100/50 hover:shadow-2xl hover:scale-105 transition-all duration-300"
+                >
                     <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm text-gray-500">Activos Este Mes</span>
-                        <Calendar className="text-green-600" size={20} />
+                        <span className="text-sm text-gray-600 font-medium">Activos</span>
+                        <div className="p-2 bg-gradient-to-br from-green-400 to-emerald-500 text-white rounded-xl shadow-lg">
+                            <Calendar size={20} />
+                        </div>
                     </div>
-                    <div className="text-2xl font-bold text-green-600">
+                    <div className="text-3xl font-bold text-gray-900">
                         {clients.filter(c => c.totalPedidos > 0).length}
                     </div>
-                </div>
-                <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                </motion.div>
+                <motion.div
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.5 }}
+                    className="bg-gradient-to-br from-white via-purple-50/20 to-white p-6 rounded-3xl shadow-xl border border-gray-100/50 hover:shadow-2xl hover:scale-105 transition-all duration-300"
+                >
                     <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm text-gray-500">Nuevos (7 días)</span>
-                        <Plus className="text-purple-600" size={20} />
+                        <span className="text-sm text-gray-600 font-medium">Nuevos (7d)</span>
+                        <div className="p-2 bg-gradient-to-br from-purple-400 to-pink-500 text-white rounded-xl shadow-lg">
+                            <UserPlus size={20} />
+                        </div>
                     </div>
-                    <div className="text-2xl font-bold text-purple-600">
+                    <div className="text-3xl font-bold text-gray-900">
                         {clients.filter(c => {
                             const weekAgo = new Date();
                             weekAgo.setDate(weekAgo.getDate() - 7);
                             return new Date(c.fechaRegistro) > weekAgo;
                         }).length}
                     </div>
-                </div>
-            </div>
+                </motion.div>
+            </motion.div>
 
             {/* Search */}
-            <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.6 }}
+                className="bg-gradient-to-br from-white via-gray-50/30 to-white rounded-3xl p-6 shadow-xl border border-gray-100/50"
+            >
                 <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
                     <input
                         type="text"
                         placeholder="Buscar por nombre, teléfono o correo..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/20 text-sm"
+                        className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 text-sm transition-all"
                     />
                 </div>
-            </div>
+            </motion.div>
 
             {/* Clients Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -180,16 +280,13 @@ export default function ClientsView() {
 
                             <div className="flex gap-2 pt-4 border-t border-gray-100">
                                 <button
-                                    onClick={() => setSelectedClient(client)}
+                                    onClick={() => handleViewClient(client)}
                                     className="flex-1 py-2 px-3 bg-blue-50 text-blue-600 rounded-lg text-xs font-medium hover:bg-blue-100 transition-colors flex items-center justify-center gap-1"
                                 >
                                     <Eye size={14} />
-                                    Ver
+                                    Ver Perfil
                                 </button>
-                                <button className="flex-1 py-2 px-3 bg-green-50 text-green-600 rounded-lg text-xs font-medium hover:bg-green-100 transition-colors flex items-center justify-center gap-1">
-                                    <Copy size={14} />
-                                    Repetir
-                                </button>
+                                {/* Removed 'Repetir' button as it was non-functional */}
                                 <button
                                     onClick={() => handleDeleteClient(client.id)}
                                     className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
@@ -280,6 +377,15 @@ export default function ClientsView() {
                     </div>
                 )}
             </AnimatePresence>
+
+            {/* NEW: Client Profile Modal */}
+            <ClientProfileModal
+                isOpen={showProfileModal}
+                onClose={() => setShowProfileModal(false)}
+                clientProfile={profileData}
+                relatedOrders={profileRelatedOrders}
+                clientPoints={profilePoints}
+            />
         </div>
     );
 }

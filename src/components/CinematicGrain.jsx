@@ -1,15 +1,25 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 /**
  * CinematicGrain Component
  * 
  * Renders a fixed, full-screen SVG noise overlay to simulate film grain.
- * This adds a subtle texture and "organic" feel to the application.
- * 
- * It uses an SVG feTurbulence filter and CSS animation to move the noise pattern.
- * The overlay is pointer-events-none to ensure it doesn't interfere with interactions.
+ * DISABLED on mobile devices for better performance.
  */
 export default function CinematicGrain() {
+    const [isMobile, setIsMobile] = useState(false);
+
+    useEffect(() => {
+        // Detectar móvil por ancho de pantalla
+        const checkMobile = () => setIsMobile(window.innerWidth < 768);
+        checkMobile();
+        window.addEventListener('resize', checkMobile);
+        return () => window.removeEventListener('resize', checkMobile);
+    }, []);
+
+    // No renderizar en móviles para mejor rendimiento
+    if (isMobile) return null;
+
     return (
         <div className="fixed inset-0 pointer-events-none z-[9000] opacity-[0.03] mix-blend-overlay overflow-hidden">
             <svg className="absolute w-full h-full">
