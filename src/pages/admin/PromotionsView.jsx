@@ -1,20 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-    Gift, Plus, Edit2, Trash2, Eye, EyeOff, Calendar, 
+import {
+    Gift, Plus, Edit2, Trash2, Eye, EyeOff, Calendar,
     Image, Tag, Home, Check, X, Search, AlertCircle,
     Clock, Package, Sparkles, RefreshCw, Upload, Loader2, Megaphone
 } from 'lucide-react';
-import { 
-    getAllPromotions, 
-    createPromotion, 
-    updatePromotion, 
-    deletePromotion, 
+import {
+    getAllPromotions,
+    createPromotion,
+    updatePromotion,
+    deletePromotion,
     togglePromotionStatus,
     getPromotionStats,
     checkExpiredPromotions
 } from '../../utils/firestorePromotions';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { uploadOptimizedImage } from '../../services/cloudinaryService';
 import PackDiscountsView from './PackDiscountsView';
 import { PACKS_DATA } from '../../data/packsData';
 import AdminPageHeader from '../../components/admin/AdminPageHeader';
@@ -69,9 +69,10 @@ const PromotionModal = ({ isOpen, onClose, promotion, onSave }) => {
         etiquetaColor: '',
         prioridadDestacado: 10,
         precio: 0, // Precio de la promoción en colones
+        precioRegular: 0, // Precio sin descuento
         // Nuevos campos para facilitar la creación
         descuentoEnvio: 50, // Porcentaje de descuento en envío (0, 10, 50, 100)
-        tipoPlan: 'mensual', // semanal, quincenal, mensual
+        planesAplicables: ['mensual'], // semanal, quincenal, mensual
         composicionPlato: {
             proteinas: 90, // gramos
             vegetales: 2, // cantidad
@@ -83,48 +84,15 @@ const PromotionModal = ({ isOpen, onClose, promotion, onSave }) => {
     const [saving, setSaving] = useState(false);
     const [uploadingImage, setUploadingImage] = useState(false);
 
-    // Helper: optimizar a WebP con resize
-    const optimizeToWebp = (file, maxSize = 1280) => new Promise((resolve, reject) => {
-        try {
-            const imgEl = new Image();
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                imgEl.onload = () => {
-                    const canvas = document.createElement('canvas');
-                    const ctx = canvas.getContext('2d');
-                    const w = imgEl.naturalWidth || imgEl.width;
-                    const h = imgEl.naturalHeight || imgEl.height;
-                    const scale = Math.min(1, maxSize / Math.max(w, h));
-                    const nw = Math.max(1, Math.round(w * scale));
-                    const nh = Math.max(1, Math.round(h * scale));
-                    canvas.width = nw; canvas.height = nh;
-                    ctx.drawImage(imgEl, 0, 0, nw, nh);
-                    canvas.toBlob((blob) => {
-                        if (blob) resolve(blob); else reject(new Error('No blob'));
-                    }, 'image/webp', 0.8);
-                };
-                imgEl.onerror = reject;
-                imgEl.src = e.target.result;
-            };
-            reader.onerror = reject;
-            reader.readAsDataURL(file);
-        } catch (err) {
-            reject(err);
-        }
-    });
-
-    // Subir imagen a Firebase Storage
+    // Subir imagen a Cloudinary
     const handleImageUpload = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
 
-        // Validar tipo de archivo
         if (!file.type.startsWith('image/')) {
             alert('Por favor selecciona una imagen válida');
             return;
         }
-
-        // Validar tamaño (máximo 5MB)
         if (file.size > 5 * 1024 * 1024) {
             alert('La imagen es muy grande. Máximo 5MB');
             return;
@@ -132,23 +100,28 @@ const PromotionModal = ({ isOpen, onClose, promotion, onSave }) => {
 
         setUploadingImage(true);
         try {
-            const storage = getStorage();
-            const ts = Date.now();
-            const safeName = (formData.titulo || file.name).toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0,60);
-            const fileName = `promociones/${safeName}-${ts}.webp`;
-            const storageRef = ref(storage, fileName);
-            const blob = await optimizeToWebp(file, 1280);
-            await uploadBytes(storageRef, blob, { contentType: 'image/webp', cacheControl: 'public, max-age=31536000, immutable' });
-            const downloadURL = await getDownloadURL(storageRef);
-            
-            setFormData(prev => ({ ...prev, imagenURL: downloadURL, imagenStoragePath: fileName }));
+            const result = await uploadOptimizedImage(file, 'bikitchen/promociones', {
+                maxSize: 1280
+            });
+            setFormData(prev => ({ ...prev, imagenURL: result.url, cloudinaryPublicId: result.publicId }));
         } catch (error) {
             console.error('Error uploading image:', error);
-            alert('Error al subir la imagen. Intenta de nuevo.');
+            alert(`Error al subir la imagen: ${error.message}`);
         } finally {
             setUploadingImage(false);
         }
     };
+
+    useEffect(() => {
+        if (isOpen) {
+            document.body.style.overflow = 'hidden';
+        } else {
+            document.body.style.overflow = 'unset';
+        }
+        return () => {
+            document.body.style.overflow = 'unset';
+        };
+    }, [isOpen]);
 
     useEffect(() => {
         if (promotion) {
@@ -168,8 +141,9 @@ const PromotionModal = ({ isOpen, onClose, promotion, onSave }) => {
                 etiquetaColor: promotion.etiquetaColor || '',
                 prioridadDestacado: promotion.prioridadDestacado || 10,
                 precio: promotion.precio || 0,
+                precioRegular: promotion.precioRegular || 0,
                 descuentoEnvio: promotion.descuentoEnvio || 50,
-                tipoPlan: promotion.tipoPlan || 'mensual',
+                planesAplicables: promotion.planesAplicables || (promotion.tipoPlan ? [promotion.tipoPlan] : ['mensual']),
                 composicionPlato: promotion.composicionPlato || {
                     proteinas: 90,
                     vegetales: 2,
@@ -192,9 +166,10 @@ const PromotionModal = ({ isOpen, onClose, promotion, onSave }) => {
                 precios: [],
                 tipoPromocion: 'pack',
                 etiquetaColor: '',
-                prioridadDestacado: 10,
+                precio: 0,
+                precioRegular: 0,
                 descuentoEnvio: 50,
-                tipoPlan: 'mensual',
+                planesAplicables: ['mensual'],
                 composicionPlato: {
                     proteinas: 90,
                     vegetales: 2,
@@ -280,8 +255,8 @@ const PromotionModal = ({ isOpen, onClose, promotion, onSave }) => {
                         </button>
                     </div>
                     <p className="text-white/80 text-sm">
-                        {promotion 
-                            ? 'Modifica los datos de la promoción existente' 
+                        {promotion
+                            ? 'Modifica los datos de la promoción existente'
                             : 'Completa los campos para crear una promoción que aparecerá en el sitio web'}
                     </p>
                 </div>
@@ -289,14 +264,14 @@ const PromotionModal = ({ isOpen, onClose, promotion, onSave }) => {
                 {/* Form */}
                 <form onSubmit={handleSubmit} className="p-6 overflow-y-auto max-h-[calc(90vh-200px)]">
                     <div className="space-y-6">
-                        
+
                         {/* Sección: Información básica */}
                         <div className="bg-gray-50 rounded-xl p-4 space-y-4">
                             <h3 className="font-bold text-gray-800 flex items-center gap-2 text-sm uppercase tracking-wide">
                                 <Tag size={16} className="text-bikitchen-orange" />
                                 Información básica
                             </h3>
-                            
+
                             {/* Título */}
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
@@ -313,7 +288,7 @@ const PromotionModal = ({ isOpen, onClose, promotion, onSave }) => {
                                 <p className="text-xs text-gray-500 mt-1">Tip: Usa emojis para hacerlo más llamativo 🎁</p>
                             </div>
 
-                        {/* Descripción corta */}
+                            {/* Descripción corta */}
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
                                     Descripción corta (para cards)
@@ -349,22 +324,45 @@ const PromotionModal = ({ isOpen, onClose, promotion, onSave }) => {
                                 📦 Detalles de la Promoción
                             </h3>
                             <p className="text-xs text-gray-600 -mt-2">Configura los beneficios y características del pack promocional</p>
-                            
+
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {/* Tipo de Plan */}
+                                {/* Planes Aplicables (Checkboxes) */}
                                 <div className="bg-white rounded-lg p-3 border border-orange-100">
                                     <label className="block text-sm font-bold text-gray-800 mb-2">
-                                        📅 Tipo de Plan
+                                        📅 Planes Aplicables
                                     </label>
-                                    <select
-                                        value={formData.tipoPlan}
-                                        onChange={(e) => setFormData({ ...formData, tipoPlan: e.target.value })}
-                                        className="w-full px-3 py-2.5 rounded-lg border-2 border-gray-200 bg-white text-gray-900 focus:ring-2 focus:ring-bikitchen-orange focus:border-bikitchen-orange font-medium"
-                                    >
-                                        <option value="semanal">Semanal (1 semana)</option>
-                                        <option value="quincenal">Quincenal (2 semanas)</option>
-                                        <option value="mensual">Mensual (4 semanas)</option>
-                                    </select>
+                                    <div className="flex flex-wrap gap-3 py-1">
+                                        {[
+                                            { id: 'semanal', label: 'Semanal' },
+                                            { id: 'quincenal', label: 'Quincenal' },
+                                            { id: 'mensual', label: 'Mensual' }
+                                        ].map(plan => (
+                                            <label key={plan.id} className="flex items-center gap-2 cursor-pointer group">
+                                                <div className="relative flex items-center justify-center">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={formData.planesAplicables.includes(plan.id)}
+                                                        onChange={(e) => {
+                                                            const planes = e.target.checked
+                                                                ? [...formData.planesAplicables, plan.id]
+                                                                : formData.planesAplicables.filter(p => p !== plan.id);
+                                                            setFormData({ ...formData, planesAplicables: planes });
+                                                        }}
+                                                        className="sr-only"
+                                                    />
+                                                    <div className={`w-5 h-5 rounded border-2 transition-all ${formData.planesAplicables.includes(plan.id)
+                                                        ? 'bg-bikitchen-orange border-bikitchen-orange'
+                                                        : 'bg-white border-gray-300 group-hover:border-bikitchen-orange/30'
+                                                        }`}>
+                                                        {formData.planesAplicables.includes(plan.id) && <Check size={14} className="text-white" />}
+                                                    </div>
+                                                </div>
+                                                <span className={`text-sm font-medium ${formData.planesAplicables.includes(plan.id) ? 'text-gray-900' : 'text-gray-500'}`}>
+                                                    {plan.label}
+                                                </span>
+                                            </label>
+                                        ))}
+                                    </div>
                                 </div>
 
                                 {/* Descuento de Envío */}
@@ -396,11 +394,69 @@ const PromotionModal = ({ isOpen, onClose, promotion, onSave }) => {
                                         placeholder="75000"
                                         className="w-full px-3 py-2.5 rounded-lg border-2 border-gray-200 bg-white text-gray-900 focus:ring-2 focus:ring-bikitchen-orange focus:border-bikitchen-orange font-medium"
                                     />
-                                    <p className="text-xs text-gray-500 mt-1">En colones (ej: 75000)</p>
+                                    <p className="text-xs text-gray-500 mt-1">Precio con el descuento aplicado</p>
+                                </div>
+
+                                {/* Precio Regular */}
+                                <div className="bg-white rounded-lg p-3 border border-orange-100">
+                                    <label className="block text-sm font-bold text-gray-800 mb-2">
+                                        🏷️ Precio Regular
+                                    </label>
+                                    <input
+                                        type="number"
+                                        value={formData.precioRegular}
+                                        onChange={(e) => setFormData({ ...formData, precioRegular: parseInt(e.target.value) || 0 })}
+                                        placeholder="98000"
+                                        className="w-full px-3 py-2.5 rounded-lg border-2 border-gray-200 bg-white text-gray-900 focus:ring-2 focus:ring-bikitchen-orange focus:border-bikitchen-orange font-medium"
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">Precio original sin oferta</p>
+                                </div>
+
+                                {/* Vista Previa del Badge */}
+                                <div className="md:col-span-2 bg-orange-100/30 rounded-lg p-3 border-2 border-dashed border-orange-200 flex items-center justify-between">
+                                    <div className="space-y-1">
+                                        <label className="block text-xs font-bold text-orange-800 uppercase">Vista previa del descuento</label>
+                                        <p className="text-[10px] text-gray-500">Así se verá el porcentaje en los botones de la web</p>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        {formData.planesAplicables.map(planId => {
+                                            const label = planId === 'semanal' ? 'Sem' : (planId === 'quincenal' ? 'Quin' : 'Men');
+
+                                            // Lógica mejorada: usar precio de formulario o el primer pack de la lista
+                                            let pPromo = formData.precio || 0;
+                                            let pRegular = formData.precioRegular || 0;
+
+                                            if (pPromo === 0 && formData.precios && formData.precios.length > 0) {
+                                                const firstPack = formData.precios[0];
+                                                pPromo = firstPack.precio || 0;
+                                                pRegular = firstPack.precioRegular || pPromo; // Evitar división por cero
+                                            }
+
+                                            const hasSpecial = pPromo > 0 && pRegular > pPromo;
+                                            const percent = hasSpecial ? Math.round((1 - pPromo / pRegular) * 100) : null;
+
+                                            return (
+                                                <div key={planId} className="bg-white p-2 rounded-xl shadow-sm border border-orange-100 flex flex-col items-center min-w-[75px] transition-all">
+                                                    <span className="text-[8px] font-bold text-gray-400 mb-1">{label}</span>
+                                                    <div className={`w-12 h-12 rounded-full flex flex-col items-center justify-center text-[9px] font-black shadow-sm transition-colors ${percent ? 'bg-yellow-400 text-gray-900' : 'bg-gray-100 text-gray-400'}`}>
+                                                        {percent ? (
+                                                            <>
+                                                                <span className="leading-none text-[10px]">🔥 {percent}%</span>
+                                                                <span className="text-[6px] uppercase mt-0.5">OFF</span>
+                                                            </>
+                                                        ) : (
+                                                            <Sparkles size={14} className="opacity-40" />
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                        {formData.planesAplicables.length === 0 && (
+                                            <p className="text-xs text-orange-400 italic">Selecciona un plan para ver la previa</p>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
-
-                            {/* Composición del Plato */}
                             <div className="bg-white rounded-lg p-4 border border-orange-100">
                                 <label className="block text-sm font-bold text-gray-800 mb-1">
                                     🍽️ Composición del Plato
@@ -408,7 +464,7 @@ const PromotionModal = ({ isOpen, onClose, promotion, onSave }) => {
                                 <p className="text-xs text-gray-500 mb-3">
                                     ℹ️ Esto es solo para describir la promoción. No modifica los packs reales.
                                 </p>
-                                
+
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                     {/* Proteínas */}
                                     <div>
@@ -508,7 +564,7 @@ const PromotionModal = ({ isOpen, onClose, promotion, onSave }) => {
                                 <Sparkles size={16} className="text-bikitchen-orange" />
                                 Configuración de Visualización
                             </h3>
-                            
+
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 {/* Tipo de Promoción */}
                                 <div>
@@ -572,7 +628,7 @@ const PromotionModal = ({ isOpen, onClose, promotion, onSave }) => {
                                 <Calendar size={16} className="text-bikitchen-orange" />
                                 Fechas y Vigencia
                             </h3>
-                            
+
                             {/* Fechas */}
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
@@ -583,21 +639,21 @@ const PromotionModal = ({ isOpen, onClose, promotion, onSave }) => {
                                         type="date"
                                         value={formData.fechaInicio}
                                         onChange={(e) => setFormData({ ...formData, fechaInicio: e.target.value })}
-                                    className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-gray-900 focus:ring-2 focus:ring-bikitchen-orange focus:border-transparent transition-all"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                                    <Clock size={14} className="inline mr-1" />
-                                    Fecha de fin
-                                </label>
-                                <input
-                                    type="date"
-                                    value={formData.fechaFin}
-                                    onChange={(e) => setFormData({ ...formData, fechaFin: e.target.value })}
-                                    className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-gray-900 focus:ring-2 focus:ring-bikitchen-orange focus:border-transparent transition-all"
-                                />
-                            </div>
+                                        className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-gray-900 focus:ring-2 focus:ring-bikitchen-orange focus:border-transparent transition-all"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                        <Clock size={14} className="inline mr-1" />
+                                        Fecha de fin
+                                    </label>
+                                    <input
+                                        type="date"
+                                        value={formData.fechaFin}
+                                        onChange={(e) => setFormData({ ...formData, fechaFin: e.target.value })}
+                                        className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-gray-900 focus:ring-2 focus:ring-bikitchen-orange focus:border-transparent transition-all"
+                                    />
+                                </div>
                             </div>
                         </div>
 
@@ -607,15 +663,14 @@ const PromotionModal = ({ isOpen, onClose, promotion, onSave }) => {
                                 <Image size={16} className="text-bikitchen-orange" />
                                 Imagen de la promoción
                             </h3>
-                            
+
                             {/* Botón para subir imagen */}
                             <div className="flex flex-col sm:flex-row gap-3">
                                 <label className="flex-1 cursor-pointer">
-                                    <div className={`flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed rounded-xl transition-all ${
-                                        uploadingImage 
-                                            ? 'border-bikitchen-orange bg-bikitchen-orange/10' 
-                                            : 'border-gray-300 hover:border-bikitchen-orange hover:bg-bikitchen-orange/5'
-                                    }`}>
+                                    <div className={`flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed rounded-xl transition-all ${uploadingImage
+                                        ? 'border-bikitchen-orange bg-bikitchen-orange/10'
+                                        : 'border-gray-300 hover:border-bikitchen-orange hover:bg-bikitchen-orange/5'
+                                        }`}>
                                         {uploadingImage ? (
                                             <>
                                                 <Loader2 size={20} className="animate-spin text-bikitchen-orange" />
@@ -639,14 +694,14 @@ const PromotionModal = ({ isOpen, onClose, promotion, onSave }) => {
                                     />
                                 </label>
                             </div>
-                            
+
                             {/* O pegar URL */}
                             <div className="flex items-center gap-3">
                                 <div className="flex-1 h-px bg-gray-200"></div>
                                 <span className="text-xs text-gray-500">o pegar URL</span>
                                 <div className="flex-1 h-px bg-gray-200"></div>
                             </div>
-                            
+
                             <input
                                 type="url"
                                 value={formData.imagenURL}
@@ -654,13 +709,13 @@ const PromotionModal = ({ isOpen, onClose, promotion, onSave }) => {
                                 className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-gray-900 focus:ring-2 focus:ring-bikitchen-orange focus:border-transparent transition-all"
                                 placeholder="https://ejemplo.com/imagen.jpg"
                             />
-                            
+
                             {/* Preview */}
                             {formData.imagenURL && (
                                 <div className="relative rounded-xl overflow-hidden h-40 bg-gray-100">
-                                    <img 
-                                        src={formData.imagenURL} 
-                                        alt="Preview" 
+                                    <img
+                                        src={formData.imagenURL}
+                                        alt="Preview"
                                         className="w-full h-full object-cover"
                                         onError={(e) => {
                                             e.target.style.display = 'none';
@@ -732,11 +787,10 @@ const PromotionModal = ({ isOpen, onClose, promotion, onSave }) => {
                                                 key={pack.name}
                                                 type="button"
                                                 onClick={() => togglePack(pack.name)}
-                                                className={`p-3 rounded-lg border-2 text-left transition-all ${
-                                                    isSelected
-                                                        ? 'border-bikitchen-orange bg-orange-50'
-                                                        : 'border-gray-200 bg-white hover:border-gray-300'
-                                                }`}
+                                                className={`p-3 rounded-lg border-2 text-left transition-all ${isSelected
+                                                    ? 'border-bikitchen-orange bg-orange-50'
+                                                    : 'border-gray-200 bg-white hover:border-gray-300'
+                                                    }`}
                                             >
                                                 <div className="flex items-start justify-between mb-1">
                                                     <div className="flex items-center gap-2">
@@ -773,11 +827,10 @@ const PromotionModal = ({ isOpen, onClose, promotion, onSave }) => {
                                                 key={pack.name}
                                                 type="button"
                                                 onClick={() => togglePack(pack.name)}
-                                                className={`p-3 rounded-lg border-2 text-left transition-all ${
-                                                    isSelected
-                                                        ? 'border-blue-500 bg-blue-50'
-                                                        : 'border-gray-200 bg-white hover:border-gray-300'
-                                                }`}
+                                                className={`p-3 rounded-lg border-2 text-left transition-all ${isSelected
+                                                    ? 'border-blue-500 bg-blue-50'
+                                                    : 'border-gray-200 bg-white hover:border-gray-300'
+                                                    }`}
                                             >
                                                 <div className="flex items-start justify-between mb-1">
                                                     <div className="flex items-center gap-2">
@@ -812,7 +865,7 @@ const PromotionModal = ({ isOpen, onClose, promotion, onSave }) => {
                                     Lista los beneficios que el cliente obtiene con esta promoción. Aparecerán en la página de promociones.
                                 </p>
                             </div>
-                            
+
                             {/* Input para agregar */}
                             <div className="flex gap-2">
                                 <input
@@ -832,7 +885,7 @@ const PromotionModal = ({ isOpen, onClose, promotion, onSave }) => {
                                     Agregar
                                 </button>
                             </div>
-                            
+
                             {/* Lista de beneficios */}
                             {formData.beneficios.length > 0 ? (
                                 <div className="space-y-2">
@@ -845,7 +898,7 @@ const PromotionModal = ({ isOpen, onClose, promotion, onSave }) => {
                                             <button
                                                 type="button"
                                                 onClick={() => removeBeneficio(idx)}
-                                                className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50:bg-red-900/20 rounded-lg transition-colors"
+                                                className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                                             >
                                                 <X size={16} />
                                             </button>
@@ -892,7 +945,7 @@ const PromotionModal = ({ isOpen, onClose, promotion, onSave }) => {
                         <button
                             type="button"
                             onClick={onClose}
-                            className="flex-1 px-6 py-3 bg-gray-100 text-gray-700 rounded-xl font-semibold hover:bg-gray-200:bg-gray-600 transition-colors"
+                            className="flex-1 px-6 py-3 bg-gray-100 text-gray-700 rounded-xl font-semibold hover:bg-gray-200 transition-colors"
                         >
                             Cancelar
                         </button>
@@ -914,9 +967,10 @@ const PromotionModal = ({ isOpen, onClose, promotion, onSave }) => {
                             )}
                         </button>
                     </div>
+
                 </form>
             </motion.div>
-        </motion.div>
+        </motion.div >
     );
 };
 
@@ -954,7 +1008,7 @@ export default function PromotionsView() {
             // 1. Eliminar "Pack Navideño con Postre de Regalo" antiguo si existe
             const allPromos = await getAllPromotions();
             const oldChristmasPromo = allPromos.find(p => p.titulo === '🎄 Pack Navideño con Postre de Regalo');
-            
+
             if (oldChristmasPromo) {
                 console.log('Eliminando promoción antigua:', oldChristmasPromo.titulo);
                 await deletePromotion(oldChristmasPromo.id);
@@ -1027,8 +1081,8 @@ export default function PromotionsView() {
                     fechaFin: '',
                     packsRelacionados: ['Two Pack'],
                     beneficios: [
-                        'Ideal para compartir', 
-                        'Precios iguales al Pack Semanal', 
+                        'Ideal para compartir',
+                        'Precios iguales al Pack Semanal',
                         'Hasta 2 cambios sin costo'
                     ],
                     mostrarEnHome: false,
@@ -1048,7 +1102,7 @@ export default function PromotionsView() {
                     await createPromotion(promo);
                 }
             }
-            
+
             await loadData();
             alert('Promociones actualizadas correctamente');
         } catch (error) {
@@ -1091,10 +1145,10 @@ export default function PromotionsView() {
 
     const formatDate = (date) => {
         if (!date) return '—';
-        return new Date(date).toLocaleDateString('es-CR', { 
-            day: 'numeric', 
-            month: 'short', 
-            year: 'numeric' 
+        return new Date(date).toLocaleDateString('es-CR', {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric'
         });
     };
 
@@ -1131,23 +1185,21 @@ export default function PromotionsView() {
 
             {/* Tabs Switcher */}
             <div className="flex bg-gray-100 p-1 rounded-xl self-start md:self-auto">
-                <button 
-                    onClick={() => setActiveTab('promotions') }
-                    className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
-                        activeTab === 'promotions' 
-                        ? 'bg-white shadow-sm text-gray-900' 
+                <button
+                    onClick={() => setActiveTab('promotions')}
+                    className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'promotions'
+                        ? 'bg-white shadow-sm text-gray-900'
                         : 'text-gray-500 hover:text-gray-700:text-gray-300'
-                    }`}
+                        }`}
                 >
                     Promociones Generales
                 </button>
-                <button 
-                    onClick={() => setActiveTab('packs') }
-                    className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 ${
-                        activeTab === 'packs' 
-                        ? 'bg-white shadow-sm text-gray-900' 
+                <button
+                    onClick={() => setActiveTab('packs')}
+                    className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 ${activeTab === 'packs'
+                        ? 'bg-white shadow-sm text-gray-900'
                         : 'text-gray-500 hover:text-gray-700:text-gray-300'
-                    }`}
+                        }`}
                 >
                     Descuentos en Packs
                     <span className="bg-bikitchen-gold text-gray-900 text-[10px] px-1.5 py-0.5 rounded-full">Nuevo</span>
@@ -1246,16 +1298,15 @@ export default function PromotionsView() {
                                     key={promo.id}
                                     initial={{ opacity: 0, y: 20 }}
                                     animate={{ opacity: 1, y: 0 }}
-                                    className={`bg-white rounded-2xl overflow-hidden border transition-all group hover:shadow-xl ${
-                                        !promo.activa ? 'opacity-75 grayscale border-gray-200' : 'border-gray-100'
-                                    }`}
+                                    className={`bg-white rounded-2xl overflow-hidden border transition-all group hover:shadow-xl ${!promo.activa ? 'opacity-75 grayscale border-gray-200' : 'border-gray-100'
+                                        }`}
                                 >
                                     {/* Image Header */}
                                     <div className="relative h-48 bg-gray-100">
                                         {promo.imagenURL ? (
-                                            <img 
-                                                src={promo.imagenURL} 
-                                                alt={promo.titulo} 
+                                            <img
+                                                src={promo.imagenURL}
+                                                alt={promo.titulo}
                                                 className="w-full h-full object-cover"
                                             />
                                         ) : (
@@ -1266,11 +1317,10 @@ export default function PromotionsView() {
                                         <div className="absolute top-4 right-4 flex gap-2">
                                             <button
                                                 onClick={() => handleToggleStatus(promo)}
-                                                className={`p-2 rounded-full backdrop-blur-md transition-colors ${
-                                                    promo.activa 
-                                                        ? 'bg-green-500/20 text-green-600 hover:bg-green-500 hover:text-white' 
-                                                        : 'bg-gray-500/20 text-gray-600 hover:bg-gray-500 hover:text-white'
-                                                }`}
+                                                className={`p-2 rounded-full backdrop-blur-md transition-colors ${promo.activa
+                                                    ? 'bg-green-500/20 text-green-600 hover:bg-green-500 hover:text-white'
+                                                    : 'bg-gray-500/20 text-gray-600 hover:bg-gray-500 hover:text-white'
+                                                    }`}
                                                 title={promo.activa ? 'Desactivar' : 'Activar'}
                                             >
                                                 {promo.activa ? <Eye size={18} /> : <EyeOff size={18} />}
@@ -1295,11 +1345,10 @@ export default function PromotionsView() {
                                         </div>
                                         {/* Status Badge */}
                                         <div className="absolute bottom-4 left-4 flex gap-2">
-                                            <span className={`px-2 py-1 rounded-lg text-xs font-bold backdrop-blur-md ${
-                                                promo.activa 
-                                                    ? 'bg-green-500/80 text-white' 
-                                                    : 'bg-gray-500/80 text-white'
-                                            }`}>
+                                            <span className={`px-2 py-1 rounded-lg text-xs font-bold backdrop-blur-md ${promo.activa
+                                                ? 'bg-green-500/80 text-white'
+                                                : 'bg-gray-500/80 text-white'
+                                                }`}>
                                                 {promo.activa ? 'ACTIVA' : 'INACTIVA'}
                                             </span>
                                             {promo.mostrarEnHome && (
@@ -1327,9 +1376,8 @@ export default function PromotionsView() {
                                                 <span>Inicio: {formatDate(promo.fechaInicio)}</span>
                                             </div>
                                             <div className="w-px h-4 bg-gray-300"></div>
-                                            <div className={`flex items-center gap-1 ${
-                                                promo.fechaFin && new Date(promo.fechaFin) < new Date() ? 'text-red-500 font-bold' : ''
-                                            }`}>
+                                            <div className={`flex items-center gap-1 ${promo.fechaFin && new Date(promo.fechaFin) < new Date() ? 'text-red-500 font-bold' : ''
+                                                }`}>
                                                 <Clock size={14} />
                                                 <span>Fin: {formatDate(promo.fechaFin)}</span>
                                             </div>
@@ -1398,6 +1446,7 @@ export default function PromotionsView() {
             {/* Delete Confirmation */}
             <AnimatePresence>
                 {deleteConfirm && (
+
                     <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
@@ -1431,13 +1480,15 @@ export default function PromotionsView() {
                             <div className="flex gap-3">
                                 <button
                                     onClick={() => setDeleteConfirm(null)}
-                                    className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl font-semibold hover:bg-gray-200:bg-gray-600 transition-colors"
+                                    className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl font-semibold hover:bg-gray-200 transition-colors"
+                                    type="button"
                                 >
                                     Cancelar
                                 </button>
                                 <button
                                     onClick={() => handleDelete(deleteConfirm.id)}
                                     className="flex-1 px-4 py-3 bg-red-500 text-white rounded-xl font-semibold hover:bg-red-600 transition-colors"
+                                    type="button"
                                 >
                                     Eliminar
                                 </button>
@@ -1449,3 +1500,4 @@ export default function PromotionsView() {
         </div>
     );
 }
+

@@ -30,6 +30,7 @@ import { doc, getDoc } from 'firebase/firestore';
 const EMAILJS_CONFIG = {
     serviceId: import.meta.env.VITE_EMAILJS_SERVICE_ID || 'service_bikitchen',
     templateId: import.meta.env.VITE_EMAILJS_TEMPLATE_ID || 'template_order_notification',
+    customerTemplateId: import.meta.env.VITE_EMAILJS_CUSTOMER_TEMPLATE_ID || 'template_customer_confirmation',
     publicKey: import.meta.env.VITE_EMAILJS_PUBLIC_KEY || ''
 };
 
@@ -140,6 +141,7 @@ export const sendOrderNotification = async (orderData) => {
                 : (orderData.fechaEntrega || 'No especificada'),
             metodoPago: orderData.metodoPago?.toUpperCase() || 'NO ESPECIFICADO',
             observaciones: orderData.observaciones || 'Sin observaciones',
+            fuente: orderData.fuente || 'Directo / Desconocido',
             // URL al admin panel (opcional)
             adminUrl: `${window.location.origin}/admin/orders`
         };
@@ -179,4 +181,56 @@ export const getEmailConfig = () => {
         templateId: EMAILJS_CONFIG.templateId,
         hasPublicKey: !!EMAILJS_CONFIG.publicKey
     };
+};
+
+/**
+ * Envía una notificación de confirmación al cliente
+ * @param {Object} orderData Datos completos del pedido
+ */
+export const sendCustomerOrderConfirmation = async (orderData) => {
+    try {
+        if (!EMAILJS_CONFIG.publicKey) {
+            console.warn('⚠️ EmailJS no está configurado. Saltando confirmación al cliente.');
+            return false;
+        }
+
+        // Determinar email del cliente
+        const customerEmail = orderData.cliente?.email || orderData.email || orderData.correo;
+
+        if (!customerEmail) {
+            console.warn('⚠️ No hay email del cliente para enviar la confirmación.');
+            return false;
+        }
+
+        // Preparar datos para la plantilla del cliente
+        // Estos nombres de variables deben coincidir con los que se usen en la plantilla de EmailJS
+        const templateParams = {
+            to_email: customerEmail,
+            to_name: orderData.cliente?.nombre || orderData.nombre || 'Cliente',
+            orderNumber: orderData.orderNumber || 'N/A',
+            fecha: new Date().toLocaleDateString('es-CR'),
+            items_summary: formatItemsForEmail(orderData.items || []),
+            subtotal: `₡${(orderData.subtotal || 0).toLocaleString()}`,
+            discount: `₡${(orderData.discount || 0).toLocaleString()}`,
+            shipping: `₡${(orderData.shippingCost || 0).toLocaleString()}`,
+            total: `₡${(orderData.total || 0).toLocaleString()}`,
+            metodoPago: orderData.metodoPago || 'Coordinado',
+            direccion: orderData.direccion || 'Retiro en local',
+            notas: orderData.notas || 'Sin notas adicionales'
+        };
+
+        const response = await emailjs.send(
+            EMAILJS_CONFIG.serviceId,
+            EMAILJS_CONFIG.customerTemplateId,
+            templateParams,
+            EMAILJS_CONFIG.publicKey
+        );
+
+        console.log('✅ Email de confirmación enviado al cliente:', response.status, response.text);
+        return true;
+
+    } catch (error) {
+        console.error('❌ Error enviando email al cliente:', error);
+        return false;
+    }
 };

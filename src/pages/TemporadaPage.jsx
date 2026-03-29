@@ -10,9 +10,9 @@ import { useCart } from '../context/CartContext';
 import { getActivePromotions } from '../utils/firestorePromotions';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
-import { db, storage } from '../firebase/config';
+import { db } from '../firebase/config';
 import { collection, getDocs, doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { uploadOptimizedImage } from '../services/cloudinaryService';
 import { useWhatsApp } from '../hooks/useWhatsApp';
 import { cleanFirebaseUrl } from '../utils/firebaseUrl';
 // import { RatingDisplay } from '../components/ReviewSystem'; // Deshabilitado temporalmente
@@ -804,45 +804,33 @@ export default function TemporadaPage() {
             const toastId = `upload-${tipo}`;
             try {
                 toast.loading('Subiendo imagen...', { id: toastId });
-                const ts = Date.now();
-                const fileName = `temporada/${tipo}/${item.id}_${ts}.webp`;
-                const storageRef = ref(storage, fileName);
-                const blob = await optimizeToWebp(file, 1280);
-                await uploadBytes(storageRef, blob, { contentType: 'image/webp', cacheControl: 'public, max-age=31536000, immutable' });
-                const url = await getDownloadURL(storageRef);
+                const result = await uploadOptimizedImage(file, `bikitchen/temporada/${tipo}`, { maxSize: 1280 });
+                const url = result.url;
 
                 const legacyRef = doc(db, 'temporada_imagenes', item.id);
-                const prevSnap = await getDoc(legacyRef);
-                const prevPath = prevSnap.exists() ? (prevSnap.data()?.fileName || null) : null;
-
                 await setDoc(legacyRef, {
                     imagenUrl: url,
-                    fileName,
+                    cloudinaryPublicId: result.publicId,
                     tipo,
                     updatedAt: new Date().toISOString()
                 }, { merge: true });
 
                 const confRef = doc(db, 'config', 'season_images');
                 await setDoc(confRef, { updatedAt: new Date().toISOString() }, { merge: true });
-                await updateDoc(confRef, { [`images.${item.id}`]: url, [`paths.${item.id}`]: fileName, [`types.${item.id}`]: tipo });
+                await updateDoc(confRef, {
+                    [`images.${item.id}`]: url,
+                    [`publicIds.${item.id}`]: result.publicId,
+                    [`types.${item.id}`]: tipo
+                });
 
-                // Actualizar estado local
-                if (tipo === 'pack') {
-                    setPackImages((prev) => ({ ...prev, [item.id]: url }));
-                } else if (tipo === 'proteina') {
-                    setProteinaImages((prev) => ({ ...prev, [item.id]: url }));
-                } else if (tipo === 'postre') {
-                    setPostreImages((prev) => ({ ...prev, [item.id]: url }));
-                }
-
-                if (prevPath && prevPath !== fileName) {
-                    try { await deleteObject(ref(storage, prevPath)); } catch (_) { }
-                }
+                if (tipo === 'pack') setPackImages((prev) => ({ ...prev, [item.id]: url }));
+                else if (tipo === 'proteina') setProteinaImages((prev) => ({ ...prev, [item.id]: url }));
+                else if (tipo === 'postre') setPostreImages((prev) => ({ ...prev, [item.id]: url }));
 
                 toast.success('Imagen actualizada correctamente', { id: toastId });
             } catch (error) {
                 console.error('Error subiendo imagen de temporada:', error);
-                toast.error('No se pudo subir la imagen. Intenta de nuevo.', { id: toastId });
+                toast.error(`No se pudo subir la imagen: ${error.message}`, { id: toastId });
             }
         };
 

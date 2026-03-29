@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { 
-    Tag, Save, AlertCircle, Loader2, Check, X, 
+import {
+    Tag, Save, AlertCircle, Loader2, Check, X,
     Calendar, DollarSign, Percent, BadgePercent
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -20,8 +20,20 @@ export default function PackDiscountsView() {
         etiquetaTexto: '',
         fechaInicio: '',
         fechaFin: '',
-        mostrarEtiqueta: true
+        mostrarEtiqueta: true,
+        planesAplicables: ['weekly', 'biweekly'] // Por defecto semanal y quincenal
     });
+
+    useEffect(() => {
+        if (editingPack) {
+            document.body.style.overflow = 'hidden';
+        } else {
+            document.body.style.overflow = 'unset';
+        }
+        return () => {
+            document.body.style.overflow = 'unset';
+        };
+    }, [editingPack]);
 
     // Cargar precios y configuraciones
     const loadData = async () => {
@@ -57,18 +69,19 @@ export default function PackDiscountsView() {
             etiquetaTexto: currentConfig.etiquetaTexto || '',
             fechaInicio: currentConfig.fechaInicio ? new Date(currentConfig.fechaInicio.toDate ? currentConfig.fechaInicio.toDate() : currentConfig.fechaInicio).toISOString().split('T')[0] : '',
             fechaFin: currentConfig.fechaFin ? new Date(currentConfig.fechaFin.toDate ? currentConfig.fechaFin.toDate() : currentConfig.fechaFin).toISOString().split('T')[0] : '',
-            mostrarEtiqueta: currentConfig.mostrarEtiqueta ?? true
+            mostrarEtiqueta: currentConfig.mostrarEtiqueta ?? true,
+            planesAplicables: currentConfig.planesAplicables || (currentConfig.tipoPlan ? [currentConfig.tipoPlan] : ['weekly', 'biweekly'])
         });
     };
 
     const handleSave = async (e) => {
         e.preventDefault();
         if (!editingPack) return;
-        
+
         setSaving(true);
         try {
             const { categoryKey, packName } = editingPack;
-            
+
             // Preparar objeto de actualización profunda
             const currentCategory = packPrices[categoryKey] || { packs: {} };
             const currentPacks = currentCategory.packs || {};
@@ -146,15 +159,14 @@ export default function PackDiscountsView() {
                         {catData.packs.map((pack) => {
                             const config = getPackConfig(catKey, pack.name);
                             const hasDiscount = config.descuentoActivo;
-                            
+
                             return (
-                                <div 
-                                    key={pack.name} 
-                                    className={`relative border rounded-xl p-4 transition-all ${
-                                        hasDiscount 
-                                            ? 'border-bikitchen-gold bg-bikitchen-gold/5' 
-                                            : 'border-gray-200'
-                                    }`}
+                                <div
+                                    key={pack.name}
+                                    className={`relative border rounded-xl p-4 transition-all ${hasDiscount
+                                        ? 'border-bikitchen-gold bg-bikitchen-gold/5'
+                                        : 'border-gray-200'
+                                        }`}
                                 >
                                     {hasDiscount && (
                                         <div className="absolute -top-2.5 -right-2.5 bg-bikitchen-gold text-gray-900 text-xs font-bold px-2 py-1 rounded-full shadow-sm flex items-center gap-1">
@@ -167,15 +179,15 @@ export default function PackDiscountsView() {
                                         <div className="text-2xl">{pack.icon}</div>
                                         <button
                                             onClick={() => handleEditClick(catKey, pack.name, config)}
-                                            className="p-1.5 text-gray-500 hover:text-bikitchen-orange hover:bg-gray-100:bg-gray-700 rounded-lg transition-colors"
+                                            className="p-1.5 text-gray-500 hover:text-bikitchen-orange hover:bg-gray-100 rounded-lg transition-colors"
                                             title="Configurar descuento"
                                         >
                                             <Tag size={16} />
                                         </button>
                                     </div>
-                                    
+
                                     <h4 className="font-bold text-gray-900 text-sm mb-1">{pack.name}</h4>
-                                    
+
                                     {hasDiscount ? (
                                         <div className="text-xs space-y-1">
                                             <p className="text-green-600 font-medium">
@@ -203,12 +215,16 @@ export default function PackDiscountsView() {
             {/* Modal de Edición */}
             <AnimatePresence>
                 {editingPack && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                    <div
+                        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+                        onClick={() => setEditingPack(null)}
+                    >
                         <motion.div
                             initial={{ opacity: 0, scale: 0.95 }}
                             animate={{ opacity: 1, scale: 1 }}
                             exit={{ opacity: 0, scale: 0.95 }}
-                            className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden"
+                            onClick={(e) => e.stopPropagation()}
+                            className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden"
                         >
                             <div className="bg-gradient-to-r from-bikitchen-orange to-orange-600 p-6 text-white">
                                 <div className="flex justify-between items-center">
@@ -223,17 +239,17 @@ export default function PackDiscountsView() {
                                 <p className="text-white/80 text-sm mt-1">{editingPack.packName}</p>
                             </div>
 
-                            <form onSubmit={handleSave} className="p-6 space-y-4">
+                            <form onSubmit={handleSave} className="p-6 space-y-4 overflow-y-auto flex-1">
                                 <div className="flex items-center justify-between bg-gray-50 p-4 rounded-xl">
                                     <span className="font-medium text-gray-700">Activar Descuento</span>
                                     <label className="relative inline-flex items-center cursor-pointer">
-                                        <input 
-                                            type="checkbox" 
+                                        <input
+                                            type="checkbox"
                                             className="sr-only peer"
                                             checked={formData.descuentoActivo}
-                                            onChange={(e) => setFormData({...formData, descuentoActivo: e.target.checked})}
+                                            onChange={(e) => setFormData({ ...formData, descuentoActivo: e.target.checked })}
                                         />
-                                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-bikitchen-orange/20:ring-bikitchen-orange/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-bikitchen-orange"></div>
+                                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-bikitchen-orange/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-bikitchen-orange"></div>
                                     </label>
                                 </div>
 
@@ -243,23 +259,21 @@ export default function PackDiscountsView() {
                                         <div className="flex rounded-lg bg-gray-100 p-1">
                                             <button
                                                 type="button"
-                                                onClick={() => setFormData({...formData, tipoDescuento: 'porcentaje'})}
-                                                className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-all ${
-                                                    formData.tipoDescuento === 'porcentaje' 
-                                                    ? 'bg-white shadow text-gray-900' 
+                                                onClick={() => setFormData({ ...formData, tipoDescuento: 'porcentaje' })}
+                                                className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-all ${formData.tipoDescuento === 'porcentaje'
+                                                    ? 'bg-white shadow text-gray-900'
                                                     : 'text-gray-500'
-                                                }`}
+                                                    }`}
                                             >
                                                 %
                                             </button>
                                             <button
                                                 type="button"
-                                                onClick={() => setFormData({...formData, tipoDescuento: 'fijo'})}
-                                                className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-all ${
-                                                    formData.tipoDescuento === 'fijo' 
-                                                    ? 'bg-white shadow text-gray-900' 
+                                                onClick={() => setFormData({ ...formData, tipoDescuento: 'fijo' })}
+                                                className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-all ${formData.tipoDescuento === 'fijo'
+                                                    ? 'bg-white shadow text-gray-900'
                                                     : 'text-gray-500'
-                                                }`}
+                                                    }`}
                                             >
                                                 ₡
                                             </button>
@@ -271,7 +285,7 @@ export default function PackDiscountsView() {
                                             <input
                                                 type="number"
                                                 value={formData.valorDescuento}
-                                                onChange={(e) => setFormData({...formData, valorDescuento: e.target.value})}
+                                                onChange={(e) => setFormData({ ...formData, valorDescuento: e.target.value })}
                                                 className="w-full pl-8 pr-3 py-2 rounded-lg border border-gray-200 bg-white text-sm"
                                                 placeholder="0"
                                             />
@@ -287,7 +301,7 @@ export default function PackDiscountsView() {
                                     <input
                                         type="text"
                                         value={formData.etiquetaTexto}
-                                        onChange={(e) => setFormData({...formData, etiquetaTexto: e.target.value})}
+                                        onChange={(e) => setFormData({ ...formData, etiquetaTexto: e.target.value })}
                                         className="w-full px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm"
                                         placeholder="Ej: 🔥 20% OFF"
                                     />
@@ -299,7 +313,7 @@ export default function PackDiscountsView() {
                                         <input
                                             type="date"
                                             value={formData.fechaInicio}
-                                            onChange={(e) => setFormData({...formData, fechaInicio: e.target.value})}
+                                            onChange={(e) => setFormData({ ...formData, fechaInicio: e.target.value })}
                                             className="w-full px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm"
                                         />
                                     </div>
@@ -308,21 +322,78 @@ export default function PackDiscountsView() {
                                         <input
                                             type="date"
                                             value={formData.fechaFin}
-                                            onChange={(e) => setFormData({...formData, fechaFin: e.target.value})}
+                                            onChange={(e) => setFormData({ ...formData, fechaFin: e.target.value })}
                                             className="w-full px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm"
                                         />
                                     </div>
                                 </div>
-                                
+
                                 <div className="flex items-center gap-2">
-                                    <input 
-                                        type="checkbox" 
+                                    <input
+                                        type="checkbox"
                                         id="showLabel"
-                                        checked={formData.mostrarEtiqueta} 
-                                        onChange={(e) => setFormData({...formData, mostrarEtiqueta: e.target.checked})}
+                                        checked={formData.mostrarEtiqueta}
+                                        onChange={(e) => setFormData({ ...formData, mostrarEtiqueta: e.target.checked })}
                                         className="rounded border-gray-300 text-bikitchen-orange focus:ring-bikitchen-orange"
                                     />
                                     <label htmlFor="showLabel" className="text-sm text-gray-600">Mostrar etiqueta visual en la card</label>
+                                </div>
+
+                                {/* Selección de Planes */}
+                                <div className="bg-orange-50 p-4 rounded-xl border border-orange-100 space-y-3">
+                                    <label className="block text-xs font-bold text-orange-800 uppercase tracking-wider">Aplicar a planes:</label>
+                                    <div className="flex flex-wrap gap-3">
+                                        {[
+                                            { id: 'weekly', label: 'Semanal' },
+                                            { id: 'biweekly', label: 'Quincenal' },
+                                            { id: 'monthly', label: 'Mensual' }
+                                        ].map(plan => (
+                                            <label key={plan.id} className="flex items-center gap-2 cursor-pointer group">
+                                                <div className="relative flex items-center justify-center">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={formData.planesAplicables.includes(plan.id)}
+                                                        onChange={(e) => {
+                                                            const planes = e.target.checked
+                                                                ? [...formData.planesAplicables, plan.id]
+                                                                : formData.planesAplicables.filter(p => p !== plan.id);
+                                                            setFormData({ ...formData, planesAplicables: planes });
+                                                        }}
+                                                        className="sr-only"
+                                                    />
+                                                    <div className={`w-5 h-5 rounded border-2 transition-all ${formData.planesAplicables.includes(plan.id)
+                                                        ? 'bg-orange-500 border-orange-500'
+                                                        : 'bg-white border-gray-300 group-hover:border-orange-300'
+                                                        }`}>
+                                                        {formData.planesAplicables.includes(plan.id) && <Check size={14} className="text-white" />}
+                                                    </div>
+                                                </div>
+                                                <span className={`text-sm font-medium ${formData.planesAplicables.includes(plan.id) ? 'text-orange-900' : 'text-gray-600'}`}>
+                                                    {plan.label}
+                                                </span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                    <p className="text-[10px] text-orange-600 italic mt-2">
+                                        ℹ️ El descuento solo se activará cuando el usuario elija alguno de estos planes.
+                                    </p>
+                                </div>
+
+                                {/* Vista Previa del Badge */}
+                                <div className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-gray-100 rounded-xl bg-gray-50/50">
+                                    <span className="text-[10px] font-bold text-gray-400 uppercase mb-3">Vista previa del botón</span>
+                                    <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 w-32 flex flex-col items-center">
+                                        <div className="w-full bg-orange-500 text-white py-2 rounded-xl text-center text-xs font-bold mb-2 shadow-sm">
+                                            Plan
+                                        </div>
+                                        <div className="flex justify-center">
+                                            <div className="w-8 h-8 rounded-full bg-orange-500 text-white flex items-center justify-center text-[10px] font-black shadow-md">
+                                                {formData.tipoDescuento === 'porcentaje'
+                                                    ? `-${formData.valorDescuento}%`
+                                                    : `-₡${Math.round(formData.valorDescuento / 1000)}k`}
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <div className="flex gap-3 pt-4">

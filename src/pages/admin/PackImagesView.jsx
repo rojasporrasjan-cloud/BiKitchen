@@ -1,14 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-    Image, Upload, Save, Loader2, Check, X, Camera, Trash2, Images
-} from 'lucide-react';
+import { Image, Upload, Save, Loader2, Check, X, Camera, Trash2, Images } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PACKS_DATA } from '../../data/packsData';
-import { db, storage } from '../../firebase/config';
+import { db } from '../../firebase/config';
 import { collection, getDocs, doc, setDoc, deleteDoc, getDoc, updateDoc, deleteField } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { uploadOptimizedImage } from '../../services/cloudinaryService';
 import toast from 'react-hot-toast';
 import AdminPageHeader from '../../components/admin/AdminPageHeader';
+import { invalidateCache } from '../../utils/firestoreCache';
 
 // Imagen por defecto
 const DEFAULT_PACK_IMAGE = 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=400&h=250&fit=crop&q=80';
@@ -24,7 +23,7 @@ export default function PackImagesView() {
     const getAllPacks = () => {
         const seenNames = new Set();
         const uniquePacks = [];
-        
+
         Object.entries(PACKS_DATA).forEach(([categoryKey, categoryData]) => {
             categoryData.packs.forEach(pack => {
                 // Solo agregar si no hemos visto este nombre antes
@@ -113,98 +112,84 @@ export default function PackImagesView() {
         } catch (err) { reject(err); }
     });
 
-    // Subir imagen
+    // Subir imagen usando Cloudinary
     const handleFileChange = async (e) => {
         const file = e.target.files?.[0];
         if (!file || !selectedPack) return;
 
-        // Validar tipo de archivo
         if (!file.type.startsWith('image/')) {
             toast.error('Por favor selecciona una imagen');
             return;
         }
-
-        // Validar tamaño (max 5MB)
         if (file.size > 5 * 1024 * 1024) {
             toast.error('La imagen debe ser menor a 5MB');
             return;
         }
 
         setUploading(selectedPack);
-        
         try {
-            const ts = Date.now();
-            const safeName = selectedPack.replace(/\s+/g, '_');
-            const fileName = `packs/${safeName}_${ts}.webp`;
-            const storageRef = ref(storage, fileName);
-            const blob = await optimizeToWebp(file, 1280);
-            await uploadBytes(storageRef, blob, { contentType: 'image/webp', cacheControl: 'public, max-age=31536000, immutable' });
-            const downloadUrl = await getDownloadURL(storageRef);
-            
-            // Guardar en doc unificado (preferido)
+            const result = await uploadOptimizedImage(file, 'bikitchen/packs', {
+                maxSize: 1280,
+                onProgress: (p) => console.log(`Subiendo pack: ${p}%`)
+            });
+            const downloadUrl = result.url;
+
+            // Guardar en doc unificado (preferido) con estructura anidada para merge correcto
             const confRef = doc(db, 'config', 'pack_images');
-            const prevSnap = await getDoc(confRef);
-            const prevPath = prevSnap.exists() ? (prevSnap.data()?.paths?.[selectedPack] || null) : null;
-            await setDoc(confRef, { updatedAt: new Date().toISOString() }, { merge: true });
-            await updateDoc(confRef, { [`images.${selectedPack}`]: downloadUrl, [`paths.${selectedPack}`]: fileName });
-            
-            // Legacy (opcional): mantener colección sincronizada para compatibilidad
-            try {
-                const legacyRef = doc(db, 'packs_imagenes', selectedPack.replace(/\s+/g, '_'));
-                await setDoc(legacyRef, {
-                    packName: selectedPack,
-                    imagenUrl: downloadUrl,
-                    fileName: fileName,
-                    updatedAt: new Date()
-                });
-            } catch (_) {}
-            
+            await setDoc(confRef, { 
+                updatedAt: new Date().toISOString(),
+                images: {
+                    [selectedPack]: downloadUrl
+                },
+                publicIds: {
+                    [selectedPack]: result.publicId
+                }
+            }, { merge: true });
+
+            // Invalidar caché local para que se vea el cambio al recargar PacksPage
+            invalidateCache('pack_images');
+
             // Actualizar estado local
-            setPackImages(prev => ({
-                ...prev,
-                [selectedPack]: downloadUrl
-            }));
-            // Eliminar imagen anterior si existe
-            if (prevPath && prevPath !== fileName) {
-                try { await deleteObject(ref(storage, prevPath)); } catch (_) {}
-            }
-            
-            toast.success(`Imagen de "${selectedPack}" actualizada`);
+            setPackImages(prev => ({ ...prev, [selectedPack]: downloadUrl }));
+            toast.success(`Imagen de "${selectedPack}" actualizada ✅`);
         } catch (error) {
             console.error('Error uploading image:', error);
-            toast.error('Error al subir la imagen');
+            toast.error(`Error: ${error.message}`);
         } finally {
             setUploading(null);
             setSelectedPack(null);
-            // Limpiar input
-            if (fileInputRef.current) {
-                fileInputRef.current.value = '';
-            }
+            if (fileInputRef.current) fileInputRef.current.value = '';
         }
     };
 
     // Eliminar imagen personalizada
     const handleDeleteImage = async (packName) => {
         if (!confirm(`¿Eliminar la imagen personalizada de "${packName}"?`)) return;
-        
+
         setUploading(packName);
         try {
             // Remover del doc unificado
             const confRef = doc(db, 'config', 'pack_images');
-            await updateDoc(confRef, { [`images.${packName}`]: deleteField(), updatedAt: new Date().toISOString() });
-            
+            await updateDoc(confRef, { 
+                [`images.${packName}`]: deleteField(), 
+                updatedAt: new Date().toISOString() 
+            });
+
+            // Invalidar caché local
+            invalidateCache('pack_images');
+
             // Legacy: eliminar documento individual si existe
             try {
                 const docRef = doc(db, 'packs_imagenes', packName.replace(/\s+/g, '_'));
                 await deleteDoc(docRef);
-            } catch (_) {}
-            
+            } catch (_) { }
+
             setPackImages(prev => {
                 const newImages = { ...prev };
                 delete newImages[packName];
                 return newImages;
             });
-            
+
             toast.success('Imagen eliminada, se usará la imagen por defecto');
         } catch (error) {
             console.error('Error deleting image:', error);
@@ -274,7 +259,7 @@ export default function PackImagesView() {
                                     alt={pack.name}
                                     className="w-full h-full object-cover"
                                 />
-                                
+
                                 {/* Overlay con botones */}
                                 <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                                     <button
@@ -289,7 +274,7 @@ export default function PackImagesView() {
                                             <Camera size={20} className="text-gray-700" />
                                         )}
                                     </button>
-                                    
+
                                     {hasCustomImage && (
                                         <button
                                             onClick={() => handleDeleteImage(pack.name)}

@@ -4,6 +4,7 @@ import { lazy, Suspense, Component, useEffect } from 'react';
 import './utils/updateWhatsAppNumber'; // Script para actualizar número de WhatsApp
 import { checkAppVersion } from './utils/appVersion'; // Sistema de versión para forzar actualizaciones
 import { hardRefresh } from './utils/cacheUtils';
+import { captureSource } from './services/sourceTracking';
 
 // Critical pages - loaded immediately
 import LandingPage from './pages/LandingPage';
@@ -28,7 +29,9 @@ const MiImpactoPage = lazy(() => import('./pages/MiImpactoPage'));
 const MisPedidosPage = lazy(() => import('./pages/MisPedidosPage'));
 const GiftCardsPage = lazy(() => import('./pages/GiftCardsPage'));
 const FidelidadPage = lazy(() => import('./pages/FidelidadPage'));
+const RewardStore = lazy(() => import('./pages/RewardStore'));
 const MiCuentaPage = lazy(() => import('./pages/MiCuentaPage'));
+const MisCuponesPage = lazy(() => import('./pages/MisCuponesPage'));
 const AccesoDenegadoPage = lazy(() => import('./pages/AccesoDenegadoPage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 const TilopayReturnPage = lazy(() => import('./pages/TilopayReturnPage'));
@@ -51,6 +54,7 @@ const ImageUploadPage = lazy(() => import('./pages/admin/ImageUploadPage'));
 const DispatchSheetView = lazy(() => import('./pages/admin/DispatchSheetView'));
 const WhatsAppConfigView = lazy(() => import('./pages/admin/WhatsAppConfigView'));
 const ShippingDiscountView = lazy(() => import('./views/ShippingDiscountView'));
+const GiftCardsView = lazy(() => import('./pages/admin/GiftCardsView'));
 const Login = lazy(() => import('./pages/admin/Login'));
 
 import SmoothScroll from './components/SmoothScroll';
@@ -67,16 +71,11 @@ import PWAPrompt from './components/PWAPrompt';
 import PromoBanner from './components/PromoBanner';
 import FloatingCartButton from './components/FloatingCartButton';
 
-import { AudioProvider } from './context/AudioContext';
-import { ThemeProvider } from './context/ThemeContext';
-import { CartProvider, useCart } from './context/CartContext';
-import { OrdersProvider } from './context/OrdersContext';
-import { AuthProvider } from './context/AuthContext';
-import { ChristmasProvider } from './context/ChristmasContext';
-import { ContactConfigProvider } from './context/ContactConfigContext';
-import { ShippingDiscountProvider } from './context/ShippingDiscountContext';
-import { MenusProvider } from './context/MenusContext';
+import { useCart } from './context/CartContext';
+import { useAuth } from './context/AuthContext';
+import { AppProviders } from './context/AppProviders';
 import ShippingDiscountBanner from './components/ShippingDiscountBanner';
+import { useUI } from './context/UIContext';
 
 // Loading fallback component
 function PageLoader() {
@@ -140,21 +139,24 @@ class ErrorBoundary extends Component {
 // Componente que usa el contexto del carrito para pasar estado a ChristmasEffects
 function PublicRouteExtras() {
   const { isCartOpen, setIsCartOpen } = useCart() || {};
+  const { isMobileMenuOpen } = useUI() || {};
+  const { isAdmin } = useAuth() || {};
   const location = useLocation();
   const pathname = location?.pathname || '';
+  const isLoginPage = pathname === '/login';
   const hideFloating = [
     /^\/terminos(\/|$)/,
     /^\/privacidad(\/|$)/,
     /^\/cookies(\/|$)/,
     /^\/reembolsos(\/|$)/
-  ].some((re) => re.test(pathname));
+  ].some((re) => re.test(pathname)) || isMobileMenuOpen || isCartOpen || isLoginPage;
   return (
     <>
       <ShippingDiscountBanner />
       <PromoBanner />
       <CartDrawer />
       {!hideFloating && <WhatsAppButton />}
-      <AISommelier />
+      {/* {isAdmin && isAdmin() && <AISommelier />} */}
       <PWAPrompt />
       {!hideFloating && (
         <FloatingCartButton onClick={() => setIsCartOpen(true)} isCartOpen={isCartOpen} />
@@ -207,7 +209,10 @@ function AnimatedRoutes() {
             <Route path="/regalar" element={<GiftCardsPage />} />
             <Route path="/fidelidad" element={<FidelidadPage />} />
             <Route path="/puntos" element={<FidelidadPage />} />
+            <Route path="/canje" element={<RewardStore />} />
+            <Route path="/tienda-vip" element={<RewardStore />} />
             <Route path="/mi-cuenta" element={<MiCuentaPage />} />
+            <Route path="/mis-cupones" element={<MisCuponesPage />} />
             <Route path="/acceso-denegado" element={<AccesoDenegadoPage />} />
 
             {/* Test WhatsApp */}
@@ -235,6 +240,7 @@ function AnimatedRoutes() {
               <Route path="promotions" element={<PromotionsView />} />
               <Route path="coupons" element={<CouponsView />} />
               <Route path="notifications" element={<NotificationsView />} />
+              <Route path="gift-cards" element={<GiftCardsView />} />
               <Route path="imagenes" element={<ImageUploadPage />} />
               <Route path="whatsapp-config" element={<WhatsAppConfigView />} />
               <Route path="shipping-discount" element={<ShippingDiscountView />} />
@@ -252,7 +258,9 @@ function AnimatedRoutes() {
 function App() {
   return (
     <Router>
-      <AppContent />
+      <AppProviders>
+        <AppContent />
+      </AppProviders>
     </Router>
   );
 }
@@ -261,37 +269,26 @@ function AppContent() {
   const location = useLocation();
   const isAdminRoute = location.pathname.startsWith('/admin');
 
+  // Capturar fuente de tráfico (UTMs, Referrer) en cada navegación
+  useEffect(() => {
+    captureSource();
+  }, [location]);
+
   return (
-    <AuthProvider>
-      <ContactConfigProvider>
-        <ShippingDiscountProvider>
-          <AudioProvider>
-            <ThemeProvider>
-              <ChristmasProvider>
-                <CartProvider>
-                  <OrdersProvider>
-                    <MenusProvider>
-                      <div className="App min-h-screen bg-white transition-colors duration-300">
-                        <ScrollToTop />
-                        <CinematicGrain />
-                        <CinematicPreloader />
-                        <SmoothScroll />
+    <div className="App min-h-screen bg-white transition-colors duration-300">
+      <ScrollToTop />
+      <CinematicGrain />
+      <CinematicPreloader />
+      <SmoothScroll />
 
-                        {/* Only show these on public routes */}
-                        {!isAdminRoute && <PublicRouteExtras />}
+      {/* Only show these on public routes */}
+      {!isAdminRoute && <PublicRouteExtras />}
 
-                        <ToastNotification />
-                        <AnimatedRoutes />
-                      </div>
-                    </MenusProvider>
-                  </OrdersProvider>
-                </CartProvider>
-              </ChristmasProvider>
-            </ThemeProvider>
-          </AudioProvider>
-        </ShippingDiscountProvider>
-      </ContactConfigProvider>
-    </AuthProvider>
+      <div className="relative z-10">
+        <ToastNotification />
+        <AnimatedRoutes />
+      </div>
+    </div>
   );
 }
 

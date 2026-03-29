@@ -62,6 +62,18 @@ const modalContentVariants = {
 
 const formatPrice = (price) => `₡${price.toLocaleString('es-CR')}`;
 
+// Convierte cualquier forma de fecha a JS Date:
+// - Firestore Timestamp (tiene .toDate())
+// - Objeto plano del cache localStorage {seconds, nanoseconds}
+// - String ISO o Date normal
+const toJsDate = (val) => {
+    if (!val) return null;
+    if (typeof val.toDate === 'function') return val.toDate();
+    if (val.seconds !== undefined) return new Date(val.seconds * 1000);
+    const d = new Date(val);
+    return isNaN(d.getTime()) ? null : d;
+};
+
 // Datos de packs especiales (familiares y proteínas)
 // NOTA: Los menús de packs familiares se cargan dinámicamente desde Firebase
 // Datos de packs especiales (familiares y proteínas)
@@ -166,19 +178,55 @@ const PackCard = memo(({ pack, shipping, category, promociones = [], customImage
         });
     }, [packEspecialData?.cantidad]);
 
-    // DESACTIVADO: El campo packsRelacionados es solo informativo para el modal de promociones
-    // No debe activar badges en las tarjetas de packs
-    // const promoActiva = promociones.find(p => p.packsRelacionados?.includes(pack.name));
-    // const tienePromo = !!promoActiva;
-    const tienePromo = false; // Desactivado temporalmente
+    // Lógica de Promociones desde Firestore
+    const getPromoForPlan = (plan) => {
+        if (!promociones || promociones.length === 0) return null;
+
+        return promociones.find(p =>
+            p.activa &&
+            p.packsRelacionados?.includes(pack.name) &&
+            p.tipoPlan === plan
+        );
+    };
+
+    const getPromoDiscountLabel = (plan) => {
+        const promo = getPromoForPlan(plan);
+        if (promo) {
+            if (promo.precio > 0) {
+                const original = getOriginalPrice(plan);
+                if (original > 0) {
+                    const discount = Math.round((1 - (promo.precio / original)) * 100);
+                    return `-${discount}%`;
+                }
+            }
+            return 'PROMO';
+        }
+
+        // Descuento de mensual predeterminado
+        if (plan === 'monthly' && !isSpecialPack && !isPromocionPack) {
+            return `-${MONTHLY_DISCOUNT_PERCENT}%`;
+        }
+
+        // Descuento manual de Firebase (Solo semanal/quincenal)
+        if (hasDiscount && plan !== 'monthly') {
+            return pack.tipoDescuento === 'porcentaje'
+                ? `-${pack.valorDescuento}%`
+                : `-₡${Math.round(pack.valorDescuento / 1000)}k`; // Abreviar para círculos
+        }
+
+        return null;
+    };
+
+    const promoActiva = getPromoForPlan(selectedPlan);
+    const tienePromo = !!promoActiva;
 
     // Lógica de Descuento Automático Configurable
     const isDiscountActive = () => {
         if (!pack.descuentoActivo) return false;
 
         const now = new Date();
-        const inicio = pack.fechaInicio ? (pack.fechaInicio.toDate ? pack.fechaInicio.toDate() : new Date(pack.fechaInicio)) : null;
-        const fin = pack.fechaFin ? (pack.fechaFin.toDate ? pack.fechaFin.toDate() : new Date(pack.fechaFin)) : null;
+        const inicio = toJsDate(pack.fechaInicio);
+        const fin = toJsDate(pack.fechaFin);
 
         if (inicio && now < inicio) return false;
         if (fin && now > fin) return false;
@@ -194,14 +242,14 @@ const PackCard = memo(({ pack, shipping, category, promociones = [], customImage
     const isMonthlyPlan = selectedPlan === 'monthly' && !isSpecialPack && !isPromocionPack;
 
     // Precio original (sin descuento) - para mensual es semanal × 4
-    const getOriginalPrice = () => {
+    const getOriginalPrice = (plan = selectedPlan) => {
         // Packs de promoción usan monthlyOriginal como precio original
         if (isPromocionPack) {
             return Number(pack.monthlyOriginal) || Number(pack.monthly) || 0;
         }
 
         if (isProteinsPack && selectedSize === '500') {
-            switch (selectedPlan) {
+            switch (plan) {
                 case 'weekly': return Number(pack.weekly_500) || 0;
                 case 'biweekly': return Number(pack.biweekly_500) || 0;
                 case 'monthly': return (Number(pack.weekly_500) || 0) * 4; // Precio base para mostrar ahorro
@@ -209,7 +257,7 @@ const PackCard = memo(({ pack, shipping, category, promociones = [], customImage
             }
         }
 
-        switch (selectedPlan) {
+        switch (plan) {
             case 'weekly': return Number(pack.weekly) || 0;
             case 'biweekly': return Number(pack.biweekly) || 0;
             case 'monthly': return Number(pack.monthlyOriginal) || (Number(pack.weekly) || 0) * 4;
@@ -219,7 +267,12 @@ const PackCard = memo(({ pack, shipping, category, promociones = [], customImage
 
     // Precio final - para mensual ya viene con descuento en los datos
     const getFinalPrice = () => {
-        // Packs de promoción - precio ya viene con descuento
+        // Prioridad 1: Promociones dinámicas de la colección 'promociones'
+        if (tienePromo && promoActiva.precio > 0) {
+            return Number(promoActiva.precio);
+        }
+
+        // Prioridad 2: Packs de promoción (Full Pack con Desayunos, etc.)
         if (isPromocionPack) {
             return Number(pack.monthly) || 0;
         }
@@ -257,7 +310,7 @@ const PackCard = memo(({ pack, shipping, category, promociones = [], customImage
     };
 
     // Verificar si hay algún descuento activo (Firebase, mensual o promoción)
-    const hasPromoDiscount = isPromocionPack && pack.monthlyOriginal && pack.monthlyOriginal !== pack.monthly;
+    const hasPromoDiscount = (isPromocionPack && pack.monthlyOriginal && pack.monthlyOriginal !== pack.monthly) || tienePromo;
     const hasAnyDiscount = hasDiscount || isMonthlyPlan || hasPromoDiscount;
 
     const getPlanLabel = () => {
@@ -294,8 +347,8 @@ const PackCard = memo(({ pack, shipping, category, promociones = [], customImage
         }
     };
 
-    // Imagen a mostrar (Forzamos default por error de Firebase, ignorando customImage temporalmente)
-    const packImage = DEFAULT_PACK_IMAGES[pack.name] || DEFAULT_PACK_IMAGE;
+    // Imagen a mostrar (Prioridad: Cloudinary customImage > Imagen por defecto del pack > Imagen de respaldo)
+    const packImage = customImage || DEFAULT_PACK_IMAGES[pack.name] || DEFAULT_PACK_IMAGE;
 
     const handleAddToCart = () => {
         if (isMaintenance) return;
@@ -318,7 +371,9 @@ const PackCard = memo(({ pack, shipping, category, promociones = [], customImage
 
         // Construir descripción con descuentos
         let desc = pack.desc;
-        if (isPromocionPack) {
+        if (tienePromo) {
+            desc = `${pack.desc} • ${promoActiva.titulo}`;
+        } else if (isPromocionPack) {
             desc = `${pack.desc} • Desayunos GRATIS • Envío 10%`;
         } else if (isMonthlyPlan) {
             const shippingText = is15ComidasPack ? 'Envío GRATIS' : '50% OFF en envío';
@@ -329,7 +384,9 @@ const PackCard = memo(({ pack, shipping, category, promociones = [], customImage
 
         // Determinar badge de descuento
         let discountBadge = null;
-        if (isPromocionPack && hasPromoDiscount) {
+        if (tienePromo) {
+            discountBadge = '🎁 PROMO Activa';
+        } else if (isPromocionPack && hasPromoDiscount) {
             discountBadge = '🎁 PROMO Desayunos';
         } else if (isMonthlyPlan) {
             discountBadge = `${MONTHLY_DISCOUNT_PERCENT}% OFF Mensual`;
@@ -459,9 +516,9 @@ const PackCard = memo(({ pack, shipping, category, promociones = [], customImage
                         <p className="text-xs sm:text-sm text-gray-600 line-clamp-2 leading-relaxed">{pack.desc}</p>
 
                         {/* Subtexto de validez de descuento */}
-                        {hasDiscount && pack.fechaFin && (
+                        {hasDiscount && pack.fechaFin && toJsDate(pack.fechaFin) && (
                             <p className="text-xs text-orange-600 mt-1 font-medium">
-                                Válido hasta {new Date(pack.fechaFin.toDate ? pack.fechaFin.toDate() : pack.fechaFin).toLocaleDateString()}
+                                Válido hasta {toJsDate(pack.fechaFin).toLocaleDateString('es-CR')}
                             </p>
                         )}
                     </div>
@@ -485,7 +542,7 @@ const PackCard = memo(({ pack, shipping, category, promociones = [], customImage
                             <div className="text-center mb-4">
                                 {isFamiliarPack ? (
                                     <div className="text-3xl font-bold text-bikitchen-orange">
-                                        {packEspecialData && formatPrice(packEspecialData.precio)}
+                                        {formatPrice(getFinalPrice())}
                                     </div>
                                 ) : (
                                     <div className="flex flex-col items-center">
@@ -544,30 +601,46 @@ const PackCard = memo(({ pack, shipping, category, promociones = [], customImage
                         <>
                             {/* Selector de plan - oculto para packs de promoción */}
                             {!isPromocionPack && (
-                                <div className="flex gap-1.5 sm:gap-2 mb-5 pt-2 overflow-visible">
+                                <div className="flex gap-1 sm:gap-2 mb-3 w-full">
                                     <motion.button
                                         onClick={() => setSelectedPlan('weekly')}
-                                        className={`flex-1 py-1.5 sm:py-3 px-1 sm:px-3 rounded-lg sm:rounded-2xl text-[10px] sm:text-sm font-bold transition-all border ${selectedPlan === 'weekly'
+                                        className={`flex-1 min-w-0 py-2 sm:py-3 px-1 sm:px-3 rounded-2xl text-[11px] sm:text-sm font-bold transition-all relative border overflow-visible ${selectedPlan === 'weekly'
                                             ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg shadow-orange-500/30 border-orange-500'
                                             : 'bg-white text-gray-700 hover:bg-orange-50 border-gray-200 hover:border-orange-300'
                                             }`}
-                                        whileHover={{ scale: 1.02 }}
-                                        whileTap={{ scale: 0.98 }}
+                                        whileHover={{ scale: 1.05 }}
+                                        whileTap={{ scale: 0.95 }}
                                     >
-                                        <span className="block">Semanal</span>
+                                        <span className="block leading-tight mb-1 truncate text-[10px] sm:text-sm">
+                                            <span className="hidden sm:inline">Semanal</span>
+                                            <span className="sm:hidden">Sem</span>
+                                        </span>
+                                        <div className="flex justify-center -mt-0.5">
+                                            <span className={`flex items-center justify-center w-6 h-6 sm:w-9 sm:h-9 rounded-full text-[7px] sm:text-[11px] font-black shadow-md transition-transform hover:scale-110 ${getPromoForPlan('semanal') ? 'bg-pink-500 text-white' : 'bg-orange-500 text-white'}`}>
+                                                {getPromoDiscountLabel('weekly')}
+                                            </span>
+                                        </div>
                                     </motion.button>
 
                                     {!isProteinsPack && (
                                         <motion.button
                                             onClick={() => setSelectedPlan('biweekly')}
-                                            className={`flex-1 py-1.5 sm:py-3 px-1 sm:px-3 rounded-lg sm:rounded-2xl text-[10px] sm:text-sm font-bold transition-all border ${selectedPlan === 'biweekly'
+                                            className={`flex-1 min-w-0 py-2 sm:py-3 px-1 sm:px-3 rounded-2xl text-[11px] sm:text-sm font-bold transition-all relative border overflow-visible ${selectedPlan === 'biweekly'
                                                 ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg shadow-orange-500/30 border-orange-500'
                                                 : 'bg-white text-gray-700 hover:bg-orange-50 border-gray-200 hover:border-orange-300'
                                                 }`}
-                                            whileHover={{ scale: 1.02 }}
-                                            whileTap={{ scale: 0.98 }}
+                                            whileHover={{ scale: 1.05 }}
+                                            whileTap={{ scale: 0.95 }}
                                         >
-                                            <span className="block">Quincenal</span>
+                                            <span className="block leading-tight mb-1 truncate text-[10px] sm:text-sm">
+                                                <span className="hidden sm:inline">Quincenal</span>
+                                                <span className="sm:hidden">Quin</span>
+                                            </span>
+                                            <div className="flex justify-center -mt-0.5">
+                                                <span className={`flex items-center justify-center w-6 h-6 sm:w-9 sm:h-9 rounded-full text-[7px] sm:text-[11px] font-black shadow-md transition-transform hover:scale-110 ${getPromoForPlan('quincenal') ? 'bg-pink-500 text-white' : 'bg-orange-500 text-white'}`}>
+                                                    {getPromoDiscountLabel('biweekly')}
+                                                </span>
+                                            </div>
                                         </motion.button>
                                     )}
 
@@ -576,22 +649,27 @@ const PackCard = memo(({ pack, shipping, category, promociones = [], customImage
                                             setSelectedPlan('monthly');
                                             if (isProteinsPack) setSelectedSize('500');
                                         }}
-                                        className={`flex-1 py-1.5 sm:py-3 px-1 sm:px-3 rounded-lg sm:rounded-2xl text-[10px] sm:text-sm font-bold transition-all relative border overflow-visible ${selectedPlan === 'monthly'
+                                        className={`flex-1 min-w-0 py-2 sm:py-3 px-1 sm:px-3 rounded-2xl text-[11px] sm:text-sm font-bold transition-all relative border overflow-visible ${selectedPlan === 'monthly'
                                             ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg shadow-orange-500/30 border-orange-500'
                                             : 'bg-white text-gray-700 hover:bg-orange-50 border-gray-200 hover:border-orange-300'
                                             }`}
-                                        whileHover={{ scale: 1.02 }}
-                                        whileTap={{ scale: 0.98 }}
+                                        whileHover={{ scale: 1.05 }}
+                                        whileTap={{ scale: 0.95 }}
                                     >
-                                        <span className="block">Mensual</span>
-                                        <span className={`absolute -top-2 right-0 ${isTwoPack ? 'bg-purple-500' : 'bg-green-500'} text-white text-[9px] px-1.5 py-0.5 rounded-full font-bold shadow-sm whitespace-nowrap`}>
-                                            -{MONTHLY_DISCOUNT_PERCENT}%
+                                        <span className="block leading-tight mb-1 truncate text-[10px] sm:text-sm">
+                                            <span className="hidden sm:inline">Mensual</span>
+                                            <span className="sm:hidden">Mes</span>
                                         </span>
+                                        <div className="flex justify-center -mt-0.5">
+                                            <span className={`flex items-center justify-center w-6 h-6 sm:w-9 sm:h-9 rounded-full text-[7px] sm:text-[11px] font-black shadow-md transition-transform hover:scale-110 ${getPromoForPlan('mensual') ? 'bg-pink-500 text-white' : (isTwoPack ? 'bg-purple-500 text-white' : 'bg-green-500 text-white')}`}>
+                                                {getPromoDiscountLabel('monthly')}
+                                            </span>
+                                        </div>
                                     </motion.button>
                                 </div>
                             )}
 
-                            {/* Badge para packs de promoción */}
+
                             {isPromocionPack && (
                                 <div className="mb-3 text-center">
                                     <span className="inline-flex items-center gap-1 px-3 py-1 bg-gradient-to-r from-pink-500 to-orange-500 text-white text-xs font-bold rounded-full">
@@ -1040,14 +1118,21 @@ const PackCard = memo(({ pack, shipping, category, promociones = [], customImage
                     } : {}}
                     packInfo={{
                         name: pack.name,
-                        desc: pack.desc,
+                        desc: tienePromo ? `${pack.desc} • ${promoActiva.titulo}` :
+                            (isPromocionPack ? `${pack.desc} • Desayunos GRATIS • Envío 10%` :
+                                (isMonthlyPlan ? `${pack.desc} • ${MONTHLY_DISCOUNT_PERCENT}% dto. mensual • ${is15ComidasPack ? 'Envío GRATIS' : '50% OFF en envío'}` :
+                                    (hasDiscount && pack.etiquetaTexto ? `${pack.desc} • ${pack.etiquetaTexto}` : pack.desc))),
                         icon: pack.icon,
                         price: formatPrice(getFinalPrice()),
                         numericPrice: getFinalPrice(),
-                        originalPrice: hasDiscount ? formatPrice(getOriginalPrice()) : null,
+                        originalPrice: hasAnyDiscount ? formatPrice(getOriginalPrice()) : null,
                         plan: selectedPlan,
                         planLabel: getPlanLabel(),
-                        image: packImage
+                        image: packImage,
+                        discountBadge: tienePromo ? '🎁 PROMO Activa' :
+                            (isPromocionPack ? '🎁 PROMO Desayunos' :
+                                (isMonthlyPlan ? `${MONTHLY_DISCOUNT_PERCENT}% OFF Mensual` :
+                                    (hasDiscount ? pack.etiquetaTexto : null)))
                     }}
                 />
             ) : isPromocionPack ? (
@@ -1268,31 +1353,36 @@ export default function PacksPage() {
                 // Aplicar imágenes cacheadas
                 setPackImages(imagesMap || {});
 
-                // Eliminado: evitar lecturas/escrituras innecesarias en clientes
-
-                // CRÍTICO: Aplicar precios de Firebase a packsData
-                /*
+                // CRÍTICO: Aplicar precios Y descuentos de Firebase a packsData
                 if (pricesFromDb && Object.keys(pricesFromDb).length > 0) {
-                    const updatedPacksData = { ...PACKS_DATA };
+                    const updatedPacksData = JSON.parse(JSON.stringify(PACKS_DATA)); // deep copy
 
-                    // Actualizar precios para cada categoría
                     Object.keys(pricesFromDb).forEach(categoryKey => {
-                        // Skip overrides for proteinas to enforce local pricing update
-                        if (categoryKey === 'proteinas') return;
-
                         if (updatedPacksData[categoryKey] && pricesFromDb[categoryKey]?.packs) {
                             const pricesForCategory = pricesFromDb[categoryKey].packs;
 
-                            // Actualizar cada pack en la categoría
                             updatedPacksData[categoryKey].packs = updatedPacksData[categoryKey].packs.map(pack => {
                                 const priceData = pricesForCategory[pack.name];
                                 if (priceData) {
                                     return {
                                         ...pack,
-                                        weekly: priceData.weekly || pack.weekly,
-                                        biweekly: priceData.biweekly || pack.biweekly,
-                                        monthly: priceData.monthly || pack.monthly,
-                                        monthlyOriginal: priceData.monthlyOriginal || pack.monthlyOriginal
+                                        // Precios (solo sobreescribir si están definidos en DB)
+                                        ...(priceData.weekly !== undefined && { weekly: priceData.weekly }),
+                                        ...(priceData.biweekly !== undefined && { biweekly: priceData.biweekly }),
+                                        ...(priceData.monthly !== undefined && { monthly: priceData.monthly }),
+                                        ...(priceData.monthlyOriginal !== undefined && { monthlyOriginal: priceData.monthlyOriginal }),
+                                        // Precios de proteínas 500g
+                                        ...(priceData.weekly_500 !== undefined && { weekly_500: priceData.weekly_500 }),
+                                        ...(priceData.biweekly_500 !== undefined && { biweekly_500: priceData.biweekly_500 }),
+                                        ...(priceData.monthly_500 !== undefined && { monthly_500: priceData.monthly_500 }),
+                                        // Config de descuento (PackDiscountsView)
+                                        descuentoActivo: priceData.descuentoActivo ?? false,
+                                        tipoDescuento: priceData.tipoDescuento ?? 'porcentaje',
+                                        valorDescuento: priceData.valorDescuento ?? 0,
+                                        etiquetaTexto: priceData.etiquetaTexto ?? '',
+                                        mostrarEtiqueta: priceData.mostrarEtiqueta ?? true,
+                                        fechaInicio: priceData.fechaInicio ?? null,
+                                        fechaFin: priceData.fechaFin ?? null,
                                     };
                                 }
                                 return pack;
@@ -1301,9 +1391,8 @@ export default function PacksPage() {
                     });
 
                     setPacksData(updatedPacksData);
-                    console.log('[PacksPage] Precios actualizados desde Firebase');
+                    console.log('[PacksPage] Precios y descuentos actualizados desde Firebase');
                 }
-                */
 
                 // Guardar promociones
                 setPromociones(activePromos);

@@ -1,20 +1,20 @@
 import { db } from '../firebase/config';
-import { 
-    collection, 
-    doc, 
-    getDocs, 
-    getDoc, 
-    addDoc, 
-    updateDoc, 
-    deleteDoc, 
-    query, 
-    where, 
+import {
+    collection,
+    doc,
+    getDocs,
+    getDoc,
+    addDoc,
+    updateDoc,
+    deleteDoc,
+    query,
+    where,
     orderBy,
     serverTimestamp,
     Timestamp
 } from 'firebase/firestore';
 import { cleanFirebaseUrl } from './firebaseUrl';
-import { cachedFetch, invalidateCache } from './firestoreCache';
+import { cachedFetch, invalidateCache, invalidateCacheByType } from './firestoreCache';
 
 const COLLECTION_NAME = 'promociones';
 
@@ -125,7 +125,7 @@ export const getHomePromotions = async () => {
 export const getPromotionsByPack = async (packName) => {
     try {
         const activePromos = await getActivePromotions();
-        return activePromos.filter(promo => 
+        return activePromos.filter(promo =>
             promo.packsRelacionados?.includes(packName)
         );
     } catch (error) {
@@ -141,7 +141,7 @@ export const getPromotionById = async (id) => {
     try {
         const docRef = doc(db, COLLECTION_NAME, id);
         const docSnap = await getDoc(docRef);
-        
+
         if (docSnap.exists()) {
             const data = docSnap.data();
             return {
@@ -170,7 +170,7 @@ export const createPromotion = async (promotionData) => {
         console.log('🔍 DEBUG - packsRelacionados:', promotionData.packsRelacionados);
         console.log('🔍 DEBUG - descuentoEnvio:', promotionData.descuentoEnvio);
         console.log('🔍 DEBUG - tipoPlan:', promotionData.tipoPlan);
-        
+
         const docRef = await addDoc(collection(db, COLLECTION_NAME), {
             ...promotionData,
             fechaInicio: promotionData.fechaInicio ? Timestamp.fromDate(new Date(promotionData.fechaInicio)) : null,
@@ -182,8 +182,8 @@ export const createPromotion = async (promotionData) => {
             updatedAt: serverTimestamp()
         });
         console.log('✅ Promoción creada exitosamente con ID:', docRef.id);
-        // Invalidar caché
-        invalidateCache('promotions_all');
+        // Invalidar todo el caché relacionado con promociones
+        invalidateCacheByType('promotions');
         return { id: docRef.id, success: true };
     } catch (error) {
         console.error('Error creating promotion:', error);
@@ -202,7 +202,7 @@ export const updatePromotion = async (id, promotionData) => {
         console.log('🔍 DEBUG - packsRelacionados:', promotionData.packsRelacionados);
         console.log('🔍 DEBUG - descuentoEnvio:', promotionData.descuentoEnvio);
         console.log('🔍 DEBUG - tipoPlan:', promotionData.tipoPlan);
-        
+
         const docRef = doc(db, COLLECTION_NAME, id);
         await updateDoc(docRef, {
             ...promotionData,
@@ -211,8 +211,8 @@ export const updatePromotion = async (id, promotionData) => {
             updatedAt: serverTimestamp()
         });
         console.log('✅ Promoción actualizada exitosamente');
-        // Invalidar caché
-        invalidateCache('promotions_all');
+        // Invalidar todo el caché relacionado con promociones
+        invalidateCacheByType('promotions');
         return { success: true };
     } catch (error) {
         console.error('Error updating promotion:', error);
@@ -226,8 +226,8 @@ export const updatePromotion = async (id, promotionData) => {
 export const deletePromotion = async (id) => {
     try {
         await deleteDoc(doc(db, COLLECTION_NAME, id));
-        // Invalidar caché
-        invalidateCache('promotions_all');
+        // Invalidar todo el caché relacionado con promociones
+        invalidateCacheByType('promotions');
         return { success: true };
     } catch (error) {
         console.error('Error deleting promotion:', error);
@@ -245,8 +245,8 @@ export const togglePromotionStatus = async (id, currentStatus) => {
             activa: !currentStatus,
             updatedAt: serverTimestamp()
         });
-        // Invalidar caché
-        invalidateCache('promotions_all');
+        // Invalidar todo el caché relacionado con promociones
+        invalidateCacheByType('promotions');
         return { success: true };
     } catch (error) {
         console.error('Error toggling promotion status:', error);
@@ -261,7 +261,7 @@ export const checkExpiredPromotions = async () => {
     try {
         const allPromos = await getAllPromotions();
         const now = new Date();
-        
+
         for (const promo of allPromos) {
             if (promo.activa && promo.fechaFin) {
                 const fechaFin = new Date(promo.fechaFin);
@@ -411,19 +411,19 @@ export const getPromotionStats = async () => {
         const allPromos = await getAllPromotions();
         const activePromos = await getActivePromotions();
         const now = new Date();
-        
+
         // Encontrar próxima a expirar
         const proximaExpirar = activePromos
             .filter(p => p.fechaFin)
             .sort((a, b) => new Date(a.fechaFin) - new Date(b.fechaFin))[0];
-        
+
         // Calcular días restantes
         let diasRestantes = null;
         if (proximaExpirar?.fechaFin) {
             const diff = new Date(proximaExpirar.fechaFin) - now;
             diasRestantes = Math.ceil(diff / (1000 * 60 * 60 * 24));
         }
-        
+
         return {
             total: allPromos.length,
             activas: activePromos.length,

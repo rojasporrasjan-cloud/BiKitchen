@@ -127,25 +127,25 @@ export default function MenuDetailsModal({ menuKey, isOpen, onClose, packInfo })
   const [dishes, setDishes] = useState([]);
   const [title, setTitle] = useState('Menú semanal');
   const scrollContainerRef = useRef(null);
-  
+
   // Estados para personalización
   const [quantity, setQuantity] = useState(1);
   const [notes, setNotes] = useState('');
   const [showNotes, setShowNotes] = useState(false);
-  
+
   // Cart context
   const { addToCart } = useCart();
-  
+
   // Precio base del pack
   const basePrice = packInfo?.numericPrice || 0;
-  
+
   // Precio total por unidad (sin extras de proteína)
   const unitPrice = basePrice;
-  
+
   // Precio total con cantidad
   const totalPrice = unitPrice * quantity;
-  
-  
+
+
   // Añadir al carrito
   const handleAddToCart = () => {
     addToCart({
@@ -158,24 +158,25 @@ export default function MenuDetailsModal({ menuKey, isOpen, onClose, packInfo })
       quantity: quantity,
       menuKey,
       plan: packInfo?.plan || 'Semanal',
+      discountBadge: packInfo?.discountBadge,
       customizations: {
         notes: notes.trim()
       }
     });
-    
+
     toast.success(`${title} añadido al carrito`);
-    
+
     // Reset y cerrar
     resetForm();
     onClose();
   };
-  
+
   const resetForm = () => {
     setQuantity(1);
     setNotes('');
     setShowNotes(false);
   };
-  
+
   // Reset al cerrar
   useEffect(() => {
     if (!isOpen) {
@@ -193,7 +194,7 @@ export default function MenuDetailsModal({ menuKey, isOpen, onClose, packInfo })
         // CRÍTICO: Forzar recarga desde servidor para que los cambios se vean en móviles
         // y en el pack mensual con desayunos gratis
         const data = await getOfficialMenus(true);
-        
+
         console.log('[MenuDetailsModal] Datos recibidos de Firebase:', {
           menuKey,
           hasData: !!data,
@@ -202,16 +203,16 @@ export default function MenuDetailsModal({ menuKey, isOpen, onClose, packInfo })
           allKeys: Object.keys(data),
           firstPlato: data[menuKey]?.[0]
         });
-        
+
         // Buscar los platos del tipo de menú seleccionado
         let platos = data[menuKey] || [];
-        
+
         console.log('[MenuDetailsModal] Platos encontrados:', {
           menuKey,
           platosLength: platos.length,
           platos: platos.slice(0, 2) // Mostrar primeros 2 platos
         });
-        
+
         // IMPORTANTE: NO usar fallback local - si no hay datos en Firebase, mostrar vacío
         // Esto asegura que SIEMPRE se vean los datos actuales de Firebase
         if (!Array.isArray(platos)) {
@@ -240,7 +241,7 @@ export default function MenuDetailsModal({ menuKey, isOpen, onClose, packInfo })
 
   // Obtener información de porciones del pack actual
   const portionInfo = PACK_PORTIONS[menuKey] || PACK_PORTIONS.regular;
-  
+
   // Detectar si es menú sin carbohidratos (Keto o Sin Carbos)
   const isNoCarbsMenu = menuKey === 'keto' || menuKey === 'sinCarbos' || menuKey === 'cenaKeto' || menuKey === 'cenaSinCarbos';
 
@@ -259,7 +260,7 @@ export default function MenuDetailsModal({ menuKey, isOpen, onClose, packInfo })
                 <p className="text-white/80 text-sm">5 platos diferentes por semana</p>
               </div>
             </div>
-            <button 
+            <button
               onClick={onClose}
               className="w-8 h-8 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center transition-colors"
             >
@@ -269,10 +270,10 @@ export default function MenuDetailsModal({ menuKey, isOpen, onClose, packInfo })
         </DialogHeader>
 
         {/* Contenido con scroll */}
-        <div 
+        <div
           ref={scrollContainerRef}
           className="flex-1 overflow-y-auto overscroll-contain p-4 space-y-4"
-          style={{ 
+          style={{
             maxHeight: 'calc(80vh - 280px)',
             WebkitOverflowScrolling: 'touch'
           }}
@@ -283,7 +284,7 @@ export default function MenuDetailsModal({ menuKey, isOpen, onClose, packInfo })
               <span className="text-lg">📏</span>
               <h4 className="font-bold text-sm">Cada plato incluye:</h4>
             </div>
-            
+
             <div className="grid grid-cols-3 gap-2 mb-3">
               {/* Proteína */}
               <div className="bg-white/20 backdrop-blur-sm rounded-xl p-3 text-center">
@@ -291,14 +292,14 @@ export default function MenuDetailsModal({ menuKey, isOpen, onClose, packInfo })
                 <div className="text-lg font-bold">{portionInfo.protein}</div>
                 <div className="text-xs text-white/80">Proteína</div>
               </div>
-              
+
               {/* Vegetales */}
               <div className="bg-white/20 backdrop-blur-sm rounded-xl p-3 text-center">
                 <div className="text-2xl mb-1">🥦</div>
                 <div className="text-lg font-bold">{portionInfo.veggies}</div>
                 <div className="text-xs text-white/80">{portionInfo.veggies === 1 ? 'Vegetal' : 'Vegetales'}</div>
               </div>
-              
+
               {/* Carbohidratos - Solo mostrar si NO es menú Keto/Sin Carbos */}
               {!isNoCarbsMenu ? (
                 <div className="bg-white/20 backdrop-blur-sm rounded-xl p-3 text-center">
@@ -314,7 +315,7 @@ export default function MenuDetailsModal({ menuKey, isOpen, onClose, packInfo })
                 </div>
               )}
             </div>
-            
+
             <p className="text-xs text-white/90 text-center italic">
               ✨ {portionInfo.description}
             </p>
@@ -376,7 +377,7 @@ export default function MenuDetailsModal({ menuKey, isOpen, onClose, packInfo })
                   <MessageSquare size={18} className="text-orange-500" />
                   Anotaciones especiales
                 </h4>
-                
+
                 {/* Anotaciones */}
                 <div>
                   <textarea
@@ -425,7 +426,7 @@ export default function MenuDetailsModal({ menuKey, isOpen, onClose, packInfo })
               </button>
             </div>
           </div>
-          
+
           <button
             onClick={handleAddToCart}
             disabled={loading || dishes.length === 0}

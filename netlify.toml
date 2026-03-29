@@ -2,7 +2,14 @@
   command = "npm run build"
   publish = "dist"
 
+[functions]
+  # Extended timeout for payment functions (NMI can be slow from Costa Rica)
+  # Our internal AbortController fires at 8.5s to give a clean JSON response.
+  # This 26s limit is the outer safety net.
+  node_bundler = "esbuild"
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
+

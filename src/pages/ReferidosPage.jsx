@@ -8,30 +8,74 @@ import BackButton from '../components/BackButton';
 import { 
     Gift, Users, Copy, Check, Share2, MessageCircle, 
     ArrowRight, Sparkles, Heart, DollarSign, Trophy,
-    Instagram, Facebook, Mail, ChevronDown
+    Instagram, Facebook, Mail, ChevronDown, Save, AlertCircle, Star
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { db } from '../firebase/config';
+import { doc, setDoc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 
-const REFERRAL_REWARD = 2000; // ₡2,000 para quien refiere
-const FRIEND_DISCOUNT = 2000; // ₡2,000 para el amigo
+const REFERRAL_REWARD_POINTS = 1000; // 1000 BiPuntos
+const FRIEND_DISCOUNT = 5000;         // ₡5,000 para el amigo (Cupón directo)
+const MIN_PURCHASE = 50000;           // Compra mínima del amigo
 
 export default function ReferidosPage() {
+    const { currentUser } = useAuth() || {};
     const [referralCode, setReferralCode] = useState('');
     const [name, setName] = useState('');
     const [phone, setPhone] = useState('');
     const [copied, setCopied] = useState(false);
     const [generated, setGenerated] = useState(false);
+    const [loading, setLoading] = useState(false);
     const [showHowItWorks, setShowHowItWorks] = useState(false);
 
-    const generateCode = () => {
-        if (!name.trim() || !phone.trim()) return;
+    // Cargar código existente si hay uno
+    React.useEffect(() => {
+        const loadExistingCode = async () => {
+            if (!currentUser) return;
+            try {
+                const q = query(collection(db, 'referral_codes'), where('uid', '==', currentUser.uid));
+                const querySnapshot = await getDocs(q);
+                if (!querySnapshot.empty) {
+                    const data = querySnapshot.docs[0].data();
+                    setReferralCode(data.code);
+                    setName(data.name || '');
+                    setPhone(data.phone || '');
+                    setGenerated(true);
+                }
+            } catch (error) {
+                console.error('Error loading referral code:', error);
+            }
+        };
+        loadExistingCode();
+    }, [currentUser]);
+
+    const generateCode = async () => {
+        if (!name.trim() || !phone.trim() || !currentUser) return;
+        setLoading(true);
         
-        // Generar código único basado en nombre y timestamp
-        const nameCode = name.trim().split(' ')[0].toUpperCase().slice(0, 4);
-        const randomNum = Math.floor(1000 + Math.random() * 9000);
-        const code = `${nameCode}${randomNum}`;
-        
-        setReferralCode(code);
-        setGenerated(true);
+        try {
+            // Generar código único basado en nombre y timestamp
+            const nameCode = name.trim().split(' ')[0].toUpperCase().slice(0, 4);
+            const randomNum = Math.floor(1000 + Math.random() * 9000);
+            const code = `${nameCode}${randomNum}`;
+
+            // Guardar en Firestore
+            await setDoc(doc(db, 'referral_codes', code), {
+                code,
+                uid: currentUser.uid,
+                name: name.trim(),
+                phone: phone.trim(),
+                createdAt: new Date().toISOString()
+            });
+            
+            setReferralCode(code);
+            setGenerated(true);
+        } catch (error) {
+            console.error('Error generating referral code:', error);
+            alert('Hubo un error al generar tu código. Intenta de nuevo.');
+        } finally {
+            setLoading(false);
+        }
     };
 
     const copyCode = () => {
@@ -41,7 +85,7 @@ export default function ReferidosPage() {
     };
 
     const shareWhatsApp = () => {
-        const message = `¡Hola! 🍽️ Te invito a probar BiKitchen, comida saludable lista para calentar.\n\nUsa mi código *${referralCode}* y obtén ₡${FRIEND_DISCOUNT.toLocaleString('es-CR')} de descuento en tu primer pedido.\n\n👉 https://bikitchenfood.com`;
+        const message = `¡Hola! 🍽️ Te invito a probar BiKitchen, comida saludable lista para calentar.\n\nUsa mi código *${referralCode}* y obtén ₡${FRIEND_DISCOUNT.toLocaleString('es-CR')} de descuento en tu primer pedido (Compra mín. ₡${MIN_PURCHASE.toLocaleString('es-CR')}).\n\n👉 https://bikitchenfood.com`;
         window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
     };
 
@@ -57,7 +101,7 @@ export default function ReferidosPage() {
     };
 
     const shareEmail = () => {
-        const subject = '¡Te regalo ₡2,000 en BiKitchen!';
+        const subject = `¡Te regalo ₡${FRIEND_DISCOUNT.toLocaleString('es-CR')} en BiKitchen!`;
         const body = `¡Hola!\n\nQuiero compartirte BiKitchen, un servicio de comida saludable que me encanta.\n\nUsa mi código ${referralCode} y obtén ₡${FRIEND_DISCOUNT.toLocaleString('es-CR')} de descuento en tu primer pedido.\n\nVisita: https://bikitchenfood.com\n\n¡Saludos!`;
         window.open(`mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
     };
@@ -81,7 +125,7 @@ export default function ReferidosPage() {
         {
             icon: DollarSign,
             title: '¡Ambos ganan!',
-            description: `Tú recibes ₡${REFERRAL_REWARD.toLocaleString('es-CR')} de crédito para tu próximo pedido`
+            description: `Tú recibes ${REFERRAL_REWARD_POINTS.toLocaleString('es-CR')} BiPuntos para tu próximo canje`
         }
     ];
 
@@ -125,7 +169,7 @@ export default function ReferidosPage() {
                                 className="text-xl text-gray-600 mb-8"
                             >
                                 Comparte BiKitchen con tus amigos y ambos obtienen 
-                                <span className="font-bold text-purple-600"> ₡{REFERRAL_REWARD.toLocaleString('es-CR')}</span>
+                                <span className="font-bold text-purple-600"> recompensas exclusivas</span>
                             </motion.p>
 
                             {/* Reward Cards */}
@@ -142,8 +186,8 @@ export default function ReferidosPage() {
                                     <p className="text-3xl font-bold text-purple-600 mb-1">
                                         ₡{FRIEND_DISCOUNT.toLocaleString('es-CR')}
                                     </p>
-                                    <p className="text-sm text-gray-600">
-                                        Para tu amigo en su primer pedido
+                                    <p className="text-sm text-gray-600 leading-tight">
+                                        De descuento para tu amigo en su primer pedido
                                     </p>
                                 </div>
                                 <div className="bg-white rounded-2xl p-6 shadow-lg border border-pink-100 flex-1 max-w-xs">
@@ -151,10 +195,10 @@ export default function ReferidosPage() {
                                         <Trophy size={24} className="text-pink-600" />
                                     </div>
                                     <p className="text-3xl font-bold text-pink-600 mb-1">
-                                        ₡{REFERRAL_REWARD.toLocaleString('es-CR')}
+                                        {REFERRAL_REWARD_POINTS} BiPts
                                     </p>
-                                    <p className="text-sm text-gray-600">
-                                        Para ti cuando tu amigo compre
+                                    <p className="text-sm text-gray-600 leading-tight">
+                                        Para ti cuando tu amigo complete su compra
                                     </p>
                                 </div>
                             </motion.div>
@@ -205,12 +249,24 @@ export default function ReferidosPage() {
                                             </div>
                                             <button
                                                 onClick={generateCode}
-                                                disabled={!name.trim() || !phone.trim()}
+                                                disabled={!name.trim() || !phone.trim() || loading || !currentUser}
                                                 className="w-full py-4 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-bold hover:from-purple-600 hover:to-pink-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                             >
-                                                <Sparkles size={20} />
-                                                Generar Mi Código
+                                                {loading ? (
+                                                    <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                                                ) : (
+                                                    <>
+                                                        <Sparkles size={20} />
+                                                        Generar Mi Código
+                                                    </>
+                                                )}
                                             </button>
+                                            {!currentUser && (
+                                                <p className="text-xs text-center text-red-500 mt-2 flex items-center justify-center gap-1">
+                                                    <AlertCircle size={12} />
+                                                    Debes iniciar sesión para generar un código.
+                                                </p>
+                                            )}
                                         </div>
                                     </>
                                 ) : (
@@ -375,15 +431,15 @@ export default function ReferidosPage() {
                                 <ul className="space-y-2 text-sm text-gray-600">
                                     <li className="flex items-start gap-2">
                                         <Check size={16} className="text-purple-500 mt-0.5 flex-shrink-0" />
-                                        El descuento de ₡{FRIEND_DISCOUNT.toLocaleString('es-CR')} aplica solo para el primer pedido de tu amigo.
+                                        El descuento de ₡{FRIEND_DISCOUNT.toLocaleString('es-CR')} aplica solo para el primer pedido de tu amigo (Monto mín. ₡{MIN_PURCHASE.toLocaleString('es-CR')}).
                                     </li>
                                     <li className="flex items-start gap-2">
                                         <Check size={16} className="text-purple-500 mt-0.5 flex-shrink-0" />
-                                        Recibirás tu crédito de ₡{REFERRAL_REWARD.toLocaleString('es-CR')} una vez que tu amigo complete su primer pedido.
+                                        Recibirás **{REFERRAL_REWARD_POINTS.toLocaleString('es-CR')} BiPuntos** una vez que tu amigo complete su primer pedido verificado.
                                     </li>
                                     <li className="flex items-start gap-2">
                                         <Check size={16} className="text-purple-500 mt-0.5 flex-shrink-0" />
-                                        El crédito se aplica automáticamente a tu próximo pedido.
+                                        Los puntos se acreditan directamente a tu monedero de BiKitchen Rewards.
                                     </li>
                                     <li className="flex items-start gap-2">
                                         <Check size={16} className="text-purple-500 mt-0.5 flex-shrink-0" />

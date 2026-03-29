@@ -1,18 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ShoppingCart, Menu, X, ChefHat, Utensils, Gift, Snowflake, HelpCircle, User, Soup, Search } from 'lucide-react';
+import { ShoppingCart, Menu, X, ChefHat, Utensils, Gift, Snowflake, HelpCircle, User, Soup, Search, Ticket } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { useChristmas } from '../context/ChristmasContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import GlobalSearch from './GlobalSearch';
+import { useUI } from '../context/UIContext';
 
 /**
  * Navbar Component - BiKitchen Brand
  * Diseño profesional con navegación clara y colores naranja
  */
 export default function Navbar() {
-    const [isOpen, setIsOpen] = useState(false);
+    const { isMobileMenuOpen, setIsMobileMenuOpen } = useUI();
+    const [isOpen, setIsOpen] = [isMobileMenuOpen, setIsMobileMenuOpen];
     const [scrolled, setScrolled] = useState(false);
     const [visible, setVisible] = useState(true);
     const [promoBannerVisible, setPromoBannerVisible] = useState(false);
@@ -325,6 +327,17 @@ export default function Navbar() {
                             <User size={18} />
                         </Link>
 
+                        {/* Mis Cupones Button (Desktop) */}
+                        {currentUser && (
+                            <Link
+                                to="/mis-cupones"
+                                className="flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-orange-50 to-amber-50 text-bikitchen-orange hover:bg-orange-500 hover:text-white transition-all duration-300 shadow-sm hover:shadow-md hover:scale-105 border border-orange-100 hover:border-orange-300"
+                                title="Mis Cupones"
+                            >
+                                <Ticket size={18} />
+                            </Link>
+                        )}
+
                         {/* Cart Button */}
                         <button
                             onClick={() => setIsCartOpen && setIsCartOpen(true)}
@@ -496,6 +509,18 @@ export default function Navbar() {
                                     <User size={20} />
                                     <span>Mi Cuenta</span>
                                 </Link>
+
+                                {/* Mis Cupones Mobile */}
+                                {currentUser && (
+                                    <Link
+                                        to="/mis-cupones"
+                                        onClick={() => setIsOpen(false)}
+                                        className="flex items-center justify-center gap-3 bg-white/20 text-white font-bold px-8 py-4 rounded-2xl shadow-lg border border-white/30 transition-all active:scale-95"
+                                    >
+                                        <Ticket size={24} className="text-amber-200" />
+                                        <span>Mis Cupones</span>
+                                    </Link>
+                                )}
                             </motion.div>
                         </div>
                     </motion.div>

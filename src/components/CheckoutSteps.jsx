@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     X, ArrowLeft, ArrowRight, User, MapPin, CreditCard, Check,
     ShoppingBag, Tag, Phone, Mail, FileText, Calendar, MessageSquare,
-    Loader2, CheckCircle, AlertCircle, Truck, Plus, Bookmark, ChevronDown, Clock
+    Loader2, CheckCircle, AlertCircle, Truck, Plus, Bookmark, ChevronDown, Clock, Lock as LucideLock
 } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
@@ -15,9 +15,12 @@ import useLoyaltyPoints from '../hooks/useLoyaltyPoints';
 import { AddressSelector } from './AddressManager';
 import PayPalButton from './PayPalButton';
 import { useContactConfig } from '../context/ContactConfigContext';
+import { getSourceLabel } from '../services/sourceTracking';
 import { useWhatsApp } from '../hooks/useWhatsApp';
-import { trackInitiateCheckout, trackPurchase, trackAddPaymentInfo } from '../services/facebookPixel';
+import { trackInitiateCheckout, trackPurchase, trackContact, trackAddPaymentInfo } from '../services/facebookPixel';
 import ShippingZoneSelector from './ShippingZoneSelector';
+import NMIPaymentModal from './NMIPaymentModal';
+import { useOrders } from '../context/OrdersContext';
 // TILOPAY: Desactivado temporalmente - pendiente aprobación
 // import { processTilopayPayment } from '../utils/tilopayClient';
 
@@ -86,8 +89,10 @@ const PAYMENT_METHODS = [
     { id: 'whatsapp', name: 'WhatsApp', icon: MessageSquare, description: 'Coordinar pago por WhatsApp', color: 'green', recommended: true },
     { id: 'sinpe', name: 'SINPE Móvil', icon: Phone, description: 'Transferencia inmediata', color: 'blue' },
     { id: 'transfer', name: 'Transferencia', icon: CreditCard, description: 'Transferencia bancaria', color: 'purple' },
-    { id: 'paypal', name: 'Tarjeta (PayPal)', icon: CreditCard, description: 'Próximamente', color: 'gray', disabled: true, comingSoon: true }
-    // TILOPAY: Desactivado temporalmente - pendiente aprobación
+    { id: 'nmi', name: 'Tarjeta de Débito / Crédito', icon: CreditCard, description: 'Pago seguro con tarjeta', color: 'blue', recommended: true }
+    // PayPal desactivado como se solicitó
+    // { id: 'paypal', name: 'PayPal', icon: CreditCard, description: 'Próximamente', color: 'gray', disabled: true, comingSoon: true }
+    // TILOPAY: Desactivado temporalmente - reemplazado por BAC (NMI)
     // { id: 'tilopay', name: 'Tarjeta', icon: CreditCard, description: 'Pago seguro con tarjeta', color: 'blue', recommended: true },
 ];
 
@@ -107,12 +112,14 @@ export default function CheckoutSteps({ isOpen, onClose }) {
         getShippingCostFinal,
         getSelectedZoneInfo,
         isZoneOutOfCoverage,
-        SHIPPING_ZONES
+        SHIPPING_ZONES,
+        appliedReferral
     } = useCart();
-    const { currentUser } = useAuth();
+    const { currentUser, isAdmin } = useAuth();
+    const { updateOrderStatus } = useOrders();
     const { addresses, addAddress, getDefaultAddress, hasAddresses } = useSavedAddresses();
     const { addOrderToHistory } = useOrderHistory();
-    const { addPoints } = useLoyaltyPoints();
+    const { addPoints, currentLevel } = useLoyaltyPoints();
     const { whatsappPhone, getWhatsAppUrl } = useWhatsApp();
 
     // Función simple de formateo para el mensaje de texto
@@ -178,8 +185,9 @@ export default function CheckoutSteps({ isOpen, onClose }) {
     const [useNewAddress, setUseNewAddress] = useState(false);
     const [saveNewAddress, setSaveNewAddress] = useState(false);
 
-    // PayPal states
-    const [pendingOrderDocId] = useState(null);
+    // BAC (NMI) states
+    const [pendingOrderDocId, setPendingOrderDocId] = useState(null);
+    const [showNMIModal, setShowNMIModal] = useState(false);
 
     // Sanitize helpers
     const stripUndefined = (val) => {
@@ -223,7 +231,7 @@ export default function CheckoutSteps({ isOpen, onClose }) {
             const count = getShipmentCountFromCart();
             // Biweekly: cada 14 días si el plan predominante es quincenal (2 envíos)
             const hasBiweekly = cart.some(i => (i.plan || '').toLowerCase() === 'biweekly');
-            const stepDays = (count === 2 && hasBiweekly) ? 14 : 7;
+            const stepDays = (count === 2 && hasBiweekly) ? 7 : 7; // Changed from 14 to 7
             const out = [];
             for (let i = 0; i < count; i++) {
                 const d = new Date(base);
@@ -426,7 +434,7 @@ export default function CheckoutSteps({ isOpen, onClose }) {
 
             // Marcar cupón como usado
             if (appliedCoupon) {
-                await markCouponAsUsed(currentUser?.email || formData.correo);
+                await markCouponAsUsed(currentUser?.uid || formData.correo);
             }
 
             // Limpiar carrito y mostrar confirmación
@@ -497,7 +505,8 @@ export default function CheckoutSteps({ isOpen, onClose }) {
             paypalCurrency: paypalDetails.amount?.currency,
             paidAt: serverTimestamp(),
             createdAt: serverTimestamp(),
-            userId: currentUser?.uid || null
+            userId: currentUser?.uid || null,
+            fuente: getSourceLabel()
         };
 
         const safePayPalOrder = stripUndefined(orderData);
@@ -561,13 +570,14 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                 fechas_entrega: deliverySchedule,
                 horario_preferido: '9:00 AM - 2:00 PM',
                 observaciones: formData.observaciones || '',
-                menu: cart.map(item => ({
+                items: cart.map(item => ({
                     nombre: item.name || '',
                     proteina: item.protein || '',
                     carbo: item.carbs || '',
                     ensalada: item.veggies || '',
                     cantidad: Number(item.quantity) || 1,
                     precio: Number(item.price) || 0,
+                    total: (Number(item.price) || 0) * (Number(item.quantity) || 1), // Añadido para admin
                     category: item.category ?? null,
                     categoryLabel: item.categoryLabel ?? null,
                     planLabel: item.planLabel ?? null,
@@ -575,23 +585,28 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                     desc: item.desc || undefined,
                     customizations: stripUndefined(item.customizations || {})
                 })),
-                subtotal: subtotal,
-                descuento: discount,
+                subtotal: Number(subtotal) || 0,
+                descuento: Number(discount) || 0,
                 cupon: appliedCoupon?.code || null,
-                total: total,
-                metodo_pago: formData.metodoPago,
+                referral_code: appliedReferral?.code || null,
+                referral_uid: appliedReferral?.referrerUid || null,
+                metodo_pago: formData.metodoPago === 'nmi' ? 'Tarjeta' : formData.metodoPago,
+                total: Number(total) || 0,
                 status: 'pending_payment', // Pendiente de pago - no confirmado aún
                 paymentConfirmed: false, // Se marca true cuando admin confirma pago
                 pointsAwarded: false, // Se marca true cuando se dan los puntos
-                pointsToAward: Math.floor(total / 1000), // Puntos que se darán al confirmar
+                pointsToAward: Math.floor(total * 0.02), // Puntos que se darán al confirmar (2%)
+                fuente: getSourceLabel(),
                 createdAt: serverTimestamp()
             };
 
             // Guardar en Firestore (colección unificada 'pedidos')
             const safeOrder = stripUndefined(productionOrder);
-            await addDoc(collection(db, 'pedidos'), safeOrder);
+            const orderRef = await addDoc(collection(db, 'pedidos'), safeOrder);
             // Nota: Ya no se duplica en 'orders', todo está unificado en 'pedidos'
 
+            setLoading(false); // Just in case, so it shows numbers during transition
+            
             // Track Purchase event para Facebook Pixel
             trackPurchase({
                 orderNumber: newOrderNumber,
@@ -617,6 +632,15 @@ export default function CheckoutSteps({ isOpen, onClose }) {
 
             // Si es PayPal, el pago ya se procesó antes de llegar aquí
             // (ver handlePayPalSuccess)
+
+            // Si es Tarjeta (BAC / NMI), abrir el modal
+            if (formData.metodoPago === 'nmi') {
+                setOrderNumber(newOrderNumber);
+                setPendingOrderDocId(orderRef.id);
+                setShowNMIModal(true);
+                setLoading(false);
+                return;
+            }
 
             /* ============================================================
              * TILOPAY: Desactivado temporalmente - pendiente aprobación
@@ -747,6 +771,11 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                     message += `Referencias: ${formData.referencias}\n`;
                 }
 
+                const sourceLabel = getSourceLabel();
+                if (sourceLabel && !sourceLabel.includes('Directo')) {
+                    message += `🔍 Origen: ${sourceLabel}\n`;
+                }
+
                 const sched = formData.fechasEntrega && formData.fechasEntrega.length > 0 ? formData.fechasEntrega : [formData.fechaEntrega];
                 if (sched.length > 1) {
                     message += `\n📅 *Entregas programadas:*\n`;
@@ -784,18 +813,23 @@ export default function CheckoutSteps({ isOpen, onClose }) {
 
             // Enviar notificación por email (no bloquear si falla)
             try {
-                const { sendOrderNotification } = await import('../services/emailNotifications');
-                await sendOrderNotification({
+                const { sendOrderNotification, sendCustomerOrderConfirmation } = await import('../services/emailNotifications');
+
+                const orderData = {
                     orderNumber: newOrderNumber,
                     cliente: formData.nombre,
+                    nombre: formData.nombre, // Para compatibilidad con plantillas
                     telefono: formData.telefono,
                     correo: formData.correo,
+                    email: formData.correo, // Para compatibilidad con plantillas
                     cedula: formData.cedula,
                     items: cart,
                     subtotal: subtotal,
-                    descuento: discount,
+                    discount: discount,
+                    descuento: discount, // Para compatibilidad con plantillas
                     cupon: appliedCoupon?.code,
                     costoEnvio: shippingCost,
+                    shippingCost: shippingCost, // Para compatibilidad con plantillas
                     envioPorConfirmar: isZoneOutOfCoverage(),
                     total: total,
                     direccion: formData.direccion,
@@ -804,11 +838,22 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                     fechaEntrega: formData.fechaEntrega,
                     fechasEntrega: deliverySchedule,
                     metodoPago: formData.metodoPago,
-                    observaciones: formData.observaciones
-                });
-                console.log('✅ Email de notificación enviado');
+                    observaciones: formData.observaciones,
+                    notas: formData.observaciones, // Para compatibilidad con plantillas
+                    fuente: getSourceLabel(),
+                    source: getSourceLabel() // Para compatibilidad con plantillas
+                };
+
+                // 1. Notificación al administrador (Gina)
+                await sendOrderNotification(orderData);
+                console.log('✅ Email de notificación enviado al admin');
+
+                // 2. Notificación al cliente (Confirmación)
+                await sendCustomerOrderConfirmation(orderData);
+                console.log('✅ Email de confirmación enviado al cliente');
+
             } catch (emailError) {
-                console.error('⚠️ Error enviando email (no crítico):', emailError);
+                console.error('⚠️ Error enviando emails (no crítico):', emailError);
                 // No mostrar error al usuario, el pedido ya se guardó correctamente
             }
 
@@ -837,9 +882,10 @@ export default function CheckoutSteps({ isOpen, onClose }) {
             });
 
             // Los puntos se agregan cuando el admin confirma el pago
-            // NO se dan puntos inmediatamente para evitar fraude
-            const pendingPoints = Math.floor(total / 1000);
-            setPointsEarned(pendingPoints); // Solo para mostrar cuántos puntos ganará
+                // Calcular puntos a dar (1.5 puntos por cada ₡100 * multiplicador de nivel)
+                const multiplier = currentLevel?.multiplier || 1;
+                const pointsToAward = Math.floor((total * 0.015) * multiplier);
+            setPointsEarned(pointsToAward); // Solo para mostrar cuántos puntos ganará
 
             // Guardar snapshot de la orden antes de limpiar el carrito
             setLastOrderDetails({
@@ -960,10 +1006,18 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                                         ¡Pedido Recibido!
                                     </h3>
 
-                                    {/* Estado pendiente */}
-                                    <div className="inline-flex items-center gap-2 bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-sm font-medium mb-4">
-                                        <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse"></div>
-                                        Pendiente de pago
+                                    {/* Estado del pedido */}
+                                    <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium mb-4 ${
+                                        formData.metodoPago === 'nmi' && orderComplete 
+                                            ? 'bg-green-100 text-green-700' 
+                                            : 'bg-orange-100 text-orange-700'
+                                    }`}>
+                                        <div className={`w-2 h-2 rounded-full ${
+                                            formData.metodoPago === 'nmi' && orderComplete 
+                                                ? 'bg-green-500' 
+                                                : 'bg-orange-500 animate-pulse'
+                                        }`}></div>
+                                        {formData.metodoPago === 'nmi' && orderComplete ? 'Pago Procesado' : 'Pendiente de pago'}
                                     </div>
 
                                     {/* Número de orden prominente */}
@@ -1436,21 +1490,25 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                                             </h3>
 
                                             <div className="space-y-3">
-                                                {PAYMENT_METHODS.map((method) => (
+                                                {PAYMENT_METHODS
+                                                  .filter(method => method.id !== 'nmi' || isAdmin())
+                                                  .map((method) => (
                                                     <button
                                                         key={method.id}
                                                         type="button"
                                                         onClick={() => !method.disabled && updateField('metodoPago', method.id)}
                                                         disabled={method.disabled}
-                                                        className={`w-full p-4 rounded-xl border-2 text-left transition-all flex items-center gap-4 relative ${method.disabled
-                                                            ? 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-60'
+                                                        className={`w-full p-4 rounded-2xl border-2 text-left transition-all flex items-center gap-4 relative ${method.disabled
+                                                            ? 'border-gray-100 bg-gray-50 cursor-not-allowed opacity-60'
                                                             : formData.metodoPago === method.id
-                                                                ? 'border-bikitchen-orange bg-bikitchen-orange/5'
-                                                                : 'border-gray-200 hover:border-gray-300'
+                                                                ? method.id === 'nmi'
+                                                                    ? 'border-orange-500 bg-orange-50/50 shadow-lg shadow-orange-100'
+                                                                    : 'border-bikitchen-orange bg-bikitchen-orange/5 shadow-md shadow-orange-50'
+                                                                : 'border-gray-100 hover:border-gray-200 hover:bg-gray-50/50 shadow-sm'
                                                             }`}
                                                     >
                                                         {method.recommended && (
-                                                            <span className="absolute -top-2 right-3 bg-gradient-to-r from-green-500 to-green-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                                                            <span className="absolute -top-2.5 right-4 bg-gradient-to-r from-green-500 to-green-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm z-10 uppercase tracking-wider">
                                                                 Recomendado
                                                             </span>
                                                         )}
@@ -1468,8 +1526,27 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                                                             <method.icon size={24} />
                                                         </div>
                                                         <div className="flex-1">
-                                                            <p className={`font-semibold ${method.disabled ? 'text-gray-400' : 'text-gray-900'}`}>{method.name}</p>
+                                                            <div className="flex items-center gap-2">
+                                                                <p className={`font-semibold ${method.disabled ? 'text-gray-400' : 'text-gray-900'}`}>{method.name}</p>
+                                                                {method.id === 'nmi' && (
+                                                                    <div className="flex items-center gap-2 opacity-90 group-hover:opacity-100 transition-all">
+                                                                        <img src="https://cdn.jsdelivr.net/gh/aaronfagan/svg-credit-card-payment-icons@master/flat/visa.svg" alt="Visa" className="h-[14px] w-auto" />
+                                                                        <img src="https://cdn.jsdelivr.net/gh/aaronfagan/svg-credit-card-payment-icons@master/flat/mastercard.svg" alt="MC" className="h-[18px] w-auto" />
+                                                                        <img src="https://cdn.jsdelivr.net/gh/aaronfagan/svg-credit-card-payment-icons@master/flat/amex.svg" alt="Amex" className="h-[16px] w-auto" />
+                                                                    </div>
+                                                                )}
+                                                            </div>
                                                             <p className={`text-sm ${method.disabled ? 'text-gray-400' : 'text-gray-500'}`}>{method.description}</p>
+                                                            {method.id === 'nmi' && formData.metodoPago === 'nmi' && (
+                                                                <motion.div 
+                                                                    initial={{ opacity: 0, y: 5 }} 
+                                                                    animate={{ opacity: 1, y: 0 }}
+                                                                    className="flex items-center gap-1.5 mt-1 text-[10px] font-bold text-green-600 uppercase tracking-tight"
+                                                                >
+                                                                    <LucideLock size={10} strokeWidth={3} />
+                                                                    <span>Pago 100% Seguro</span>
+                                                                </motion.div>
+                                                            )}
                                                         </div>
                                                         <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${method.disabled
                                                             ? 'border-gray-300'
@@ -1520,8 +1597,8 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                                                     Resumen del Pedido
                                                 </h4>
                                                 <div className="space-y-3 max-h-48 overflow-y-auto">
-                                                    {cart.map((item) => (
-                                                        <div key={item.id} className="space-y-1">
+                                                    {cart.map((item, index) => (
+                                                        <div key={`${item.id || 'item'}-${index}`} className="space-y-1">
                                                             <div className="flex justify-between text-sm">
                                                                 <span className="text-gray-600">
                                                                     {item.quantity}× {item.name}
@@ -1737,6 +1814,58 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                     )}
                 </motion.div>
             </motion.div>
+            {/* BAC (NMI) Payment Modal */}
+            <NMIPaymentModal 
+                isOpen={showNMIModal}
+                onClose={() => setShowNMIModal(false)}
+                total={isZoneOutOfCoverage() ? getTotalPrice() : getTotalWithShipping()}
+                orderId={orderNumber || 'ORD-NEW'}
+                customerInfo={formData}
+                onPaymentSuccess={async (nmiResult) => {
+                    // Obtener el ID del pedido - Intentar varias fuentes para robustez
+                    const orderIdToUpdate = pendingOrderDocId || nmiResult.orderid || nmiResult.order_id;
+                    
+                    console.log('[Checkout] ✅ Pago NMI exitoso. Actualizando Firestore:', { orderIdToUpdate, transactionid: nmiResult.transactionid });
+
+                    // El pago ya se procesó en el modal, ahora actualizamos el pedido en Firestore
+                    try {
+                        if (orderIdToUpdate) {
+                            await updateOrderStatus(orderIdToUpdate, 'confirmed', {
+                                paymentStatus: 'paid',
+                                paymentProvider: 'Tarjeta',
+                                transactionId: nmiResult.transactionid || nmiResult.transaction_id || 'NMI',
+                                isDuplicateDetection: nmiResult.isDuplicate || false,
+                                paidAt: serverTimestamp(),
+                                updatedAt: serverTimestamp(),
+                                nmiDetails: stripUndefined(nmiResult)
+                            });
+                            console.log('[Checkout] Pedido actualizado exitosamente a "confirmed"');
+                        } else {
+                            // pendingOrderDocId can be null if the state got stale — log a clear alert for debugging
+                            console.error('[Checkout] ⚠️ CRÍTICO: No se encontró ID de pedido para actualizar estado. El pago fue procesado pero el pedido puede quedar como pending_payment.', {
+                                orderNumber,
+                                nmiResult
+                            });
+                        }
+                    } catch (error) {
+                        console.error('[Checkout] Error actualizando pedido tras pago NMI:', error);
+                    }
+
+                    // Marcar cupón como usado
+                    if (appliedCoupon) {
+                        try { await markCouponAsUsed(currentUser?.uid || formData.correo); } catch { }
+                    }
+
+                    // Limpiar datos del formulario del localStorage
+                    localStorage.removeItem('bikitchen-checkout-form');
+
+                    setShowNMIModal(false);
+                    setOrderComplete(true);
+                    clearCart();
+                    
+                    console.log('[Checkout] Flujo de pago NMI completado exitosamente:', nmiResult);
+                }}
+            />
         </AnimatePresence>
     );
 }

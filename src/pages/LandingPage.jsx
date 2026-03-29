@@ -13,6 +13,7 @@ import { useAudio } from '../context/AudioContext';
 import PageTransition from '../components/PageTransition';
 import MagneticButton from '../components/MagneticButton';
 import AISommelier from '../components/AISommelier';
+import { useAuth } from '../context/AuthContext';
 import TestimonialsSection from '../components/TestimonialsSection';
 import { getPackPrices } from '../utils/firestoreMenus';
 import { getHomePromotions } from '../utils/firestorePromotions';
@@ -42,6 +43,7 @@ const createStaggerContainer = (isMobile) => ({
 // WhatsApp link se genera dinámicamente usando el hook useWhatsApp
 
 export default function LandingPage() {
+    const { isAdmin } = useAuth() || {};
     const { playHover, playClick } = useAudio();
     const { getWhatsAppUrl } = useWhatsApp();
     const WHATSAPP_LINK = getWhatsAppUrl('Quiero pedir 🛒');
@@ -131,12 +133,12 @@ export default function LandingPage() {
     // Estado para el banner de promociones
     const [currentPromoIndex, setCurrentPromoIndex] = useState(0);
     const promos = homePromo ? [
-        { text: homePromo.titulo, desc: homePromo.descripcionCorta || "¡Aprovecha ahora!" },
-        { text: "🎁 10% OFF al Registrarte", desc: "Regístrate hoy y obtén un 10% de descuento" }
+        { text: homePromo.titulo, desc: homePromo.descripcionCorta || "¡Aprovecha ahora!", link: "/promociones" },
+        { text: "🎁 10% OFF al Registrarte", desc: "Regístrate hoy y obtén un 10% de descuento", link: "/login" }
     ] : [
-        { text: "🎉 Promociones", desc: "Ofertas activas y descuentos" },
-        { text: "🎉 Promoción Mensual", desc: "Desayunos GRATIS con tu pack mensual" },
-        { text: "🎁 10% OFF al Registrarte", desc: "Regístrate hoy y obtén un 10% de descuento" }
+        { text: "🎉 Promociones", desc: "Ofertas activas y descuentos", link: "/promociones" },
+        { text: "🎉 Promoción Mensual", desc: "Desayunos GRATIS con tu pack mensual", link: "/promociones" },
+        { text: "🎁 10% OFF al Registrarte", desc: "Regístrate hoy y obtén un 10% de descuento", link: "/login" }
     ];
 
     // Rotar promociones cada 4 segundos
@@ -157,7 +159,7 @@ export default function LandingPage() {
 
                 {/* Banner de Promociones Premium - Debajo del navbar */}
                 <Link
-                    to="/promociones"
+                    to={promos[currentPromoIndex]?.link || "/promociones"}
                     className={`fixed left-0 right-0 z-[35] group shadow-lg transition-all duration-300`}
                     style={{
                         transform: navbarVisible ? 'translateY(0)' : 'translateY(-200px)',
@@ -839,7 +841,7 @@ export default function LandingPage() {
                 </main>
 
                 <Footer />
-                <AISommelier />
+                {/* {isAdmin && isAdmin() && <AISommelier />} */}
             </div>
         </PageTransition>
     );

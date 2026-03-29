@@ -1,5 +1,5 @@
 import { db } from '../firebase/config';
-import { cachedFetch } from './firestoreCache';
+import { cachedFetch, invalidateCacheByType } from './firestoreCache';
 import {
     collection,
     doc,
@@ -165,10 +165,22 @@ export const validateCoupon = async (code, cartTotal, userId = null) => {
 export const useCoupon = async (couponId, userId = null) => {
     try {
         const couponRef = doc(db, COUPONS_COLLECTION, couponId);
+        const couponSnap = await getDoc(couponRef);
+        
+        if (!couponSnap.exists()) return false;
+        
+        const couponData = couponSnap.data();
+        const newUsedCount = (couponData.usedCount || 0) + 1;
+        
         const updates = {
             usedCount: increment(1),
             lastUsed: Timestamp.now()
         };
+
+        // Si alcanza el límite de usos, marcar como inactivo explícitamente
+        if (couponData.maxUses && newUsedCount >= couponData.maxUses) {
+            updates.active = false;
+        }
 
         // Si se proporciona userId, agregarlo al array de usuarios que han usado el cupón
         if (userId) {
@@ -207,6 +219,16 @@ export const createCoupon = async (couponData) => {
             bannerTextColor: couponData.bannerTextColor || '#ffffff',
             bannerMessage: couponData.bannerMessage || '',
             bannerEmoji: couponData.bannerEmoji || '🎉',
+            generatedBy: couponData.generatedBy || null, // ID del usuario que canjeó este cupón
+            // Campos de Tarjeta de Regalo
+            isGiftCard: couponData.isGiftCard || false,
+            paymentStatus: couponData.paymentStatus || null,
+            recipientName: couponData.recipientName || null,
+            recipientEmail: couponData.recipientEmail || null,
+            senderName: couponData.senderName || null,
+            occasion: couponData.occasion || null,
+            personalMessage: couponData.personalMessage || null,
+            deliveryDate: couponData.deliveryDate || null,
             createdAt: Timestamp.now(),
             updatedAt: Timestamp.now()
         };
@@ -218,6 +240,10 @@ export const createCoupon = async (couponData) => {
         }
 
         const docRef = await addDoc(collection(db, COUPONS_COLLECTION), newCoupon);
+        
+        // Invalidar caché de cupones para que el admin vea los cambios
+        invalidateCacheByType('coupons');
+        
         return { id: docRef.id, ...newCoupon };
     } catch (error) {
         console.error('Error creating coupon:', error);
@@ -258,6 +284,10 @@ export const updateCoupon = async (couponId, couponData) => {
         if (couponData.bannerEmoji !== undefined) updates.bannerEmoji = couponData.bannerEmoji;
 
         await updateDoc(couponRef, updates);
+        
+        // Invalidar caché
+        invalidateCacheByType('coupons');
+        
         return true;
     } catch (error) {
         console.error('Error updating coupon:', error);
@@ -269,6 +299,10 @@ export const updateCoupon = async (couponId, couponData) => {
 export const deleteCoupon = async (couponId) => {
     try {
         await deleteDoc(doc(db, COUPONS_COLLECTION, couponId));
+        
+        // Invalidar caché
+        invalidateCacheByType('coupons');
+        
         return true;
     } catch (error) {
         console.error('Error deleting coupon:', error);
@@ -349,6 +383,54 @@ export const getWelcomeCoupon = async (userId = null) => {
     }
 };
 
+/**
+ * Agrega el cupón de bienvenida a un usuario específico
+ * Crea una copia del cupón plantilla para el usuario
+ */
+export const grantWelcomeCoupon = async (userId) => {
+    if (!userId) return null;
+
+    try {
+        const welcomeTemplate = await getWelcomeCoupon();
+        if (!welcomeTemplate) {
+            console.log('No welcome coupon template found to grant');
+            return null;
+        }
+
+        // Crear una copia específica para el usuario
+        // No queremos que esta copia personal sea 'isWelcomeCoupon' true para no viciar las consultas globales
+        const personalCoupon = {
+            code: welcomeTemplate.code, // Mismo código o podríamos generar uno único?
+            // El usuario quiere que use el mismo código pero que le "llegue" (aparezca en su lista)
+            type: welcomeTemplate.type,
+            value: welcomeTemplate.value,
+            description: welcomeTemplate.description || '¡Tu regalo de bienvenida!',
+            active: true,
+            minPurchase: welcomeTemplate.minPurchase || 0,
+            maxDiscount: welcomeTemplate.maxDiscount || null,
+            maxUses: 1, // La copia personal es de un solo uso
+            usedCount: 0,
+            usedBy: [],
+            isWelcomeCoupon: false, // Es una copia, no el template original
+            singleUsePerUser: true,
+            generatedBy: userId,
+            createdAt: Timestamp.now(),
+            updatedAt: Timestamp.now()
+        };
+
+        const docRef = await addDoc(collection(db, COUPONS_COLLECTION), personalCoupon);
+        console.log('Welcome coupon granted to user:', userId, 'Doc ID:', docRef.id);
+        
+        // Invalidar caché
+        invalidateCacheByType('coupons');
+        
+        return { id: docRef.id, ...personalCoupon };
+    } catch (error) {
+        console.error('Error granting welcome coupon:', error);
+        return null;
+    }
+};
+
 // Obtener cupón con banner activo (para mostrar en la página principal)
 export const getBannerCoupon = async () => {
     try {
@@ -404,5 +486,66 @@ export const getBannerCoupon = async () => {
     } catch (error) {
         console.error('Error fetching banner coupon:', error);
         return null;
+    }
+};
+
+// Vincular un cupón huérfano a un usuario
+export const linkCouponToUser = async (couponCode, userId) => {
+    if (!couponCode || !userId) return false;
+    try {
+        const coupon = await getCouponByCode(couponCode);
+        if (coupon && !coupon.generatedBy) {
+            const couponRef = doc(db, COUPONS_COLLECTION, coupon.id);
+            await updateDoc(couponRef, {
+                generatedBy: userId,
+                updatedAt: Timestamp.now()
+            });
+            return true;
+        }
+        return false;
+    } catch (error) {
+        console.error('Error linking coupon:', error);
+        return false;
+    }
+};
+
+// Obtener cupones generados por un usuario específico (que aún estén activos y no usados)
+export const getUserCoupons = async (userId) => {
+    if (!userId) return [];
+    try {
+        // Consultamos solo por generatedBy para evitar requerir un índice compuesto
+        const q = query(
+            collection(db, COUPONS_COLLECTION),
+            where('generatedBy', '==', userId)
+        );
+        const querySnapshot = await getDocs(q);
+        const now = new Date();
+
+        return querySnapshot.docs
+            .map(doc => ({ id: doc.id, ...doc.data() }))
+            .filter(coupon => {
+                // Solo cupones activos
+                if (coupon.active === false) return false;
+
+                // Solo cupones que no han sido usados el máximo de veces
+                if (coupon.maxUses && coupon.usedCount >= coupon.maxUses) return false;
+                
+                // Solo cupones no expirados
+                if (coupon.expirationDate) {
+                    const expDate = coupon.expirationDate.toDate ? coupon.expirationDate.toDate() : new Date(coupon.expirationDate);
+                    if (now > expDate) return false;
+                }
+                
+                return true;
+            })
+            .sort((a, b) => {
+                // Ordenar por fecha de creación (descendiente)
+                const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
+                const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);
+                return dateB - dateA;
+            });
+    } catch (error) {
+        console.error('Error fetching user coupons:', error);
+        return [];
     }
 };

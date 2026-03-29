@@ -127,7 +127,7 @@ export default function DispatchSheetView() {
     };
 
     return (
-        <div className="max-w-7xl mx-auto space-y-6">
+        <div className="space-y-6">
             {/* Header - Hidden on Print */}
             <div className="no-print">
                 <AdminPageHeader

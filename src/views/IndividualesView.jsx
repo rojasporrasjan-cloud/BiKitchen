@@ -11,12 +11,13 @@ import { useCart } from '../context/CartContext';
 import toast from 'react-hot-toast';
 import { ShoppingCart, X, Plus, Minus, MessageSquare, ChevronDown, Check, Package, Pencil, Camera } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { db, storage } from '../firebase/config';
+import { db } from '../firebase/config';
 import { collection, getDocs, doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { uploadOptimizedImage } from '../services/cloudinaryService';
 import { cleanFirebaseUrl } from '../utils/firebaseUrl';
 import { cachedFetch, invalidateCache } from '../utils/firestoreCache';
-import { getOfficialMenus } from '../utils/firestoreMenus';
+import { useMenusRefresh } from '../hooks/useMenusRefresh';
+import { getPackPrices } from '../utils/firestoreMenus';
 
 export default function IndividualesView() {
   const { addToCart } = useCart();
@@ -44,7 +45,14 @@ export default function IndividualesView() {
   const [tempDesayunosVeg, setTempDesayunosVeg] = useState([]);
   const [desayunosModalOpen, setDesayunosModalOpen] = useState(false);
   const [activeDesayunoTab, setActiveDesayunoTab] = useState('regular'); // 'regular' o 'vegetariano'
-  const DESAYUNOS_PRECIO = 15000;
+
+  // Precios dinámicos desde Firestore
+  const [preciosPacks, setPreciosPacks] = useState(null);
+  const DESAYUNOS_PRECIO = preciosPacks?.desayuno?.packs?.['Desayunos de la Semana']?.weekly || 15000;
+  const PROTEIN_PRICES = preciosPacks?.proteinas?.packs || {
+    'Pack 3 Proteínas': { weekly: 13500, weekly_500: 25850 },
+    'Pack 5 Proteínas': { weekly: 21000, weekly_500: 39950 }
+  };
 
   // Estado para editar proteínas (similar a desayunos)
   const [editingProteinas, setEditingProteinas] = useState(false);
@@ -54,30 +62,40 @@ export default function IndividualesView() {
   const [editandoIndice, setEditandoIndice] = useState(null);
   const [nombreEditado, setNombreEditado] = useState('');
 
-  // Cargar desayunos y proteínas desde el menú oficial (con caché)
+  // Usar hook que recarga menús automáticamente cuando la página vuelve a estar visible
+  // (mismo comportamiento que PacksPage para garantizar sincronización)
+  const { menus: menusData } = useMenusRefresh();
+
+  // Cargar precios desde config (solo al montar)
   useEffect(() => {
-    const loadMenus = async () => {
+    const loadPrices = async () => {
       try {
-        const data = await getOfficialMenus();
-        if (data) {
-          if (Array.isArray(data.desayuno)) {
-            setDesayunosMenu(data.desayuno.map(d => d.proteina));
-          }
-          if (Array.isArray(data.desayunoVegetariano)) {
-            setDesayunosVegetarianos(data.desayunoVegetariano.map(d => d.proteina));
-          }
-          if (Array.isArray(data.proteinasDisponibles)) {
-            setProteinasDisponibles(data.proteinasDisponibles);
-          } else {
-            setProteinasDisponibles(PROTEINAS_PACK.map(p => p.nombre));
-          }
+        const pricesData = await getPackPrices();
+        if (pricesData) {
+          setPreciosPacks(pricesData);
         }
       } catch (error) {
-        console.error('Error cargando menús:', error);
+        console.error('Error cargando precios:', error);
       }
     };
-    loadMenus();
+    loadPrices();
   }, []);
+
+  // Sincronizar estado local cuando llegan datos del hook
+  useEffect(() => {
+    if (!menusData) return;
+    if (Array.isArray(menusData.desayuno)) {
+      setDesayunosMenu(menusData.desayuno.map(d => d.proteina));
+    }
+    if (Array.isArray(menusData.desayunoVegetariano)) {
+      setDesayunosVegetarianos(menusData.desayunoVegetariano.map(d => d.proteina));
+    }
+    if (Array.isArray(menusData.proteinasDisponibles)) {
+      setProteinasDisponibles(menusData.proteinasDisponibles);
+    } else {
+      setProteinasDisponibles(PROTEINAS_PACK.map(p => p.nombre));
+    }
+  }, [menusData]);
 
   // Guardar desayunos en el menú oficial (sincronizado con packs)
   const saveDesayunos = async () => {
@@ -296,7 +314,15 @@ export default function IndividualesView() {
   const handleAgregarPack = () => {
     if (proteinasSeleccionadas.length !== packModalOpen) return;
 
-    const precio = PACK_PRECIOS[packModalOpen][packTamano];
+    const packKey = `Pack ${packModalOpen} Proteínas`;
+    const period = packTamano === '500' ? 'weekly_500' : 'weekly';
+    const precio = PROTEIN_PRICES[packKey]?.[period] || 0;
+
+    if (!precio) {
+      toast.error('Precio no disponible para esta configuración');
+      return;
+    }
+
     const nombresProteinas = proteinasSeleccionadas.map(p => p.nombre).join(', ');
 
     // Usar imagen custom de Firestore si existe, sino usar default
@@ -318,35 +344,6 @@ export default function IndividualesView() {
     cerrarPackModal();
   };
 
-  // Subir imagen personalizada para un producto (solo admin)
-  // Helper: optimizar a WebP
-  const optimizeToWebp = (file, maxSize = 1280) => new Promise((resolve, reject) => {
-    try {
-      const imgEl = new Image();
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        imgEl.onload = () => {
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
-          const w = imgEl.naturalWidth || imgEl.width;
-          const h = imgEl.naturalHeight || imgEl.height;
-          const scale = Math.min(1, maxSize / Math.max(w, h));
-          const nw = Math.max(1, Math.round(w * scale));
-          const nh = Math.max(1, Math.round(h * scale));
-          canvas.width = nw; canvas.height = nh;
-          ctx.drawImage(imgEl, 0, 0, nw, nh);
-          canvas.toBlob((blob) => {
-            if (blob) resolve(blob); else reject(new Error('No blob'));
-          }, 'image/webp', 0.8);
-        };
-        imgEl.onerror = reject;
-        imgEl.src = e.target.result;
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    } catch (err) { reject(err); }
-  });
-
   const handleUploadImage = (producto) => {
     if (!isAdmin || !isAdmin()) return;
 
@@ -360,38 +357,33 @@ export default function IndividualesView() {
 
       try {
         toast.loading('Subiendo imagen...', { id: 'upload-image' });
-        const ts = Date.now();
-        const fileName = `individuales/${producto.id}_${ts}.webp`;
-        const storageRef = ref(storage, fileName);
-        const blob = await optimizeToWebp(file, 1280);
-        await uploadBytes(storageRef, blob, { contentType: 'image/webp', cacheControl: 'public, max-age=31536000, immutable' });
-        const url = await getDownloadURL(storageRef);
+        // Subir a Cloudinary (Optimización más agresiva: 1080px, 0.75 calidad)
+        const result = await uploadOptimizedImage(file, 'bikitchen/individuales', { maxSize: 1080, quality: 0.75 });
+        const url = result.url;
 
-        // Guardar en Firestore (legacy)
-        await setDoc(doc(db, 'individuales_imagenes', producto.id), { imagenUrl: url, fileName }, { merge: true });
-
-        // Guardar también en el doc unificado + path para permitir limpieza del anterior
+        // Guardar en Firestore con unificación de escrituras y estructura anidada para merge correcto
         const confRef = doc(db, 'config', 'individual_images');
-        const prevSnap = await getDoc(confRef);
-        const prevPath = prevSnap.exists() ? (prevSnap.data()?.paths?.[producto.id] || null) : null;
-        await setDoc(confRef, { updatedAt: new Date().toISOString() }, { merge: true });
-        await updateDoc(confRef, { [`images.${producto.id}`]: url, [`paths.${producto.id}`]: fileName });
+        await setDoc(confRef, { 
+          updatedAt: new Date().toISOString(),
+          images: {
+            [producto.id]: url
+          },
+          publicIds: {
+            [producto.id]: result.publicId
+          }
+        }, { merge: true });
+        
+        // Legacy support por si otras partes usan la colección vieja
+        await setDoc(doc(db, 'individuales_imagenes', producto.id), { imagenUrl: url, cloudinaryPublicId: result.publicId }, { merge: true });
 
-        // Actualizar estado local para reflejar el cambio inmediato
-        setImagenesCustom((prev) => ({
-          ...prev,
-          [producto.id]: url
-        }));
+        // Invalidar caché local para que el cambio se vea al recargar
+        invalidateCache('individuales_images_map');
 
-        // Intentar eliminar imagen anterior si existe
-        if (prevPath && prevPath !== fileName) {
-          try { await deleteObject(ref(storage, prevPath)); } catch (_) { }
-        }
-
+        setImagenesCustom((prev) => ({ ...prev, [producto.id]: url }));
         toast.success('Imagen actualizada correctamente', { id: 'upload-image' });
       } catch (error) {
         console.error('Error subiendo imagen:', error);
-        toast.error('No se pudo subir la imagen. Intenta de nuevo.', { id: 'upload-image' });
+        toast.error(`No se pudo subir la imagen: ${error.message}`, { id: 'upload-image' });
       }
     };
 
@@ -459,13 +451,20 @@ export default function IndividualesView() {
 
   // Filtrar productos por búsqueda
   const productosFiltrados = useMemo(() => {
-    if (!busqueda.trim()) return individualesData;
+    let base = individualesData;
+
+    // REGLA: Ocultar producto de prueba de producción a no-admins
+    if (!isAdmin || !isAdmin()) {
+      base = base.filter(p => !p.id?.includes('test-nmi-prod'));
+    }
+
+    if (!busqueda.trim()) return base;
     const termino = busqueda.toLowerCase().trim();
-    return individualesData.filter((p) =>
+    return base.filter((p) =>
       p.nombre.toLowerCase().includes(termino) ||
       p.categoria.toLowerCase().includes(termino)
     );
-  }, [busqueda]);
+  }, [busqueda, isAdmin]);
 
   const productosPorCategoria = useMemo(() => {
     // No calcular hasta que las imágenes estén cargadas
@@ -480,8 +479,7 @@ export default function IndividualesView() {
         .map((p) => ({
           ...p,
           // Si existe una imagen personalizada en Firestore, usarla; si no, usar la de data
-          // FORZADO: Usar imagen de data por defecto mientras se resuelve problema de Firebase
-          imagen: p.imagen // imagenesCustom[p.id] || p.imagen
+          imagen: imagenesCustom[p.id] || p.imagen
         }))
     }));
   }, [categoriaActiva, productosFiltrados, imagenesCustom, loadingImages]);
@@ -655,11 +653,11 @@ export default function IndividualesView() {
                       <div className="flex flex-col gap-2 text-right">
                         <div className="bg-white px-3 py-2 rounded-xl border-2 border-orange-300 shadow-md">
                           <p className="text-xs text-gray-600 font-semibold">250g</p>
-                          <p className="text-base text-gray-900 font-black">₡{PACK_PRECIOS[3]['250'].toLocaleString('es-CR')}</p>
+                          <p className="text-base text-gray-900 font-black">₡{(PROTEIN_PRICES['Pack 3 Proteínas']?.weekly || 0).toLocaleString('es-CR')}</p>
                         </div>
                         <div className="bg-white px-3 py-2 rounded-xl border-2 border-orange-300 shadow-md">
                           <p className="text-xs text-gray-600 font-semibold">500g</p>
-                          <p className="text-base text-gray-900 font-black">₡{PACK_PRECIOS[3]['500'].toLocaleString('es-CR')}</p>
+                          <p className="text-base text-gray-900 font-black">₡{(PROTEIN_PRICES['Pack 3 Proteínas']?.weekly_500 || 0).toLocaleString('es-CR')}</p>
                         </div>
                       </div>
                     </div>
@@ -696,16 +694,16 @@ export default function IndividualesView() {
                     <div className="flex items-center justify-between mb-5">
                       <div className="space-y-1">
                         <p className="text-sm text-gray-700 font-bold">Desde</p>
-                        <p className="text-2xl font-black bg-gradient-to-r from-red-500 to-rose-500 bg-clip-text text-transparent">₡{PACK_PRECIOS[5]['250'].toLocaleString('es-CR')}</p>
+                        <p className="text-2xl font-black bg-gradient-to-r from-red-500 to-rose-500 bg-clip-text text-transparent">₡{(PROTEIN_PRICES['Pack 5 Proteínas']?.weekly || 0).toLocaleString('es-CR')}</p>
                       </div>
                       <div className="flex flex-col gap-2 text-right">
                         <div className="bg-white px-3 py-2 rounded-xl border-2 border-red-300 shadow-md">
                           <p className="text-xs text-gray-600 font-semibold">250g</p>
-                          <p className="text-base text-gray-900 font-black">₡{PACK_PRECIOS[5]['250'].toLocaleString('es-CR')}</p>
+                          <p className="text-base text-gray-900 font-black">₡{(PROTEIN_PRICES['Pack 5 Proteínas']?.weekly || 0).toLocaleString('es-CR')}</p>
                         </div>
                         <div className="bg-white px-3 py-2 rounded-xl border-2 border-red-300 shadow-md">
                           <p className="text-xs text-gray-600 font-semibold">500g</p>
-                          <p className="text-base text-gray-900 font-black">₡{PACK_PRECIOS[5]['500'].toLocaleString('es-CR')}</p>
+                          <p className="text-base text-gray-900 font-black">₡{(PROTEIN_PRICES['Pack 5 Proteínas']?.weekly_500 || 0).toLocaleString('es-CR')}</p>
                         </div>
                       </div>
                     </div>
@@ -765,7 +763,7 @@ export default function IndividualesView() {
                     <div className="flex items-center justify-between mb-4">
                       <div>
                         <p className="text-sm text-gray-700 font-bold">Precio</p>
-                        <p className="text-2xl font-black bg-gradient-to-r from-amber-500 to-yellow-500 bg-clip-text text-transparent">₡15,000</p>
+                        <p className="text-2xl font-black bg-gradient-to-r from-amber-500 to-yellow-500 bg-clip-text text-transparent">₡{DESAYUNOS_PRECIO.toLocaleString('es-CR')}</p>
                       </div>
                       <span className="text-sm text-gray-900 bg-white px-3 py-1.5 rounded-full font-bold border-2 border-amber-300 shadow-sm">Por semana</span>
                     </div>

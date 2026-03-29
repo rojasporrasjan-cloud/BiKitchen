@@ -95,11 +95,11 @@ export default function LoginPage() {
                 <div className="bg-white rounded-3xl shadow-2xl p-8 border border-gray-100">
                     {/* Logo */}
                     <div className="text-center mb-8">
-                        <div className="inline-block bg-white rounded-2xl p-3 shadow-lg mb-4">
+                        <div className="inline-flex items-center justify-center bg-white rounded-2xl p-3 shadow-lg mb-4">
                             <img
                                 src="/assets/logo.jpg"
                                 alt="BiKitchen"
-                                className="h-16 w-auto object-contain"
+                                className="h-16 w-auto object-contain block mx-auto"
                             />
                         </div>
                         <h1 className="text-2xl font-bold text-gray-900">

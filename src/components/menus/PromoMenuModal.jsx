@@ -6,13 +6,14 @@ import { getOfficialMenus } from '../../utils/firestoreMenus';
 // Iconos de comida para cada día
 const FOOD_ICONS = ['🍗', '🥩', '🍤', '🐟', '🍖'];
 
-export default function PromoMenuModal({ 
-    packName, 
-    menuKey, 
+export default function PromoMenuModal({
+    packName,
+    menuKey,
     promoPrice,
     promoImage,
-    isOpen, 
-    onClose, 
+    promoMetadata, // Nueva prop para metadatos de la promoción
+    isOpen,
+    onClose,
     onAddToCart,
     onBack // Nueva prop para volver atrás
 }) {
@@ -20,6 +21,7 @@ export default function PromoMenuModal({
     const [loading, setLoading] = useState(true);
     const [notes, setNotes] = useState('');
     const [quantity, setQuantity] = useState(1);
+    const [isAdding, setIsAdding] = useState(false); // Estado para feedback visual
 
     useEffect(() => {
         if (isOpen && menuKey) {
@@ -34,13 +36,13 @@ export default function PromoMenuModal({
             console.log('[PromoMenuModal] Datos completos de Firebase:', menusData);
             console.log('[PromoMenuModal] Buscando menuKey:', menuKey);
             console.log('[PromoMenuModal] Keys disponibles:', Object.keys(menusData));
-            
+
             // Detectar si es menú sin carbohidratos
             const isNoCarbsMenu = menuKey === 'sinCarbos' || menuKey === 'keto';
-            
+
             const menuData = menusData[menuKey];
             console.log('[PromoMenuModal] Menú encontrado:', menuData);
-            
+
             if (menuData && Array.isArray(menuData)) {
                 // Convertir objetos a strings si es necesario
                 const formattedMenu = menuData.map(item => {
@@ -75,21 +77,33 @@ export default function PromoMenuModal({
     };
 
     const handleAddToCart = () => {
+        setIsAdding(true);
+
         const cartItem = {
             id: `promo-${menuKey}-${Date.now()}`,
-            name: packName,
+            name: `${promoMetadata?.title || 'Promoción'} - ${packName}`,
             price: promoPrice,
             quantity: quantity,
             menuKey: menuKey,
             isPromo: true,
+            promoId: promoMetadata?.id,
+            promoTitle: promoMetadata?.title,
+            benefits: promoMetadata?.benefits || [],
             image: promoImage,
+            plan: 'monthly',
+            planLabel: promoMetadata?.planLabel || 'Promoción Mensual',
             customizations: {
                 notes: notes
             }
         };
-        
+
         onAddToCart(cartItem);
-        onClose();
+
+        // Timeout para mostrar feedback antes de cerrar
+        setTimeout(() => {
+            setIsAdding(false);
+            onClose();
+        }, 1500);
     };
 
     if (!isOpen) return null;
@@ -112,7 +126,7 @@ export default function PromoMenuModal({
                     animate={{ scale: 1, opacity: 1, y: 0 }}
                     exit={{ scale: 0.9, opacity: 0, y: 20 }}
                     transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
-                    className="relative bg-gradient-to-br from-white via-white to-gray-50 rounded-3xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-hidden border border-gray-100"
+                    className="relative bg-gradient-to-br from-white via-white to-gray-50 rounded-3xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-hidden border border-gray-100 flex flex-col"
                 >
                     {/* Header mejorado */}
                     <div className="bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 text-white px-6 py-6 relative overflow-hidden">
@@ -128,7 +142,7 @@ export default function PromoMenuModal({
                                         title="Volver atrás"
                                     >
                                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                            <path d="M19 12H5M12 19l-7-7 7-7"/>
+                                            <path d="M19 12H5M12 19l-7-7 7-7" />
                                         </svg>
                                     </button>
                                 )}
@@ -150,7 +164,7 @@ export default function PromoMenuModal({
                     </div>
 
                     {/* Content */}
-                    <div className="p-6 overflow-y-auto max-h-[calc(90vh-200px)]">
+                    <div className="p-6 overflow-y-auto flex-1 custom-scrollbar">
                         {loading ? (
                             <div className="flex flex-col items-center justify-center py-12">
                                 <Loader2 className="animate-spin text-orange-500 mb-3" size={40} />
@@ -198,7 +212,7 @@ export default function PromoMenuModal({
                                 </div>
 
                                 {/* Badge informativo */}
-                                <motion.div 
+                                <motion.div
                                     initial={{ opacity: 0, scale: 0.95 }}
                                     animate={{ opacity: 1, scale: 1 }}
                                     transition={{ delay: 0.5 }}
@@ -239,7 +253,7 @@ export default function PromoMenuModal({
                             <span className="text-gray-700 font-bold">Precio promocional</span>
                             <span className="text-3xl font-black bg-gradient-to-r from-orange-600 to-amber-600 bg-clip-text text-transparent">₡{promoPrice.toLocaleString('es-CR')}</span>
                         </div>
-                        
+
                         {/* Contador de cantidad mejorado */}
                         <div className="flex items-center justify-between mb-5 p-4 bg-gradient-to-r from-orange-50 to-amber-50 rounded-2xl border border-orange-200">
                             <span className="text-sm font-black text-gray-800">Cantidad:</span>
@@ -262,10 +276,23 @@ export default function PromoMenuModal({
 
                         <button
                             onClick={handleAddToCart}
-                            className="w-full bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 hover:from-orange-600 hover:via-amber-600 hover:to-orange-700 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-3 transition-all shadow-xl hover:shadow-2xl hover:scale-105 active:scale-95 text-lg"
+                            disabled={loading || menu?.length === 0 || isAdding}
+                            className={`w-full font-black py-4 rounded-2xl flex items-center justify-center gap-3 transition-all shadow-xl hover:shadow-2xl hover:scale-105 active:scale-95 text-lg ${isAdding
+                                ? 'bg-green-500 text-white'
+                                : 'bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 hover:from-orange-600 hover:via-amber-600 hover:to-orange-700 text-white'
+                                }`}
                         >
-                            <ShoppingCart size={22} />
-                            Añadir al carrito
+                            {isAdding ? (
+                                <>
+                                    <Check size={22} />
+                                    ¡Agregado al carrito!
+                                </>
+                            ) : (
+                                <>
+                                    <ShoppingCart size={22} />
+                                    Añadir al carrito
+                                </>
+                            )}
                         </button>
                     </div>
                 </motion.div>

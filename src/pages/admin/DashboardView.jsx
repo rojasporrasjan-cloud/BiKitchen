@@ -13,7 +13,12 @@ import {
     RefreshCw,
     Clock,
     Trash2,
-    BarChart3
+    BarChart3,
+    Instagram,
+    Facebook,
+    Globe,
+    Compass,
+    Smartphone
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
@@ -44,6 +49,7 @@ export default function DashboardView() {
     const [recentOrders, setRecentOrders] = useState([]);
     const [lowStockItems, setLowStockItems] = useState([]);
     const [topProducts, setTopProducts] = useState([]);
+    const [topSources, setTopSources] = useState([]);
 
     const { orders: contextOrders, loading: contextLoading } = useOrders();
     // Cache de pedidos históricos (para totales y estadísticas globales)
@@ -179,14 +185,45 @@ export default function DashboardView() {
 
         // Top Productos (Historical)
         const planCounts = {};
+        const sourceCounts = {};
+
         allOrders.forEach(p => {
             const plan = p.plan || 'Sin Plan';
             planCounts[plan] = (planCounts[plan] || 0) + 1;
+
+            // Aggregating Marketing Sources
+            let rawSource = p.fuente || p.source || 'Directo';
+            const s = rawSource.toLowerCase();
+
+            if (s.includes('instagram') || s.includes('ig')) {
+                rawSource = 'Instagram';
+            } else if (s.includes('facebook') || s.includes('fb')) {
+                rawSource = 'Facebook';
+            } else if (s.includes('google') || s.includes('ads')) {
+                rawSource = 'Google';
+            } else if (s.includes('tiktok')) {
+                rawSource = 'TikTok';
+            } else if (s.includes('admin') || s.includes('manual')) {
+                rawSource = 'Admin / Manual';
+            } else {
+                rawSource = 'Directo';
+            }
+
+            sourceCounts[rawSource] = (sourceCounts[rawSource] || 0) + 1;
         });
+
         const topProductsList = Object.entries(planCounts)
             .map(([name, sales]) => ({ name, sales, revenue: sales * 25000 })) // Estimado
             .sort((a, b) => b.sales - a.sales)
             .slice(0, 4);
+
+        const topSourcesList = Object.entries(sourceCounts)
+            .map(([name, count]) => ({
+                name,
+                count,
+                percentage: totalPedidos > 0 ? Math.round((count / totalPedidos) * 100) : 0
+            }))
+            .sort((a, b) => b.count - a.count);
 
         setStats(prev => ({
             ...prev,
@@ -200,6 +237,7 @@ export default function DashboardView() {
         }));
         setRecentOrders(recent);
         setTopProducts(topProductsList);
+        setTopSources(topSourcesList);
     };
 
     const refreshData = () => {
@@ -252,7 +290,7 @@ export default function DashboardView() {
     }
 
     return (
-        <div className="max-w-7xl mx-auto space-y-4 md:space-y-6 pb-20 md:pb-0">
+        <div className="space-y-4 md:space-y-6 pb-20 md:pb-0">
             {/* Header */}
             <AdminPageHeader
                 icon={BarChart3}
@@ -390,6 +428,76 @@ export default function DashboardView() {
                     )}
                 </AdminCard>
 
+                {/* Sales Channel Distribution */}
+                <AdminCard
+                    title="Canales de Venta (Origen)"
+                    icon={Users}
+                    delay={0.65}
+                >
+                    {topSources.length === 0 ? (
+                        <div className="text-center py-8 text-gray-400">
+                            <Users size={32} className="mx-auto mb-2 opacity-50" />
+                            <p className="text-sm">Sin datos de origen aún</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-6">
+                            {topSources.map((source, idx) => {
+                                const Icon = {
+                                    'Instagram': Instagram,
+                                    'Facebook': Facebook,
+                                    'Google': Globe,
+                                    'Directo': Compass,
+                                    'TikTok': Smartphone,
+                                    'Admin / Manual': Users
+                                }[source.name] || Globe;
+
+                                const brandColor = {
+                                    'Instagram': 'from-purple-500 via-pink-500 to-orange-500',
+                                    'Facebook': 'from-blue-600 to-blue-700',
+                                    'Google': 'from-red-500 via-yellow-500 to-green-500', // Intentar emular colores Google
+                                    'Directo': 'from-orange-400 to-orange-600',
+                                    'TikTok': 'from-black via-gray-800 to-cyan-500',
+                                    'Admin / Manual': 'from-gray-400 to-gray-600'
+                                }[source.name] || 'from-gray-400 to-gray-600';
+
+                                const iconBg = {
+                                    'Instagram': 'bg-pink-100 text-pink-600',
+                                    'Facebook': 'bg-blue-100 text-blue-600',
+                                    'Google': 'bg-red-100 text-red-600',
+                                    'Directo': 'bg-orange-100 text-orange-600',
+                                    'TikTok': 'bg-gray-100 text-black',
+                                    'Admin / Manual': 'bg-slate-100 text-slate-600'
+                                }[source.name] || 'bg-gray-100 text-gray-600';
+
+                                return (
+                                    <div key={idx} className="group">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <div className="flex items-center gap-3">
+                                                <div className={`p-2 rounded-lg ${iconBg} group-hover:scale-110 transition-transform duration-300`}>
+                                                    <Icon size={18} />
+                                                </div>
+                                                <span className="font-bold text-gray-800 tracking-tight">{source.name}</span>
+                                            </div>
+                                            <div className="text-right">
+                                                <span className="text-sm font-black text-gray-900">{source.count}</span>
+                                                <span className="text-[10px] text-gray-400 ml-1 font-bold">({source.percentage}%)</span>
+                                            </div>
+                                        </div>
+                                        <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden shadow-inner">
+                                            <motion.div
+                                                initial={{ width: 0 }}
+                                                animate={{ width: `${source.percentage}%` }}
+                                                transition={{ duration: 1, delay: 0.5 + (idx * 0.1), ease: "easeOut" }}
+                                                className={`h-full rounded-full bg-gradient-to-r ${brandColor} shadow-sm shadow-black/10`}
+                                            />
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </AdminCard>
+
                 {/* Low Stock Alert */}
                 <AdminCard
                     title="Stock Bajo"
@@ -471,21 +579,27 @@ export default function DashboardView() {
                                 </thead>
                                 <tbody>
                                     {recentOrders.map((order) => {
-                                        const status = order.deliveryStatus || 'pending';
+                                        const status = order.status || 'pending';
+                                        const statusConfig = {
+                                            pending_payment: { label: 'Pendiente Pago', color: 'bg-orange-100 text-orange-700' },
+                                            pending: { label: 'Por Confirmar', color: 'bg-yellow-100 text-yellow-700' },
+                                            confirmed: { label: 'Confirmado', color: 'bg-blue-100 text-blue-700' },
+                                            preparing: { label: 'En Cocina', color: 'bg-indigo-100 text-indigo-700' },
+                                            ready: { label: 'Listo', color: 'bg-purple-100 text-purple-700' },
+                                            in_transit: { label: 'En Camino', color: 'bg-cyan-100 text-cyan-700' },
+                                            delivered: { label: 'Entregado', color: 'bg-green-100 text-green-700' },
+                                            cancelled: { label: 'Cancelado', color: 'bg-red-100 text-red-700' }
+                                        };
+                                        const config = statusConfig[status] || { label: status, color: 'bg-gray-100 text-gray-700' };
+
                                         return (
                                             <tr key={order.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                                                 <td className="py-3 px-4 text-sm font-medium text-gray-900">{order.cliente || 'Sin nombre'}</td>
                                                 <td className="py-3 px-4 text-sm text-gray-600">{order.plan || '-'}</td>
                                                 <td className="py-3 px-4 text-sm text-gray-600">{order.fecha_entrega || '-'}</td>
                                                 <td className="py-3 px-4">
-                                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                                                        status === 'in_transit' ? 'bg-blue-100 text-blue-700' :
-                                                            status === 'delivered' ? 'bg-green-100 text-green-700' :
-                                                                'bg-gray-100 text-gray-700'
-                                                        }`}>
-                                                        {status === 'pending' ? 'Pendiente' :
-                                                            status === 'in_transit' ? 'En Ruta' :
-                                                                status === 'delivered' ? 'Entregado' : status}
+                                                    <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${config.color}`}>
+                                                        {config.label}
                                                     </span>
                                                 </td>
                                             </tr>
@@ -498,7 +612,19 @@ export default function DashboardView() {
                         {/* Mobile Card View */}
                         <div className="md:hidden space-y-3">
                             {recentOrders.map((order) => {
-                                const status = order.deliveryStatus || 'pending';
+                                const status = order.status || 'pending';
+                                const statusConfig = {
+                                    pending_payment: { label: 'Pago Pendiente', color: 'bg-orange-100 text-orange-700' },
+                                    pending: { label: 'Por Confirmar', color: 'bg-yellow-100 text-yellow-700' },
+                                    confirmed: { label: 'Confirmado', color: 'bg-blue-100 text-blue-700' },
+                                    preparing: { label: 'En Cocina', color: 'bg-indigo-100 text-indigo-700' },
+                                    ready: { label: 'Listo', color: 'bg-purple-100 text-purple-700' },
+                                    in_transit: { label: 'En Camino', color: 'bg-cyan-100 text-cyan-700' },
+                                    delivered: { label: 'Entregado', color: 'bg-green-100 text-green-700' },
+                                    cancelled: { label: 'Cancelado', color: 'bg-red-100 text-red-700' }
+                                };
+                                const config = statusConfig[status] || { label: status, color: 'bg-gray-100 text-gray-700' };
+
                                 return (
                                     <div key={order.id} className="bg-gray-50 rounded-xl p-3 border border-gray-100 flex flex-col gap-2">
                                         <div className="flex justify-between items-start">
@@ -506,14 +632,8 @@ export default function DashboardView() {
                                                 <div className="font-semibold text-gray-900">{order.cliente || 'Sin nombre'}</div>
                                                 <div className="text-xs text-gray-500">{order.plan || '-'}</div>
                                             </div>
-                                            <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                                                status === 'in_transit' ? 'bg-blue-100 text-blue-700' :
-                                                    status === 'delivered' ? 'bg-green-100 text-green-700' :
-                                                        'bg-gray-100 text-gray-700'
-                                                }`}>
-                                                {status === 'pending' ? 'Pendiente' :
-                                                    status === 'in_transit' ? 'En Ruta' :
-                                                        status === 'delivered' ? 'Entregado' : status}
+                                            <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${config.color}`}>
+                                                {config.label}
                                             </span>
                                         </div>
                                         <div className="flex items-center gap-2 text-xs text-gray-500 pt-2 border-t border-gray-200/50 mt-1">

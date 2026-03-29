@@ -1,9 +1,10 @@
 import React from 'react';
 import { motion } from 'framer-motion';
+import { Camera } from 'lucide-react';
 
 const formatPrice = (value) => `₡${value.toLocaleString('es-CR')}`;
 
-export default function IndividualCard({ producto, onClick, onEdit }) {
+export default function IndividualCard({ producto, onClick, canEditImage, onUploadImage }) {
 
   return (
     <motion.div
@@ -12,12 +13,25 @@ export default function IndividualCard({ producto, onClick, onEdit }) {
       className="rounded-2xl shadow-md hover:shadow-xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 overflow-hidden flex flex-col cursor-pointer"
       onClick={onClick}
     >
-      <div className="h-40 w-full overflow-hidden">
+      <div className="h-40 w-full overflow-hidden relative group/img">
         <img
           src={producto.imagen}
           alt={producto.nombre}
           className="w-full h-full object-cover"
         />
+        
+        {canEditImage && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onUploadImage();
+            }}
+            className="absolute top-2 right-2 p-2 bg-white/90 dark:bg-gray-800/90 rounded-full shadow-lg text-[#FF671D] hover:bg-white transition-all transform hover:scale-110 flex items-center justify-center opacity-0 group-hover/img:opacity-100 z-10"
+            title="Cambiar imagen"
+          >
+            <Camera size={18} />
+          </button>
+        )}
       </div>
 
       <div className="p-4 flex flex-col gap-2 flex-1">

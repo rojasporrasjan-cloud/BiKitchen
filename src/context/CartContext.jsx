@@ -1,5 +1,7 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect } from 'react';
 import { validateCoupon as validateCouponAPI, useCoupon } from '../utils/firestoreCoupons';
+import { db } from '../firebase/config';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 import { SHIPPING_ZONES, getZoneById, getShippingCost, zoneRequiresContact } from '../data/shippingZones';
 import { trackAddToCart, trackInitiateCheckout } from '../services/facebookPixel';
 import { useShippingDiscount } from './ShippingDiscountContext';
@@ -32,6 +34,18 @@ export function CartProvider({ children }) {
     const [couponLoading, setCouponLoading] = useState(false);
     const [couponError, setCouponError] = useState(null);
 
+    // Estado de Referido
+    const [appliedReferral, setAppliedReferral] = useState(() => {
+        try {
+            const savedReferral = localStorage.getItem('bikitchen-referral');
+            return savedReferral ? JSON.parse(savedReferral) : null;
+        } catch (error) {
+            return null;
+        }
+    });
+    const [referralLoading, setReferralLoading] = useState(false);
+    const [referralError, setReferralError] = useState(null);
+
     // Estado de zona de envío
     const [selectedZone, setSelectedZone] = useState(() => {
         try {
@@ -44,21 +58,21 @@ export function CartProvider({ children }) {
     const [shippingDiscount, setShippingDiscount] = useState(0); // Porcentaje de descuento en envío
 
     const { discountConfig } = useShippingDiscount();
-    const { currentUser } = useAuth();
+    const { currentUser, isAdmin } = useAuth();
 
     // Save cart to localStorage whenever it changes
     useEffect(() => {
         localStorage.setItem('bikitchen-cart', JSON.stringify(cart));
     }, [cart]);
 
-    // Save coupon to localStorage
+    // Save referral to localStorage
     useEffect(() => {
-        if (appliedCoupon) {
-            localStorage.setItem('bikitchen-coupon', JSON.stringify(appliedCoupon));
+        if (appliedReferral) {
+            localStorage.setItem('bikitchen-referral', JSON.stringify(appliedReferral));
         } else {
-            localStorage.removeItem('bikitchen-coupon');
+            localStorage.removeItem('bikitchen-referral');
         }
-    }, [appliedCoupon]);
+    }, [appliedReferral]);
 
     // Save shipping zone to localStorage
     useEffect(() => {
@@ -143,15 +157,30 @@ export function CartProvider({ children }) {
                 maxDiscount = Math.max(maxDiscount, 50);
             }
 
+            // REGLA ESPECIAL: Producto de prueba de producción -> ENVÍO GRATIS
+            if (itemId.includes('test-nmi-prod') || name.includes('prueba') || item.price === 100) {
+                maxDiscount = 100;
+            }
+
             // Plan quincenal y semanal: 0% descuento (SIN DESCUENTO)
         });
+
+        // REGLA MAESTRA PARA ADMINS: Siempre 100% descuento en envío para pruebas
+        if (isAdmin && isAdmin()) {
+            maxDiscount = 100;
+        }
 
         setShippingDiscount(maxDiscount);
     }, [cart, discountConfig]);
 
     const showNotification = (message, type = 'success') => {
         setNotification({ message, type });
-        setTimeout(() => setNotification(null), 3000);
+        // Duración de 10 segundos para móviles (10000ms)
+        setTimeout(() => setNotification(null), 10000);
+    };
+
+    const dismissNotification = () => {
+        setNotification(null);
     };
 
     const addToCart = (item) => {
@@ -198,6 +227,8 @@ export function CartProvider({ children }) {
         setCart([]);
         setAppliedCoupon(null);
         setCouponError(null);
+        setAppliedReferral(null);
+        setReferralError(null);
         setSelectedZone(null);
         setShippingDiscount(0);
     };
@@ -226,6 +257,19 @@ export function CartProvider({ children }) {
 
     // Obtener costo de envío con descuento aplicado
     const getShippingCostFinal = () => {
+        // Si el producto de prueba está en el carrito, el envío es SIEMPRE 0.
+        // Buscamos por ID, por nombre que contenga "PRUEBA" o por precio exacto de 100.
+        const hasTestProduct = cart.some(item => 
+            (item.id || '').toLowerCase().includes('test-nmi-prod') ||
+            (item.name || '').toUpperCase().includes('PRUEBA') ||
+            item.price === 100
+        );
+
+        // REGLA PARA ADMINS: Envío gratis siempre para facilitar pruebas en el dominio real
+        const isUserAdmin = isAdmin && isAdmin();
+
+        if (hasTestProduct || isUserAdmin) return 0;
+
         const baseCost = getShippingCostBase();
         if (baseCost === null || baseCost === 0) return baseCost;
 
@@ -267,26 +311,36 @@ export function CartProvider({ children }) {
         }, 0);
     };
 
-    // Calcular descuento del cupón
+    // Calcular descuento (Cupones + Referidos)
     const getDiscount = () => {
-        if (!appliedCoupon) return 0;
-
+        let totalDiscount = 0;
         const subtotal = getSubtotal();
 
-        switch (appliedCoupon.type) {
-            case 'percentage':
-                let discount = Math.round(subtotal * (appliedCoupon.value / 100));
-                if (appliedCoupon.maxDiscount && discount > appliedCoupon.maxDiscount) {
-                    discount = appliedCoupon.maxDiscount;
-                }
-                return discount;
-            case 'fixed':
-                return Math.min(appliedCoupon.value, subtotal);
-            case 'free_shipping':
-                return 0; // Se maneja en envío
-            default:
-                return 0;
+        // Descuento de cupón
+        if (appliedCoupon) {
+            switch (appliedCoupon.type) {
+                case 'percentage':
+                    let d = Math.round(subtotal * (appliedCoupon.value / 100));
+                    if (appliedCoupon.maxDiscount && d > appliedCoupon.maxDiscount) {
+                        d = appliedCoupon.maxDiscount;
+                    }
+                    totalDiscount += d;
+                    break;
+                case 'fixed':
+                    totalDiscount += appliedCoupon.value;
+                    break;
+                case 'free_shipping':
+                    // Se maneja aparte
+                    break;
+            }
         }
+
+        // Descuento de referido (₡5,000 fijo - Alineado con ReferidosPage.jsx)
+        if (appliedReferral) {
+            totalDiscount += 5000;
+        }
+
+        return Math.min(totalDiscount, subtotal);
     };
 
     // Total con descuento aplicado (sin envío)
@@ -347,6 +401,53 @@ export function CartProvider({ children }) {
         setAppliedCoupon(null);
         setCouponError(null);
         showNotification('Cupón removido', 'success');
+    };
+
+    // Aplicar código de referido
+    const applyReferralCode = async (code) => {
+        if (!code) return { success: false, message: 'Ingresa un código' };
+        
+        setReferralLoading(true);
+        setReferralError(null);
+        
+        try {
+            const q = query(collection(db, 'referral_codes'), where('code', '==', code.toUpperCase().trim()));
+            const querySnapshot = await getDocs(q);
+            
+            if (querySnapshot.empty) {
+                setReferralError('Código de referido no válido');
+                return { success: false, message: 'Código no encontrado' };
+            }
+            
+            const referralData = querySnapshot.docs[0].data();
+            
+            // No puedes referirte a ti mismo
+            if (currentUser && referralData.uid === currentUser.uid) {
+                setReferralError('No puedes usar tu propio código');
+                return { success: false, message: 'No puedes usar tu propio código' };
+            }
+            
+            setAppliedReferral({
+                code: referralData.code,
+                referrerUid: referralData.uid,
+                referrerName: referralData.name
+            });
+            
+            showNotification('¡Código de referido aplicado! Descuento de ₡2,000 activado.', 'success');
+            return { success: true };
+        } catch (error) {
+            console.error('Error applying referral:', error);
+            setReferralError('Error al validar código');
+            return { success: false, message: 'Error de conexión' };
+        } finally {
+            setReferralLoading(false);
+        }
+    };
+
+    const removeReferral = () => {
+        setAppliedReferral(null);
+        setReferralError(null);
+        showNotification('Código de referido removido', 'success');
     };
 
     // Marcar cupón como usado (llamar al completar pedido)
@@ -435,7 +536,14 @@ export function CartProvider({ children }) {
                 getShippingCostFinal,
                 getSelectedZoneInfo,
                 isZoneOutOfCoverage,
-                SHIPPING_ZONES
+                SHIPPING_ZONES,
+                // Referidos
+                appliedReferral,
+                referralLoading,
+                referralError,
+                applyReferralCode,
+                removeReferral,
+                dismissNotification
             }}
         >
             {children}

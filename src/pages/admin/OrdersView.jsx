@@ -26,7 +26,8 @@ import {
     Plus,
     Trash2,
     ClipboardList,
-    UserPlus
+    UserPlus,
+    TrendingUp
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useOrders } from '../../context/OrdersContext';
@@ -218,12 +219,14 @@ export default function OrdersView() {
     const [selectedPlan, setSelectedPlan] = useState('weekly'); // 'weekly', 'biweekly', 'monthly'
     const [packsData, setPacksData] = useState(DEFAULT_PACKS_DATA);
     const [zoneFilter, setZoneFilter] = useState('all'); // Filtro por zona
+    const [sourceFilter, setSourceFilter] = useState('all'); // Filtro por fuente marketing
     const [customerHistory, setCustomerHistory] = useState(null); // Historial del cliente
     const [loadingHistory, setLoadingHistory] = useState(false);
     const [showClientProfile, setShowClientProfile] = useState(false);
     const [clientProfile, setClientProfile] = useState(null);
     const [clientPoints, setClientPoints] = useState(null);
     const [clientRelatedOrders, setClientRelatedOrders] = useState([]);
+    const [isRepairing, setIsRepairing] = useState(false);
     const stats = getStats();
     // Normalizador de nombres (remueve acentos y palabras Pack/Menú)
     const normalizeName = (s) => {
@@ -581,9 +584,6 @@ export default function OrdersView() {
                 zoneId: manualOrderData.zoneId || null,
                 zoneName: manualOrderData.zoneName || 'Por definir',
                 shippingCost: manualOrderData.shippingCost || 0,
-
-                zoneName: manualOrderData.zoneName || 'Por definir',
-                shippingCost: manualOrderData.shippingCost || 0,
                 // Pass discount fields
                 discount: manualOrderData.discount,
                 discountType: manualOrderData.discountType,
@@ -612,6 +612,68 @@ export default function OrdersView() {
         } catch (error) {
             console.error('Error al crear pedido:', error);
             alert('Error al crear el pedido');
+        }
+    };
+
+    // Reparar pedidos antiguos (formato legacy / total 0)
+    const repairOrders = async () => {
+        if (!window.confirm('¿Deseas reparar pedidos con total 0 y migrar datos antiguos?')) return;
+        
+        setIsRepairing(true);
+        try {
+            const querySnapshot = await getDocs(collection(db, 'pedidos'));
+            let fixedCount = 0;
+            
+            for (const d of querySnapshot.docs) {
+                const data = d.data();
+                let needsUpdate = false;
+                const updateData = {};
+
+                // 1. Migrar menu -> items (el admin espera 'items')
+                if (data.menu && !data.items) {
+                    updateData.items = data.menu;
+                    needsUpdate = true;
+                }
+
+                // 2. Corregir total si es 0
+                const currentTotal = Number(data.total) || 0;
+                if (currentTotal === 0) {
+                    const itemsToCalc = data.items || data.menu;
+                    if (itemsToCalc && Array.isArray(itemsToCalc)) {
+                        let calculatedTotal = 0;
+                        itemsToCalc.forEach(item => {
+                            const price = Number(item.price || item.precio) || 0;
+                            const qty = Number(item.quantity || item.cantidad) || 1;
+                            calculatedTotal += (price * qty);
+                        });
+
+                        calculatedTotal += (Number(data.costo_envio) || Number(data.shippingCost) || 0);
+                        calculatedTotal -= (Number(data.descuento) || Number(data.discount) || 0);
+
+                        if (calculatedTotal > 0) {
+                            updateData.total = calculatedTotal;
+                            needsUpdate = true;
+                        }
+                    }
+                }
+
+                // 3. Renombrar nmi -> Tarjeta
+                if (data.metodo_pago === 'nmi') {
+                    updateData.metodo_pago = 'Tarjeta';
+                    needsUpdate = true;
+                }
+
+                if (needsUpdate) {
+                    await updateDoc(doc(db, "pedidos", d.id), updateData);
+                    fixedCount++;
+                }
+            }
+            alert(`Reparación finalizada. Se actualizaron ${fixedCount} pedidos.`);
+        } catch (error) {
+            console.error('Error reparando pedidos:', error);
+            alert('Error al reparar pedidos: ' + error.message);
+        } finally {
+            setIsRepairing(false);
         }
     };
 
@@ -673,7 +735,19 @@ export default function OrdersView() {
             );
         }
 
-        // 5. Filtro de Fecha
+        // 5. Filtro de Fuente (Marketing)
+        if (sourceFilter !== 'all') {
+            result = result.filter(order => {
+                const src = (order.fuente || order.source || '').toLowerCase();
+                if (sourceFilter === 'meta') return src.includes('facebook') || src.includes('instagram') || src.includes('meta');
+                if (sourceFilter === 'google') return src.includes('google');
+                if (sourceFilter === 'directo') return src.includes('direct') || (!src && order.source !== 'manual' && order.source !== 'admin');
+                if (sourceFilter === 'manual') return src.includes('manual') || src.includes('admin');
+                return true;
+            });
+        }
+
+        // 6. Filtro de Fecha
         if (dateFilter !== 'all') {
             const now = new Date();
             const todayStr = now.toISOString().split('T')[0];
@@ -789,7 +863,7 @@ export default function OrdersView() {
         try {
             const base = new Date(`${baseStr}T00:00:00`);
             if (isNaN(base.getTime())) return [];
-            const step = (count === 2) ? 14 : 7;
+            const step = 7; // Changed from (count === 2) ? 14 : 7 to 7
             const out = [];
             for (let i = 0; i < count; i++) {
                 const d = new Date(base);
@@ -1311,6 +1385,19 @@ export default function OrdersView() {
                             <Plus size={16} /> Nuevo Pedido
                         </button>,
                         <button
+                            key="repair"
+                            disabled={isRepairing}
+                            onClick={repairOrders}
+                            className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold shadow-md transition-colors ${
+                                isRepairing 
+                                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                                    : 'bg-orange-500 text-white hover:bg-orange-600'
+                            }`}
+                        >
+                            <History size={16} className={isRepairing ? 'animate-spin' : ''} />
+                            {isRepairing ? 'Reparando...' : 'Reparar Pedidos'}
+                        </button>,
+                        <button
                             key="delete-all"
                             onClick={handleDeleteAllOrders}
                             className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 shadow-md transition-colors"
@@ -1520,6 +1607,22 @@ export default function OrdersView() {
                         </select>
                     )}
 
+                    {/* Marketing Source Filter */}
+                    <div className="flex items-center bg-white px-4 py-2.5 rounded-xl border border-gray-200 shadow-sm">
+                        <TrendingUp size={16} className="text-gray-400 mr-2" />
+                        <select
+                            className="bg-transparent border-none focus:ring-0 text-sm font-bold text-gray-800 cursor-pointer p-0"
+                            value={sourceFilter}
+                            onChange={(e) => setSourceFilter(e.target.value)}
+                        >
+                            <option value="all">Todas las Fuentes</option>
+                            <option value="meta">Meta (FB/IG)</option>
+                            <option value="google">Google</option>
+                            <option value="directo">Directo</option>
+                            <option value="manual">Admin / Manual</option>
+                        </select>
+                    </div>
+
                     {/* Status Filters - Only show helpful sub-filters based on Tab */}
                     <div className="flex gap-2 flex-wrap">
                         {activeTab === 'pending' && [
@@ -1609,6 +1712,10 @@ export default function OrdersView() {
                                             <td className="py-4 px-6">
                                                 <div className="font-medium text-gray-800">{order.client}</div>
                                                 <div className="text-sm text-gray-500">{order.details?.phone || 'Sin teléfono'}</div>
+                                                <div className="flex items-center gap-1 mt-1 text-[10px] uppercase font-bold text-gray-400">
+                                                    <TrendingUp size={10} />
+                                                    {order.fuente || order.source || 'Directo'}
+                                                </div>
                                             </td>
                                             <td className="py-4 px-6">
                                                 <div className="text-sm text-gray-700 font-medium">
@@ -2421,7 +2528,7 @@ Somos de BiKitchen, te contactamos sobre tu pedido ${selectedOrder.displayId}.
                                                         deliveryDate: '' // Reset date on zone change
                                                     }));
                                                 }}
-                                                className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none"
+                                                className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none disabled:bg-gray-100 disabled:text-gray-400"
                                             >
                                                 <option value="">Seleccionar Zona...</option>
                                                 {SHIPPING_ZONES.map(zone => (

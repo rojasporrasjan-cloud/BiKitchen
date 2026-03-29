@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Trash2, Plus, Minus, ShoppingCart, ArrowRight, Tag, Loader2, CheckCircle, XCircle } from 'lucide-react';
+import { X, Trash2, Plus, Minus, ShoppingCart, ArrowRight, Tag, Loader2, CheckCircle, XCircle, Users, Truck } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
@@ -20,11 +20,18 @@ export default function CartDrawer() {
         couponError,
         applyCoupon,
         removeCoupon,
-        shippingDiscount
+        shippingDiscount,
+        applyReferralCode,
+        appliedReferral,
+        removeReferral,
+        referralError,
+        referralLoading
     } = useCart();
     const { currentUser } = useAuth();
     const [couponCode, setCouponCode] = useState('');
+    const [referralCode, setReferralCode] = useState('');
     const [showCouponInput, setShowCouponInput] = useState(false);
+    const [showReferralInput, setShowReferralInput] = useState(false);
     const [showStepsCheckout, setShowStepsCheckout] = useState(false);
 
     const handleApplyCoupon = async () => {
@@ -80,9 +87,9 @@ export default function CartDrawer() {
                                 </div>
                             ) : (
                                 <div className="space-y-4">
-                                    {cart.map((item) => (
+                                    {cart.map((item, index) => (
                                         <motion.div
-                                            key={item.id}
+                                            key={`${item.id || 'item'}-${index}`}
                                             layout
                                             initial={{ opacity: 0, y: 20 }}
                                             animate={{ opacity: 1, y: 0 }}
@@ -155,114 +162,169 @@ export default function CartDrawer() {
 
                         {/* Footer */}
                         {cart.length > 0 && (
-                            <div className="border-t border-gray-200 p-4 sm:p-6 space-y-3">
-                                {/* Sección de Cupón */}
-                                <div className="space-y-2">
-                                    {appliedCoupon ? (
-                                        <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-                                            <div className="flex items-center gap-2">
-                                                <CheckCircle size={16} className="text-green-600" />
-                                                <div>
-                                                    <span className="text-sm font-semibold text-green-700">{appliedCoupon.code}</span>
-                                                    <p className="text-xs text-green-600">{appliedCoupon.discountText}</p>
+                            <div className="border-t border-gray-200 p-4 sm:p-6 space-y-4">
+                                
+                                {/* Cupones y Referidos */}
+                                <div className="space-y-3">
+                                    {/* Cupón Section */}
+                                    <div>
+                                        {appliedCoupon ? (
+                                            <div className="flex items-center justify-between bg-orange-50 border border-orange-100 rounded-lg px-3 py-2">
+                                                <div className="flex items-center gap-2">
+                                                    <Tag size={16} className="text-orange-500" />
+                                                    <div className="min-w-0">
+                                                        <p className="text-sm font-bold text-gray-900 truncate">{appliedCoupon.code}</p>
+                                                        <p className="text-[10px] text-orange-600 font-medium uppercase tracking-wider">{appliedCoupon.discountText}</p>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                            <button
-                                                onClick={removeCoupon}
-                                                className="text-green-600 hover:text-green-800 p-1"
-                                            >
-                                                <X size={16} />
-                                            </button>
-                                        </div>
-                                    ) : showCouponInput ? (
-                                        <div className="space-y-2">
-                                            <div className="flex gap-2">
-                                                <input
-                                                    type="text"
-                                                    value={couponCode}
-                                                    onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                                                    placeholder="Código de cupón"
-                                                    className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 uppercase"
-                                                    onKeyDown={(e) => e.key === 'Enter' && handleApplyCoupon()}
-                                                />
-                                                <button
-                                                    onClick={handleApplyCoupon}
-                                                    disabled={couponLoading || !couponCode.trim()}
-                                                    className="px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-                                                >
-                                                    {couponLoading ? <Loader2 size={16} className="animate-spin" /> : 'Aplicar'}
+                                                <button onClick={removeCoupon} className="text-gray-400 hover:text-gray-600 p-1">
+                                                    <X size={16} />
                                                 </button>
                                             </div>
-                                            {couponError && (
-                                                <div className="flex items-center gap-2 text-red-600 text-xs">
-                                                    <XCircle size={14} />
-                                                    {couponError}
+                                        ) : showCouponInput ? (
+                                            <div className="space-y-2">
+                                                <div className="flex gap-2">
+                                                    <input
+                                                        type="text"
+                                                        value={couponCode}
+                                                        onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                                                        placeholder="CÓDIGO DE CUPÓN"
+                                                        className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+                                                        onKeyDown={(e) => e.key === 'Enter' && handleApplyCoupon()}
+                                                    />
+                                                    <button
+                                                        onClick={handleApplyCoupon}
+                                                        disabled={couponLoading || !couponCode.trim()}
+                                                        className="px-4 py-2 bg-bikitchen-orange text-white rounded-lg text-sm font-bold hover:bg-bikitchen-orange-dark disabled:opacity-50 transition-colors"
+                                                    >
+                                                        {couponLoading ? <Loader2 size={16} className="animate-spin" /> : 'Aplicar'}
+                                                    </button>
                                                 </div>
-                                            )}
+                                                {couponError && <p className="text-xs text-red-500 font-medium">{couponError}</p>}
+                                                <button onClick={() => { setShowCouponInput(false); setCouponCode(''); }} className="text-[10px] text-gray-400 hover:text-gray-600 uppercase tracking-widest font-bold">Cancelar</button>
+                                            </div>
+                                        ) : (
                                             <button
-                                                onClick={() => {
-                                                    setShowCouponInput(false);
-                                                    setCouponCode('');
-                                                }}
-                                                className="text-xs text-gray-500 hover:text-gray-700"
+                                                onClick={() => setShowCouponInput(true)}
+                                                className="text-sm text-bikitchen-orange hover:text-bikitchen-orange-dark font-medium flex items-center gap-1.5 transition-colors"
                                             >
-                                                Cancelar
+                                                <Tag size={14} />
+                                                ¿Tienes un cupón?
                                             </button>
-                                        </div>
-                                    ) : (
-                                        <button
-                                            onClick={() => setShowCouponInput(true)}
-                                            className="flex items-center gap-2 text-sm text-orange-600 hover:text-orange-700 font-medium"
-                                        >
-                                            <Tag size={16} />
-                                            ¿Tienes un cupón de descuento?
-                                        </button>
-                                    )}
+                                        )}
+                                    </div>
+
+                                    {/* Referral Section */}
+                                    <div>
+                                        {appliedReferral ? (
+                                            <div className="flex items-center justify-between bg-purple-50 border border-purple-100 rounded-lg px-3 py-2">
+                                                <div className="flex items-center gap-2">
+                                                    <Users size={16} className="text-purple-600" />
+                                                    <div className="min-w-0">
+                                                        <p className="text-sm font-bold text-gray-900 truncate">Invitado por {appliedReferral.referrerName || 'Amigo'}</p>
+                                                        <p className="text-[10px] text-purple-600 font-medium uppercase tracking-wider">₡2,000 de regalo aplicado</p>
+                                                    </div>
+                                                </div>
+                                                <button onClick={removeReferral} className="text-gray-400 hover:text-gray-600 p-1">
+                                                    <X size={16} />
+                                                </button>
+                                            </div>
+                                        ) : showReferralInput ? (
+                                            <div className="space-y-2">
+                                                <div className="flex gap-2">
+                                                    <input
+                                                        type="text"
+                                                        value={referralCode}
+                                                        onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
+                                                        placeholder="CÓDIGO DE INVITACIÓN"
+                                                        className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter' && referralCode.trim()) {
+                                                                applyReferralCode(referralCode).then(res => res.success && setReferralCode(''));
+                                                            }
+                                                        }}
+                                                    />
+                                                    <button
+                                                        onClick={async () => {
+                                                            const res = await applyReferralCode(referralCode);
+                                                            if (res.success) setReferralCode('');
+                                                        }}
+                                                        disabled={referralLoading || !referralCode.trim()}
+                                                        className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-bold hover:bg-purple-700 disabled:opacity-50 transition-colors"
+                                                    >
+                                                        {referralLoading ? <Loader2 size={16} className="animate-spin" /> : 'Validar'}
+                                                    </button>
+                                                </div>
+                                                {referralError && <p className="text-xs text-red-500 font-medium">{referralError}</p>}
+                                                <button onClick={() => { setShowReferralInput(false); setReferralCode(''); }} className="text-[10px] text-gray-400 hover:text-gray-600 uppercase tracking-widest font-bold">Cancelar</button>
+                                            </div>
+                                        ) : (
+                                            <button
+                                                onClick={() => setShowReferralInput(true)}
+                                                className="text-sm text-purple-600 hover:text-purple-700 font-medium flex items-center gap-1.5 transition-colors"
+                                            >
+                                                <Users size={14} />
+                                                ¿Un amigo te recomendó?
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
 
                                 {/* Resumen de precios */}
-                                <div className="space-y-1 pt-2 border-t border-gray-100">
-                                    <div className="flex justify-between text-sm text-gray-600">
-                                        <span>Subtotal</span>
+                                <div className="space-y-1.5 pt-4 border-t border-gray-100">
+                                    <div className="flex justify-between text-sm text-gray-500">
+                                        <span>Subtotal productos</span>
                                         <span>₡{getSubtotal().toLocaleString('es-CR')}</span>
                                     </div>
-                                    {appliedCoupon && getDiscount() > 0 && (
-                                        <div className="flex justify-between text-sm text-green-600">
-                                            <span>Descuento ({appliedCoupon.code})</span>
+                                    
+                                    {(appliedCoupon || appliedReferral) && getDiscount() > 0 && (
+                                        <div className="flex justify-between text-sm text-green-600 font-medium">
+                                            <span className="flex items-center gap-1">
+                                                <CheckCircle size={14} />
+                                                Descuentos aplicados
+                                            </span>
                                             <span>-₡{getDiscount().toLocaleString('es-CR')}</span>
                                         </div>
                                     )}
+
                                     {shippingDiscount > 0 && (
-                                        <div className="flex justify-between text-sm text-blue-600">
-                                            <span>🚚 Envío</span>
-                                            <span className="font-medium">Pagas solo {100 - shippingDiscount}%</span>
+                                        <div className="flex justify-between text-sm text-blue-600 font-medium italic">
+                                            <span className="flex items-center gap-1">
+                                                <Truck size={14} />
+                                                ¡Envío con {shippingDiscount}% descuento!
+                                            </span>
                                         </div>
                                     )}
-                                    <div className="flex justify-between items-center text-lg font-bold pt-1">
-                                        <span>Total:</span>
-                                        <span className="text-orange-500">₡{getTotalPrice().toLocaleString('es-CR')}</span>
+
+                                    <div className="flex justify-between items-center text-xl font-bold pt-2 text-gray-900 border-t border-gray-50 mt-1">
+                                        <span>Total estimado</span>
+                                        <span className="text-bikitchen-orange">₡{getTotalPrice().toLocaleString('es-CR')}</span>
                                     </div>
-                                    <p className="text-xs text-gray-400 text-center">+ envío según zona</p>
+                                    <p className="text-[10px] text-gray-400 text-center uppercase tracking-tighter">I.V.A Incluido • Costo de envío según zona</p>
                                 </div>
 
                                 {/* Botones de checkout */}
-                                <div className="space-y-2 pt-2">
+                                <div className="pt-2">
                                     <button
                                         onClick={() => setShowStepsCheckout(true)}
-                                        className="w-full py-3 bg-bikitchen-orange text-white rounded-lg font-medium hover:bg-bikitchen-orange-dark transition-colors flex items-center justify-center gap-2"
+                                        className="w-full py-4 bg-gradient-to-r from-bikitchen-orange to-bikitchen-gold text-white rounded-xl font-bold hover:shadow-lg hover:shadow-orange-200 transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
                                     >
                                         Finalizar Pedido
-                                        <ArrowRight size={18} />
+                                        <ArrowRight size={20} />
                                     </button>
                                 </div>
 
                                 {/* Métodos de pago aceptados */}
-                                <div className="pt-3 border-t border-gray-100">
-                                    <p className="text-xs text-gray-400 text-center mb-2">Aceptamos</p>
-                                    <div className="flex items-center justify-center gap-3 flex-wrap">
-                                        <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-1 rounded">SINPE Móvil</span>
-                                        <span className="text-xs font-semibold text-purple-600 bg-purple-50 px-2 py-1 rounded">Transferencia</span>
-                                        <span className="text-xs font-semibold text-green-600 bg-green-50 px-2 py-1 rounded">WhatsApp</span>
+                                <div className="mt-4 pt-4 border-t border-gray-100">
+                                    <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
+                                        <p className="text-[10px] text-gray-400 font-black uppercase tracking-[0.2em] text-center mb-3">Medios de Pago Seguros</p>
+                                        <div className="flex items-center justify-center">
+                                            <div className="flex items-center gap-3 opacity-90">
+                                                <img src="https://cdn.jsdelivr.net/gh/aaronfagan/svg-credit-card-payment-icons@master/flat/visa.svg" alt="Visa" className="h-[14px] w-auto" />
+                                                <img src="https://cdn.jsdelivr.net/gh/aaronfagan/svg-credit-card-payment-icons@master/flat/mastercard.svg" alt="Mastercard" className="h-[18px] w-auto" />
+                                                <img src="https://cdn.jsdelivr.net/gh/aaronfagan/svg-credit-card-payment-icons@master/flat/amex.svg" alt="Amex" className="h-[16px] w-auto" />
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

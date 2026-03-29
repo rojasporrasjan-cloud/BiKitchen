@@ -54,7 +54,8 @@ const optimizeToWebp = (file, maxSize = 1280) => new Promise((resolve, reject) =
 
 const formatPrice = (price) => `₡${price.toLocaleString('es-CR')}`;
 
-const PromoCard = ({ promo, onClick, customImage, onUploadImage, isAdmin }) => {
+const PromoCard = ({ promo, onClick, onAddToCart, customImage, onUploadImage, isAdmin }) => {
+    const [addedToCart, setAddedToCart] = useState(false);
     const isActive = !promo.fechaFin || new Date(promo.fechaFin) >= new Date();
     const isChristmas = promo.titulo.toLowerCase().includes('menú navideño');
     const displayImage = customImage || promo.imagen;
@@ -63,6 +64,23 @@ const PromoCard = ({ promo, onClick, customImage, onUploadImage, isAdmin }) => {
         e.stopPropagation();
         if (onUploadImage) {
             onUploadImage(promo);
+        }
+    };
+
+    // Calcular precios y descuento para el cuadro de oferta
+    const pPromo = promo.precio || (promo.detalles?.packs?.[0]?.precio);
+    const pRegular = promo.precioRegular || (promo.detalles?.packs?.[0]?.precioRegular);
+    const hasSpecialPrice = pPromo > 0 && pRegular > 0;
+    const percentOff = hasSpecialPrice ? Math.round((1 - pPromo / pRegular) * 100) : 0;
+
+    const handleAddToCartClick = (e) => {
+        e.stopPropagation();
+        if (promo.detalles?.packs && promo.detalles.packs.length > 0) {
+            onClick(promo);
+        } else if (onAddToCart) {
+            onAddToCart(promo);
+            setAddedToCart(true);
+            setTimeout(() => setAddedToCart(false), 2000);
         }
     };
 
@@ -195,29 +213,29 @@ const PromoCard = ({ promo, onClick, customImage, onUploadImage, isAdmin }) => {
                             </div>
                         )}
 
-                        {/* Precios preview si tiene packs con descuento */}
-                        {promo.detalles?.packs && promo.detalles.packs[0]?.precioRegular && (
+                        {/* Cuadro de oferta configurable */}
+                        {hasSpecialPrice && (
                             <div className="bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl p-4 mb-4 text-white relative overflow-hidden">
                                 {/* Decoración de fondo */}
                                 <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2"></div>
                                 <div className="absolute bottom-0 left-0 w-16 h-16 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2"></div>
 
-                                {/* Badge de descuento */}
+                                {/* Badge de descuento dinámico */}
                                 <div className="absolute top-2 right-2 bg-yellow-400 text-gray-900 text-xs font-black px-2 py-1 rounded-full shadow-lg animate-pulse">
-                                    🔥 25% OFF
+                                    🔥 {percentOff}% OFF
                                 </div>
 
                                 <div className="relative z-10">
                                     <div className="flex items-center gap-2 mb-2">
                                         <span className="text-white/80 text-xs font-medium">Precio Regular:</span>
                                         <span className="text-white/70 line-through text-sm">
-                                            {formatPrice(promo.detalles.packs[0].precioRegular)}
+                                            {formatPrice(pRegular)}
                                         </span>
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <span className="text-yellow-300 text-xs font-bold">Precio Promoción:</span>
                                         <span className="text-2xl font-black text-white drop-shadow-lg">
-                                            {formatPrice(promo.detalles.packs[0].precio)}
+                                            {formatPrice(pPromo)}
                                         </span>
                                     </div>
                                     <p className="text-white/70 text-[10px] mt-2">*Precio desde. Varía según el pack seleccionado</p>
@@ -237,11 +255,47 @@ const PromoCard = ({ promo, onClick, customImage, onUploadImage, isAdmin }) => {
                             </div>
                         )}
 
-                        {/* CTA */}
-                        <button className="w-full bg-gradient-to-r from-bikitchen-orange to-orange-500 text-white font-bold py-3 px-4 rounded-xl hover:shadow-lg transition-all duration-300 flex items-center justify-center gap-2 group-hover:scale-[1.02]">
-                            Ver detalles
-                            <ChevronRight size={18} />
-                        </button>
+                        {/* Botones de acción */}
+                        <div className="flex gap-2">
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onClick(promo);
+                                }}
+                                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-3 px-4 rounded-xl transition-all duration-300 flex items-center justify-center gap-2"
+                            >
+                                <Filter size={18} />
+                                Detalles
+                            </button>
+                            <button
+                                onClick={handleAddToCartClick}
+                                className={`flex-[1.5] font-bold py-3 px-4 rounded-xl transition-all duration-300 flex items-center justify-center gap-2 group-hover:scale-[1.02] shadow-sm ${addedToCart
+                                    ? 'bg-green-500 text-white'
+                                    : 'bg-gradient-to-r from-bikitchen-orange to-orange-500 text-white hover:shadow-lg'
+                                    }`}
+                            >
+                                {addedToCart ? (
+                                    <>
+                                        <Check size={18} />
+                                        ¡Agregado!
+                                    </>
+                                ) : (
+                                    <>
+                                        {promo.detalles?.packs && promo.detalles.packs.length > 0 ? (
+                                            <>
+                                                Ver opciones
+                                                <ChevronRight size={18} />
+                                            </>
+                                        ) : (
+                                            <>
+                                                <ShoppingCart size={18} />
+                                                Agregar
+                                            </>
+                                        )}
+                                    </>
+                                )}
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -267,20 +321,24 @@ function PromoDetail({ promo, onClose, addToCart, onPackClick }) {
     const whatsappUrl = getWhatsAppUrl(mensajeWhatsApp);
 
     const handleAddToCart = () => {
-        if (promo.detalles?.packs && !selectedPack) {
-            console.log('[PromoDetail] No se puede agregar: no hay pack seleccionado');
+        if (promo.detalles?.packs && promo.detalles.packs.length > 0 && !selectedPack) {
+            toast.error('Por favor selecciona un pack');
             return;
         }
 
         // Determinar si es promoción con desayunos gratis o con 50% descuento envío
         const esDesayunosGratis = promo.titulo && promo.titulo.includes('Desayunos Gratis');
         const es50DescuentoEnvio = promo.titulo && promo.titulo.includes('50%') && promo.titulo.includes('descuento');
+        const esTwoPack = promo.titulo && promo.titulo.includes('Two Pack');
+
+        const cartItemId = esTwoPack 
+            ? `promo-${promo.id}-two_pack${selectedPack ? `-${selectedPack.nombre}` : ''}`
+            : `promo-${promo.id}${selectedPack ? `-${selectedPack.nombre}` : ''}`;
 
         const cartItem = {
-            id: `promo-${promo.id}${selectedPack ? `-${selectedPack.nombre}` : ''}`,
+            id: cartItemId,
             name: selectedPack ? `${promo.titulo} - ${selectedPack.nombre}` : promo.titulo,
-            price: selectedPack?.precio || promo.detalles?.packs?.[0]?.precio || 0,
-            quantity: quantity,
+            price: selectedPack?.precio || promo.precio || promo.precioEspecial || promo.detalles?.packs?.[0]?.precio || promo.precios?.[0]?.precio || promo.precioRegular || 0,
             isPromo: true,
             promoId: promo.id,
             promoTitle: promo.titulo,
@@ -288,7 +346,7 @@ function PromoDetail({ promo, onClose, addToCart, onPackClick }) {
             image: promo.imagen,
             // Agregar propiedades para detectar descuentos de envío
             plan: 'monthly',
-            planLabel: esDesayunosGratis ? 'Promo Desayunos Gratis' : (es50DescuentoEnvio ? 'Promo 50% Envío' : 'Promoción Mensual')
+            planLabel: esDesayunosGratis ? 'Promo Desayunos Gratis' : (esTwoPack ? 'Two Pack' : (es50DescuentoEnvio ? 'Promo 50% Envío' : 'Promoción Mensual'))
         };
 
         console.log('[PromoDetail] Agregando al carrito:', cartItem);
@@ -400,8 +458,8 @@ function PromoDetail({ promo, onClose, addToCart, onPackClick }) {
                                         <button
                                             onClick={() => setActiveTab('pack')}
                                             className={`flex-1 py-3 px-6 rounded-xl font-black transition-all duration-300 ${activeTab === 'pack'
-                                                    ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg'
-                                                    : 'bg-transparent text-gray-600 hover:bg-white'
+                                                ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg'
+                                                : 'bg-transparent text-gray-600 hover:bg-white'
                                                 }`}
                                         >
                                             🍽️ Pack Mensual
@@ -409,8 +467,8 @@ function PromoDetail({ promo, onClose, addToCart, onPackClick }) {
                                         <button
                                             onClick={() => setActiveTab('desayuno')}
                                             className={`flex-1 py-3 px-6 rounded-xl font-black transition-all duration-300 ${activeTab === 'desayuno'
-                                                    ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg'
-                                                    : 'bg-transparent text-gray-600 hover:bg-white'
+                                                ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg'
+                                                : 'bg-transparent text-gray-600 hover:bg-white'
                                                 }`}
                                         >
                                             ☕ Desayuno Gratis
@@ -528,19 +586,28 @@ function PromoDetail({ promo, onClose, addToCart, onPackClick }) {
                                                         onClick={(e) => {
                                                             e.stopPropagation();
                                                             if (onPackClick) {
-                                                                // Buscar el precio específico del pack en el array de precios
+                                                                // Buscar el precio específico del pack en el array de precios mejorado
                                                                 let promoPrice = 0;
+                                                                const normalizedPack = pack.toLowerCase();
                                                                 if (promo.precios && Array.isArray(promo.precios)) {
-                                                                    const packPrice = promo.precios.find(p => p.nombre === pack);
+                                                                    const packPrice = promo.precios.find(p =>
+                                                                        p.nombre.toLowerCase() === normalizedPack ||
+                                                                        p.nombre.toLowerCase().includes(normalizedPack) ||
+                                                                        normalizedPack.includes(p.nombre.toLowerCase())
+                                                                    );
                                                                     promoPrice = packPrice?.precio || 0;
                                                                 } else if (promo.detalles?.packs) {
-                                                                    const packDetail = promo.detalles.packs.find(p => p.nombre === pack);
+                                                                    const packDetail = promo.detalles.packs.find(p =>
+                                                                        p.nombre.toLowerCase() === normalizedPack ||
+                                                                        p.nombre.toLowerCase().includes(normalizedPack) ||
+                                                                        normalizedPack.includes(p.nombre.toLowerCase())
+                                                                    );
                                                                     promoPrice = packDetail?.precio || 0;
                                                                 } else {
                                                                     promoPrice = promo.precio || 0;
                                                                 }
                                                                 const promoImage = promo.imagen || '';
-                                                                onPackClick(pack, promoPrice, promoImage);
+                                                                onPackClick(pack, promoPrice, promoImage, promo);
                                                             }
                                                         }}
                                                         className="bg-white px-4 py-2 rounded-xl border-2 border-orange-300 shadow-sm hover:shadow-lg hover:scale-105 hover:border-orange-500 hover:bg-orange-50 transition-all duration-200 cursor-pointer"
@@ -577,8 +644,8 @@ function PromoDetail({ promo, onClose, addToCart, onPackClick }) {
                                                         key={idx}
                                                         onClick={() => setSelectedPack(pack)}
                                                         className={`rounded-2xl p-5 text-center transition-all border-2 ${selectedPack?.nombre === pack.nombre
-                                                                ? 'border-orange-500 bg-gradient-to-br from-orange-50 to-amber-50 shadow-xl ring-2 ring-orange-500 ring-offset-2'
-                                                                : 'border-gray-200 bg-white hover:border-orange-400 hover:shadow-lg'
+                                                            ? 'border-orange-500 bg-gradient-to-br from-orange-50 to-amber-50 shadow-xl ring-2 ring-orange-500 ring-offset-2'
+                                                            : 'border-gray-200 bg-white hover:border-orange-400 hover:shadow-lg'
                                                             }`}
                                                         whileHover={{ scale: 1.05, y: -4 }}
                                                         whileTap={{ scale: 0.95 }}
@@ -724,15 +791,15 @@ function PromoDetail({ promo, onClose, addToCart, onPackClick }) {
                             {/* Botones de acción */}
                             <div className="flex flex-col sm:flex-row gap-3 mt-auto">
                                 {/* Agregar al carrito */}
-                                {promo.detalles?.packs && promo.detalles.packs.length > 0 && (
+                                {(promo.precio > 0 || promo.precioEspecial > 0 || promo.precioRegular > 0 || (promo.detalles?.packs && promo.detalles.packs.length > 0) || (promo.precios && promo.precios.length > 0)) && (
                                     <button
                                         onClick={handleAddToCart}
-                                        disabled={!selectedPack}
+                                        disabled={((promo.detalles?.packs && promo.detalles.packs.length > 0) || (promo.precios && promo.precios.length > 0)) && !selectedPack}
                                         className={`w-full flex items-center justify-center gap-2 font-bold py-3.5 px-6 rounded-xl transition-all duration-300 ${addedToCart
-                                                ? 'bg-green-500 text-white'
-                                                : selectedPack
-                                                    ? 'bg-bikitchen-orange hover:bg-bikitchen-orange-dark text-white hover:shadow-lg'
-                                                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                            ? 'bg-green-500 text-white'
+                                            : (selectedPack || (!promo.detalles?.packs?.length && !promo.precios?.length))
+                                                ? 'bg-bikitchen-orange hover:bg-bikitchen-orange-dark text-white hover:shadow-lg'
+                                                : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                                             }`}
                                     >
                                         {addedToCart ? (
@@ -743,8 +810,8 @@ function PromoDetail({ promo, onClose, addToCart, onPackClick }) {
                                         ) : (
                                             <>
                                                 <ShoppingCart size={20} />
-                                                {selectedPack
-                                                    ? `Agregar ${quantity > 1 ? `(${quantity})` : ''} • ${formatPrice(selectedPack.precio * quantity)}`
+                                                {(selectedPack || (!promo.detalles?.packs?.length && !promo.precios?.length))
+                                                    ? `Agregar ${quantity > 1 ? `(${quantity})` : ''} • ${formatPrice((selectedPack?.precio || promo.precio || promo.precioEspecial || promo.precioRegular || 0) * quantity)}`
                                                     : 'Selecciona un pack'}
                                             </>
                                         )}
@@ -794,12 +861,39 @@ export default function PromocionesPage() {
         }
     };
 
+    const handleDirectAddToCart = (promo) => {
+        // Determinar si es promoción con desayunos gratis o con 50% descuento envío
+        const esDesayunosGratis = promo.titulo && promo.titulo.includes('Desayunos Gratis');
+        const es50DescuentoEnvio = promo.titulo && promo.titulo.includes('50%') && promo.titulo.includes('descuento');
+        const esTwoPack = promo.titulo && promo.titulo.includes('Two Pack');
+
+        // Buscar el mejor precio disponible
+        const price = promo.precio || promo.precioEspecial || promo.detalles?.packs?.[0]?.precio || promo.precios?.[0]?.precio || promo.precioRegular || 0;
+
+        const cartItemId = esTwoPack ? `promo-${promo.id}-two_pack` : `promo-${promo.id}`;
+
+        const cartItem = {
+            id: cartItemId,
+            name: promo.titulo,
+            price: price,
+            isPromo: true,
+            promoId: promo.id,
+            promoTitle: promo.titulo,
+            benefits: promo.detalles?.beneficios || [],
+            image: promo.imagen,
+            plan: 'monthly',
+            planLabel: esDesayunosGratis ? 'Promo Desayunos Gratis' : (esTwoPack ? 'Two Pack' : (es50DescuentoEnvio ? 'Promo 50% Envío' : 'Promoción Mensual'))
+        };
+
+        handleAddToCart(cartItem);
+    };
+
     // Manejar clic en pack incluido para ver su menú detallado
-    const handlePackClick = (packName, promoPrice = 0, promoImage = '') => {
+    const handlePackClick = (packName, promoPrice = 0, promoImage = '', fullPromo = null) => {
         const menuKey = PACK_TO_MENU_KEY[packName];
         if (menuKey) {
             // Guardar la promoción actual antes de cerrarla
-            setPreviousPromo(selectedPromo);
+            setPreviousPromo(fullPromo || selectedPromo);
 
             // Cerrar el modal de promoción primero
             setSelectedPromo(null);
@@ -820,42 +914,74 @@ export default function PromocionesPage() {
         const loadAllData = async () => {
             setLoading(true);
             try {
-                // Cargar promociones e imágenes en paralelo
-                const [activePromos, imagesSnapshot] = await Promise.all([
-                    getActivePromotions(),
-                    getDocs(collection(db, 'promociones_imagenes'))
-                ]);
+                // 1. Cargar promociones activas (independiente)
+                let activePromos = [];
+                try {
+                    activePromos = await getActivePromotions();
+                } catch (e) {
+                    console.error('[PromocionesPage] Error obteniendo promociones:', e);
+                }
 
-                // Procesar imágenes personalizadas
+                // 2. Cargar imágenes personalizadas (independiente para que no bloquee si falla permisos)
                 const imagesMap = {};
-                imagesSnapshot.forEach((docSnap) => {
-                    const data = docSnap.data();
-                    if (data && data.imagenUrl) {
-                        imagesMap[docSnap.id] = data.imagenUrl;
-                    }
-                });
+                try {
+                    const imagesSnapshot = await getDocs(collection(db, 'promociones_imagenes'));
+                    imagesSnapshot.forEach((docSnap) => {
+                        const data = docSnap.data();
+                        if (data && data.imagenUrl) {
+                            imagesMap[docSnap.id] = data.imagenUrl;
+                        }
+                    });
+                } catch (e) {
+                    console.warn('[PromocionesPage] No se pudieron cargar imágenes personalizadas (posible error de permisos):', e);
+                }
+
                 setImagenesCustom(imagesMap);
 
-                // Procesar promociones
-                if (activePromos.length > 0) {
+                // Procesar promociones obtenidas
+                if (activePromos && activePromos.length > 0) {
                     const formattedPromos = activePromos.map(promo => {
-                        // HARDCODED: Precios para promociones mensuales
-                        let preciosHardcoded = promo.precios || [];
-                        if (promo.titulo && promo.titulo.includes('Desayunos Gratis')) {
-                            preciosHardcoded = [
-                                { nombre: 'Pack Sin Carbos', precio: 89900 },
-                                { nombre: 'Pack Bajo Calorías', precio: 99500 },
-                                { nombre: 'Pack Regular', precio: 111400 },
-                                { nombre: 'Pack Casaditos', precio: 111400 },
-                                { nombre: 'Pack Vegetariano', precio: 111400 },
-                                { nombre: 'Full Pack', precio: 135600 }
-                            ];
+                        // DETERMINAR PRECIOS: Priorizar datos de Firestore sobre valores hardcoded
+                        let preciosFinales = [];
+
+                        // 1. Intentar obtener precios directamente de la promoción (incluye ediciones de Gina)
+                        if (promo.precios && Array.isArray(promo.precios) && promo.precios.length > 0) {
+                            preciosFinales = promo.precios;
+                        } else if (promo.detalles?.packs && Array.isArray(promo.detalles.packs) && promo.detalles.packs.length > 0) {
+                            preciosFinales = promo.detalles.packs;
                         }
-                        // HARDCODED: Precio para promoción mensual con 50% descuento envío - SOLO Pack Bajo Calorías
-                        else if (promo.titulo && promo.titulo.includes('50%') && promo.titulo.includes('descuento')) {
-                            preciosHardcoded = [
-                                { nombre: 'Pack Bajo Calorías', precio: 75000 }
-                            ];
+
+                        // 2. Si NO hay precios en Firestore, usar valores hardcoded como FALLBACK de seguridad
+                        if (preciosFinales.length === 0) {
+                            if (promo.titulo && promo.titulo.includes('Desayunos Gratis')) {
+                                preciosFinales = [
+                                    { nombre: 'Pack Sin Carbos', precio: 89900 },
+                                    { nombre: 'Pack Bajo Calorías', precio: 99500 },
+                                    { nombre: 'Pack Regular', precio: 111400 },
+                                    { nombre: 'Pack Casaditos', precio: 111400 },
+                                    { nombre: 'Pack Vegetariano', precio: 111400 },
+                                    { nombre: 'Full Pack', precio: 135600 }
+                                ];
+                            }
+                            else if (promo.titulo && promo.titulo.includes('50%') && promo.titulo.includes('descuento')) {
+                                preciosFinales = [
+                                    { nombre: 'Pack Bajo Calorías', precio: 75000 }
+                                ];
+                            }
+                            // GINA REQUEST: Activar sub-packs exclusivamente para el Two Pack (igual al pack mensual)
+                            else if (promo.titulo && promo.titulo.includes('Two Pack')) {
+                                preciosFinales = [
+                                    { nombre: 'Pack Sin Carbos', precio: 147000 },
+                                    { nombre: 'Pack Bajo Calorías', precio: 155100 },
+                                    { nombre: 'Pack Regular', precio: 167100 },
+                                    { nombre: 'Pack Casaditos', precio: 167100 },
+                                    { nombre: 'Pack Vegetariano', precio: 167100 },
+                                    { nombre: 'Full Pack', precio: 203400 },
+                                    { nombre: 'Pack Keto', precio: 203400 }
+                                ];
+                                // Asegurar que el modal los muestre como sub-packs a evaluar
+                                promo.packsRelacionados = preciosFinales.map(p => p.nombre);
+                            }
                         }
 
                         return {
@@ -866,8 +992,8 @@ export default function PromocionesPage() {
                             fechaFin: promo.fechaFin,
                             destacada: promo.mostrarEnHome,
                             detalles: {
-                                beneficios: promo.beneficios || [],
-                                packs: preciosHardcoded
+                                beneficios: promo.beneficios || promo.detalles?.beneficios || [],
+                                packs: preciosFinales
                             },
                             whatsappMsg: promo.whatsappKeyword || `Hola 👋`,
                             prioridadDestacado: promo.prioridadDestacado || 99,
@@ -875,23 +1001,22 @@ export default function PromocionesPage() {
                             tipoPromocion: promo.tipoPromocion,
                             // NUEVOS CAMPOS - Composición y packs relacionados
                             composicionPlato: promo.composicionPlato,
-                            packsRelacionados: promo.packsRelacionados,
+                            packsRelacionados: promo.packsRelacionados || [],
                             beneficios: promo.beneficios,
                             descuentoEnvio: promo.descuentoEnvio,
                             tipoPlan: promo.tipoPlan,
                             precio: promo.precio || 0,
-                            precios: preciosHardcoded // Usar precios hardcodeados si es la promo de desayunos
+                            precioRegular: promo.precioRegular || 0,
+                            precios: preciosFinales
                         };
                     }).sort((a, b) => a.prioridadDestacado - b.prioridadDestacado);
                     setPromociones(formattedPromos);
                 } else {
-                    // Si no hay promociones en Firebase, mostrar vacío
-                    console.warn('[PromocionesPage] No hay promociones en Firebase');
+                    console.warn('[PromocionesPage] No hay promociones activas detectadas');
                     setPromociones([]);
                 }
             } catch (error) {
-                console.error('[PromocionesPage] Error cargando promociones:', error);
-                // En caso de error, mostrar vacío en lugar de datos hardcodeados antiguos
+                console.error('[PromocionesPage] Error crítico en loadAllData:', error);
                 setPromociones([]);
             } finally {
                 setLoading(false);
@@ -940,7 +1065,7 @@ export default function PromocionesPage() {
 
                 // Eliminar objeto anterior si corresponde
                 if (prevPath && prevPath !== fileName) {
-                    try { await deleteObject(ref(storage, prevPath)); } catch (_) {}
+                    try { await deleteObject(ref(storage, prevPath)); } catch (_) { }
                 }
 
                 // Actualizar estado local
@@ -970,8 +1095,8 @@ export default function PromocionesPage() {
         return () => window.removeEventListener('scroll', handleScroll);
     }, []);
 
-    // Mostrar solo promociones destacadas (del mes)
-    const promocionesDestacadas = promociones.filter(p => p.destacada);
+    // Mostrar todas las promociones activas (ya vienen filtradas por getActivePromotions)
+    const promocionesDestacadas = promociones;
 
     return (
         <PageTransition>
@@ -1107,6 +1232,7 @@ export default function PromocionesPage() {
                                                 key={promo.id}
                                                 promo={promo}
                                                 onClick={setSelectedPromo}
+                                                onAddToCart={handleDirectAddToCart}
                                                 customImage={imagenesCustom[promo.id]}
                                                 onUploadImage={handleUploadImage}
                                                 isAdmin={isAdmin && isAdmin()}
@@ -1250,6 +1376,12 @@ export default function PromocionesPage() {
                         menuKey={selectedMenuKey}
                         promoPrice={selectedPromoPrice}
                         promoImage={selectedPromoImage}
+                        promoMetadata={previousPromo ? {
+                            id: previousPromo.id,
+                            title: previousPromo.titulo,
+                            benefits: previousPromo.detalles?.beneficios || [],
+                            planLabel: previousPromo.titulo?.includes('Desayunos Gratis') ? 'Promo Desayunos Gratis' : (previousPromo.titulo?.includes('50%') && previousPromo.titulo?.includes('descuento') ? 'Promo 50% Envío' : 'Promoción Mensual')
+                        } : null}
                         isOpen={showMenuModal}
                         onClose={() => {
                             setShowMenuModal(false);

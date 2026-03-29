@@ -4,9 +4,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     User, ShoppingBag, Gift, Users, Star,
     ChevronRight, LogOut, LogIn, ArrowLeft,
-    Award, Sparkles, Crown, TrendingUp, Bell, Tag, Copy, Check, Loader2
+    Award, Sparkles, Crown, TrendingUp, Bell, Tag, Copy, Check, Loader2, Ticket, Smartphone, MessageSquare, ExternalLink
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useWhatsApp } from '../hooks/useWhatsApp';
 import useLoyaltyPoints from '../hooks/useLoyaltyPoints';
 import { usePromoBanner } from '../hooks/usePromoBanner';
 import useOrderHistory from '../hooks/useOrderHistory';
@@ -14,7 +15,7 @@ import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import PageTransition from '../components/PageTransition';
 import NotificationSettings from '../components/NotificationSettings';
-import { validateCoupon, getWelcomeCoupon } from '../utils/firestoreCoupons';
+import { validateCoupon, getWelcomeCoupon, getUserCoupons } from '../utils/firestoreCoupons';
 import { useCart } from '../context/CartContext';
 import toast from 'react-hot-toast';
 
@@ -33,17 +34,34 @@ export default function MiCuentaPage() {
     const [couponSuccess, setCouponSuccess] = useState(null);
     const [welcomeCoupon, setWelcomeCoupon] = useState(null);
     const [copiedWelcome, setCopiedWelcome] = useState(false);
+    const [userCoupons, setUserCoupons] = useState([]);
+    const [loadingCoupons, setLoadingCoupons] = useState(false);
+    const [copiedCouponId, setCopiedCouponId] = useState(null);
 
-    // Cargar cupón de bienvenida si existe
     useEffect(() => {
-        const loadWelcomeCoupon = async () => {
+        const loadUserCoupons = async () => {
             if (currentUser) {
-                const coupon = await getWelcomeCoupon(currentUser.uid);
-                setWelcomeCoupon(coupon);
+                setLoadingCoupons(true);
+                const coupons = await getUserCoupons(currentUser.uid);
+                setUserCoupons(coupons);
+                setLoadingCoupons(false);
             }
         };
-        loadWelcomeCoupon();
+        loadUserCoupons();
     }, [currentUser]);
+
+    const handleCopyCoupon = async (coupon) => {
+        if (coupon?.code) {
+            try {
+                await navigator.clipboard.writeText(coupon.code);
+                setCopiedCouponId(coupon.id);
+                toast.success('¡Código copiado!');
+                setTimeout(() => setCopiedCouponId(null), 2000);
+            } catch (err) {
+                console.error('Error copying:', err);
+            }
+        }
+    };
 
     const handleCopyWelcomeCoupon = async () => {
         if (welcomeCoupon?.code) {
@@ -92,6 +110,8 @@ export default function MiCuentaPage() {
         }
     };
 
+    const { getWhatsAppUrl } = useWhatsApp();
+
     // Validar y aplicar cupón
     const handleApplyCoupon = async () => {
         if (!couponCode.trim()) {
@@ -136,14 +156,14 @@ export default function MiCuentaPage() {
             badge: orders?.length > 0 ? `${orders.length}` : null
         },
         {
-            title: 'Programa de Fidelidad',
-            description: 'Próximamente',
+            title: 'Tienda de Recompensas',
+            description: 'Canjea tus BiPuntos',
             icon: Star,
-            path: '#',
+            path: '/fidelidad',
             color: 'from-yellow-500 to-amber-500',
             bgColor: 'bg-yellow-50',
-            badge: 'Próximamente',
-            disabled: true
+            badge: 'Nuevo!',
+            disabled: false
         }
     ];
 
@@ -151,34 +171,29 @@ export default function MiCuentaPage() {
     const secondarySections = [
         {
             title: 'Referidos',
-            description: 'Próximamente',
+            description: '¡Invita y gana puntos!',
             icon: Users,
-            path: '#',
-            color: 'from-blue-500 to-cyan-500',
-            disabled: true
+            path: '/referidos',
+            color: 'from-blue-50 to-cyan-50',
+            iconColor: 'from-blue-500 to-cyan-500',
+            disabled: false
         },
         {
             title: 'Gift Cards',
-            description: 'Próximamente',
+            description: 'Regala salud',
             icon: Gift,
-            path: '#',
-            color: 'from-pink-500 to-rose-500',
-            disabled: true
-        },
-        {
-            title: 'Mi Impacto',
-            description: 'Próximamente',
-            icon: TrendingUp,
-            path: '#',
-            color: 'from-green-500 to-emerald-500',
-            disabled: true
+            path: '/gift-cards',
+            color: 'from-pink-50 to-rose-50',
+            iconColor: 'from-pink-500 to-rose-500',
+            disabled: false
         },
         {
             title: 'Preguntas',
             description: 'FAQ y ayuda',
             icon: Award,
             path: '/faq',
-            color: 'from-purple-500 to-violet-500'
+            color: 'from-purple-50 to-violet-50',
+            iconColor: 'from-purple-500 to-violet-500'
         }
     ];
 
@@ -375,7 +390,7 @@ export default function MiCuentaPage() {
                             const Icon = section.icon;
                             return (
                                 <motion.div
-                                    key={section.path}
+                                    key={section.title}
                                     initial={{ opacity: 0, y: 20 }}
                                     animate={{ opacity: 1, y: 0 }}
                                     transition={{ delay: 0.15 + index * 0.05 }}
@@ -442,14 +457,23 @@ export default function MiCuentaPage() {
                             transition={{ delay: 0.18 }}
                             className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-6"
                         >
-                            <div className="p-4 border-b border-gray-100">
-                                <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                                    <Tag size={20} className="text-bikitchen-orange" />
-                                    Códigos de Descuento
-                                </h3>
-                                <p className="text-sm text-gray-500 mt-1">
-                                    Aplica cupones y obtén descuentos en tus pedidos
-                                </p>
+                            <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+                                <div>
+                                    <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                                        <Tag size={20} className="text-bikitchen-orange" />
+                                        Códigos de Descuento
+                                    </h3>
+                                    <p className="text-sm text-gray-500 mt-1">
+                                        Aplica cupones y obtén descuentos en tus pedidos
+                                    </p>
+                                </div>
+                                <Link 
+                                    to="/mis-cupones"
+                                    className="text-xs font-bold text-bikitchen-orange bg-orange-50 px-3 py-1.5 rounded-lg border border-orange-100 hover:bg-orange-100 transition-colors flex items-center gap-1.5"
+                                >
+                                    <Ticket size={14} />
+                                    Gestionar Premios
+                                </Link>
                             </div>
 
                             <div className="p-4 space-y-4">
@@ -496,6 +520,133 @@ export default function MiCuentaPage() {
                                             </button>
                                         </div>
                                     </motion.div>
+                                )}
+
+                                {/* Cupones canjeados por el usuario (no Gift Cards) */}
+                                {userCoupons.filter(c => !c.isGiftCard).length > 0 && (
+                                    <div className="space-y-3">
+                                        <p className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                                            <Gift size={16} className="text-purple-500" />
+                                            Tus Recompensas Canjeadas
+                                        </p>
+                                        <div className="grid gap-3">
+                                            {userCoupons.filter(c => !c.isGiftCard).map((coupon) => (
+                                                <motion.div
+                                                    key={coupon.id}
+                                                    layout
+                                                    initial={{ opacity: 0, x: -10 }}
+                                                    animate={{ opacity: 1, x: 0 }}
+                                                    className="p-3 bg-purple-50 rounded-xl border border-purple-100 flex items-center justify-between group"
+                                                >
+                                                    <div className="flex-1">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-mono font-bold text-purple-700">
+                                                                {coupon.code}
+                                                            </span>
+                                                            <button
+                                                                onClick={() => handleCopyCoupon(coupon)}
+                                                                className={`p-1 rounded-md transition-colors ${copiedCouponId === coupon.id
+                                                                        ? 'bg-green-100 text-green-600'
+                                                                        : 'bg-purple-100 text-purple-600 hover:bg-purple-200'
+                                                                    }`}
+                                                            >
+                                                                {copiedCouponId === coupon.id ? <Check size={12} /> : <Copy size={12} />}
+                                                            </button>
+                                                        </div>
+                                                        <p className="text-xs text-purple-600 mt-0.5">
+                                                            {coupon.description || 'Cupón de recompensa'}
+                                                        </p>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => {
+                                                            setCouponCode(coupon.code);
+                                                            handleApplyCoupon();
+                                                        }}
+                                                        className="px-3 py-1.5 bg-white text-purple-600 border border-purple-200 rounded-lg text-xs font-bold hover:bg-purple-600 hover:text-white transition-all shadow-sm"
+                                                    >
+                                                        Aplicar
+                                                    </button>
+                                                </motion.div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Mis Gift Cards (NUEVA SECCIÓN) */}
+                                {userCoupons.filter(c => c.isGiftCard).length > 0 && (
+                                    <div className="space-y-3 pt-2">
+                                        <p className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                                            <Gift size={16} className="text-pink-500" />
+                                            Mis Gift Cards
+                                        </p>
+                                        <div className="grid gap-4">
+                                            {userCoupons.filter(c => c.isGiftCard).map((gc) => (
+                                                <motion.div
+                                                    key={gc.id}
+                                                    layout
+                                                    initial={{ opacity: 0, y: 10 }}
+                                                    animate={{ opacity: 1, y: 0 }}
+                                                    className="p-4 bg-gradient-to-br from-white to-pink-50/30 rounded-2xl border border-pink-100 shadow-sm overflow-hidden relative"
+                                                >
+                                                    {/* Status Badge */}
+                                                    <div className="absolute top-3 right-3">
+                                                        {gc.active ? (
+                                                            <span className="bg-green-100 text-green-700 text-[10px] font-black uppercase px-2 py-0.5 rounded-full border border-green-200">Activa</span>
+                                                        ) : (
+                                                            <span className="bg-amber-100 text-amber-700 text-[10px] font-black uppercase px-2 py-0.5 rounded-full border border-amber-200">Pendiente de Pago</span>
+                                                        )}
+                                                    </div>
+
+                                                    <div className="flex items-start gap-4">
+                                                        <div className="w-12 h-12 rounded-xl bg-pink-100 flex items-center justify-center flex-shrink-0">
+                                                            <Gift size={24} className="text-pink-600" />
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="font-black text-gray-900 truncate pr-20">
+                                                                ₡{gc.value?.toLocaleString()} - {gc.recipientName}
+                                                            </p>
+                                                            <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+                                                                Código: <span className="font-mono font-bold text-gray-700">{gc.code}</span>
+                                                            </p>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="mt-4 flex gap-2">
+                                                        {!gc.active ? (
+                                                            <button
+                                                                onClick={() => {
+                                                                    const msg = `✨ *COORDINAR PAGO - GIFT CARD* ✨%0A%0A¡Hola BiKitchen! 👋 Quiero coordinar el pago de mi Gift Card pendiente.%0A%0A📋 *DETALLES:*%0A🔹 *Código:* \`${gc.code}\`%0A🔹 *Monto:* ₡${gc.value?.toLocaleString()}%0A%0A👤 *DE:* ${gc.senderName}%0A🎁 *PARA:* ${gc.recipientName}%0A%0A¿Me podrían indicar los pasos para pagar y activarla? ¡Gracias! 🍱`;
+                                                                    window.open(getWhatsAppUrl(msg), '_blank');
+                                                                }}
+                                                                className="flex-1 flex items-center justify-center gap-2 py-2 bg-bikitchen-orange text-white rounded-xl text-xs font-bold hover:bg-orange-600 transition-all shadow-sm"
+                                                            >
+                                                                <Smartphone size={14} />
+                                                                Coordinar Pago
+                                                            </button>
+                                                        ) : (
+                                                            <button
+                                                                onClick={() => {
+                                                                    const msg = `✨ *¡UN REGALO ESPECIAL PARA TI!* ✨%0A%0A¡Hola *${gc.recipientName}*! 👋%0A%0A*${gc.senderName}* te ha enviado una *Tarjeta de Regalo BiKitchen* de ₡${gc.value?.toLocaleString('es-CR')} para que disfrutes de comida saludable y deliciosa. 🥗🍱%0A%0A${gc.personalMessage ? `💬 *Mensaje de ${gc.senderName}:*%0A_"${gc.personalMessage}"_%0A%0A` : ''}🎫 *TU CÓDIGO DE CANJE:*%0A\`${gc.code}\`%0A%0A---%0A💡 *¿CÓMO USAR TU REGALO?*%0A1️⃣ Entra a *bikitchenfood.com*%0A2️⃣ Elige tus platos o packs favoritos.%0A3️⃣ Al pagar, ingresa tu código en la casilla de cupones.%0A%0A¡Esperamos que lo disfrutes muchísimo! ✨🥑`;
+                                                                    window.open(`https://wa.me/?text=${msg}`, '_blank');
+                                                                }}
+                                                                className="flex-1 flex items-center justify-center gap-2 py-2 bg-[#25D366] text-white rounded-xl text-xs font-bold hover:bg-[#128C7E] transition-all shadow-sm"
+                                                            >
+                                                                <MessageSquare size={14} />
+                                                                Enviar Regalo
+                                                            </button>
+                                                        )}
+                                                        <button
+                                                            onClick={() => handleCopyCoupon(gc)}
+                                                            className="px-3 py-2 bg-white text-gray-500 border border-gray-200 rounded-xl hover:bg-gray-50 transition-all"
+                                                            title="Copiar Código"
+                                                        >
+                                                            {copiedCouponId === gc.id ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
+                                                        </button>
+                                                    </div>
+                                                </motion.div>
+                                            ))}
+                                        </div>
+                                    </div>
                                 )}
 
                                 {/* Cupón aplicado actualmente */}
@@ -595,7 +746,7 @@ export default function MiCuentaPage() {
                                 const Component = section.disabled ? 'div' : Link;
                                 return (
                                     <Component
-                                        key={section.path}
+                                        key={section.title}
                                         to={section.disabled ? undefined : section.path}
                                         className={`flex flex-col items-center p-4 rounded-2xl bg-gray-50 transition-all text-center relative ${section.disabled
                                                 ? 'opacity-60 cursor-not-allowed'

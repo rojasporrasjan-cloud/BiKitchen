@@ -24,24 +24,24 @@ export default function CinematicPreloader() {
     if (!loading) return null;
 
     return (
-        <div className={`fixed inset-0 z-[10000] flex items-center justify-center bg-[#FF671D] text-white transition-all duration-1000 ease-in-out ${exiting ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
-            <div className={`text-center transition-all duration-700 transform ${exiting ? 'scale-110 opacity-0' : 'scale-100 opacity-100'}`}>
+        <div className={`fixed top-0 left-0 w-screen h-screen z-[10000] bg-[#FF671D] text-white transition-all duration-1000 ease-in-out ${exiting ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md px-4">
                 <motion.div
                     initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ duration: 0.5 }}
-                    className="relative z-10"
+                    className="relative z-10 text-center"
                 >
                     {/* Logo container with white background for contrast */}
-                    <div className="bg-white rounded-3xl p-4 shadow-2xl">
+                    <div className="bg-white rounded-3xl p-4 shadow-2xl inline-flex items-center justify-center mx-auto border-2 border-white/50">
                         <img
                             src="/assets/logo.jpg"
                             alt="BiKitchen Food"
-                            className="h-20 md:h-28 w-auto object-contain mx-auto"
+                            className="h-20 md:h-28 w-auto object-contain block"
                         />
                     </div>
                     {/* Brand text */}
-                    <p className="text-white/90 text-sm font-medium mt-6 tracking-widest uppercase">
+                    <p className="text-white/90 text-sm font-medium mt-6 tracking-widest uppercase block">
                         Comida saludable
                     </p>
                 </motion.div>

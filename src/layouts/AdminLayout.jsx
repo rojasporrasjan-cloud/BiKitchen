@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Menu as MenuIcon, LogOut, X, LayoutDashboard, ShoppingBag, Package, Users, ClipboardList, Truck, UtensilsCrossed, Gift, Tag, Search, Bell, Monitor, Smartphone, Image, Upload, MessageCircle, FileText } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useOrders } from '../context/OrdersContext';
+import { getAllCoupons } from '../utils/firestoreCoupons';
 import '../utils/deleteAllData'; // Importar script de eliminación (disponible en consola)
 
 
@@ -33,6 +34,8 @@ export default function AdminLayout() {
     const isMobile = useIsMobile();
     const { orders, getStats } = useOrders();
 
+    const [pendingGiftCardsCount, setPendingGiftCardsCount] = useState(0);
+
     // Usar OrdersContext para obtener conteo de pedidos pendientes (evita listener duplicado)
     useEffect(() => {
         try {
@@ -42,6 +45,22 @@ export default function AdminLayout() {
             }
         } catch (e) { }
     }, [orders, getStats]);
+
+    // Obtener conteo de tarjetas de regalo pendientes
+    useEffect(() => {
+        const loadPendingGiftCards = async () => {
+            try {
+                const coupons = await getAllCoupons();
+                const pending = coupons.filter(c => c.isGiftCard && c.paymentStatus === 'pending');
+                setPendingGiftCardsCount(pending.length);
+            } catch (e) {
+                console.error('Error loading pending gift cards for badge:', e);
+            }
+        };
+
+        loadPendingGiftCards();
+        // Podríamos añadir un intervalo o un listener si fuera crítico
+    }, []);
 
     // Bloquear acceso en móviles - DESHABILITADO para permitir acceso a Gina
     // if (isMobile) {
@@ -95,6 +114,7 @@ export default function AdminLayout() {
         { to: '/admin/pack-images', label: 'Imágenes Packs', icon: Image },
         { to: '/admin/promotions', label: 'Promociones', icon: Gift },
         { to: '/admin/coupons', label: 'Cupones', icon: Tag },
+        { to: '/admin/gift-cards', label: 'Tarjeta de Regalo', icon: Gift, badge: pendingGiftCardsCount },
         { to: '/admin/notifications', label: 'Notificaciones', icon: Bell },
         { to: '/admin/imagenes', label: 'Subir Imágenes', icon: Upload },
 
@@ -113,11 +133,11 @@ export default function AdminLayout() {
             {/* Header del Sidebar */}
             <div className="p-5 border-b border-white/10 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex justify-between items-center">
                 <Link to="/" className="flex items-center gap-3 group">
-                    <div className="w-12 h-12 bg-gradient-to-br from-orange-500 via-amber-500 to-orange-600 rounded-2xl flex items-center justify-center shadow-lg group-hover:shadow-xl group-hover:scale-105 transition-all duration-300">
+                    <div className="w-12 h-12 bg-gradient-to-br from-orange-500 via-amber-500 to-orange-600 rounded-2xl flex items-center justify-center shadow-lg group-hover:shadow-xl group-hover:scale-105 transition-all duration-300 overflow-hidden">
                         <img
                             src="/assets/logo.jpg"
                             alt="BiKitchen Food"
-                            className="h-8 w-auto object-contain"
+                            className="h-8 w-auto object-contain block mx-auto"
                         />
                     </div>
                     <div className="flex flex-col">

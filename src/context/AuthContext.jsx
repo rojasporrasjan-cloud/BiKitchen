@@ -10,6 +10,7 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
+import { grantWelcomeCoupon } from '../utils/firestoreCoupons';
 
 const AuthContext = createContext();
 
@@ -34,6 +35,14 @@ export function AuthProvider({ children }) {
                 role: 'user',
                 createdAt: serverTimestamp()
             });
+            
+            // Otorgar cupón de bienvenida
+            try {
+                await grantWelcomeCoupon(result.user.uid);
+            } catch (couponError) {
+                console.error('Error granting welcome coupon during registration:', couponError);
+                // No bloqueamos el registro si falla el cupón
+            }
 
             setUserRole('user');
             return { success: true };

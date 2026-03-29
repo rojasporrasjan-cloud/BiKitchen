@@ -3,16 +3,17 @@ import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase/config';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 
-// Configuración del programa - AJUSTADO para ser más realista
+// Configuración del programa (BiPuntos)
 const POINTS_CONFIG = {
-    pointsPerColon: 0.001, // 1 punto por cada ₡1,000 gastados
-    colonesPerPoint: 1000, // ₡1,000 = 1 punto
-    pointValue: 100, // Cada punto vale ₡100 al canjear
-    minRedeemPoints: 50, // Mínimo 50 puntos para canjear (₡5,000)
-    maxRedeemPercent: 30, // Máximo 30% del pedido se puede pagar con puntos
+    pointsPerColon: 0.02, // 2 puntos por cada ₡100 gastados (200k = 4,000 pts)
+    colonesPerPoint: 50,  // ₡50 = 1 punto
+    welcomeBonus: 500,     // 500 puntos de bienvenida
+    referralReward: 200,   // 200 puntos por referido
+    // pointValue y maxRedeemPercent ya no se usan directamente para pagar "cash", 
+    // se usan los puntos en la "Tienda de Recompensas" para canjear productos/cupones.
 };
 
-// Niveles del programa - Requiere compras significativas para subir
+// Niveles del programa
 const LOYALTY_LEVELS = [
     { 
         name: 'Bronce', 
@@ -20,31 +21,31 @@ const LOYALTY_LEVELS = [
         icon: '🥉', 
         color: 'from-amber-600 to-amber-700',
         multiplier: 1,
-        benefits: ['1 punto por cada ₡1,000']
+        benefits: ['Gana 2 BiPuntos por cada ₡100', 'Acceso a Tienda de Recompensas']
     },
     { 
         name: 'Plata', 
-        minPoints: 150, // ~₡150,000 en compras (~6 pedidos de ₡25k)
+        minPoints: 1500, // ~₡75,000 en compras cumulativas (con tasa 2%)
         icon: '🥈', 
         color: 'from-gray-400 to-gray-500',
-        multiplier: 1.25,
-        benefits: ['1.25x puntos', 'Acceso anticipado a promos']
+        multiplier: 1.2, // 1.2x puntos
+        benefits: ['Gana 2.4 BiPuntos por cada ₡100 (1.2x)', 'Acceso a Tienda de Recompensas']
     },
     { 
         name: 'Oro', 
-        minPoints: 500, // ~₡500,000 en compras (~20 pedidos de ₡25k)
+        minPoints: 5000, // ~₡250,000 en compras cumulativas
         icon: '🥇', 
         color: 'from-yellow-400 to-yellow-500',
-        multiplier: 1.5,
-        benefits: ['1.5x puntos', 'Envío prioritario', 'Ofertas exclusivas']
+        multiplier: 1.5, // 1.5x puntos
+        benefits: ['Gana 3 BiPuntos por cada ₡100 (1.5x)', 'Acceso a Tienda de Recompensas']
     },
     { 
         name: 'Platino', 
-        minPoints: 1500, // ~₡1,500,000 en compras (~60 pedidos de ₡25k)
+        minPoints: 15000, // ~₡750,000 en compras cumulativas
         icon: '💎', 
         color: 'from-cyan-400 to-blue-500',
-        multiplier: 2,
-        benefits: ['2x puntos', 'Envío gratis', 'Regalos sorpresa', 'Soporte VIP']
+        multiplier: 2, // 2x puntos
+        benefits: ['Gana 4 BiPuntos por cada ₡100 (2x)', 'Acceso a Tienda de Recompensas']
     }
 ];
 
@@ -54,7 +55,8 @@ export default function useLoyaltyPoints() {
         currentPoints: 0,
         totalEarned: 0,
         totalRedeemed: 0,
-        history: []
+        history: [],
+        completedMissions: []
     });
     const [loading, setLoading] = useState(true);
 
@@ -66,25 +68,39 @@ export default function useLoyaltyPoints() {
                     currentPoints: 0,
                     totalEarned: 0,
                     totalRedeemed: 0,
-                    history: []
+                    history: [],
+                    completedMissions: []
                 });
                 setLoading(false);
                 return;
             }
 
             try {
-                const docRef = doc(db, 'loyalty', currentUser.uid);
+                const docRef = doc(db, 'loyalty', currentUser.email.toLowerCase());
                 const docSnap = await getDoc(docRef);
                 
                 if (docSnap.exists()) {
-                    setPointsData(docSnap.data());
+                    const data = docSnap.data();
+                    setPointsData({
+                        ...data,
+                        completedMissions: data.completedMissions || []
+                    });
                 } else {
-                    // Crear documento inicial para el usuario
+                    // Crear documento inicial para el usuario con bono de bienvenida
                     const initialData = {
-                        currentPoints: 0,
-                        totalEarned: 0,
+                        currentPoints: POINTS_CONFIG.welcomeBonus,
+                        totalEarned: POINTS_CONFIG.welcomeBonus,
                         totalRedeemed: 0,
-                        history: [],
+                        completedMissions: ['welcome'],
+                        history: [
+                            {
+                                id: 'welcome-bonus',
+                                type: 'earned',
+                                points: POINTS_CONFIG.welcomeBonus,
+                                description: '¡Bienvenido! Bono inicial BiKitchen',
+                                date: new Date().toISOString()
+                            }
+                        ],
                         createdAt: new Date().toISOString()
                     };
                     await setDoc(docRef, initialData);
@@ -105,7 +121,7 @@ export default function useLoyaltyPoints() {
         if (!currentUser) return;
         
         try {
-            const docRef = doc(db, 'loyalty', currentUser.uid);
+            const docRef = doc(db, 'loyalty', currentUser.email.toLowerCase());
             await setDoc(docRef, {
                 ...newData,
                 updatedAt: new Date().toISOString()
@@ -180,29 +196,21 @@ export default function useLoyaltyPoints() {
         return pointsEarned;
     };
 
-    // Canjear puntos
-    const redeemPoints = async (points, orderNumber) => {
-        if (!currentUser) {
-            return { success: false, error: 'Debes iniciar sesión' };
-        }
+    // Canjear puntos (ahora es en tienda por productos específicos)
+    const redeemItem = async (pointsCost, itemName, metadata = {}) => {
+        if (!currentUser) return { success: false, error: 'Debes iniciar sesión' };
         
-        if (points > pointsData.currentPoints) {
+        if (pointsCost > pointsData.currentPoints) {
             return { success: false, error: 'No tienes suficientes puntos' };
         }
-        
-        if (points < POINTS_CONFIG.minRedeemPoints) {
-            return { success: false, error: `Mínimo ${POINTS_CONFIG.minRedeemPoints} puntos para canjear` };
-        }
-
-        const discount = points * POINTS_CONFIG.pointValue;
 
         const newHistory = [
             {
                 id: Date.now().toString(),
                 type: 'redeemed',
-                points: -points,
-                description: `Canjeado en ${orderNumber}`,
-                discount: discount,
+                points: -pointsCost,
+                description: `Canje por: ${itemName}`,
+                couponCode: metadata.code || null, // Guardar el código generado
                 date: new Date().toISOString()
             },
             ...pointsData.history
@@ -210,27 +218,20 @@ export default function useLoyaltyPoints() {
 
         const newData = {
             ...pointsData,
-            currentPoints: pointsData.currentPoints - points,
-            totalRedeemed: pointsData.totalRedeemed + points,
+            currentPoints: pointsData.currentPoints - pointsCost,
+            totalRedeemed: pointsData.totalRedeemed + pointsCost,
             history: newHistory.slice(0, 50)
         };
 
         setPointsData(newData);
         await saveToFirestore(newData);
 
-        return { success: true, discount };
+        return { success: true };
     };
 
-    // Calcular máximo de puntos canjeables para un pedido
+    // Calcular máximo de puntos canjeables (deprecated logic for store, keeping for compat)
     const getMaxRedeemablePoints = (orderTotal) => {
-        const maxByPercent = Math.floor((orderTotal * POINTS_CONFIG.maxRedeemPercent / 100) / POINTS_CONFIG.pointValue);
-        const maxByBalance = pointsData.currentPoints;
-        return Math.min(maxByPercent, maxByBalance);
-    };
-
-    // Convertir puntos a colones
-    const pointsToColones = (points) => {
-        return points * POINTS_CONFIG.pointValue;
+        return pointsData.currentPoints;
     };
 
     // Progreso al siguiente nivel
@@ -245,20 +246,55 @@ export default function useLoyaltyPoints() {
         return Math.min((pointsInCurrentLevel / pointsNeededForNext) * 100, 100);
     };
 
+    // Completar una misión
+    const completeMission = async (missionId, pointsAwarded, missionName, handle = null) => {
+        if (!currentUser) return { success: false, error: 'Inicia sesión' };
+        
+        // Verificar si ya se completó
+        const completed = pointsData.completedMissions || [];
+        if (completed.includes(missionId)) {
+            return { success: false, error: 'Misión ya completada' };
+        }
+
+        const newHistory = [
+            {
+                id: `mission-${missionId}-${Date.now()}`,
+                type: 'earned',
+                points: pointsAwarded,
+                description: `Misión: ${missionName}${handle ? ` (@${handle})` : ''}`,
+                date: new Date().toISOString()
+            },
+            ...pointsData.history
+        ];
+
+        const newData = {
+            ...pointsData,
+            currentPoints: pointsData.currentPoints + pointsAwarded,
+            totalEarned: pointsData.totalEarned + pointsAwarded,
+            completedMissions: [...completed, missionId],
+            history: newHistory.slice(0, 50)
+        };
+
+        setPointsData(newData);
+        await saveToFirestore(newData);
+        
+        return { success: true, points: pointsAwarded };
+    };
+
     return {
         points: pointsData.currentPoints,
         totalEarned: pointsData.totalEarned,
         totalRedeemed: pointsData.totalRedeemed,
         history: pointsData.history,
+        completedMissions: pointsData.completedMissions || [],
         currentLevel: getCurrentLevel(),
         nextLevel: getNextLevel(),
         progressToNextLevel: getProgressToNextLevel(),
         loading,
         addPoints,
-        redeemPoints,
-        calculatePointsForPurchase,
+        redeemItem,
+        completeMission,
         getMaxRedeemablePoints,
-        pointsToColones,
         config: POINTS_CONFIG,
         levels: LOYALTY_LEVELS
     };

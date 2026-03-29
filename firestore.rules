@@ -12,52 +12,27 @@ service cloud.firestore {
     
     function isAdmin() {
       return isAuthenticated() && 
-        request.auth.token.email in [
+        request.auth.token.email.lower() in [
           'bikitchenfood@gmail.com',
           'ginamaroli@gmail.com',
-          'rojasporrasjan@gmail.com'
+          'rojasporrasjan@gmail.com',
+          'mfcorrales15@gmail.com'
         ];
     }
     
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
     }
+
+    function isEmailOwner(email) {
+      return isAuthenticated() && request.auth.token.email.lower() == email.lower();
+    }
     
     // ==========================================
     // COLECCIONES PÚBLICAS (Solo lectura pública)
     // ==========================================
     
-    match /menus/{doc} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-    
     match /menus_oficial/{doc} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-    
-    match /menus_oficiales/{doc} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-    
-    match /packs/{doc} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-    
-    match /packs_imagenes/{doc} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-    
-    match /individuales_imagenes/{doc} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-    
-    match /temporada_imagenes/{doc} {
       allow read: if true;
       allow write: if isAdmin();
     }
@@ -67,17 +42,27 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
     
-    match /promociones_imagenes/{doc} {
+    match /promociones_imagenes/{allPaths=**} {
       allow read: if true;
       allow write: if isAdmin();
     }
     
-    match /productos/{doc} {
+    match /individuales_imagenes/{allPaths=**} {
       allow read: if true;
       allow write: if isAdmin();
     }
-    
-    match /categorias/{doc} {
+
+    match /imagenes/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /packs_imagenes/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /temporada_imagenes/{allPaths=**} {
       allow read: if true;
       allow write: if isAdmin();
     }
@@ -86,88 +71,70 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isAdmin();
     }
-    
-    // ==========================================
-    // IMÁGENES - Para el gestor de imágenes
-    // ==========================================
-    
-    match /imagenes/{doc} {
+
+    match /coupons/{id} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow create: if isAdmin() || 
+        (request.resource.data.isGiftCard == true && request.resource.data.active == false);
+      allow update, delete: if isAdmin();
     }
-    
-    match /menu_items/{doc} {
+
+    match /referral_codes/{code} {
       allow read: if true;
-      allow write: if isAdmin();
-    }
-    
-    // ==========================================
-    // CUPONES - SEGURIDAD REFORZADA
-    // ==========================================
-    
-    match /coupons/{couponId} {
-      allow read: if true;
-      allow create: if isAdmin();
-      allow update: if isAdmin() || (
-        isAuthenticated() &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usedCount', 'usedBy', 'lastUsed']) &&
-        request.resource.data.usedCount == resource.data.usedCount + 1
-      );
+      allow create: if isAuthenticated();
+      allow update: if isAdmin() || (isAuthenticated() && resource.data.uid == request.auth.uid);
       allow delete: if isAdmin();
     }
     
     // ==========================================
-    // INVENTARIO
+    // NOTIFICACIONES Y SUSCRIPCIONES
     // ==========================================
-    
-    match /inventory/{doc} {
-      allow read: if true;
-      allow write: if isAdmin();
+
+    match /push_subscriptions/{userId} {
+      allow read: if isAdmin() || isOwner(userId);
+      allow create: if true; // Permitir que cualquiera se suscriba
+      allow update: if isAdmin() || isOwner(userId);
+      allow delete: if isAdmin() || isOwner(userId);
     }
-    
-    match /inventario/{doc} {
-      allow read: if true;
-      allow write: if isAdmin();
+
+    match /notifications/{notifId} {
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow create: if true; // Permitir que se generen alertas (ej: al hacer pedido)
+      allow update: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'readAt']));
+      allow delete: if isAdmin();
     }
-    
+
     // ==========================================
-    // CLIENTES - SOLO ADMIN
-    // ==========================================
-    
-    match /clientes/{doc} {
-      allow read, write: if isAdmin();
-    }
-    
-    // ==========================================
-    // PEDIDOS - Permite checkout sin cuenta
+    // PEDIDOS (Propietario o Admin)
     // ==========================================
     
     match /pedidos/{pedidoId} {
       allow read: if isAdmin() || 
         (isAuthenticated() && resource.data.userId == request.auth.uid) ||
-        (isAuthenticated() && resource.data.correo == request.auth.token.email);
+        (isAuthenticated() && resource.data.correo.lower() == request.auth.token.email.lower());
       allow create: if true;
-      allow update, delete: if isAdmin();
+      allow update: if isAdmin() || (
+        (isAuthenticated() && (resource.data.userId == request.auth.uid || resource.data.correo.lower() == request.auth.token.email.lower())) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'paymentConfirmed', 'paymentStatus', 'pointsToAward', 'pointsAwarded', 'pointsAwardedAt', 'payment_id', 'transaction_id']) &&
+        request.resource.data.status == 'confirmed'
+      );
+      allow delete: if isAdmin();
     }
-    
+
     match /orders/{orderId} {
-      allow read: if isAdmin() || 
-        (isAuthenticated() && resource.data.userId == request.auth.uid) ||
-        (isAuthenticated() && resource.data.correo == request.auth.token.email);
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
       allow create: if true;
       allow update, delete: if isAdmin();
     }
     
     // ==========================================
-    // USUARIOS - SEGURIDAD CRÍTICA
+    // USUARIOS (Propietario o Admin)
     // ==========================================
     
     match /users/{userId} {
       allow read: if isOwner(userId) || isAdmin();
-      allow create: if isOwner(userId) && 
-        request.resource.data.role != 'admin';
-      allow update: if (isOwner(userId) && 
-        request.resource.data.role == resource.data.role) || isAdmin();
+      allow create: if isOwner(userId) && request.resource.data.role != 'admin';
+      allow update: if (isOwner(userId) && request.resource.data.role == resource.data.role) || isAdmin();
       allow delete: if isAdmin();
     }
     
@@ -176,52 +143,33 @@ service cloud.firestore {
     // ==========================================
     
     match /loyalty/{userId} {
-      allow read, write: if isOwner(userId);
+      allow read, write: if isOwner(userId) || isEmailOwner(userId) || isAdmin();
     }
     
-    match /loyalty_points/{docId} {
+    match /loyalty_points/{id} {
       allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
-      allow update, delete: if isAdmin();
-    }
-    
-    match /points_history/{docId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
-      allow update, delete: if isAdmin();
+      allow write: if isAdmin();
     }
     
     // ==========================================
-    // NOTIFICACIONES
+    // RESEÑAS
     // ==========================================
     
-    match /push_subscriptions/{docId} {
-      allow read, write: if isAuthenticated();
-    }
-    
-    match /notifications/{docId} {
-      allow read: if isAuthenticated();
+    match /reviews/{id} {
+      allow read: if true;
       allow create: if isAuthenticated();
-      allow update, delete: if isAdmin();
+      allow update: if isAdmin() || (isAuthenticated() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['helpful']));
+      allow delete: if isAdmin();
     }
-    
+
     // ==========================================
-    // SOLO ADMIN
+    // GESTIÓN INTERNA (Solo Admin)
     // ==========================================
     
-    match /stats/{doc} {
-      allow read, write: if isAdmin();
-    }
-    
-    match /activity_logs/{doc} {
-      allow read: if isAdmin();
-      allow create: if isAuthenticated();
-      allow update, delete: if isAdmin();
-    }
-    
-    match /admin_config/{doc} {
-      allow read, write: if isAdmin();
-    }
+    match /inventario/{doc} { allow read, write: if isAdmin(); }
+    match /clientes/{doc} { allow read, write: if isAdmin(); }
+    match /stats/{doc} { allow read, write: if isAdmin(); }
+    match /admin_config/{doc} { allow read, write: if isAdmin(); }
     
     // ==========================================
     // REGLA POR DEFECTO - DENEGAR TODO

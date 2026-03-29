@@ -76,8 +76,8 @@ const DEFAULT_PRICES = {
       'Pack Keto': { weekly: 67800, biweekly: 126000, monthly: 244080 }
     }
   },
-  '15_comidas': {
-    title: '15 Comidas',
+  'desayuno_almuerzo_cena': {
+    title: '15 Comidas (Desayuno, Almuerzo y Cena)',
     packs: {
       'Pack Sin Carbos': { weekly: 61500, biweekly: 114500, monthly: 221400 },
       'Pack Bajo Calorías': { weekly: 65200, biweekly: 121200, monthly: 234720 },
@@ -98,6 +98,32 @@ const DEFAULT_PRICES = {
       'Full Pack': { weekly: 67800, biweekly: 126000, monthly: 203400 },
       'Pack Vegetariano': { weekly: 55700, biweekly: 100260, monthly: 167100 },
       'Pack Keto': { weekly: 67800, biweekly: 126000, monthly: 203400 }
+    }
+  },
+  'familiar': {
+    title: 'Pack Familiar',
+    packs: {
+      'Pack Familiar Premium': { weekly: 41500, biweekly: 77200, monthly: 149400 },
+      'Pack Familiar Deluxe': { weekly: 47500, biweekly: 88500, monthly: 171000 }
+    }
+  },
+  'desayuno': {
+    title: 'Pack de Desayunos',
+    packs: {
+      'Desayunos de la Semana': { weekly: 15000, biweekly: 0, monthly: 0 }
+    }
+  },
+  'proteinas': {
+    title: 'Pack de Proteínas',
+    packs: {
+      'Pack 3 Proteínas': {
+        weekly: 13500, biweekly: 25100, monthly: 48600,
+        weekly_500: 25850, biweekly_500: 48100, monthly_500: 93000
+      },
+      'Pack 5 Proteínas': {
+        weekly: 21000, biweekly: 39000, monthly: 75600,
+        weekly_500: 39950, biweekly_500: 74300, monthly_500: 143000
+      }
     }
   }
 };
@@ -241,19 +267,22 @@ export default function MenusView() {
   // Manejar cambio de precio
   const handlePriceChange = (category, packName, period, value) => {
     const numValue = parseInt(value) || 0;
-    setPrices(prev => ({
-      ...prev,
-      [category]: {
-        ...prev[category],
-        packs: {
-          ...prev[category].packs,
-          [packName]: {
-            ...prev[category].packs[packName],
-            [period]: numValue
-          }
+    setPrices(prev => {
+      const updatedCategory = { ...prev[category] };
+      const updatedPacks = { ...updatedCategory.packs };
+      updatedPacks[packName] = {
+        ...updatedPacks[packName],
+        [period]: numValue
+      };
+
+      return {
+        ...prev,
+        [category]: {
+          ...updatedCategory,
+          packs: updatedPacks
         }
-      }
-    }));
+      };
+    });
   };
 
   // Guardar precios
@@ -378,7 +407,7 @@ export default function MenusView() {
   }, [menuCounts]);
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
+    <div className="space-y-6">
       <Toaster position="top-right" />
 
       {/* Header mejorado */}
@@ -1173,10 +1202,10 @@ export default function MenusView() {
                 <div>
                   <h2 className="text-xl font-bold text-white flex items-center gap-2">
                     <DollarSign size={24} />
-                    Editar Precios de Packs
+                    Configuración de Precios BiKitchen
                   </h2>
                   <p className="text-sm text-green-100 mt-1">
-                    Configura los precios semanal, quincenal y mensual de cada pack
+                    Gestiona los precios oficiales de planes, familiares y proteínas
                   </p>
                 </div>
                 <button
@@ -1188,65 +1217,128 @@ export default function MenusView() {
               </div>
 
               {/* Contenido del Modal */}
-              <div className="p-6 overflow-y-auto max-h-[calc(90vh-180px)]">
+              <div className="p-6 overflow-y-auto max-h-[calc(90vh-180px)] space-y-8">
                 {prices && Object.entries(prices).map(([categoryKey, categoryData]) => (
-                  <div key={categoryKey} className="mb-8 last:mb-0">
-                    <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                      <span className="w-8 h-8 bg-orange-100 text-orange-600 rounded-lg flex items-center justify-center text-sm">
-                        {categoryKey === '5_comidas' ? '5' : categoryKey === '10_comidas' ? '10' : categoryKey === '15_comidas' ? '15' : '2x'}
-                      </span>
-                      {categoryData.title}
-                    </h3>
+                  <div key={categoryKey} className="bg-gray-50/50 rounded-2xl border border-gray-100 p-6">
+                    <div className="flex items-center justify-between mb-6">
+                      <h3 className="text-lg font-bold text-gray-800 flex items-center gap-3">
+                        <div className="w-10 h-10 bg-orange-500 text-white rounded-xl flex items-center justify-center font-bold shadow-sm">
+                          {categoryKey === '5_comidas' ? '5' :
+                            categoryKey === '10_comidas' ? '10' :
+                              categoryKey === 'desayuno_almuerzo_cena' ? '15' :
+                                categoryKey === 'desayuno' ? '🍳' :
+                                  categoryKey === 'two_pack' ? '2x' :
+                                    categoryKey === 'familiar' ? '👨‍👩‍' : '🥩'}
+                        </div>
+                        {categoryData.title}
+                      </h3>
+                      <div className="text-xs font-semibold px-3 py-1 bg-white border border-gray-200 rounded-full text-gray-500 uppercase tracking-wider">
+                        Categoría: {categoryKey}
+                      </div>
+                    </div>
 
-                    <div className="bg-gray-50 rounded-xl p-4">
+                    <div className="space-y-4">
                       {/* Header de la tabla */}
-                      <div className="grid grid-cols-4 gap-4 mb-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                        <div>Pack</div>
-                        <div className="text-center">Semanal</div>
-                        <div className="text-center">Quincenal</div>
-                        <div className="text-center">Mensual</div>
+                      <div className="grid grid-cols-12 gap-4 px-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                        <div className="col-span-3">Nombre del Pack</div>
+                        <div className="col-span-3 text-center">Plan Semanal (₡)</div>
+                        <div className="col-span-3 text-center">Plan Quincenal (₡)</div>
+                        <div className="col-span-3 text-center">Plan Mensual (₡)</div>
                       </div>
 
                       {/* Filas de packs */}
-                      <div className="space-y-2">
-                        {categoryData?.packs && Object.entries(categoryData.packs).map(([packName, packPrices]) => (
-                          <div key={packName} className="grid grid-cols-4 gap-4 items-center bg-white p-3 rounded-lg border border-gray-100">
-                            <div className="font-medium text-gray-800 text-sm">{packName}</div>
-                            <div>
-                              <div className="relative">
-                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">₡</span>
-                                <input
-                                  type="number"
-                                  value={packPrices.weekly}
-                                  onChange={(e) => handlePriceChange(categoryKey, packName, 'weekly', e.target.value)}
-                                  className="w-full pl-7 pr-2 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-green-500/20 focus:border-green-500 outline-none text-center"
-                                />
+                      <div className="space-y-3">
+                        {categoryData?.packs && Object.entries(categoryData.packs).map(([packName, packPrices]) => {
+                          const isProteins = categoryKey === 'proteinas';
+
+                          return (
+                            <div key={packName} className={`space-y-3 p-4 rounded-xl border border-gray-100 bg-white shadow-sm transition-all hover:shadow-md ${isProteins ? 'bg-red-50/30 border-red-100' : ''}`}>
+                              {/* Fila Principal / Normal (250g para proteínas) */}
+                              <div className="grid grid-cols-12 gap-4 items-center">
+                                <div className="col-span-3 font-bold text-gray-800 flex items-center gap-2">
+                                  {isProteins && <span className="text-[10px] px-1.5 py-0.5 bg-red-100 text-red-600 rounded">250g</span>}
+                                  {packName}
+                                </div>
+                                <div className="col-span-3">
+                                  <div className="relative group">
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold group-focus-within:text-orange-500 transition-colors">₡</span>
+                                    <input
+                                      type="number"
+                                      value={packPrices.weekly || 0}
+                                      onChange={(e) => handlePriceChange(categoryKey, packName, 'weekly', e.target.value)}
+                                      className="w-full pl-7 pr-3 py-2.5 bg-gray-50/50 border border-gray-200 rounded-xl text-sm font-semibold focus:ring-4 focus:ring-orange-100 focus:border-orange-400 outline-none text-right transition-all"
+                                    />
+                                  </div>
+                                </div>
+                                <div className="col-span-3">
+                                  <div className="relative group">
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold group-focus-within:text-orange-500 transition-colors">₡</span>
+                                    <input
+                                      type="number"
+                                      value={packPrices.biweekly || 0}
+                                      onChange={(e) => handlePriceChange(categoryKey, packName, 'biweekly', e.target.value)}
+                                      className="w-full pl-7 pr-3 py-2.5 bg-gray-50/50 border border-gray-200 rounded-xl text-sm font-semibold focus:ring-4 focus:ring-orange-100 focus:border-orange-400 outline-none text-right transition-all"
+                                    />
+                                  </div>
+                                </div>
+                                <div className="col-span-3">
+                                  <div className="relative group">
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold group-focus-within:text-orange-500 transition-colors">₡</span>
+                                    <input
+                                      type="number"
+                                      value={packPrices.monthly || 0}
+                                      onChange={(e) => handlePriceChange(categoryKey, packName, 'monthly', e.target.value)}
+                                      className="w-full pl-7 pr-3 py-2.5 bg-gray-50/50 border border-gray-200 rounded-xl text-sm font-semibold focus:ring-4 focus:ring-orange-100 focus:border-orange-400 outline-none text-right transition-all"
+                                    />
+                                  </div>
+                                </div>
                               </div>
+
+                              {/* Fila extra para 500g (Solo proteínas) */}
+                              {isProteins && (
+                                <div className="grid grid-cols-12 gap-4 items-center pt-2 border-t border-red-100/50">
+                                  <div className="col-span-3 font-bold text-gray-500 flex items-center gap-2">
+                                    <span className="text-[10px] px-1.5 py-0.5 bg-red-600 text-white rounded">500g</span>
+                                    {packName}
+                                  </div>
+                                  <div className="col-span-3">
+                                    <div className="relative group">
+                                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold group-focus-within:text-red-500 transition-colors">₡</span>
+                                      <input
+                                        type="number"
+                                        value={packPrices.weekly_500 || 0}
+                                        onChange={(e) => handlePriceChange(categoryKey, packName, 'weekly_500', e.target.value)}
+                                        className="w-full pl-7 pr-3 py-2.5 bg-red-50/30 border border-red-100 rounded-xl text-sm font-semibold focus:ring-4 focus:ring-red-100 focus:border-red-400 outline-none text-right transition-all"
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className="col-span-3">
+                                    <div className="relative group">
+                                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold group-focus-within:text-red-500 transition-colors">₡</span>
+                                      <input
+                                        type="number"
+                                        value={packPrices.biweekly_500 || 0}
+                                        onChange={(e) => handlePriceChange(categoryKey, packName, 'biweekly_500', e.target.value)}
+                                        className="w-full pl-7 pr-3 py-2.5 bg-red-50/30 border border-red-100 rounded-xl text-sm font-semibold focus:ring-4 focus:ring-red-100 focus:border-red-400 outline-none text-right transition-all"
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className="col-span-3">
+                                    <div className="relative group">
+                                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold group-focus-within:text-red-500 transition-colors">₡</span>
+                                      <input
+                                        type="number"
+                                        value={packPrices.monthly_500 || 0}
+                                        onChange={(e) => handlePriceChange(categoryKey, packName, 'monthly_500', e.target.value)}
+                                        className="w-full pl-7 pr-3 py-2.5 bg-red-50/30 border border-red-100 rounded-xl text-sm font-semibold focus:ring-4 focus:ring-red-100 focus:border-red-400 outline-none text-right transition-all"
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
                             </div>
-                            <div>
-                              <div className="relative">
-                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">₡</span>
-                                <input
-                                  type="number"
-                                  value={packPrices.biweekly}
-                                  onChange={(e) => handlePriceChange(categoryKey, packName, 'biweekly', e.target.value)}
-                                  className="w-full pl-7 pr-2 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-green-500/20 focus:border-green-500 outline-none text-center"
-                                />
-                              </div>
-                            </div>
-                            <div>
-                              <div className="relative">
-                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">₡</span>
-                                <input
-                                  type="number"
-                                  value={packPrices.monthly}
-                                  onChange={(e) => handlePriceChange(categoryKey, packName, 'monthly', e.target.value)}
-                                  className="w-full pl-7 pr-2 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-green-500/20 focus:border-green-500 outline-none text-center"
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   </div>

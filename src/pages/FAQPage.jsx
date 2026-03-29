@@ -12,159 +12,9 @@ import {
     UtensilsCrossed, Clock, RefreshCw, MessageCircle, Phone, Mail,
     Sparkles, ArrowRight
 } from 'lucide-react';
+import { FAQ_DATA } from '../data/faqData';
 
-const FAQ_DATA = [
-    {
-        category: 'Pedidos',
-        icon: ShoppingBag,
-        color: 'orange',
-        questions: [
-            {
-                q: '¿Cómo hago un pedido?',
-                a: `Puedes hacer tu pedido directamente desde nuestra página web. Selecciona el pack o las comidas individuales que desees, agrégalas al carrito y completa el proceso de checkout. También puedes contactarnos por WhatsApp al ${whatsappPhone}.`
-            },
-            {
-                q: '¿Cuál es el pedido mínimo?',
-                a: 'No tenemos un pedido mínimo obligatorio. Sin embargo, para aprovechar mejor los costos de envío, te recomendamos nuestros packs semanales que incluyen varias comidas.'
-            },
-            {
-                q: '¿Puedo personalizar mi pedido?',
-                a: 'Sí, puedes indicarnos tus preferencias o restricciones alimentarias en las observaciones del pedido. Hacemos lo posible por adaptarnos a tus necesidades, aunque algunos cambios pueden estar sujetos a disponibilidad de ingredientes.'
-            },
-            {
-                q: '¿Puedo cancelar o modificar mi pedido?',
-                a: 'Puedes cancelar o modificar tu pedido hasta 24 horas antes de la fecha de entrega programada. Después de ese plazo, no podemos garantizar cambios ya que comenzamos la preparación.'
-            },
-            {
-                q: '¿Cómo sé que mi pedido fue recibido?',
-                a: 'Recibirás una confirmación por WhatsApp con tu número de orden. Si no recibes confirmación en las siguientes 2 horas, por favor contáctanos.'
-            }
-        ]
-    },
-    {
-        category: 'Entregas',
-        icon: Truck,
-        color: 'blue',
-        questions: [
-            {
-                q: '¿Cuáles son los días de entrega?',
-                a: 'Realizamos entregas los días Lunes, Miércoles y Sábados. Puedes seleccionar tu día preferido al momento de hacer el pedido.'
-            },
-            {
-                q: '¿En qué zonas entregan?',
-                a: 'Actualmente entregamos en Alajuela y zonas aledañas de Costa Rica. Contáctanos para confirmar si llegamos a tu ubicación específica y conocer el costo de envío.'
-            },
-            {
-                q: '¿Cuánto cuesta el envío?',
-                a: 'El costo de envío varía según tu ubicación. Te informaremos el monto exacto antes de confirmar tu pedido. ¡Aprovecha nuestro 50% de descuento en envíos!'
-            },
-            {
-                q: '¿En qué horario entregan?',
-                a: 'Las entregas se realizan entre 8:00 AM y 6:00 PM. Coordinamos contigo un rango horario aproximado para que puedas recibir tu pedido.'
-            },
-            {
-                q: '¿Qué pasa si no estoy para recibir el pedido?',
-                a: 'Te contactaremos antes de llegar. Si no puedes recibir el pedido, podemos dejarlo con un vecino o en un lugar seguro que nos indiques. También puedes reprogramar la entrega con al menos 2 horas de anticipación.'
-            }
-        ]
-    },
-    {
-        category: 'Pagos',
-        icon: CreditCard,
-        color: 'green',
-        questions: [
-            {
-                q: '¿Qué métodos de pago aceptan?',
-                a: 'Aceptamos SINPE Móvil, transferencia bancaria y pago en efectivo al momento de la entrega. Próximamente habilitaremos pago con tarjeta de crédito/débito.'
-            },
-            {
-                q: '¿Cuándo debo pagar?',
-                a: 'El pago debe realizarse antes de la preparación de tu pedido. Una vez confirmado el pago, comenzamos a preparar tus comidas.'
-            },
-            {
-                q: '¿Emiten factura?',
-                a: 'Sí, podemos emitir factura electrónica. Solo necesitas proporcionarnos tu cédula o número de identificación al momento del pedido.'
-            },
-            {
-                q: '¿Tienen promociones o descuentos?',
-                a: '¡Sí! Frecuentemente tenemos promociones especiales. Síguenos en Instagram @bikitchenfood para enterarte de las últimas ofertas. También puedes usar cupones de descuento en tu carrito.'
-            }
-        ]
-    },
-    {
-        category: 'Comidas',
-        icon: UtensilsCrossed,
-        color: 'purple',
-        questions: [
-            {
-                q: '¿Las comidas son frescas o congeladas?',
-                a: 'Todas nuestras comidas se preparan frescas el mismo día o el día anterior a la entrega. No utilizamos conservantes artificiales. Algunas comidas pueden refrigerarse para mantener su frescura.'
-            },
-            {
-                q: '¿Cuánto duran las comidas?',
-                a: 'Nuestras comidas duran entre 3-5 días refrigeradas correctamente (entre 0-4°C). Te recomendamos consumirlas lo antes posible para disfrutar de su máxima frescura y sabor.'
-            },
-            {
-                q: '¿Cómo debo calentar las comidas?',
-                a: 'Puedes calentarlas en microondas (2-3 minutos) o en sartén/horno. Retira la tapa del envase antes de calentar en microondas. Cada comida incluye instrucciones específicas.'
-            },
-            {
-                q: '¿Los envases son reciclables?',
-                a: 'Sí, utilizamos envases de plástico reciclable y cartón. Te animamos a reciclarlos correctamente o reutilizarlos. Estamos trabajando en opciones más sostenibles.'
-            },
-            {
-                q: '¿El menú cambia cada semana?',
-                a: 'Sí, nuestro menú rota semanalmente para ofrecerte variedad. Publicamos el nuevo menú cada sábado en nuestra página web y redes sociales.'
-            }
-        ]
-    },
-    {
-        category: 'Alergias y Dietas',
-        icon: HelpCircle,
-        color: 'red',
-        questions: [
-            {
-                q: '¿Manejan opciones para alérgicos?',
-                a: 'Podemos adaptar algunas comidas según tus alergias, pero es importante que nos informes con anticipación. Nuestra cocina maneja diversos ingredientes incluyendo gluten, lácteos, huevos y frutos secos.'
-            },
-            {
-                q: '¿Tienen opciones vegetarianas o veganas?',
-                a: 'Sí, ofrecemos opciones vegetarianas en nuestro menú semanal. Para opciones veganas, contáctanos directamente y haremos lo posible por adaptarnos.'
-            },
-            {
-                q: '¿Las comidas son aptas para diabéticos?',
-                a: 'Nuestras comidas son balanceadas y utilizamos ingredientes naturales. Sin embargo, te recomendamos consultar con tu médico y revisar la información nutricional de cada plato.'
-            },
-            {
-                q: '¿Puedo solicitar comidas sin sal o bajas en sodio?',
-                a: 'Sí, podemos preparar comidas con menos sal. Indícalo en las observaciones de tu pedido y lo tendremos en cuenta.'
-            }
-        ]
-    },
-    {
-        category: 'Otros',
-        icon: Sparkles,
-        color: 'amber',
-        questions: [
-            {
-                q: '¿Hacen catering para eventos?',
-                a: '¡Sí! Ofrecemos servicios de catering para eventos corporativos, reuniones familiares y celebraciones. Contáctanos con al menos una semana de anticipación para coordinar.'
-            },
-            {
-                q: '¿Tienen tarjetas de regalo?',
-                a: 'Próximamente lanzaremos tarjetas de regalo digitales. Mientras tanto, puedes contactarnos para hacer un regalo especial a alguien.'
-            },
-            {
-                q: '¿Cómo puedo dejar una reseña o comentario?',
-                a: 'Puedes dejarnos tu opinión en Google, Instagram o enviarnos un mensaje directo. ¡Tu feedback nos ayuda a mejorar!'
-            },
-            {
-                q: '¿Tienen programa de referidos?',
-                a: 'Estamos trabajando en un programa de referidos. Pronto podrás invitar amigos y obtener beneficios. ¡Mantente atento a nuestras redes!'
-            }
-        ]
-    }
-];
+// FAQ_DATA ahora se importa desde ../data/faqData
 
 const FAQItem = ({ question, answer, isOpen, onClick, color }) => {
     return (
@@ -209,8 +59,8 @@ const FAQItem = ({ question, answer, isOpen, onClick, color }) => {
 export default function FAQPage() {
     const showPromoBanner = usePromoBanner();
     const { getWhatsAppUrl } = useWhatsApp();
-    const [selectedCategory, setSelectedCategory] = useState('todos');
-    const [searchQuery, setSearchQuery] = useState('');
+    const [activeCategory, setActiveCategory] = useState('all');
+    const [searchTerm, setSearchTerm] = useState('');
     const [openQuestions, setOpenQuestions] = useState({});
 
     const toggleQuestion = (categoryIndex, questionIndex) => {

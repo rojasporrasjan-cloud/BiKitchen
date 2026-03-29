@@ -63,6 +63,19 @@ export const getProductUnits = (categoria) => {
 
 export const individualesData = [
   // ============================================================
+  // PRODUCTO DE PRUEBA (PRODUCCIÓN)
+  // ============================================================
+  {
+    id: 'test-nmi-prod',
+    nombre: '🛠️ PRUEBA PRODUCCIÓN (₡100)',
+    descripcion: 'Producto temporal para verificar cobro real en BAC. Se eliminará tras la prueba.',
+    precio500: 100,
+    precio1kg: 100,
+    categoria: 'Pollo',
+    imagen: 'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=800&q=80'
+  },
+
+  // ============================================================
   // POLLO (500 gramos / 1 kg)
   // ============================================================
   {
@@ -785,7 +798,7 @@ export const individualesData = [
     precio500: 12500,
     precio1kg: 18750,
     categoria: 'Sopas',
-    imagen: 'https://images.unsplash.com/photo-1503766580805-931a4d5ad1a7?auto=format&fit=crop&w=800&q=80'
+    imagen: 'https://images.unsplash.com/photo-1603105037880-880cd4edfb0d?auto=format&fit=crop&w=800&q=80'
   },
 
   // ============================================================

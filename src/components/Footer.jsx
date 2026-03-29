@@ -178,11 +178,25 @@ export default function Footer() {
                             <Heart size={14} className="text-orange-400 fill-orange-400 animate-pulse" />
                             sabor de casa
                         </p>
-                        <div className="flex gap-6 text-xs text-gray-400 font-medium">
-                            <Link to="/privacidad" className="hover:text-orange-400 transition-colors cursor-pointer">Privacidad</Link>
-                            <Link to="/terminos" className="hover:text-orange-400 transition-colors cursor-pointer">Términos</Link>
-                            <Link to="/cookies" className="hover:text-orange-400 transition-colors cursor-pointer">Cookies</Link>
-                            <Link to="/reembolsos" className="hover:text-orange-400 transition-colors cursor-pointer">Reembolsos</Link>
+                        <div className="flex flex-col items-center md:items-end gap-3 translate-y-[-2px]">
+                            <div className="flex gap-6 text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">
+                                <Link to="/privacidad" className="hover:text-orange-400 transition-colors cursor-pointer">Privacidad</Link>
+                                <Link to="/terminos" className="hover:text-orange-400 transition-colors cursor-pointer">Términos</Link>
+                                <Link to="/cookies" className="hover:text-orange-400 transition-colors cursor-pointer">Cookies</Link>
+                                <Link to="/reembolsos" className="hover:text-orange-400 transition-colors cursor-pointer">Reembolsos</Link>
+                            </div>
+                            <div className="flex items-center gap-4 group transition-all duration-500">
+                                <div className="flex items-center gap-3">
+                                    <img src="https://cdn.jsdelivr.net/gh/aaronfagan/svg-credit-card-payment-icons@master/flat/visa.svg" alt="Visa" className="h-[14px] w-auto" />
+                                    <img src="https://cdn.jsdelivr.net/gh/aaronfagan/svg-credit-card-payment-icons@master/flat/mastercard.svg" alt="Mastercard" className="h-[18px] w-auto" />
+                                    <img src="https://cdn.jsdelivr.net/gh/aaronfagan/svg-credit-card-payment-icons@master/flat/amex.svg" alt="Amex" className="h-[16px] w-auto" />
+                                </div>
+                                <div className="h-4 w-[1px] bg-white/20"></div>
+                                <div className="flex flex-col items-start leading-tight opacity-50">
+                                    <span className="text-[10px] font-black text-white/80 tracking-tighter uppercase line-through decoration-orange-500/50">BAC</span>
+                                    <span className="text-[7px] font-bold text-gray-400 uppercase tracking-[0.1em]">Procesamiento Seguro</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

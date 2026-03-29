@@ -109,6 +109,7 @@ export default function MenuDetailsModalWithTabs({ menuKey, isOpen, onClose, pac
       quantity: quantity,
       menuKey,
       plan: packInfo?.plan || 'Semanal',
+      discountBadge: packInfo?.discountBadge,
       customizations: {
         notes: notes.trim()
       }
