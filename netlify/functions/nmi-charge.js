@@ -14,9 +14,9 @@ const NMI_PRIVATE_KEY = process.env.VITE_NMI_PRIVATE_KEY;
 const NMI_PROCESSOR_ID = process.env.VITE_NMI_PROCESSOR_ID;
 const FN_VERSION = 'v4-with3ds-20260328'; // Ensure version matches deployed state
 
-// Netlify's default timeout is 10s. We set an internal timeout of 8.5s 
-// to ensure we can return a controlled JSON response before being killed.
-const INTERNAL_TIMEOUT = 8500; 
+// Netlify's default timeout is 10s, but we extended it to 26s in netlify.toml.
+// We set an internal timeout of 24s to ensure we return a controlled JSON response.
+const INTERNAL_TIMEOUT = 24000; 
 
 exports.handler = async (event) => {
     // Only allow POST requests
