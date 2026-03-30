@@ -153,7 +153,7 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
             // Finalize Transaction
             setStep('processing');
             // Log ALL fields returned by Gateway.js 3DS for debugging
-            console.log('[NMI] Datos de autenticaciÃ³n recibidos (COMPLETO):', JSON.stringify(authData));
+            console.log('[NMI] Datos de autenticación recibidos (COMPLETO):', JSON.stringify(authData));
             
             const result = await processTransaction({
                 ...paymentInfo,
@@ -186,7 +186,7 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
                     console.log('[NMI] Transacción duplicada — el pago ya fue procesado previamente.');
                 }
                 if (isAuthFailedButCharged) {
-                    console.log('[NMI] âš ï¸ NMI reportÃ³ error pero authcode presente:', result.authcode, '— el banco SÃ cobró. Tratando como ÉXITO.');
+                    console.log('[NMI] ⚠️ NMI reportó error pero authcode presente:', result.authcode, '— el banco SÃ cobró. Tratando como ÉXITO.');
                 }
 
                 setStep('success');
@@ -217,7 +217,7 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
             
             if (errorMessage.includes('TIMEOUT') || errorMessage.includes('502') || errorMessage.includes('504')) {
                 setError(
-                    "âš ï¸ EL SERVIDOR TARDÓ DEMASIADO EN RESPONDER.\n\n" +
+                    "⚠️ EL SERVIDOR TARDÓ DEMASIADO EN RESPONDER.\n\n" +
                     "Es posible que el pago se haya realizado con éxito pero la confirmación no llegó a tiempo.\n\n" +
                     "POR FAVOR: Revisa tu banca en línea o correo electrónico antes de reintentar para evitar un cobro doble."
                 );
@@ -290,7 +290,7 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
                                             
                                             <div className="space-y-4">
                                                 <p className="text-2xl font-mono tracking-[0.2em]">
-                                                    {cardData.number || 'â€¢â€¢â€¢â€¢ â€¢â€¢â€¢â€¢ â€¢â€¢â€¢â€¢ â€¢â€¢â€¢â€¢'}
+                                                    {cardData.number || '•••• •••• •••• ••••'}
                                                 </p>
                                                 <div className="flex justify-between items-end">
                                                     <div>
@@ -311,8 +311,8 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
                                     {/* Form Fields */}
                                     <div className="space-y-4">
                                         <div className="flex items-center justify-between mb-2">
-                                            <span className="text-sm font-bold text-gray-500 uppercase tracking-widest">InformaciÃ³n de Pago</span>
-                                            <span className="text-xs text-orange-600 font-bold bg-orange-50 px-2 py-1 rounded-lg">Total: â‚¡{total.toLocaleString('es-CR')}</span>
+                                            <span className="text-sm font-bold text-gray-500 uppercase tracking-widest">Información de Pago</span>
+                                            <span className="text-xs text-orange-600 font-bold bg-orange-50 px-2 py-1 rounded-lg">Total: ₡{total.toLocaleString('es-CR')}</span>
                                         </div>
 
                                         <div className="grid gap-4">
@@ -375,7 +375,7 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
                                                 className="flex items-center gap-2 text-xs font-black text-gray-400 uppercase tracking-[0.2em] hover:text-orange-600 transition-colors"
                                             >
                                                 {showBilling ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                                                DirecciÃ³n de FacturaciÃ³n
+                                                Dirección de Facturación
                                             </button>
 
                                             <AnimatePresence>
@@ -387,7 +387,7 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
                                                         <input
                                                             name="address" value={cardData.address} onChange={handleCardChange}
                                                             className="w-full px-5 py-4 bg-gray-50 border-2 border-transparent focus:border-orange-500 focus:bg-white rounded-2xl outline-none transition-all font-bold text-gray-800"
-                                                            placeholder="DirecciÃ³n"
+                                                            placeholder="Dirección"
                                                         />
                                                         <div className="grid grid-cols-2 gap-4">
                                                             <input
@@ -432,8 +432,8 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
                                     >
                                         <Shield size={48} />
                                     </motion.div>
-                                    <h4 className="text-2xl font-black text-gray-900 mb-2 text-center tracking-tight">VerificaciÃ³n de Seguridad</h4>
-                                    <p className="text-base text-gray-500 text-center mb-10 px-4">Completa la validaciÃ³n 3D Secure en la ventana interactiva inferior para proteger tu compra.</p>
+                                    <h4 className="text-2xl font-black text-gray-900 mb-2 text-center tracking-tight">Verificación de Seguridad</h4>
+                                    <p className="text-base text-gray-500 text-center mb-10 px-4">Completa la validación 3D Secure en la ventana interactiva inferior para proteger tu compra.</p>
                                     
                                     <div id="three-ds-container" className="w-full border-4 border-dashed border-gray-100 rounded-[2rem] overflow-hidden min-h-[450px] bg-gray-50 flex items-center justify-center relative">
                                         <div className="absolute inset-0 flex flex-col items-center justify-center opacity-20">
