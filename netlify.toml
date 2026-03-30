@@ -7,7 +7,6 @@
   # Our internal AbortController fires at 24s to give a clean JSON response.
   # This 26s limit is the outer safety net.
   node_bundler = "esbuild"
-  timeout = 26
 
 [[redirects]]
   from = "/*"
