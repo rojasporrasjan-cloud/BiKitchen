@@ -34,3 +34,7 @@ dist-ssr
 # Diagnostic scripts (contain hardcoded credentials)
 scripts/
 src/diag_*.js
+
+# Standalone scripts with hardcoded credentials
+update-*.js
+testOrder.js

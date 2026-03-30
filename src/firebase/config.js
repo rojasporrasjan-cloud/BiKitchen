@@ -4,13 +4,16 @@ import { getAuth } from "firebase/auth";
 import { getAnalytics } from "firebase/analytics";
 import { getStorage } from "firebase/storage";
 
+// Firebase configuration loaded from environment variables.
+// Set these in Netlify: Site → Configuration → Environment variables
+// For local dev: create .env.local and add these values.
 const firebaseConfig = {
-    apiKey: "AIzaSyD6ZUpIYtXhTFp9lZGZgLX4mPp959H0PCo",
-    authDomain: "bikitchen-food.firebaseapp.com",
-    projectId: "bikitchen-food",
-    storageBucket: "bikitchen-food.firebasestorage.app",
-    messagingSenderId: "281700974825",
-    appId: "1:281700974825:web:0b45828ccc7745b340b078"
+    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
 // Initialize Firebase
