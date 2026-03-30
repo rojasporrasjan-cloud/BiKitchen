@@ -210,10 +210,13 @@ export const sendCustomerOrderConfirmation = async (orderData) => {
             orderNumber: orderData.orderNumber || 'N/A',
             fecha: new Date().toLocaleDateString('es-CR'),
             items_summary: formatItemsForEmail(orderData.items || []),
-            subtotal: `₡${(orderData.subtotal || 0).toLocaleString()}`,
-            discount: `₡${(orderData.discount || 0).toLocaleString()}`,
-            shipping: `₡${(orderData.shippingCost || 0).toLocaleString()}`,
-            total: `₡${(orderData.total || 0).toLocaleString()}`,
+            subtotal: `₡${(orderData.subtotal || 0).toLocaleString('es-CR')}`,
+            discount: `₡${(orderData.discount || orderData.discountAmount || orderData.descuento || 0).toLocaleString('es-CR')}`,
+            shipping: `₡${(orderData.shippingCost || orderData.deliveryFee || orderData.costoEnvio || 0).toLocaleString('es-CR')}`,
+            total: `₡${(orderData.total || 0).toLocaleString('es-CR')}`,
+            fechaEntrega: orderData.fechasEntrega && orderData.fechasEntrega.length > 0
+                ? formatDeliveryDates(orderData.fechasEntrega)
+                : (orderData.fechaEntrega || 'No especificada'),
             metodoPago: orderData.metodoPago || 'Coordinado',
             direccion: orderData.direccion || 'Retiro en local',
             notas: orderData.notas || 'Sin notas adicionales'

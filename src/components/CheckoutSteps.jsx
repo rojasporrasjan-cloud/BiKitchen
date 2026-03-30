@@ -1491,7 +1491,6 @@ export default function CheckoutSteps({ isOpen, onClose }) {
 
                                             <div className="space-y-3">
                                                 {PAYMENT_METHODS
-                                                  .filter(method => method.id !== 'nmi' || isAdmin())
                                                   .map((method) => (
                                                     <button
                                                         key={method.id}
