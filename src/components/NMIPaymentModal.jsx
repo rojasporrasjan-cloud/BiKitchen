@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, CreditCard, Shield, Loader2, AlertCircle, CheckCircle, Lock as LucideLock, ChevronDown, ChevronUp } from 'lucide-react';
 import { initGateway, authenticate3DS, processTransaction, unmount3DS } from '../utils/nmiClient';
@@ -171,7 +171,7 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
             // --- Ground truth: authcode ---
             // BAC/NMI can return response=2 "Authentication Failed" on the 3DS post-validation
             // step AFTER the bank already authorized and charged the card.
-            // If authcode is non-empty, the bank approved the charge â€” it went through.
+            // If authcode is non-empty, the bank approved the charge — it went through.
             const bankApprovedByAuthcode = !!(result.authcode && result.authcode.trim() && result.authcode !== '');
 
             const isApproved = result.response === '1';
@@ -183,10 +183,10 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
 
             if (isApproved || isDuplicate || isAuthFailedButCharged) {
                 if (isDuplicate) {
-                    console.log('[NMI] TransacciÃ³n duplicada â€” el pago ya fue procesado previamente.');
+                    console.log('[NMI] Transacción duplicada — el pago ya fue procesado previamente.');
                 }
                 if (isAuthFailedButCharged) {
-                    console.log('[NMI] âš ï¸ NMI reportÃ³ error pero authcode presente:', result.authcode, 'â€” el banco SÃ cobrÃ³. Tratando como Ã‰XITO.');
+                    console.log('[NMI] âš ï¸ NMI reportÃ³ error pero authcode presente:', result.authcode, '— el banco SÃ cobró. Tratando como ÉXITO.');
                 }
 
                 setStep('success');
@@ -206,9 +206,9 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
             } else {
                 // If it's a timeout error from our internal proxy check
                 if (result.responsetext === 'TIMEOUT_LIMIT_REACHED') {
-                    throw new Error(result.message || 'La conexiÃ³n tardÃ³ demasiado.');
+                    throw new Error(result.message || 'La conexión tardó demasiado.');
                 }
-                throw new Error(result.responsetext || 'La transacciÃ³n fue declinada por el banco.');
+                throw new Error(result.responsetext || 'La transacción fue declinada por el banco.');
             }
         } catch (err) {
             console.error('[NMI] Payment Error:', err);
@@ -217,14 +217,14 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
             
             if (errorMessage.includes('TIMEOUT') || errorMessage.includes('502') || errorMessage.includes('504')) {
                 setError(
-                    "âš ï¸ EL SERVIDOR TARDÃ“ DEMASIADO EN RESPONDER.\n\n" +
-                    "Es posible que el pago se haya realizado con Ã©xito pero la confirmaciÃ³n no llegÃ³ a tiempo.\n\n" +
-                    "POR FAVOR: Revisa tu banca en lÃ­nea o correo electrÃ³nico antes de reintentar para evitar un cobro doble."
+                    "âš ï¸ EL SERVIDOR TARDÓ DEMASIADO EN RESPONDER.\n\n" +
+                    "Es posible que el pago se haya realizado con éxito pero la confirmación no llegó a tiempo.\n\n" +
+                    "POR FAVOR: Revisa tu banca en línea o correo electrónico antes de reintentar para evitar un cobro doble."
                 );
-            } else if (errorMessage.includes('3DS') || errorMessage.includes('InicializaciÃ³n')) {
-                setError(`${errorMessage}\n\nNota: Parece haber un problema con la llave pÃºblica o la configuraciÃ³n 3DS.`);
+            } else if (errorMessage.includes('3DS') || errorMessage.includes('Inicialización')) {
+                setError(`${errorMessage}\n\nNota: Parece haber un problema con la llave pública o la configuración 3DS.`);
             } else {
-                setError(errorMessage || 'OcurriÃ³ un error al procesar el pago.');
+                setError(errorMessage || 'Ocurrió un error al procesar el pago.');
             }
             setStep('error');
         } finally {
@@ -447,7 +447,7 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
                             {step === 'processing' && (
                                 <div className="flex flex-col items-center justify-center py-20">
                                     <Loader2 size={64} className="text-orange-600 animate-spin mb-6" />
-                                    <h4 className="text-2xl font-black text-gray-900 tracking-tight">Finalizando TransacciÃ³n</h4>
+                                    <h4 className="text-2xl font-black text-gray-900 tracking-tight">Finalizando Transacción</h4>
                                     <p className="text-gray-500 mt-2 text-center">Estamos procesando tu pago de forma segura con el banco.</p>
                                 </div>
                             )}
@@ -461,7 +461,7 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
                                         <CheckCircle size={48} />
                                     </motion.div>
                                     <h4 className="text-3xl font-black text-gray-900 tracking-tight">Â¡Pago Confirmado!</h4>
-                                    <p className="text-gray-500 mt-3 max-w-[280px]">Tu pedido se ha procesado con Ã©xito. Redirigiendo...</p>
+                                    <p className="text-gray-500 mt-3 max-w-[280px]">Tu pedido se ha procesado con éxito. Redirigiendo...</p>
                                 </div>
                             )}
 
@@ -473,7 +473,7 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
                                     >
                                         <AlertCircle size={48} />
                                     </motion.div>
-                                    <h4 className="text-2xl font-black text-gray-900 tracking-tight">TransacciÃ³n Fallida</h4>
+                                    <h4 className="text-2xl font-black text-gray-900 tracking-tight">Transacción Fallida</h4>
                                     <div className="mt-4 px-6 py-4 bg-red-50 text-red-700 rounded-2xl font-bold text-sm border border-red-100 mb-8 max-w-full overflow-hidden" style={{whiteSpace: 'pre-line'}}>
                                         {error}
                                     </div>
