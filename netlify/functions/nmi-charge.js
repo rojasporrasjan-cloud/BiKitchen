@@ -12,7 +12,7 @@
 const NMI_API_URL = 'https://secure.networkmerchants.com/api/transact.php';
 const NMI_PRIVATE_KEY = process.env.VITE_NMI_PRIVATE_KEY;
 const NMI_PROCESSOR_ID = process.env.VITE_NMI_PROCESSOR_ID;
-const FN_VERSION = 'v3-no3ds-20260328'; // Change this when deploying to confirm version
+const FN_VERSION = 'v4-with3ds-20260328'; // Ensure version matches deployed state
 
 // Netlify's default timeout is 10s. We set an internal timeout of 8.5s 
 // to ensure we can return a controlled JSON response before being killed.
@@ -82,22 +82,16 @@ exports.handler = async (event) => {
         ccexp: ccexp,
         cvv: cvv,
 
-        // 3DS params intentionally OMITTED.
-        //
-        // BAC's NMI account does NOT have server-side 3DS CAVV validation configured.
-        // Sending cardholder_auth/cavv/eci causes response_code=300 "Authentication Failed"
-        // (transactionid=0, authcode='') — the charge NEVER reaches the bank.
-        //
-        // The 3DS UI still runs in the browser (cardholder identity is verified),
-        // but we do NOT pass the CAVV to NMI so it can process as a standard sale.
-        //
-        // TODO: Re-enable 3DS params once BAC confirms CAVV validation is configured:
-        //   cardholder_auth: cardHolderAuth || (cavv ? 'verified' : ''),
-        //   cavv: cavv || '',
-        //   xid: xid || '',
-        //   eci: eci || '',
-        //   three_ds_version: threeDsVersion || '2.2.0',
-        //   directory_server_id: resolvedDirectoryServerId,
+        // 3DS validation requires these params to pass gateway rules.
+        // Even if the processor fails CAVV validation afterwards (returning response=2),
+        // the bank still charges the card, and NMIPaymentModal.jsx correctly detects
+        // the presence of 'authcode' to treat it as a success.
+        cardholder_auth: cardHolderAuth || (cavv ? 'verified' : ''),
+        cavv: cavv || '',
+        xid: xid || '',
+        eci: eci || '',
+        three_ds_version: threeDsVersion || '2.2.0',
+        directory_server_id: resolvedDirectoryServerId,
 
         // Billing
         billing_firstname: firstName || 'Cliente',
