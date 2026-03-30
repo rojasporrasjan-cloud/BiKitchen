@@ -460,7 +460,7 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
                                     >
                                         <CheckCircle size={48} />
                                     </motion.div>
-                                    <h4 className="text-3xl font-black text-gray-900 tracking-tight">Â¡¡Pago Confirmado!</h4>
+                                    <h4 className="text-3xl font-black text-gray-900 tracking-tight">¡Pago Confirmado!</h4>
                                     <p className="text-gray-500 mt-3 max-w-[280px]">Tu pedido se ha procesado con éxito. Redirigiendo...</p>
                                 </div>
                             )}
