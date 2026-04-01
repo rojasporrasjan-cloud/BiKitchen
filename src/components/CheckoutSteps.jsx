@@ -68,6 +68,12 @@ const getNextDeliveryDates = () => {
                     String(date.getMonth() + 1).padStart(2, '0') + '-' +
                     String(date.getDate()).padStart(2, '0');
 
+                // BLOQUEAR FECHAS ESPECÍFICAS (Sábado Santo 2026-04-04)
+                const blockedDates = ['2026-04-04'];
+                if (blockedDates.includes(value)) {
+                    continue; // Saltar esta fecha
+                }
+
                 dates.push({
                     date: date,
                     value: value,
