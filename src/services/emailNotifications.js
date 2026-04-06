@@ -80,7 +80,8 @@ const generateStyledSummary = (orderData) => {
     const divider = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
     const headerLine = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
     
-    let summary = `${headerLine}\n📦 PEDIDO: ${orderData.orderNumber}\n${divider}\n\n`;
+    let summary = `${headerLine}\n📦 PEDIDO: ${orderData.orderNumber}\n${divider}\n`;
+    summary += `Fecha del Pedido: ${orderData.orderDate || new Date().toLocaleDateString('es-CR')}\n${divider}\n\n`;
     
     summary += `👤 INFORMACIÓN DEL CLIENTE\n${divider}\n`;
     summary += `Nombre: ${orderData.cliente}\n`;
@@ -102,7 +103,17 @@ const generateStyledSummary = (orderData) => {
     summary += `Zona: ${orderData.zona}\n`;
     summary += `Dirección: ${orderData.direccion}\n`;
     summary += `Referencias: ${orderData.referencias || 'Sin referencias'}\n`;
-    summary += `Fecha de Entrega: ${orderData.fechasEntrega ? (Array.isArray(orderData.fechasEntrega) ? orderData.fechasEntrega[0] : orderData.fechasEntrega) : 'N/A'}\n\n`;
+    
+    // Manejo de múltiples fechas de entrega (Suscripciones)
+    if (Array.isArray(orderData.fechasEntrega) && orderData.fechasEntrega.length > 0) {
+        if (orderData.fechasEntrega.length > 1) {
+            summary += `Fechas de Entrega:\n${orderData.fechasEntrega.map((d, i) => ` • Entrega ${i + 1}: ${d}`).join('\n')}\n\n`;
+        } else {
+            summary += `Fecha de Entrega: ${orderData.fechasEntrega[0]}\n\n`;
+        }
+    } else {
+        summary += `Fecha de Entrega: ${orderData.fechasEntrega || orderData.fechaEntrega || 'N/A'}\n\n`;
+    }
     
     summary += `💳 MÉTODO DE PAGO\n${divider}\n`;
     summary += `${orderData.metodoPago?.toUpperCase() || 'TARJETA'}\n`;

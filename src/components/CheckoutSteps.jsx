@@ -711,7 +711,8 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                 metodoPago: paymentMethodLabel,
                 transactionId: orderDetails?.paymentResult?.transactionid || orderDetails?.paymentResult?.id || orderDetails?.id || null,
                 observaciones: formData.observaciones || 'Sin observaciones',
-                fuente: 'Web App (Final)'
+                fuente: 'Web App (Final)',
+                orderDate: new Date().toLocaleDateString('es-CR')
             };
 
             // 2. Enviar notificaciones por email (Admin y Cliente)
