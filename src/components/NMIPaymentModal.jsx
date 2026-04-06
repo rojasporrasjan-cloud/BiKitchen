@@ -75,6 +75,11 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
                 city: customerInfo?.city || '',
             });
         }
+
+        // Cleanup for real unmount
+        return () => {
+            unmount3DS();
+        };
     }, [isOpen, customerInfo]);
 
     const handleCardChange = (e) => {
@@ -327,6 +332,9 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
                                             <div className="relative group">
                                                 <input
                                                     required name="number" value={cardData.number} onChange={handleCardChange}
+                                                    inputMode="numeric"
+                                                    pattern="[0-9]*"
+                                                    autoComplete="cc-number"
                                                     className="w-full px-5 py-4 bg-gray-50 border-2 border-transparent focus:border-orange-500 focus:bg-white rounded-2xl outline-none transition-all font-bold text-gray-800 tracking-widest"
                                                     placeholder="0000 0000 0000 0000"
                                                 />
@@ -339,13 +347,24 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
                                                 <div className="relative group">
                                                     <input
                                                         required name="exp" value={cardData.exp} onChange={handleCardChange}
+                                                        inputMode="numeric"
+                                                        pattern="[0-9]*"
+                                                        autoComplete="cc-exp"
                                                         className="w-full px-5 py-4 bg-gray-50 border-2 border-transparent focus:border-orange-500 focus:bg-white rounded-2xl outline-none transition-all font-bold text-gray-800 text-center"
                                                         placeholder="MM/YY"
                                                     />
                                                 </div>
                                                 <div className="relative group">
                                                     <input
-                                                        required name="cvv" type="password" value={cardData.cvv} onChange={handleCardChange}
+                                                        required 
+                                                        name="cvv" 
+                                                        type="tel" 
+                                                        value={cardData.cvv} 
+                                                        onChange={handleCardChange}
+                                                        inputMode="numeric"
+                                                        pattern="[0-9]*"
+                                                        autoComplete="cc-csc"
+                                                        maxLength={4}
                                                         className="w-full px-5 py-4 bg-gray-50 border-2 border-transparent focus:border-orange-500 focus:bg-white rounded-2xl outline-none transition-all font-bold text-gray-800 text-center"
                                                         placeholder="CVV"
                                                     />
@@ -435,8 +454,8 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
                                     <h4 className="text-2xl font-black text-gray-900 mb-2 text-center tracking-tight">Verificación de Seguridad</h4>
                                     <p className="text-base text-gray-500 text-center mb-10 px-4">Completa la validación 3D Secure en la ventana interactiva inferior para proteger tu compra.</p>
                                     
-                                    <div id="three-ds-container" className="w-full border-4 border-dashed border-gray-100 rounded-[2rem] overflow-hidden min-h-[450px] bg-gray-50 flex items-center justify-center relative">
-                                        <div className="absolute inset-0 flex flex-col items-center justify-center opacity-20">
+                                    <div id="three-ds-container" className="w-full border-4 border-dashed border-gray-100 rounded-[2rem] min-h-[450px] bg-gray-50 flex items-center justify-center relative overflow-auto">
+                                        <div className="absolute inset-0 flex flex-col items-center justify-center opacity-20 pointer-events-none">
                                             <Loader2 size={40} className="animate-spin text-gray-400 mb-2" />
                                             <p className="text-xs font-bold uppercase tracking-widest text-gray-400">Cargando Plataforma...</p>
                                         </div>

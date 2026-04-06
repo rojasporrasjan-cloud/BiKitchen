@@ -43,8 +43,8 @@ const getNextDeliveryDates = () => {
         deadline.setHours(22, 0, 0, 0); // 10:00 PM
 
         const day = deliveryDate.getDay();
-        if (day === 1) { // Lunes -> Viernes anterior (3 días antes)
-            deadline.setDate(deliveryDate.getDate() - 3);
+        if (day === 1) { // Lunes -> Sábado anterior (2 días antes) - Corregido de 3 a 2
+            deadline.setDate(deliveryDate.getDate() - 2);
         } else if (day === 3) { // Miércoles -> Lunes anterior (2 días antes)
             deadline.setDate(deliveryDate.getDate() - 2);
         } else if (day === 6) { // Sábado -> Jueves anterior (2 días antes)
@@ -85,7 +85,7 @@ const getNextDeliveryDates = () => {
             }
         }
 
-        if (dates.length >= 3) break; // Máximo 6 fechas
+        if (dates.length >= 6) break; // Mostrar hasta 6 fechas disponibles
     }
 
     return dates;
@@ -443,13 +443,12 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                 await markCouponAsUsed(currentUser?.uid || formData.correo);
             }
 
-            // Limpiar carrito y mostrar confirmación
-            clearCart();
-            setOrderNumber(newOrderNumber);
-            setOrderComplete(true);
-
-            // Limpiar datos del formulario
-            localStorage.removeItem('bikitchen-checkout-form');
+            // Limpiar datos del formulario y finalizar orden
+            await handleOrderCompletion({
+                ...paypalDetails,
+                orderNumber: newOrderNumber,
+                metodoPago: 'paypal'
+            });
 
         } catch (error) {
             console.error('[PayPal] Error procesando pago:', error);
@@ -517,16 +516,6 @@ export default function CheckoutSteps({ isOpen, onClose }) {
 
         const safePayPalOrder = stripUndefined(orderData);
         await addDoc(collection(db, 'pedidos'), safePayPalOrder);
-
-        // Agregar al historial local
-        addOrderToHistory({
-            orderNumber: orderNum,
-            items: cart,
-            total,
-            status: 'confirmed',
-            paymentStatus: 'paid',
-            createdAt: new Date().toISOString()
-        });
     };
 
     // Manejar error de PayPal
@@ -620,26 +609,7 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                 total: total
             });
 
-            // Marcar cupón como usado
-            if (appliedCoupon) {
-                try { await markCouponAsUsed(currentUser?.uid || formData.correo); } catch { }
-            }
-
-            // Guardar dirección si el usuario lo solicitó
-            if (saveNewAddress && formData.direccion) {
-                // Verificar que la dirección no exista ya
-                const existingAddress = addresses.find(a =>
-                    a.direccion.toLowerCase().trim() === formData.direccion.toLowerCase().trim()
-                );
-                if (!existingAddress) {
-                    try { addAddress({ type: 'home', direccion: formData.direccion, referencias: formData.referencias || '' }); } catch { }
-                }
-            }
-
-            // Si es PayPal, el pago ya se procesó antes de llegar aquí
-            // (ver handlePayPalSuccess)
-
-            // Si es Tarjeta (BAC / NMI), abrir el modal
+            // Si es Tarjeta (BAC / NMI), abrir el modal y no finalizar aún
             if (formData.metodoPago === 'nmi') {
                 setOrderNumber(newOrderNumber);
                 setPendingOrderDocId(orderRef.id);
@@ -648,64 +618,9 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                 return;
             }
 
-            /* ============================================================
-             * TILOPAY: Desactivado temporalmente - pendiente aprobación
-             * Cuando Tilopay sea aprobado, descomentar este bloque y
-             * agregar 'tilopay' de vuelta a PAYMENT_METHODS
-             * ============================================================
-            if (formData.metodoPago === 'tilopay') {
-                try {
-                    const nameParts = formData.nombre.trim().split(' ');
-                    const firstName = nameParts[0] || 'Cliente';
-                    const lastName = nameParts.slice(1).join(' ') || 'BiKitchen';
-                    const redirectUrl = `${window.location.origin}/tilopay/return?order=${encodeURIComponent(newOrderNumber)}`;
-                    
-                    const tilopayResponse = await processTilopayPayment({
-                        amount: total,
-                        currency: 'CRC',
-                        orderNumber: newOrderNumber.replace('#', ''),
-                        customer: {
-                            firstName,
-                            lastName,
-                            email: formData.correo,
-                            phone: formData.telefono,
-                            address: formData.direccion,
-                            city: zoneInfo?.name || 'San José',
-                            state: 'SJ',
-                            zip: '10101',
-                            country: 'CR',
-                        },
-                        redirectUrl,
-                    });
-                    
-                    const paymentUrl = tilopayResponse.url || tilopayResponse.redirect_url || tilopayResponse.payment_url || tilopayResponse.redirectUrl;
-                    
-                    if (paymentUrl) {
-                        localStorage.setItem('bikitchen-tilopay-order', JSON.stringify({
-                            orderNumber: newOrderNumber,
-                            total,
-                            timestamp: Date.now()
-                        }));
-                        window.location.href = paymentUrl;
-                        return;
-                    } else if (tilopayResponse.status === 'approved' || tilopayResponse.approved) {
-                        console.log('[Tilopay] Pago aprobado directamente');
-                    } else {
-                        throw new Error(tilopayResponse.message || 'No se pudo procesar el pago con tarjeta');
-                    }
-                } catch (tilopayError) {
-                    console.error('[Tilopay] Error:', tilopayError);
-                    alert(`Error al procesar el pago: ${tilopayError.message}`);
-                    setLoading(false);
-                    return;
-                }
-            }
-            ============================================================ */
-
-
-            // Si es WhatsApp, SINPE o Transferencia, abrir chat a Gina con todos los detalles
+            // Para SINPE, WhatsApp o Transferencia, abrimos WhatsApp PRIMERO (antes de limpiar el carrito)
             if (['whatsapp', 'sinpe', 'transfer'].includes(formData.metodoPago)) {
-                // Formatear items con mejor estructura
+                // Formatear items para WhatsApp
                 const itemsLines = cart.map(item => {
                     const lineTotal = (Number(item.price) || 0) * (Number(item.quantity) || 0);
                     const tags = [];
@@ -723,150 +638,118 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                     return [base, ...extras].join('\n');
                 }).join('\n\n');
 
-                // Construir mensaje mejorado con separadores
                 let message = `🛒 *NUEVO PEDIDO ${newOrderNumber}*\n\n`;
                 message += `━━━━━━━━━━━━━━━━━━━━\n`;
                 message += `📦 *ITEMS DEL PEDIDO*\n\n`;
                 message += `${itemsLines}\n\n`;
-
                 message += `━━━━━━━━━━━━━━━━━━━━\n`;
-                message += `💰 *RESUMEN DE PAGO*\n\n`;
-
-                if (appliedCoupon && discount > 0) {
-                    message += `Subtotal: ₡${subtotal.toLocaleString('es-CR')}\n`;
-                    message += `Cupón (${appliedCoupon.code}): -₡${discount.toLocaleString('es-CR')}\n`;
-                }
-
-                if (zoneInfo) {
-                    if (isZoneOutOfCoverage()) {
-                        message += `Envío: Por confirmar ⚠️\n`;
-                    } else {
-                        message += `Envío (${zoneInfo.name}): ₡${shippingCost.toLocaleString('es-CR')}\n`;
-                    }
-                }
-
-                message += `━━━━━━━━━━━━━━━━━━━━\n`;
-                message += `*TOTAL: ₡${total.toLocaleString('es-CR')}*`;
-                if (isZoneOutOfCoverage()) {
-                    message += ` (+ envío)`;
-                }
-                message += `\n\n`;
-
-                message += `━━━━━━━━━━━━━━━━━━━━\n`;
-                message += `👤 *DATOS DEL CLIENTE*\n\n`;
-                message += `Nombre: ${formData.nombre}\n`;
-                message += `Teléfono: ${formData.telefono}\n`;
-                message += `Email: ${formData.correo}\n`;
-                if (formData.cedula) message += `Cédula: ${formData.cedula}\n`;
-
-                message += `\n━━━━━━━━━━━━━━━━━━━━\n`;
-                message += `🚚 *INFORMACIÓN DE ENTREGA*\n\n`;
-
-                if (zoneInfo) {
-                    if (isZoneOutOfCoverage()) {
-                        message += `Zona: FUERA DE COBERTURA\n`;
-                        message += `Ubicación: ${formData.direccionFueraCobertura}\n`;
-                        message += `⚠️ *PENDIENTE CONFIRMAR DISPONIBILIDAD*\n\n`;
-                    } else {
-                        message += `Zona: ${zoneInfo.name}\n`;
-                    }
-                }
-
-                message += `Dirección: ${formData.direccion}\n`;
-                if (formData.referencias) {
-                    message += `Referencias: ${formData.referencias}\n`;
-                }
-
-                const sourceLabel = getSourceLabel();
-                if (sourceLabel && !sourceLabel.includes('Directo')) {
-                    message += `🔍 Origen: ${sourceLabel}\n`;
-                }
-
-                const sched = formData.fechasEntrega && formData.fechasEntrega.length > 0 ? formData.fechasEntrega : [formData.fechaEntrega];
-                if (sched.length > 1) {
-                    message += `\n📅 *Entregas programadas:*\n`;
-                    sched.forEach((d, i) => {
-                        const date = new Date(d + 'T00:00:00');
-                        const dayName = date.toLocaleDateString('es-CR', { weekday: 'long' });
-                        message += `   • ${d} (${dayName}) 9am-2pm\n`;
-                    });
-                } else {
-                    const date = new Date(formData.fechaEntrega + 'T00:00:00');
-                    const dayName = date.toLocaleDateString('es-CR', { weekday: 'long' });
-                    message += `\n📅 Entrega: ${formData.fechaEntrega} (${dayName}) 9am-2pm\n`;
-                }
-
-                message += `\n━━━━━━━━━━━━━━━━━━━━\n`;
-                message += `💳 *MÉTODO DE PAGO*\n\n`;
-
-                if (formData.metodoPago === 'sinpe') {
-                    message += `SINPE Móvil (Adjunto comprobante)\n`;
-                } else if (formData.metodoPago === 'transfer') {
-                    message += `Transferencia (Adjunto comprobante)\n`;
-                } else {
-                    message += `A coordinar\n`;
-                }
-
+                message += `💰 *RESUMEN*\n`;
+                message += `Total: ₡${total.toLocaleString('es-CR')}\n\n`;
+                message += `👤 *CLIENTE*: ${formData.nombre}\n`;
+                message += `🚚 *ENTREGA*: ${formData.fechaEntrega}\n`;
+                message += `💳 *PAGO*: ${formData.metodoPago.toUpperCase()}\n`;
+                
                 if (formData.observaciones) {
-                    message += `\n━━━━━━━━━━━━━━━━━━━━\n`;
-                    message += `📝 *OBSERVACIONES*\n\n`;
-                    message += `${formData.observaciones}\n`;
+                    message += `📝 *NOTAS*: ${formData.observaciones}\n`;
                 }
 
                 const url = getWhatsAppUrl(message);
                 window.open(url, '_blank');
             }
 
-            // Enviar notificación por email (no bloquear si falla)
+            // Finalizar orden (Notificaciones, Puntos, Limpiar Carrito)
+            await handleOrderCompletion({
+                orderNumber: newOrderNumber,
+                docId: orderRef.id
+            });
+
+        } catch (error) {
+            console.error('Error creating order:', error);
+            alert('Error al crear el pedido. Por favor intenta de nuevo.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    /**
+     * Centraliza la finalización de un pedido: 
+     * - Envío de notificaciones (Admin y Cliente)
+     * - Gestión de cupones y puntos
+     * - Limpieza de estado local
+     */
+    const handleOrderCompletion = async (orderDetails) => {
+        try {
+            const currentOrderNumber = orderDetails.orderNumber || orderNumber;
+            const subtotal = getSubtotal();
+            const discount = getDiscount();
+            const shippingCost = isZoneOutOfCoverage() ? null : getShippingCostFinal();
+            const zoneInfo = getSelectedZoneInfo();
+            const total = isZoneOutOfCoverage() ? getTotalPrice() : getTotalWithShipping();
+            const deliverySchedule = computeDeliverySchedule(formData.fechaEntrega);
+
+            // 1. Obtener etiquetas legibles y datos finales (ya definidos arriba)
+            const paymentMethodLabel = PAYMENT_METHODS.find(m => m.id === formData.metodoPago)?.name || formData.metodoPago;
+
+            // 2. Preparar el objeto de datos UNIVERSAL para todos los correos
+            const fullOrderData = {
+                orderNumber: currentOrderNumber,
+                cliente: formData.nombre,
+                telefono: formData.telefono,
+                correo: formData.correo,
+                cedula: formData.cedula || 'N/A',
+                items: [...cart], // Clonar para evitar cambios por referencia
+                subtotal: getSubtotal(),
+                descuento: getDiscount(),
+                cupon: appliedCoupon?.code || null,
+                total: isZoneOutOfCoverage() ? getTotalPrice() : getTotalWithShipping(),
+                costoEnvio: isZoneOutOfCoverage() ? 0 : getShippingCostFinal(),
+                envioPorConfirmar: isZoneOutOfCoverage(),
+                direccion: formData.direccion,
+                referencias: formData.referencias || 'Sin referencias',
+                zona: isZoneOutOfCoverage() ? 'Fuera de cobertura' : (zoneInfo?.name || 'No especificada'),
+                fechasEntrega: deliverySchedule,
+                metodoPago: paymentMethodLabel,
+                transactionId: orderDetails?.paymentResult?.transactionid || orderDetails?.paymentResult?.id || orderDetails?.id || null,
+                observaciones: formData.observaciones || 'Sin observaciones',
+                fuente: 'Web App (Final)'
+            };
+
+            // 2. Enviar notificaciones por email (Admin y Cliente)
             try {
                 const { sendOrderNotification, sendCustomerOrderConfirmation } = await import('../services/emailNotifications');
-
-                const orderData = {
-                    orderNumber: newOrderNumber,
-                    cliente: formData.nombre,
-                    nombre: formData.nombre, // Para compatibilidad con plantillas
-                    telefono: formData.telefono,
-                    correo: formData.correo,
-                    email: formData.correo, // Para compatibilidad con plantillas
-                    cedula: formData.cedula,
-                    items: cart,
-                    subtotal: subtotal,
-                    discount: discount,
-                    descuento: discount, // Para compatibilidad con plantillas
-                    cupon: appliedCoupon?.code,
-                    costoEnvio: shippingCost,
-                    shippingCost: shippingCost, // Para compatibilidad con plantillas
-                    envioPorConfirmar: isZoneOutOfCoverage(),
-                    total: total,
-                    direccion: formData.direccion,
-                    referencias: formData.referencias,
-                    zona: isZoneOutOfCoverage() ? 'Fuera de cobertura' : zoneInfo?.name,
-                    fechaEntrega: formData.fechaEntrega,
-                    fechasEntrega: deliverySchedule,
-                    metodoPago: formData.metodoPago,
-                    observaciones: formData.observaciones,
-                    notas: formData.observaciones, // Para compatibilidad con plantillas
-                    fuente: getSourceLabel(),
-                    source: getSourceLabel() // Para compatibilidad con plantillas
-                };
-
-                // 1. Notificación al administrador (Gina)
-                await sendOrderNotification(orderData);
+                
+                // Admin (Gina)
+                await sendOrderNotification(fullOrderData);
                 console.log('✅ Email de notificación enviado al admin');
 
-                // 2. Notificación al cliente (Confirmación)
-                await sendCustomerOrderConfirmation(orderData);
+                // Cliente
+                await sendCustomerOrderConfirmation(fullOrderData);
                 console.log('✅ Email de confirmación enviado al cliente');
-
-            } catch (emailError) {
-                console.error('⚠️ Error enviando emails (no crítico):', emailError);
-                // No mostrar error al usuario, el pedido ya se guardó correctamente
+            } catch (emailErr) {
+                console.error('⚠️ Error en notificaciones email:', emailErr);
             }
 
+            // 3. Agregar puntos de fidelidad si aplica
+            if (currentUser) {
+                try {
+                    await addPoints(total, currentOrderNumber);
+                } catch (pointsErr) {
+                    console.error('⚠️ Error al agregar puntos:', pointsErr);
+                }
+            }
 
-            // Guardar en historial local
+            // 4. Marcar cupón como usado
+            if (appliedCoupon) {
+                try {
+                    await markCouponAsUsed(currentUser?.uid || formData.correo);
+                } catch (couponErr) {
+                    console.error('⚠️ Error al marcar cupón:', couponErr);
+                }
+            }
+
+            // 5. Guardar en historial local
             addOrderToHistory({
-                orderNumber: newOrderNumber,
+                orderNumber: currentOrderNumber,
                 items: cart.map(item => ({
                     name: item.name,
                     quantity: item.quantity,
@@ -887,15 +770,9 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                 paymentMethod: formData.metodoPago
             });
 
-            // Los puntos se agregan cuando el admin confirma el pago
-                // Calcular puntos a dar (1.5 puntos por cada ₡100 * multiplicador de nivel)
-                const multiplier = currentLevel?.multiplier || 1;
-                const pointsToAward = Math.floor((total * 0.015) * multiplier);
-            setPointsEarned(pointsToAward); // Solo para mostrar cuántos puntos ganará
-
-            // Guardar snapshot de la orden antes de limpiar el carrito
+            // 6. Guardar snapshot para la vista de éxito
             setLastOrderDetails({
-                items: [...cart], // Copia del array
+                items: [...cart],
                 total: total,
                 subtotal: subtotal,
                 descuento: discount,
@@ -905,15 +782,18 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                 zoneName: zoneInfo?.name
             });
 
-            setOrderNumber(newOrderNumber);
+            // 7. Finalizar UI
+            setOrderNumber(currentOrderNumber);
             setOrderComplete(true);
             clearCart();
+            
+            // Limpiar datos del formulario de localStorage
+            localStorage.removeItem('bikitchen-checkout-form');
 
         } catch (error) {
-            console.error('Error creating order:', error);
-            alert('Error al crear el pedido. Por favor intenta de nuevo.');
-        } finally {
-            setLoading(false);
+            console.error('❌ Error crítico en handleOrderCompletion:', error);
+            // Mostrar éxito de todos modos si el pedido ya está en DB
+            setOrderComplete(true);
         }
     };
 
@@ -1827,12 +1707,12 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                 orderId={orderNumber || 'ORD-NEW'}
                 customerInfo={formData}
                 onPaymentSuccess={async (nmiResult) => {
-                    // Obtener el ID del pedido - Intentar varias fuentes para robustez
+                    // 1. Obtener el ID del pedido - Intentar varias fuentes para robustez
                     const orderIdToUpdate = pendingOrderDocId || nmiResult.orderid || nmiResult.order_id;
                     
                     console.log('[Checkout] ✅ Pago NMI exitoso. Actualizando Firestore:', { orderIdToUpdate, transactionid: nmiResult.transactionid });
 
-                    // El pago ya se procesó en el modal, ahora actualizamos el pedido en Firestore
+                    // 2. Actualizar el pedido en Firestore a 'confirmed' y 'paid'
                     try {
                         if (orderIdToUpdate) {
                             await updateOrderStatus(orderIdToUpdate, 'confirmed', {
@@ -1844,31 +1724,26 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                                 updatedAt: serverTimestamp(),
                                 nmiDetails: stripUndefined(nmiResult)
                             });
-                            console.log('[Checkout] Pedido actualizado exitosamente a "confirmed"');
+                            console.log('[Checkout] Pedido actualizado exitosamente en Firestore');
                         } else {
-                            // pendingOrderDocId can be null if the state got stale — log a clear alert for debugging
-                            console.error('[Checkout] ⚠️ CRÍTICO: No se encontró ID de pedido para actualizar estado. El pago fue procesado pero el pedido puede quedar como pending_payment.', {
-                                orderNumber,
-                                nmiResult
-                            });
+                            console.warn('[Checkout] ⚠️ No se encontró ID de documento para actualizar. Intentando continuar con notificaciones.');
                         }
                     } catch (error) {
                         console.error('[Checkout] Error actualizando pedido tras pago NMI:', error);
                     }
 
-                    // Marcar cupón como usado
-                    if (appliedCoupon) {
-                        try { await markCouponAsUsed(currentUser?.uid || formData.correo); } catch { }
-                    }
+                    // 3. Finalizar orden CENTRALIZADAMENTE (Envía Emails, suma Puntos, limpia Carrito)
+                    // Importante: handleOrderCompletion YA hace clearCart() y setOrderComplete(true)
+                    await handleOrderCompletion({
+                        orderNumber: orderNumber,
+                        docId: orderIdToUpdate,
+                        metodoPago: 'nmi'
+                    });
 
-                    // Limpiar datos del formulario del localStorage
-                    localStorage.removeItem('bikitchen-checkout-form');
-
+                    // 4. Cerrar el modal de NMI
                     setShowNMIModal(false);
-                    setOrderComplete(true);
-                    clearCart();
                     
-                    console.log('[Checkout] Flujo de pago NMI completado exitosamente:', nmiResult);
+                    console.log('[Checkout] Flujo de pago NMI con notificaciones completado ✅');
                 }}
             />
         </AnimatePresence>

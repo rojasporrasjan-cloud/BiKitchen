@@ -94,7 +94,8 @@ export function authenticate3DS(gateway, paymentInfo) {
                 return;
             }
 
-            console.log('[NMI] Attempting createUI with Info:', paymentInfo);
+            const maskedInfo = { ...paymentInfo, cardNumber: `XXXX-XXXX-XXXX-${paymentInfo.cardNumber?.slice(-4)}` };
+            console.log('[NMI] Attempting createUI with masked Info:', maskedInfo);
             
             try {
                 // Add Device Data for better reliability (as per NMI docs)
@@ -102,6 +103,8 @@ export function authenticate3DS(gateway, paymentInfo) {
                 try { javaEnabled = String(window.navigator.javaEnabled()); } catch (e) { }
 
                 const deviceData = {
+                    browserUserAgent: window.navigator.userAgent,
+                    browserAcceptHeader: "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
                     browserJavaEnabled: javaEnabled,
                     browserJavascriptEnabled: "true",
                     browserLanguage: window.navigator.language,
@@ -114,7 +117,8 @@ export function authenticate3DS(gateway, paymentInfo) {
 
                 const options = {
                     ...paymentInfo,
-                    ...deviceData
+                    ...deviceData,
+                    size: '390x400' // Better fit for mobile devices (~375-414px)
                 };
 
                 // THE FIX: always unmount any previous 3DS UI before starting a new one.
@@ -145,6 +149,7 @@ export function authenticate3DS(gateway, paymentInfo) {
                 // Event listeners
                 threeDSInterface.on('complete', (data) => {
                     clearTimeout(timeoutHandle);
+                    try { threeDSInterface.unmount(); } catch (e) { } // Ensure UI is destroyed
                     _activeThreeDSInterface = null; // Clear ref — no longer needed
                     console.log('[NMI] 3DS Complete:', data);
                     resolve(data);
@@ -152,6 +157,7 @@ export function authenticate3DS(gateway, paymentInfo) {
 
                 threeDSInterface.on('failure', (error) => {
                     clearTimeout(timeoutHandle);
+                    try { threeDSInterface.unmount(); } catch (e) { }
                     _activeThreeDSInterface = null;
                     console.error('[NMI] 3DS Failure:', error);
                     reject(new Error('La autenticación 3D Secure fue rechazada o cancelada.'));
@@ -159,6 +165,7 @@ export function authenticate3DS(gateway, paymentInfo) {
 
                 threeDSInterface.on('error', (error) => {
                     clearTimeout(timeoutHandle);
+                    try { threeDSInterface.unmount(); } catch (e) { }
                     _activeThreeDSInterface = null;
                     console.error('[NMI] 3DS Error:', error);
                     reject(new Error(`Error técnico en 3DS: ${error?.message || 'Error desconocido'}`));

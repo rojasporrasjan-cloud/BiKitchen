@@ -119,7 +119,7 @@ export const OrdersProvider = ({ children }) => {
     }, [isAdmin]);
 
     // Agregar pedido manual (desde admin) - usa la misma estructura que el checkout
-    const addOrder = async (cartItems, customerData, orderNumber) => {
+    const addOrder = async (cartItems, customerData, orderNumber, createdBy) => {
         try {
             const numeroOrden = orderNumber || `#ORD-${Math.floor(1000 + Math.random() * 9000)}`;
             const totalAmount = cartItems.reduce((acc, item) => acc + (item.price * item.quantity), 0);
@@ -200,7 +200,8 @@ export const OrdersProvider = ({ children }) => {
                 status: 'pending',
                 deliveryStatus: 'pending',
                 createdAt: new Date().toISOString(),
-                source: 'admin' // Marcar que viene del admin
+                source: 'admin', // Marcar que viene del admin
+                createdBy: createdBy || 'admin' // Guardar quién lo creó
             };
 
             const docRef = await addDoc(collection(db, "pedidos"), newOrder);

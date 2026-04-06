@@ -41,6 +41,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useMenus } from '../../context/MenusContext';
 import { SHIPPING_ZONES } from '../../data/shippingZones';
+import { useAuth } from '../../context/AuthContext';
 import ClientProfileModal from '../../components/admin/ClientProfileModal';
 
 // Generar próximas fechas de entrega disponibles (lógica mirror de Checkout)
@@ -192,6 +193,7 @@ const DATE_FILTERS = [
 
 export default function OrdersView() {
     const { orders, updateOrderStatus, addOrder, getStats, formatTotal, deleteAllOrders, deleteOrder, loading } = useOrders();
+    const { currentUser } = useAuth();
     // Use menus for individual products
     const { menus } = useMenus();
 
@@ -591,7 +593,7 @@ export default function OrdersView() {
                 source: 'manual'
             };
 
-            await addOrder(cartItems, orderPayload);
+            await addOrder(cartItems, orderPayload, null, currentUser?.email);
 
             // Resetear formulario
             setManualOrderData({
@@ -739,10 +741,25 @@ export default function OrdersView() {
         if (sourceFilter !== 'all') {
             result = result.filter(order => {
                 const src = (order.fuente || order.source || '').toLowerCase();
+                const creator = (order.createdBy || '').toLowerCase();
+
+                if (sourceFilter === 'only_clients') {
+                    // Excluir si tiene marca de manual/admin, si tiene un creador admin, 
+                    // o si el total es exactamente 100 (usado típicamente para pruebas de admin)
+                    const isManual = src === 'manual' || src === 'admin' || !!creator;
+                    const isTestPrice = order.totalValue === 100 || order.total === 100 || order.total === '100' || order.total === '₡100';
+                    
+                    return !isManual && !isTestPrice;
+                }
                 if (sourceFilter === 'meta') return src.includes('facebook') || src.includes('instagram') || src.includes('meta');
                 if (sourceFilter === 'google') return src.includes('google');
                 if (sourceFilter === 'directo') return src.includes('direct') || (!src && order.source !== 'manual' && order.source !== 'admin');
                 if (sourceFilter === 'manual') return src.includes('manual') || src.includes('admin');
+                
+                // Filtros específicos de Admin
+                if (sourceFilter === 'byron') return creator === 'bikitchenfood@gmail.com' || creator === 'rojasporrasjan@gmail.com';
+                if (sourceFilter === 'gina') return creator === 'ginamaroli@gmail.com';
+                
                 return true;
             });
         }
@@ -819,7 +836,7 @@ export default function OrdersView() {
             return dateB - dateA;
         });
 
-    }, [orders, searchTerm, activeFilter, dateFilter, zoneFilter, activeTab]);
+    }, [orders, searchTerm, activeFilter, dateFilter, zoneFilter, activeTab, sourceFilter, paymentMethodFilter]);
 
     // =====================
     // Envíos pendientes
@@ -1607,7 +1624,6 @@ export default function OrdersView() {
                         </select>
                     )}
 
-                    {/* Marketing Source Filter */}
                     <div className="flex items-center bg-white px-4 py-2.5 rounded-xl border border-gray-200 shadow-sm">
                         <TrendingUp size={16} className="text-gray-400 mr-2" />
                         <select
@@ -1616,10 +1632,13 @@ export default function OrdersView() {
                             onChange={(e) => setSourceFilter(e.target.value)}
                         >
                             <option value="all">Todas las Fuentes</option>
+                            <option value="only_clients">✨ Solo Clientes (Real)</option>
                             <option value="meta">Meta (FB/IG)</option>
                             <option value="google">Google</option>
                             <option value="directo">Directo</option>
-                            <option value="manual">Admin / Manual</option>
+                            <option value="manual">Admin / Manual (Todos)</option>
+                            <option value="byron">Admin: Byron</option>
+                            <option value="gina">Admin: Gina</option>
                         </select>
                     </div>
 
@@ -1712,9 +1731,16 @@ export default function OrdersView() {
                                             <td className="py-4 px-6">
                                                 <div className="font-medium text-gray-800">{order.client}</div>
                                                 <div className="text-sm text-gray-500">{order.details?.phone || 'Sin teléfono'}</div>
-                                                <div className="flex items-center gap-1 mt-1 text-[10px] uppercase font-bold text-gray-400">
-                                                    <TrendingUp size={10} />
-                                                    {order.fuente || order.source || 'Directo'}
+                                                <div className="flex flex-col gap-0.5 mt-1">
+                                                    <div className="flex items-center gap-1 text-[10px] uppercase font-bold text-gray-400">
+                                                        <TrendingUp size={10} />
+                                                        {order.fuente || order.source || 'Directo'}
+                                                    </div>
+                                                    {order.createdBy && (
+                                                        <div className="text-[9px] font-medium text-blue-500/70 italic px-1 rounded bg-blue-50/50 w-fit">
+                                                            Pd: {order.createdBy.split('@')[0]}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </td>
                                             <td className="py-4 px-6">

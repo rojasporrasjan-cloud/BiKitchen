@@ -39,9 +39,9 @@ const DEFAULT_NOTIFICATION_EMAIL = 'ginamaroli@gmail.com';
 
 /**
  * Obtener el email de notificaciones configurado en Firebase
- * Si no existe configuración, usa el email por defecto
+ * Soporta múltiples destinatarios (separados por coma)
  */
-const getNotificationEmail = async () => {
+export const getNotificationEmail = async () => {
     try {
         const configDoc = await getDoc(doc(db, 'config', 'notifications'));
         if (configDoc.exists()) {
@@ -58,28 +58,14 @@ const getNotificationEmail = async () => {
  * Formatear items del pedido para el email
  */
 const formatItemsForEmail = (items) => {
+    if (!items || !Array.isArray(items)) return "Sin items";
     return items.map(item => {
         let line = `${item.quantity}× ${item.name}`;
-
-        // Agregar plan si existe
-        if (item.planLabel && item.planLabel !== 'Mensual') {
-            line += ` (${item.planLabel})`;
-        }
-
-        // Agregar precio
+        if (item.planLabel && item.planLabel !== 'Mensual') line += ` (${item.planLabel})`;
         const itemTotal = (Number(item.price) || 0) * (Number(item.quantity) || 0);
         line += ` - ₡${itemTotal.toLocaleString('es-CR')}`;
-
-        // Agregar proteínas si existen
-        if (item.proteinas && Array.isArray(item.proteinas) && item.proteinas.length > 0) {
-            line += `\n   └ Proteínas: ${item.proteinas.join(', ')}`;
-        }
-
-        // Agregar notas si existen
-        if (item.customizations?.notes) {
-            line += `\n   └ Notas: ${item.customizations.notes}`;
-        }
-
+        if (item.proteinas?.length) line += `\n   └ Proteínas: ${item.proteinas.join(', ')}`;
+        if (item.customizations?.notes) line += `\n   └ Notas: ${item.customizations.notes}`;
         return line;
     }).join('\n\n');
 };
@@ -89,151 +75,125 @@ const formatItemsForEmail = (items) => {
  */
 const formatDeliveryDates = (dates) => {
     if (!dates || dates.length === 0) return 'No especificado';
-
-    if (dates.length === 1) {
-        return dates[0];
-    }
-
+    if (dates.length === 1) return dates[0];
     return dates.map((date, index) => `Entrega ${index + 1}: ${date}`).join('\n');
 };
 
 /**
- * Enviar notificación de nuevo pedido por email
- * 
- * @param {Object} orderData - Datos del pedido
- * @returns {Promise<boolean>} - true si se envió correctamente
+ * Enviar notificación de nuevo pedido al administrador.
+ * Soporta múltiples destinatarios (separados por coma).
  */
 export const sendOrderNotification = async (orderData) => {
     try {
-        // Validar que EmailJS esté configurado
         if (!EMAILJS_CONFIG.publicKey) {
-            console.warn('⚠️ EmailJS no está configurado. Saltando notificación por email.');
+            console.warn('⚠️ EmailJS no está configurado.');
             return false;
         }
 
-        // Obtener email de destino
-        const recipientEmail = await getNotificationEmail();
+        const recipientsString = await getNotificationEmail();
+        const recipients = recipientsString.split(',').map(e => e.trim()).filter(e => e);
 
-        // Preparar datos para la plantilla
-        const templateParams = {
-            to_email: recipientEmail,
+        console.log(`[Email] Enviando notificación a: ${recipients.join(', ')}`);
+
+        // Preparar parámetros comunes
+        const baseParams = {
             orderNumber: orderData.orderNumber || 'N/A',
             cliente: orderData.cliente || 'Cliente',
             telefono: orderData.telefono || 'No especificado',
             correo: orderData.correo || 'No especificado',
             cedula: orderData.cedula || 'No especificado',
             items: formatItemsForEmail(orderData.items || []),
+            items_text: (orderData.items || []).map(i => `${i.quantity}x ${i.name}`).join(', '),
             subtotal: `₡${(orderData.subtotal || 0).toLocaleString('es-CR')}`,
             descuento: orderData.descuento > 0
                 ? `₡${orderData.descuento.toLocaleString('es-CR')} (${orderData.cupon || 'Cupón'})`
                 : 'Sin descuento',
-            envio: orderData.envioPorConfirmar
-                ? 'Por confirmar ⚠️'
-                : (orderData.costoEnvio !== null
-                    ? `₡${orderData.costoEnvio.toLocaleString('es-CR')}`
-                    : 'Incluido'),
+            envio: orderData.envioPorConfirmar ? 'Por confirmar ⚠️' : `₡${(orderData.costoEnvio || 0).toLocaleString('es-CR')}`,
             total: `₡${(orderData.total || 0).toLocaleString('es-CR')}`,
             direccion: orderData.direccion || 'No especificada',
             referencias: orderData.referencias || 'Sin referencias',
             zona: orderData.zona || 'No especificada',
-            fechaEntrega: orderData.fechasEntrega && orderData.fechasEntrega.length > 0
-                ? formatDeliveryDates(orderData.fechasEntrega)
-                : (orderData.fechaEntrega || 'No especificada'),
-            metodoPago: orderData.metodoPago?.toUpperCase() || 'NO ESPECIFICADO',
+            fechaEntrega: orderData.fechasEntrega ? formatDeliveryDates(orderData.fechasEntrega) : (orderData.fechaEntrega || 'N/A'),
+            metodoPago: orderData.metodoPago || 'Tarjeta (Procesado)',
+            transaccion: orderData.transactionId || 'No disponible',
             observaciones: orderData.observaciones || 'Sin observaciones',
-            fuente: orderData.fuente || 'Directo / Desconocido',
-            // URL al admin panel (opcional)
-            adminUrl: `${window.location.origin}/admin/orders`
+            fuente: orderData.fuente || 'Directo',
+            admin_email: recipientsString, // Alias para responder a
+            to_name: "Admin BiKitchen"
         };
 
-        // Enviar email
-        const response = await emailjs.send(
-            EMAILJS_CONFIG.serviceId,
-            EMAILJS_CONFIG.templateId,
-            templateParams,
-            EMAILJS_CONFIG.publicKey
-        );
+        // Enviar a cada destinatario de forma independiente
+        const results = await Promise.all(recipients.map(email => 
+            emailjs.send(EMAILJS_CONFIG.serviceId, EMAILJS_CONFIG.templateId, { ...baseParams, to_email: email }, EMAILJS_CONFIG.publicKey)
+        ));
 
-        console.log('✅ Email de notificación enviado:', response.status, response.text);
+        console.log('✅ Notificaciones enviadas exitosamente');
         return true;
-
     } catch (error) {
-        console.error('❌ Error enviando email de notificación:', error);
-        // No lanzar error para no bloquear el pedido
+        console.error('❌ Error enviando notificación:', error);
         return false;
     }
 };
 
 /**
- * Verificar si EmailJS está configurado correctamente
- */
-export const isEmailConfigured = () => {
-    return !!(EMAILJS_CONFIG.publicKey && EMAILJS_CONFIG.serviceId && EMAILJS_CONFIG.templateId);
-};
-
-/**
- * Obtener configuración actual de EmailJS (para mostrar en admin)
- */
-export const getEmailConfig = () => {
-    return {
-        configured: isEmailConfigured(),
-        serviceId: EMAILJS_CONFIG.serviceId,
-        templateId: EMAILJS_CONFIG.templateId,
-        hasPublicKey: !!EMAILJS_CONFIG.publicKey
-    };
-};
-
-/**
- * Envía una notificación de confirmación al cliente
- * @param {Object} orderData Datos completos del pedido
+ * Envía confirmación al cliente.
  */
 export const sendCustomerOrderConfirmation = async (orderData) => {
     try {
-        if (!EMAILJS_CONFIG.publicKey) {
-            console.warn('⚠️ EmailJS no está configurado. Saltando confirmación al cliente.');
-            return false;
-        }
+        if (!EMAILJS_CONFIG.publicKey) return false;
+        
+        const customerEmail = orderData.correo || orderData.email;
+        if (!customerEmail) return false;
 
-        // Determinar email del cliente
-        const customerEmail = orderData.cliente?.email || orderData.email || orderData.correo;
-
-        if (!customerEmail) {
-            console.warn('⚠️ No hay email del cliente para enviar la confirmación.');
-            return false;
-        }
-
-        // Preparar datos para la plantilla del cliente
-        // Estos nombres de variables deben coincidir con los que se usen en la plantilla de EmailJS
         const templateParams = {
             to_email: customerEmail,
-            to_name: orderData.cliente?.nombre || orderData.nombre || 'Cliente',
+            to_name: orderData.nombre || orderData.cliente || 'Cliente',
             orderNumber: orderData.orderNumber || 'N/A',
             fecha: new Date().toLocaleDateString('es-CR'),
             items_summary: formatItemsForEmail(orderData.items || []),
-            subtotal: `₡${(orderData.subtotal || 0).toLocaleString('es-CR')}`,
-            discount: `₡${(orderData.discount || orderData.discountAmount || orderData.descuento || 0).toLocaleString('es-CR')}`,
-            shipping: `₡${(orderData.shippingCost || orderData.deliveryFee || orderData.costoEnvio || 0).toLocaleString('es-CR')}`,
             total: `₡${(orderData.total || 0).toLocaleString('es-CR')}`,
-            fechaEntrega: orderData.fechasEntrega && orderData.fechasEntrega.length > 0
-                ? formatDeliveryDates(orderData.fechasEntrega)
-                : (orderData.fechaEntrega || 'No especificada'),
-            metodoPago: orderData.metodoPago || 'Coordinado',
-            direccion: orderData.direccion || 'Retiro en local',
-            notas: orderData.notas || 'Sin notas adicionales'
+            direccion: orderData.direccion || 'Domicilio',
+            metodoPago: orderData.metodoPago || 'Tarjeta',
+            transaccion: orderData.transactionId || 'Referencia bancaria'
         };
 
-        const response = await emailjs.send(
-            EMAILJS_CONFIG.serviceId,
-            EMAILJS_CONFIG.customerTemplateId,
-            templateParams,
-            EMAILJS_CONFIG.publicKey
-        );
-
-        console.log('✅ Email de confirmación enviado al cliente:', response.status, response.text);
+        await emailjs.send(EMAILJS_CONFIG.serviceId, EMAILJS_CONFIG.customerTemplateId, templateParams, EMAILJS_CONFIG.publicKey);
+        console.log('✅ Confirmación enviada al cliente');
         return true;
-
     } catch (error) {
         console.error('❌ Error enviando email al cliente:', error);
         return false;
     }
 };
+
+/**
+ * Función de diagnóstico para probar la configuración desde el panel admin.
+ */
+export const sendTestNotification = async (targetEmail) => {
+    try {
+        if (!EMAILJS_CONFIG.publicKey) throw new Error("Public Key faltante");
+
+        const templateParams = {
+            orderNumber: "#TEST-1234",
+            cliente: "Usuario de Prueba",
+            total: "₡0",
+            items: "1x Producto de Prueba",
+            to_email: targetEmail,
+            message: "Esta es una prueba de configuración de correo desde el panel de BiKitchen."
+        };
+
+        const result = await emailjs.send(EMAILJS_CONFIG.serviceId, EMAILJS_CONFIG.templateId, templateParams, EMAILJS_CONFIG.publicKey);
+        return { success: true, result };
+    } catch (error) {
+        console.error('[Email Test] Error:', error);
+        return { success: false, error: error.message || error };
+    }
+};
+
+export const isEmailConfigured = () => !!(EMAILJS_CONFIG.publicKey && EMAILJS_CONFIG.serviceId);
+export const getEmailConfig = () => ({
+    configured: isEmailConfigured(),
+    serviceId: EMAILJS_CONFIG.serviceId,
+    templateId: EMAILJS_CONFIG.templateId,
+    hasPublicKey: !!EMAILJS_CONFIG.publicKey
+});
