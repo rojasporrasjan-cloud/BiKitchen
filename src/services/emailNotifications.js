@@ -57,31 +57,65 @@ export const getNotificationEmail = async () => {
 /**
  * Formatear items del pedido para el email
  */
+/**
+ * Formatear items del pedido para el email con estilo ASCII (Gina Style)
+ */
 const formatItemsForEmail = (items) => {
     if (!items || !Array.isArray(items)) return "Sin items";
     return items.map(item => {
-        let line = `${item.quantity}× ${item.name}`;
-        if (item.planLabel && item.planLabel !== 'Mensual') line += ` (${item.planLabel})`;
+        const itemPlan = item.planLabel && item.planLabel !== 'Mensual' ? ` (${item.planLabel})` : '';
         const itemTotal = (Number(item.price) || 0) * (Number(item.quantity) || 0);
-        line += ` - ₡${itemTotal.toLocaleString('es-CR')}`;
-        if (item.proteinas?.length) line += `\n   └ Proteínas: ${item.proteinas.join(', ')}`;
-        if (item.customizations?.notes) line += `\n   └ Notas: ${item.customizations.notes}`;
+        let line = `${item.quantity}× ${item.name}${itemPlan} - ₡${itemTotal.toLocaleString('es-CR')}`;
+        
+        if (item.proteinas?.length) line += `\n└ Proteínas: ${item.proteinas.join(', ')}`;
+        if (item.customizations?.notes) line += `\n└ Notas: ${item.customizations.notes}`;
         return line;
     }).join('\n\n');
 };
 
 /**
- * Formatear fechas de entrega
+ * Genera el bloque completo de la orden con el estilo solicitado (Separadores y Emojis)
  */
-const formatDeliveryDates = (dates) => {
-    if (!dates || dates.length === 0) return 'No especificado';
-    if (dates.length === 1) return dates[0];
-    return dates.map((date, index) => `Entrega ${index + 1}: ${date}`).join('\n');
+const generateStyledSummary = (orderData) => {
+    const divider = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
+    const headerLine = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
+    
+    let summary = `${headerLine}\n📦 PEDIDO: ${orderData.orderNumber}\n${divider}\n\n`;
+    
+    summary += `👤 INFORMACIÓN DEL CLIENTE\n${divider}\n`;
+    summary += `Nombre: ${orderData.cliente}\n`;
+    summary += `Teléfono: ${orderData.telefono}\n`;
+    summary += `Email: ${orderData.correo}\n`;
+    summary += `Cédula: ${orderData.cedula || 'No especificado'}\n\n`;
+    
+    summary += `📦 ITEMS DEL PEDIDO\n${divider}\n`;
+    summary += `${formatItemsForEmail(orderData.items)}\n\n`;
+    
+    summary += `💰 RESUMEN DE PAGO\n${divider}\n`;
+    summary += `Subtotal: ₡${(orderData.subtotal || 0).toLocaleString('es-CR')}\n`;
+    summary += `Descuento: ${orderData.descuento > 0 ? `₡${orderData.descuento.toLocaleString('es-CR')}` : 'Sin descuento'}\n`;
+    summary += `Envio: ${orderData.envioPorConfirmar ? 'Por confirmar ⚠️' : `₡${(orderData.costoEnvio || 0).toLocaleString('es-CR')}`}\n`;
+    summary += `${divider}\n`;
+    summary += `TOTAL: ₡${(orderData.total || 0).toLocaleString('es-CR')}\n\n`;
+    
+    summary += `🚚 INFORMACIÓN DE ENTREGA\n${divider}\n`;
+    summary += `Zona: ${orderData.zona}\n`;
+    summary += `Dirección: ${orderData.direccion}\n`;
+    summary += `Referencias: ${orderData.referencias || 'Sin referencias'}\n`;
+    summary += `Fecha de Entrega: ${orderData.fechasEntrega ? (Array.isArray(orderData.fechasEntrega) ? orderData.fechasEntrega[0] : orderData.fechasEntrega) : 'N/A'}\n\n`;
+    
+    summary += `💳 MÉTODO DE PAGO\n${divider}\n`;
+    summary += `${orderData.metodoPago?.toUpperCase() || 'TARJETA'}\n`;
+    if (orderData.transactionId) summary += `Transacción: ${orderData.transactionId}\n`;
+    summary += `\n`;
+    
+    summary += `📝 OBSERVACIONES DEL CLIENTE\n${orderData.observaciones || 'Ninguna'}\n`;
+    
+    return summary;
 };
 
 /**
  * Enviar notificación de nuevo pedido al administrador.
- * Soporta múltiples destinatarios (separados por coma).
  */
 export const sendOrderNotification = async (orderData) => {
     try {
@@ -93,36 +127,31 @@ export const sendOrderNotification = async (orderData) => {
         const recipientsString = await getNotificationEmail();
         const recipients = recipientsString.split(',').map(e => e.trim()).filter(e => e);
 
-        console.log(`[Email] Enviando notificación a: ${recipients.join(', ')}`);
+        // Bloque completo estilizado para que Gina lo use en un solo campo {{message}}
+        const styledMessage = generateStyledSummary(orderData);
 
-        // Preparar parámetros comunes
         const baseParams = {
+            message: styledMessage, // <--- Este es el campo "mágico"
             orderNumber: orderData.orderNumber || 'N/A',
             cliente: orderData.cliente || 'Cliente',
             telefono: orderData.telefono || 'No especificado',
             correo: orderData.correo || 'No especificado',
             cedula: orderData.cedula || 'No especificado',
             items: formatItemsForEmail(orderData.items || []),
-            items_text: (orderData.items || []).map(i => `${i.quantity}x ${i.name}`).join(', '),
             subtotal: `₡${(orderData.subtotal || 0).toLocaleString('es-CR')}`,
-            descuento: orderData.descuento > 0
-                ? `₡${orderData.descuento.toLocaleString('es-CR')} (${orderData.cupon || 'Cupón'})`
-                : 'Sin descuento',
+            descuento: orderData.descuento > 0 ? `₡${orderData.descuento.toLocaleString('es-CR')}` : 'Sin descuento',
             envio: orderData.envioPorConfirmar ? 'Por confirmar ⚠️' : `₡${(orderData.costoEnvio || 0).toLocaleString('es-CR')}`,
             total: `₡${(orderData.total || 0).toLocaleString('es-CR')}`,
             direccion: orderData.direccion || 'No especificada',
             referencias: orderData.referencias || 'Sin referencias',
             zona: orderData.zona || 'No especificada',
-            fechaEntrega: orderData.fechasEntrega ? formatDeliveryDates(orderData.fechasEntrega) : (orderData.fechaEntrega || 'N/A'),
+            fechaEntrega: orderData.fechasEntrega ? (Array.isArray(orderData.fechasEntrega) ? orderData.fechasEntrega[0] : orderData.fechasEntrega) : 'N/A',
             metodoPago: orderData.metodoPago || 'Tarjeta (Procesado)',
             transaccion: orderData.transactionId || 'No disponible',
             observaciones: orderData.observaciones || 'Sin observaciones',
-            fuente: orderData.fuente || 'Directo',
-            admin_email: recipientsString, // Alias para responder a
             to_name: "Admin BiKitchen"
         };
 
-        // Enviar a cada destinatario de forma independiente
         const results = await Promise.all(recipients.map(email => 
             emailjs.send(EMAILJS_CONFIG.serviceId, EMAILJS_CONFIG.templateId, { ...baseParams, to_email: email }, EMAILJS_CONFIG.publicKey)
         ));
@@ -145,7 +174,10 @@ export const sendCustomerOrderConfirmation = async (orderData) => {
         const customerEmail = orderData.correo || orderData.email;
         if (!customerEmail) return false;
 
+        const styledMessage = generateStyledSummary(orderData);
+
         const templateParams = {
+            message: styledMessage, 
             to_email: customerEmail,
             to_name: orderData.nombre || orderData.cliente || 'Cliente',
             orderNumber: orderData.orderNumber || 'N/A',
