@@ -333,7 +333,6 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
                                                 <input
                                                     required name="number" value={cardData.number} onChange={handleCardChange}
                                                     inputMode="numeric"
-                                                    pattern="[0-9]*"
                                                     autoComplete="cc-number"
                                                     className="w-full px-5 py-4 bg-gray-50 border-2 border-transparent focus:border-orange-500 focus:bg-white rounded-2xl outline-none transition-all font-bold text-gray-800 tracking-widest"
                                                     placeholder="0000 0000 0000 0000"
@@ -348,7 +347,6 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
                                                     <input
                                                         required name="exp" value={cardData.exp} onChange={handleCardChange}
                                                         inputMode="numeric"
-                                                        pattern="[0-9]*"
                                                         autoComplete="cc-exp"
                                                         className="w-full px-5 py-4 bg-gray-50 border-2 border-transparent focus:border-orange-500 focus:bg-white rounded-2xl outline-none transition-all font-bold text-gray-800 text-center"
                                                         placeholder="MM/YY"
@@ -362,7 +360,6 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
                                                         value={cardData.cvv} 
                                                         onChange={handleCardChange}
                                                         inputMode="numeric"
-                                                        pattern="[0-9]*"
                                                         autoComplete="cc-csc"
                                                         maxLength={4}
                                                         className="w-full px-5 py-4 bg-gray-50 border-2 border-transparent focus:border-orange-500 focus:bg-white rounded-2xl outline-none transition-all font-bold text-gray-800 text-center"
