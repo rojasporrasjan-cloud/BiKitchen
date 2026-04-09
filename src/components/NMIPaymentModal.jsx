@@ -441,20 +441,30 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
 
                             {/* Verification Steps Remain mostly same but improved UI */}
                             {step === '3ds' && (
-                                <div className="flex flex-col items-center justify-center py-12">
-                                    <motion.div 
-                                        initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-                                        className="w-24 h-24 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 mb-8 animate-pulse"
-                                    >
-                                        <Shield size={48} />
-                                    </motion.div>
-                                    <h4 className="text-2xl font-black text-gray-900 mb-2 text-center tracking-tight">Verificación de Seguridad</h4>
-                                    <p className="text-base text-gray-500 text-center mb-10 px-4">Completa la validación 3D Secure en la ventana interactiva inferior para proteger tu compra.</p>
+                                <div className="flex flex-col items-center justify-center py-4 sm:py-8">
+                                    <div className="flex items-center gap-3 mb-6 bg-blue-50 px-4 py-2 rounded-xl border border-blue-100">
+                                        <div className="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center shrink-0">
+                                            <Shield size={18} />
+                                        </div>
+                                        <div className="text-left">
+                                            <h4 className="text-sm font-black text-gray-900">Validación Bancaria</h4>
+                                            <p className="text-[10px] text-blue-700 font-bold uppercase tracking-tight">Espera el código en tu celular</p>
+                                        </div>
+                                    </div>
                                     
-                                    <div id="three-ds-container" className="w-full border-4 border-dashed border-gray-100 rounded-[2rem] min-h-[450px] bg-gray-50 flex items-center justify-center relative overflow-auto">
-                                        <div className="absolute inset-0 flex flex-col items-center justify-center opacity-20 pointer-events-none">
-                                            <Loader2 size={40} className="animate-spin text-gray-400 mb-2" />
-                                            <p className="text-xs font-bold uppercase tracking-widest text-gray-400">Cargando Plataforma...</p>
+                                    <p className="text-xs text-gray-500 text-center mb-6 px-4 leading-relaxed">
+                                        Tu banco requiere una verificación adicional. 
+                                        <strong> Si no ves el campo para el código, desliza hacia abajo </strong> 
+                                        dentro del cuadro inferior.
+                                    </p>
+                                    
+                                    <div 
+                                        id="three-ds-container" 
+                                        className="w-full border-t border-b sm:border-2 sm:rounded-2xl border-gray-100 min-h-[500px] bg-white flex items-center justify-center relative overflow-auto"
+                                    >
+                                        <div className="absolute inset-0 flex flex-col items-center justify-center opacity-10 pointer-events-none">
+                                            <Loader2 size={32} className="animate-spin text-gray-400 mb-2" />
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Cargando Banco...</p>
                                         </div>
                                     </div>
                                 </div>

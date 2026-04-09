@@ -530,16 +530,43 @@ aside[class*="overflow-y-auto"]:hover {
   overflow: hidden;
 }
 
-/* ========================================
-   Hide Scrollbar Utility
-   ======================================== */
-.scrollbar-hide {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
+@layer utilities {
+  .hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
 
-.scrollbar-hide::-webkit-scrollbar {
-  display: none;
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Scrollbar sutil e interactiva para escritorio */
+  .scrollbar-premium {
+    scrollbar-width: thin !important;
+    scrollbar-color: rgba(255, 103, 29, 0.4) rgba(0, 0, 0, 0.05) !important;
+  }
+
+  .scrollbar-premium::-webkit-scrollbar {
+    display: block !important;
+    height: 8px !important; /* Aumentado de 4px para mejor visibilidad */
+    width: 8px !important;
+  }
+
+  .scrollbar-premium::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.03) !important;
+    border-radius: 10px !important;
+  }
+
+  .scrollbar-premium::-webkit-scrollbar-thumb {
+    background: rgba(255, 103, 29, 0.3) !important;
+    border-radius: 10px !important;
+    border: 2px solid transparent !important;
+    background-clip: content-box !important;
+  }
+
+  .scrollbar-premium:hover::-webkit-scrollbar-thumb {
+    background: rgba(255, 103, 29, 0.6) !important;
+  }
 }
 
 /* ========================================

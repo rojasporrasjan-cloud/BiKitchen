@@ -62,6 +62,7 @@ import ScrollToTop from './components/ScrollToTop';
 import CinematicPreloader from './components/CinematicPreloader';
 import CinematicGrain from './components/CinematicGrain';
 import CartDrawer from './components/CartDrawer';
+import BottomNav from './components/BottomNav';
 import AISommelier from './components/AISommelier';
 import WhatsAppButton from './components/WhatsAppButton';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -69,7 +70,6 @@ import ToastNotification from './components/ToastNotification';
 import PWAPrompt from './components/PWAPrompt';
 // Christmas effects deshabilitados
 import PromoBanner from './components/PromoBanner';
-import FloatingCartButton from './components/FloatingCartButton';
 
 import { useCart } from './context/CartContext';
 import { useAuth } from './context/AuthContext';
@@ -156,11 +156,7 @@ function PublicRouteExtras() {
       <PromoBanner />
       <CartDrawer />
       {!hideFloating && <WhatsAppButton />}
-      {/* {isAdmin && isAdmin() && <AISommelier />} */}
       <PWAPrompt />
-      {!hideFloating && (
-        <FloatingCartButton onClick={() => setIsCartOpen(true)} isCartOpen={isCartOpen} />
-      )}
       {/* Christmas effects y banner deshabilitados */}
     </>
   );
@@ -283,8 +279,9 @@ function AppContent() {
 
       {/* Only show these on public routes */}
       {!isAdminRoute && <PublicRouteExtras />}
+      {!isAdminRoute && <BottomNav />}
 
-      <div className="relative z-10">
+      <div className={`relative z-10 ${!isAdminRoute ? 'pb-20 md:pb-0' : ''}`}>
         <ToastNotification />
         <AnimatedRoutes />
       </div>

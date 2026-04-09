@@ -84,7 +84,7 @@ export default function AIAssistant() {
     ];
 
     return (
-        <div className="fixed bottom-6 left-6 z-[100] font-sans">
+        <div className="fixed bottom-6 md:bottom-8 left-6 z-[100] font-sans">
             <AnimatePresence>
                 {isOpen ? (
                     <motion.div

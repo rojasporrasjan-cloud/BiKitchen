@@ -1304,43 +1304,40 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                                             )}
 
                                             <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                    <Calendar size={16} className="inline mr-1" />
-                                                    Fecha de Entrega *
+                                                <label className="flex items-center gap-2 text-sm font-black text-gray-800 mb-4 uppercase tracking-widest">
+                                                    <Calendar size={18} className="text-orange-600" />
+                                                    Día de Entrega
                                                 </label>
-                                                <div className="grid grid-cols-3 gap-2">
+                                                <div className="grid grid-cols-3 gap-3">
                                                     {getNextDeliveryDates().map((dateObj) => (
                                                         <button
                                                             key={dateObj.value}
                                                             type="button"
                                                             onClick={() => updateField('fechaEntrega', dateObj.value)}
-                                                            className={`p-3 rounded-xl border-2 text-center transition-all ${formData.fechaEntrega === dateObj.value
-                                                                ? 'border-bikitchen-orange bg-bikitchen-orange/10'
-                                                                : 'border-gray-200 hover:border-gray-300'
+                                                            className={`relative p-3 rounded-2xl border-2 transition-all flex flex-col items-center justify-center gap-1 overflow-hidden group ${formData.fechaEntrega === dateObj.value
+                                                                ? 'border-orange-600 bg-orange-600 shadow-lg shadow-orange-100'
+                                                                : 'border-gray-100 bg-gray-50 hover:border-gray-300'
                                                                 }`}
                                                         >
-                                                            <p className={`text-xs capitalize ${formData.fechaEntrega === dateObj.value
-                                                                ? 'text-bikitchen-orange'
-                                                                : 'text-gray-500'
-                                                                }`}>
-                                                                {dateObj.dayName}
+                                                            {formData.fechaEntrega === dateObj.value && (
+                                                                <motion.div 
+                                                                    layoutId="activeDate"
+                                                                    className="absolute inset-0 bg-gradient-to-br from-orange-500 to-orange-600"
+                                                                />
+                                                            )}
+                                                            <p className={`relative z-10 text-[10px] font-black uppercase tracking-widest ${formData.fechaEntrega === dateObj.value ? 'text-orange-100' : 'text-gray-400'}`}>
+                                                                {dateObj.dayName.substring(0, 3)}
                                                             </p>
-                                                            <p className={`text-lg font-bold ${formData.fechaEntrega === dateObj.value
-                                                                ? 'text-bikitchen-orange'
-                                                                : 'text-gray-900'
-                                                                }`}>
+                                                            <p className={`relative z-10 text-xl font-black ${formData.fechaEntrega === dateObj.value ? 'text-white' : 'text-gray-900'}`}>
                                                                 {dateObj.dayNumber}
                                                             </p>
-                                                            <p className={`text-xs ${formData.fechaEntrega === dateObj.value
-                                                                ? 'text-bikitchen-orange'
-                                                                : 'text-gray-500'
-                                                                }`}>
-                                                                {dateObj.month}
+                                                            <p className={`relative z-10 text-[10px] font-bold ${formData.fechaEntrega === dateObj.value ? 'text-orange-100' : 'text-gray-500'}`}>
+                                                                {dateObj.month.toUpperCase()}
                                                             </p>
                                                         </button>
                                                     ))}
                                                 </div>
-                                                {errors.fechaEntrega && <p className="text-red-500 text-xs mt-1">{errors.fechaEntrega}</p>}
+                                                {errors.fechaEntrega && <p className="text-red-500 text-xs mt-2 font-bold">{errors.fechaEntrega}</p>}
                                             </div>
 
                                             {/* Horario de entrega - Info fija */}

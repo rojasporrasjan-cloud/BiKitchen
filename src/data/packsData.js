@@ -41,7 +41,7 @@ export const PACKS_DATA = {
             { name: 'Pack Casaditos', desc: 'Estilo tradicional costarricense', icon: '🍚', weekly: 55700, biweekly: 100260, monthly: 167100, monthlyOriginal: 222800 },
             { name: 'Full Pack', desc: '150g proteína + 3 carbos + 2 vegetales', icon: '🍽️', weekly: 67800, biweekly: 126000, monthly: 203400, monthlyOriginal: 271200 },
             { name: 'Pack Vegetariano', desc: 'Proteína vegetal + 2 vegetales + 2 carbos', icon: '🥦', weekly: 55700, biweekly: 100260, monthly: 167100, monthlyOriginal: 222800 },
-            { name: 'Pack Keto', desc: '200g proteína + 3 vegetales', icon: '🥑', weekly: 67800, biweekly: 126000, monthly: 203400, monthlyOriginal: 271200 }
+            { name: 'Pack Keto', desc: '200g proteína + 3 vegetales', icon: '🥑', weekly: 67800, biweekly: 126000, monthly: 203400, monthlyOriginal: 271200, featured: true }
         ]
     },
     'familiar': {
@@ -138,6 +138,25 @@ export const PACKS_DATA = {
                 icon: '🥩',
                 weekly: 21000, biweekly: 39000, monthly: 75600,
                 weekly_500: 39950, biweekly_500: 74300, monthly_500: 143000,
+                featured: true
+            }
+        ]
+    },
+    'desayunos': {
+        title: 'Pack de Desayunos',
+        subtitle: '5 opciones saludables para tu semana',
+        icon: '🍳',
+        shipping: {
+            weekly: '🚚 Envío según zona',
+            biweekly: '🚚 2 envíos semanales (se cobra el envío de tu zona × 2)',
+            monthly: '🚚 4 envíos semanales (envío de tu zona × 4) • 50% dto.'
+        },
+        packs: [
+            {
+                name: 'Pack de Desayunos',
+                desc: 'Menú semanal (Regular o Vegetariano)',
+                icon: '🍳',
+                weekly: 15000,
                 featured: true
             }
         ]

@@ -39,7 +39,7 @@ export default function WhatsAppButton() {
             target="_blank"
             rel="noopener noreferrer"
             onClick={handleClick}
-            className="fixed bottom-6 right-6 z-40 group"
+            className="fixed bottom-32 md:bottom-8 right-6 z-40 group"
         >
             {/* Pulse animation - solo en desktop */}
             {!isMobile && (

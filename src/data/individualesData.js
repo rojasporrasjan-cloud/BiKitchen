@@ -426,7 +426,9 @@ export const individualesData = [
     precio500: 7800,
     precio1kg: 14850,
     categoria: 'Cerdo',
-    imagen: 'https://cdn.pixabay.com/photo/2017/06/02/18/24/pork-2369174_1280.jpg'
+    imagen: 'https://images.unsplash.com/photo-1544148103-0773bf10d330?auto=format&fit=crop&w=800&q=80',
+    isBestValue: true,
+    macros: { p: '32g', c: '5g', f: '14g' }
   },
   {
     id: 'pulled-pork',
@@ -435,7 +437,9 @@ export const individualesData = [
     precio500: 8950,
     precio1kg: 17000,
     categoria: 'Cerdo',
-    imagen: 'https://cdn.pixabay.com/photo/2016/02/23/17/52/pork-1216039_1280.jpg'
+    imagen: 'https://images.unsplash.com/photo-1612108188274-d1ae7460e4db?auto=format&fit=crop&w=800&q=80',
+    isPopular: true,
+    macros: { p: '40g', c: '2g', f: '18g' }
   },
   {
     id: 'trocitos-cerdo-salsa-bbq',
@@ -444,7 +448,7 @@ export const individualesData = [
     precio500: 8500,
     precio1kg: 16150,
     categoria: 'Cerdo',
-    imagen: 'https://cdn.pixabay.com/photo/2017/03/27/14/56/bbq-2178720_1280.jpg'
+    imagen: 'https://images.unsplash.com/photo-1623351239100-34d60c325883?auto=format&fit=crop&w=800&q=80'
   },
   {
     id: 'trocitos-cerdo-salsa-pina',
@@ -453,7 +457,7 @@ export const individualesData = [
     precio500: 8500,
     precio1kg: 16150,
     categoria: 'Cerdo',
-    imagen: 'https://cdn.pixabay.com/photo/2017/09/16/15/23/barbecue-2754161_1280.jpg'
+    imagen: 'https://images.unsplash.com/photo-1432139555190-58524dae6a55?auto=format&fit=crop&w=800&q=80'
   },
   {
     id: 'trocitos-cerdo-naranja',
@@ -462,7 +466,7 @@ export const individualesData = [
     precio500: 8500,
     precio1kg: 16150,
     categoria: 'Cerdo',
-    imagen: 'https://cdn.pixabay.com/photo/2016/11/21/14/33/orange-1840782_1280.jpg'
+    imagen: 'https://images.unsplash.com/photo-1521305916504-4a1121188589?auto=format&fit=crop&w=800&q=80'
   },
   {
     id: 'trocitos-cerdo-salsa-criolla',
@@ -471,7 +475,7 @@ export const individualesData = [
     precio500: 8500,
     precio1kg: 16150,
     categoria: 'Cerdo',
-    imagen: 'https://cdn.pixabay.com/photo/2019/06/21/03/32/stew-4292434_1280.jpg'
+    imagen: 'https://images.unsplash.com/photo-1514516348920-f5d8964d7f2d?auto=format&fit=crop&w=800&q=80'
   },
   {
     id: 'cerdo-salsa-chipotle',
@@ -480,7 +484,7 @@ export const individualesData = [
     precio500: 8950,
     precio1kg: 17000,
     categoria: 'Cerdo',
-    imagen: 'https://cdn.pixabay.com/photo/2019/01/08/21/57/chipotle-3923589_1280.jpg'
+    imagen: 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=800&q=80'
   },
   {
     id: 'trocitos-cerdo-chimichurri',
@@ -489,7 +493,7 @@ export const individualesData = [
     precio500: 8950,
     precio1kg: 17000,
     categoria: 'Cerdo',
-    imagen: 'https://cdn.pixabay.com/photo/2019/09/28/16/39/meat-4501359_1280.jpg'
+    imagen: 'https://images.unsplash.com/photo-1529692236671-f1f6cf9683ba?auto=format&fit=crop&w=800&q=80'
   },
   {
     id: 'bistec-cerdo-encebollado',
@@ -498,7 +502,7 @@ export const individualesData = [
     precio500: 8850,
     precio1kg: 16800,
     categoria: 'Cerdo',
-    imagen: 'https://cdn.pixabay.com/photo/2017/08/11/02/15/pork-2629074_1280.jpg'
+    imagen: 'https://images.unsplash.com/photo-1518492104633-130d0cc84637?auto=format&fit=crop&w=800&q=80'
   },
   {
     id: 'cerdo-mechado-salsa-tomate',
@@ -507,7 +511,7 @@ export const individualesData = [
     precio500: 7800,
     precio1kg: 14850,
     categoria: 'Cerdo',
-    imagen: 'https://cdn.pixabay.com/photo/2020/01/22/08/40/stew-4780421_1280.jpg'
+    imagen: 'https://images.unsplash.com/photo-1547050605-2f167389617c?auto=format&fit=crop&w=800&q=80'
   },
   {
     id: 'cerdo-salsa-curry',
@@ -516,7 +520,7 @@ export const individualesData = [
     precio500: 8850,
     precio1kg: 16800,
     categoria: 'Cerdo',
-    imagen: 'https://cdn.pixabay.com/photo/2016/02/13/12/26/curry-1196581_1280.jpg'
+    imagen: 'https://images.unsplash.com/photo-1588166524941-3bf61a7c21df?auto=format&fit=crop&w=800&q=80'
   },
   {
     id: 'cerdo-salsa-teriyaki',
@@ -525,7 +529,7 @@ export const individualesData = [
     precio500: 8850,
     precio1kg: 16800,
     categoria: 'Cerdo',
-    imagen: 'https://cdn.pixabay.com/photo/2020/12/06/17/05/food-5800479_1280.jpg'
+    imagen: 'https://images.unsplash.com/photo-1529193591184-b1d58b3fffc4?auto=format&fit=crop&w=800&q=80'
   },
   {
     id: 'cerdo-salsa-mostaza',
@@ -534,7 +538,7 @@ export const individualesData = [
     precio500: 8950,
     precio1kg: 17000,
     categoria: 'Cerdo',
-    imagen: 'https://cdn.pixabay.com/photo/2018/08/29/15/11/pork-3646441_1280.jpg'
+    imagen: 'https://images.unsplash.com/photo-1544145945-f904253db0ad?auto=format&fit=crop&w=800&q=80'
   },
   {
     id: 'trocitos-cerdo-fritos',
@@ -543,7 +547,7 @@ export const individualesData = [
     precio500: 8950,
     precio1kg: 17000,
     categoria: 'Cerdo',
-    imagen: 'https://cdn.pixabay.com/photo/2016/03/05/19/02/fried-pork-1239430_1280.jpg'
+    imagen: 'https://images.unsplash.com/photo-1603048588665-791ca8aea617?auto=format&fit=crop&w=800&q=80'
   },
   {
     id: 'trocitos-cerdo-salsa-agridulce',
@@ -552,7 +556,7 @@ export const individualesData = [
     precio500: 8950,
     precio1kg: 17000,
     categoria: 'Cerdo',
-    imagen: 'https://cdn.pixabay.com/photo/2018/11/09/21/41/sweet-and-sour-pork-3804539_1280.jpg'
+    imagen: 'https://images.unsplash.com/photo-1525755662778-989d0524087e?auto=format&fit=crop&w=800&q=80'
   },
   {
     id: 'trocitos-cerdo-salsa-pimienta',
@@ -561,7 +565,7 @@ export const individualesData = [
     precio500: 8950,
     precio1kg: 17000,
     categoria: 'Cerdo',
-    imagen: 'https://cdn.pixabay.com/photo/2016/04/02/00/42/pepper-1302243_1280.jpg'
+    imagen: 'https://images.unsplash.com/photo-1504973999539-e4f7ad332b72?auto=format&fit=crop&w=800&q=80'
   },
   {
     id: 'cochinita-pibil',
@@ -570,7 +574,7 @@ export const individualesData = [
     precio500: 8950,
     precio1kg: 17000,
     categoria: 'Cerdo',
-    imagen: 'https://cdn.pixabay.com/photo/2018/01/07/19/41/food-3061923_1280.jpg'
+    imagen: 'https://images.unsplash.com/photo-1552332386-f8dd00dc2f85?auto=format&fit=crop&w=800&q=80'
   },
 
   // ============================================================

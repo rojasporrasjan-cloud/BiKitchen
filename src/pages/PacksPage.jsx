@@ -5,7 +5,7 @@ import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import PageTransition from '../components/PageTransition';
 import SmoothImage from '../components/SmoothImage';
-import { ShoppingCart, Truck, Check, Info, Eye, X, Gift, Tag, Filter, Flame, Leaf, Users, Zap, Package, Edit } from 'lucide-react';
+import { ShoppingCart, Truck, Check, Info, Eye, X, Gift, Tag, Filter, Flame, Leaf, Users, Zap, Package, Edit, Plus, MessageSquare, ChevronDown } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCart } from '../context/CartContext';
@@ -16,9 +16,9 @@ import { getPackPrices } from '../utils/firestoreMenus';
 import { getActivePromotions } from '../utils/firestorePromotions';
 import { PACKS_DATA, PACK_TO_MENU_KEY, DEFAULT_PACK_IMAGES } from '../data/packsData';
 import { db } from '../firebase/config';
-import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc, updateDoc, setDoc } from 'firebase/firestore';
 import { cleanFirebaseUrl } from '../utils/firebaseUrl';
-import { cachedFetch } from '../utils/firestoreCache';
+import { cachedFetch, invalidateCache } from '../utils/firestoreCache';
 import { trackViewContent } from '../services/facebookPixel';
 import { useMenusRefresh } from '../hooks/useMenusRefresh';
 import { usePromoBanner } from '../hooks/usePromoBanner';
@@ -29,14 +29,24 @@ import { formatDishItem } from '../utils/menuUtils';
 
 // Categorías de filtro para packs
 const PACK_FILTERS = [
-    { id: 'todos', label: 'Todos', icon: '🍽️' },
-    { id: 'casaditos', label: 'Casaditos', icon: '🍚', packs: ['Pack Casaditos'] },
-    { id: 'two_pack', label: 'Two Pack', icon: '👥', section: 'two_pack' },
-    { id: 'keto', label: 'Keto', icon: '🥑', packs: ['Pack Keto'] },
-    { id: 'bajo_calorias', label: 'Bajo Calorías', icon: '🥗', packs: ['Pack Bajo Calorías'] },
-    { id: 'familiar', label: 'Familiar', icon: '👨‍👩‍👧‍👦', section: 'familiar' },
-    { id: 'proteinas', label: 'Proteínas', icon: '🥩', section: 'proteinas' },
-    { id: 'vegetariano', label: 'Vegetariano', icon: '🥦', packs: ['Pack Vegetariano'] }
+    { id: 'todos', label: 'Todos', icon: '✨' },
+    { id: 'two_pack', label: 'Two Pack', icon: '👥', section: 'two_pack', groupId: 'main' },
+    { id: 'familiar', label: 'Familiar', icon: '👨‍👩‍👧‍👦', section: 'familiar', groupId: 'main' },
+    { id: 'full_pack', label: 'Full Pack', icon: '🍽️', packs: ['Full Pack'], groupId: 'diet' },
+    { id: 'keto', label: 'Keto', icon: '🥑', packs: ['Pack Keto'], groupId: 'diet' },
+    { id: 'bajo_calorias', label: 'Bajo Calorías', icon: '🥗', packs: ['Pack Bajo Calorías'], groupId: 'diet' },
+    { id: 'sin_carbos', label: 'Sin Carbos', icon: '🥩', packs: ['Pack Sin Carbos'], groupId: 'diet' },
+    { id: 'casaditos', label: 'Casaditos', icon: '🍚', packs: ['Pack Casaditos'], groupId: 'diet' },
+    { id: 'vegetariano', label: 'Vegetariano', icon: '🥦', packs: ['Pack Vegetariano'], groupId: 'diet' },
+    { id: 'proteinas', label: 'Proteínas', icon: '🍗', section: 'proteinas', groupId: 'extra' },
+    { id: 'desayunos', label: 'Desayunos', icon: '🍳', section: 'desayunos', groupId: 'extra' }
+];
+
+const PACK_GROUPS = [
+    { id: 'todos', label: 'Todos', icon: '✨' },
+    { id: 'main', label: 'Planes Pro', icon: '⭐️' },
+    { id: 'diet', label: 'Por Dieta', icon: '🥗' },
+    { id: 'extra', label: 'Añadidos', icon: '➕' }
 ];
 
 // Imagen por defecto para packs
@@ -106,13 +116,23 @@ const PACKS_ESPECIALES_BASE = {
         color: 'orange',
         cantidad: 5,
         proteinas: ['Pollo en salsa de curry', 'Pollo en salsa caribeña', 'Fajitas de lomo en salsa vino', 'Pollo mechado en salsa', 'Carne mechada en salsa', 'Cerdo en salsa de piña', 'Pollo a la toscana', 'Trocitos de cerdo en salsa criolla', 'Pollo en salsa demiglase', 'Fajitas de cerdo con chimichurri']
+    },
+    'Pack de Desayunos': {
+        nombre: 'Pack de Desayunos',
+        emoji: '🍳',
+        color: 'yellow',
+        items: [],
+        itemsVeg: []
     }
 };
 
-const PackCard = memo(({ pack, shipping, category, promociones = [], customImage, packsEspeciales }) => {
+const PackCard = memo(({ pack, shipping, category, categoryLabel: customCategoryLabel, promociones = [], customImage, packsEspeciales, 
+    desayunosMenu = [], desayunosVegetarianos = [], onOpenDesayunos, onEditDesayunos, onEditProteinas }) => {
     const isProteinsPack =
         category === 'proteinas' &&
         (pack.name.includes('Pack 3 Proteínas') || pack.name.includes('Pack 5 Proteínas'));
+
+    const isBreakfastPack = category === 'desayunos';
 
     const isFamiliarPack =
         category === 'familiar' &&
@@ -359,6 +379,12 @@ const PackCard = memo(({ pack, shipping, category, promociones = [], customImage
             return;
         }
 
+        // INTERCEPTAR: Si es pack de desayunos, abrir modal de desayunos
+        if (isBreakfastPack) {
+            onOpenDesayunos?.();
+            return;
+        }
+
         const finalPrice = getFinalPrice();
         const originalPrice = getOriginalPrice();
 
@@ -431,360 +457,230 @@ const PackCard = memo(({ pack, shipping, category, promociones = [], customImage
                 initial="hidden"
                 whileInView="visible"
                 viewport={{ once: true, margin: "-50px" }}
-                whileHover={{ y: -8, scale: 1.02 }}
+                whileHover={{ y: -8, scale: 1.01 }}
                 transition={{ duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
-                className={`group bg-white rounded-3xl shadow-lg hover:shadow-2xl transition-all duration-300 border-2 border-gray-100 hover:border-orange-200 ${pack.featured ? 'ring-2 ring-orange-500 ring-offset-4' : ''}`}
+                className={`group bg-white rounded-[2.5rem] shadow-xl hover:shadow-2xl transition-all duration-500 border-2 border-gray-50 hover:border-orange-200 overflow-hidden ${pack.featured ? 'ring-2 ring-orange-500 ring-offset-4' : ''}`}
             >
                 {/* Imagen principal del pack */}
-                <motion.div
-                    className="relative h-36 sm:h-56 overflow-hidden rounded-t-3xl"
-                    whileHover={{ scale: 1.05 }}
-                    transition={{ duration: 0.3 }}
-                >
+                <div className="relative h-44 sm:h-64 overflow-hidden">
                     <SmoothImage
                         src={packImage}
                         alt={pack.name}
-                        className="h-36 sm:h-56"
+                        className="h-full w-full object-cover transition-transform duration-1000 group-hover:scale-110"
                         aspectRatio=""
                         placeholderColor="bg-gradient-to-br from-gray-100 to-gray-50"
                     />
-                    {/* Overlay con gradiente */}
-                    <motion.div
-                        className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent"
-                        initial={{ opacity: 0.7 }}
-                        whileHover={{ opacity: 1 }}
-                        transition={{ duration: 0.3 }}
-                    />
+                    
+                    {/* Overlay Gradiente Premium y Acción de Click */}
+                    <div 
+                        className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-60 group-hover:opacity-80 transition-opacity duration-500 cursor-pointer flex flex-col items-center justify-center"
+                        onClick={() => setShowMenuModal(true)}
+                    >
+                        <motion.div 
+                            className="bg-white/20 backdrop-blur-md rounded-full p-4 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-4 group-hover:translate-y-0"
+                            whileHover={{ scale: 1.1 }}
+                        >
+                            <Eye className="text-white" size={32} />
+                        </motion.div>
+                        <span className="text-white text-[10px] font-black uppercase tracking-widest mt-2 opacity-0 group-hover:opacity-100 transition-all duration-300">Ver Menú Semanal</span>
+                    </div>
 
-                    {/* Emoji del pack sobre la imagen */}
+                    {/* Emoji flotante con Glassmorphism */}
                     <motion.div
-                        className="absolute bottom-4 left-4 text-5xl drop-shadow-2xl"
-                        whileHover={{ scale: 1.2, rotate: 5 }}
-                        transition={{ duration: 0.3 }}
+                        className="absolute bottom-5 left-5 w-16 h-16 bg-white/20 backdrop-blur-xl rounded-2xl flex items-center justify-center text-4xl shadow-2xl border border-white/30"
+                        whileHover={{ scale: 1.1, rotate: 10 }}
                     >
                         {pack.icon}
                     </motion.div>
 
-                    {/* Badge de oferta especial */}
+                    {/* Badge de oferta o descuento */}
                     {pack.featured && (
-                        <motion.div
-                            className="absolute top-0 left-0 right-0 bg-gradient-to-r from-orange-500 to-amber-500 text-white text-center py-2 text-sm font-black uppercase tracking-wider shadow-lg"
-                            initial={{ y: -20, opacity: 0 }}
-                            animate={{ y: 0, opacity: 1 }}
-                            transition={{ delay: 0.2, duration: 0.4 }}
+                        <div className="absolute top-5 left-5 bg-gradient-to-r from-orange-500 to-amber-500 text-white px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.2em] shadow-lg">
+                            Selección Pro
+                        </div>
+                    )}
+                    
+                    {/* Botón de Edición para Admins (Proteínas o Desayunos) */}
+                    {isAdmin && (isProteinsPack || isBreakfastPack) && (
+                        <button
+                            type="button"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                if (isProteinsPack) onEditProteinas?.();
+                                else onEditDesayunos?.();
+                            }}
+                            className="absolute bottom-5 right-5 z-20 bg-white/30 backdrop-blur-md hover:bg-white/50 text-white p-2.5 rounded-xl shadow-lg border border-white/20 transition-all hover:scale-110 active:scale-95"
                         >
-                            ⭐ Oferta Especial
-                        </motion.div>
+                            <Edit size={18} />
+                        </button>
                     )}
 
-                    {/* Sello de promoción General (Legacy) */}
-                    {tienePromo && !hasDiscount && (
-                        <div className="absolute top-3 right-3 z-10 group/promo">
-                            <div className="bg-bikitchen-gold text-gray-900 px-2 py-1 rounded-full text-xs font-bold flex items-center gap-1 shadow-lg cursor-help animate-pulse">
-                                <Gift size={12} />
-                                Promo
+                    {/* Sello de Descuento / Promo */}
+                    {(hasDiscount || tienePromo) && (
+                        <motion.div
+                            className="absolute top-5 right-5 z-10"
+                            initial={{ scale: 0 }}
+                            animate={{ scale: 1 }}
+                        >
+                            <div className="bg-white/95 backdrop-blur-md text-orange-600 px-4 py-2 rounded-2xl text-xs font-black flex items-center gap-2 shadow-xl border border-orange-100">
+                                <Gift size={14} className="animate-bounce" />
+                                {pack.etiquetaTexto || 'OFERTA'}
                             </div>
-                            <div className="absolute right-0 top-full mt-2 w-52 bg-gray-900 text-white text-xs p-3 rounded-lg opacity-0 group-hover/promo:opacity-100 transition-opacity pointer-events-none z-20 shadow-xl">
-                                <p className="font-bold mb-1">{promoActiva.titulo}</p>
-                                <p className="text-gray-300">{promoActiva.descripcionCorta || 'Promoción activa'}</p>
+                        </motion.div>
+                    )}
+                </div>
+
+                <div className="p-6 sm:p-8 flex flex-col gap-5">
+                    {/* Título y descripción */}
+                    <div>
+                        {customCategoryLabel && (
+                            <span className="inline-block px-3 py-1 bg-orange-100 text-orange-600 rounded-lg text-[10px] font-black uppercase tracking-wider mb-2">
+                                {customCategoryLabel}
+                            </span>
+                        )}
+                        <div className="flex items-center justify-between gap-4 mb-2">
+                            <h3 className="text-xl sm:text-2xl font-black text-gray-900 group-hover:text-orange-600 transition-colors leading-tight">
+                                {pack.name}
+                            </h3>
+                            <button 
+                                onClick={() => setShowMenuModal(true)}
+                                className="w-10 h-10 bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center hover:bg-orange-600 hover:text-white transition-all shadow-sm"
+                                title="Ver detalles del menú"
+                            >
+                                <Eye size={20} />
+                            </button>
+                        </div>
+                        <p className="text-xs sm:text-sm text-gray-500 font-medium leading-relaxed line-clamp-2">
+                            {pack.desc}
+                        </p>
+                    </div>
+
+                    {/* Selector de plan con UI mejorada */}
+                    {!isPromocionPack && !isSpecialPack && (
+                        <div className="space-y-3">
+                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Selecciona tu Plan</p>
+                            <div className="grid grid-cols-3 gap-2 bg-gray-50 p-1.5 rounded-[1.5rem] border border-gray-100">
+                                {['weekly', 'biweekly', 'monthly'].map((plan) => {
+                                    if (isProteinsPack && plan === 'biweekly') return null;
+                                    const isActive = selectedPlan === plan;
+                                    const labels = { weekly: 'Semanal', biweekly: 'Quin.', monthly: 'Mensual' };
+                                    return (
+                                        <button
+                                            key={plan}
+                                            onClick={() => {
+                                                setSelectedPlan(plan);
+                                                if (isProteinsPack && plan === 'monthly') setSelectedSize('500');
+                                            }}
+                                            className={`py-2.5 rounded-2xl text-[10px] sm:text-xs font-black transition-all duration-300 relative ${
+                                                isActive 
+                                                ? 'bg-white text-orange-600 shadow-md border-orange-100' 
+                                                : 'text-gray-400 hover:text-gray-600'
+                                            } border border-transparent`}
+                                        >
+                                            {labels[plan]}
+                                            {isActive && (
+                                                <motion.div 
+                                                    layoutId="activePlan" 
+                                                    className="absolute inset-0 bg-white rounded-2xl shadow-sm -z-10 border border-orange-100" 
+                                                />
+                                            )}
+                                        </button>
+                                    );
+                                })}
                             </div>
                         </div>
                     )}
 
-                    {/* Sello de Descuento Automático */}
-                    {hasDiscount && pack.mostrarEtiqueta && (
-                        <motion.div
-                            className="absolute top-4 right-4 z-10"
-                            initial={{ scale: 0, rotate: -180 }}
-                            animate={{ scale: 1, rotate: 0 }}
-                            transition={{ delay: 0.3, duration: 0.5, type: "spring" }}
-                        >
-                            <div className="bg-gradient-to-r from-yellow-400 to-amber-500 text-gray-900 px-4 py-2 rounded-full text-sm font-black flex items-center gap-2 shadow-xl">
-                                <Tag size={14} />
-                                {pack.etiquetaTexto || 'Oferta'}
+                    {/* Selector de Tamaño para Proteínas */}
+                    {isProteinsPack && (
+                        <div className="flex items-center justify-between px-2">
+                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Tamaño</span>
+                            <div className="flex gap-2">
+                                {['250', '500'].map(size => (
+                                    <button
+                                        key={size}
+                                        onClick={() => setSelectedSize(size)}
+                                        className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all ${
+                                            selectedSize === size 
+                                            ? 'bg-orange-500 text-white shadow-md' 
+                                            : 'bg-gray-50 text-gray-500 hover:bg-gray-100'
+                                        }`}
+                                    >
+                                        {size}g
+                                    </button>
+                                ))}
                             </div>
-                        </motion.div>
+                        </div>
                     )}
 
-
-                </motion.div>
-
-                <div className="p-3 sm:p-6">
-                    {/* Título y descripción */}
-                    <div className="text-center mb-5">
-                        <h3 className="text-base sm:text-2xl font-black text-gray-900 mb-1 sm:mb-2 leading-tight line-clamp-2">{pack.name}</h3>
-                        <p className="text-xs sm:text-sm text-gray-600 line-clamp-2 leading-relaxed">{pack.desc}</p>
-
-                        {/* Subtexto de validez de descuento */}
-                        {hasDiscount && pack.fechaFin && toJsDate(pack.fechaFin) && (
-                            <p className="text-xs text-orange-600 mt-1 font-medium">
-                                Válido hasta {toJsDate(pack.fechaFin).toLocaleDateString('es-CR')}
-                            </p>
-                        )}
-                    </div>
-
-                    {/* Modificado: Mostrar botón de ver detalles si hay menuKey O es Familiar/Proteinas */}
-                    {(menuKey || isFamiliarPack) && !isSpecialPack && (
-                        <motion.button
-                            onClick={() => isFamiliarPack ? handleOpenModal() : setShowMenuModal(true)}
-                            className="w-full mb-3 sm:mb-5 text-xs sm:text-sm text-orange-600 hover:text-white font-bold flex items-center justify-center gap-1.5 sm:gap-2 py-2 sm:py-3 hover:bg-gradient-to-r hover:from-orange-500 hover:to-amber-500 rounded-xl sm:rounded-2xl transition-all border-2 border-orange-200 hover:border-orange-500"
-                            whileHover={{ scale: 1.02 }}
-                            whileTap={{ scale: 0.98 }}
-                        >
-                            <Eye size={18} />
-                            {isFamiliarPack ? 'Ver Menú de la semana' : 'Ver detalles del menú'}
-                        </motion.button>
-                    )}
-
-                    {/* Para packs especiales: mostrar precios y botón Ver detalles */}
-                    {isSpecialPack ? (
-                        <>
-                            <div className="text-center mb-4">
-                                {isFamiliarPack ? (
-                                    <div className="text-3xl font-bold text-bikitchen-orange">
+                    {/* Area de Precio */}
+                    <div className="flex flex-col items-center py-2">
+                        {hasAnyDiscount ? (
+                            <div className="flex flex-col items-center">
+                                <span className="text-sm text-gray-300 line-through font-bold mb-1">
+                                    {formatPrice(getOriginalPrice())}
+                                </span>
+                                <div className="flex items-baseline gap-1">
+                                    <span className="text-3xl sm:text-4xl font-black text-gray-900 group-hover:text-orange-600 transition-colors">
                                         {formatPrice(getFinalPrice())}
-                                    </div>
-                                ) : (
-                                    <div className="flex flex-col items-center">
-                                        <div className="text-xl sm:text-3xl font-bold text-bikitchen-orange mb-1 sm:mb-2">
-                                            {formatPrice(getFinalPrice())}
-                                        </div>
-
-                                        {/* Selector de Tamaño 250g / 500g */}
-                                        <div className="bg-gray-100 p-1 rounded-xl flex gap-1 mb-2">
-                                            <button
-                                                onClick={() => setSelectedSize('250')}
-                                                className={`px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${selectedSize === '250'
-                                                    ? 'bg-white text-orange-600 shadow-sm'
-                                                    : 'text-gray-500 hover:text-gray-700'
-                                                    }`}
-                                            >
-                                                250g
-                                            </button>
-                                            <button
-                                                onClick={() => setSelectedSize('500')}
-                                                className={`px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${selectedSize === '500'
-                                                    ? 'bg-white text-orange-600 shadow-sm'
-                                                    : 'text-gray-500 hover:text-gray-700'
-                                                    }`}
-                                            >
-                                                500g
-                                            </button>
-                                        </div>
-                                    </div>
-                                )}
-                                <div className="text-sm text-gray-700 mt-1 font-medium">
-                                    {isFamiliarPack
-                                        ? packEspecialData && `${packEspecialData.items.length} platos para 4 porciones`
-                                        : packEspecialData && `Elige ${packEspecialData.cantidad} proteínas`
-                                    }
-                                </div>
-                            </div>
-
-                            <motion.button
-                                onClick={handleOpenModal}
-                                className={`w-full font-black py-2.5 px-3 sm:py-4 sm:px-6 rounded-xl sm:rounded-2xl transition-all flex items-center justify-center gap-1.5 sm:gap-2 shadow-lg ${isProteinsPack ? 'bg-gradient-to-r from-orange-500 to-amber-500 hover:shadow-orange-500/50' :
-                                    packEspecialData?.color === 'green'
-                                        ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white hover:shadow-green-500/50'
-                                        : packEspecialData?.color === 'purple'
-                                            ? 'bg-gradient-to-r from-purple-500 to-indigo-600 text-white hover:shadow-purple-500/50'
-                                            : 'bg-gradient-to-r from-orange-500 to-amber-500 text-white hover:shadow-orange-500/50'
-                                    }`}
-                                whileHover={{ scale: 1.05, boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.2)" }}
-                                whileTap={{ scale: 0.95 }}
-                            >
-                                <Package size={20} />
-                                Ver detalles / Seleccionar
-                            </motion.button>
-                        </>
-                    ) : (
-                        <>
-                            {/* Selector de plan - oculto para packs de promoción */}
-                            {!isPromocionPack && (
-                                <div className="flex gap-1 sm:gap-2 mb-3 w-full">
-                                    <motion.button
-                                        onClick={() => setSelectedPlan('weekly')}
-                                        className={`flex-1 min-w-0 py-2 sm:py-3 px-1 sm:px-3 rounded-2xl text-[11px] sm:text-sm font-bold transition-all relative border overflow-visible ${selectedPlan === 'weekly'
-                                            ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg shadow-orange-500/30 border-orange-500'
-                                            : 'bg-white text-gray-700 hover:bg-orange-50 border-gray-200 hover:border-orange-300'
-                                            }`}
-                                        whileHover={{ scale: 1.05 }}
-                                        whileTap={{ scale: 0.95 }}
-                                    >
-                                        <span className="block leading-tight mb-1 truncate text-[10px] sm:text-sm">
-                                            <span className="hidden sm:inline">Semanal</span>
-                                            <span className="sm:hidden">Sem</span>
-                                        </span>
-                                        <div className="flex justify-center -mt-0.5">
-                                            <span className={`flex items-center justify-center w-6 h-6 sm:w-9 sm:h-9 rounded-full text-[7px] sm:text-[11px] font-black shadow-md transition-transform hover:scale-110 ${getPromoForPlan('semanal') ? 'bg-pink-500 text-white' : 'bg-orange-500 text-white'}`}>
-                                                {getPromoDiscountLabel('weekly')}
-                                            </span>
-                                        </div>
-                                    </motion.button>
-
-                                    {!isProteinsPack && (
-                                        <motion.button
-                                            onClick={() => setSelectedPlan('biweekly')}
-                                            className={`flex-1 min-w-0 py-2 sm:py-3 px-1 sm:px-3 rounded-2xl text-[11px] sm:text-sm font-bold transition-all relative border overflow-visible ${selectedPlan === 'biweekly'
-                                                ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg shadow-orange-500/30 border-orange-500'
-                                                : 'bg-white text-gray-700 hover:bg-orange-50 border-gray-200 hover:border-orange-300'
-                                                }`}
-                                            whileHover={{ scale: 1.05 }}
-                                            whileTap={{ scale: 0.95 }}
-                                        >
-                                            <span className="block leading-tight mb-1 truncate text-[10px] sm:text-sm">
-                                                <span className="hidden sm:inline">Quincenal</span>
-                                                <span className="sm:hidden">Quin</span>
-                                            </span>
-                                            <div className="flex justify-center -mt-0.5">
-                                                <span className={`flex items-center justify-center w-6 h-6 sm:w-9 sm:h-9 rounded-full text-[7px] sm:text-[11px] font-black shadow-md transition-transform hover:scale-110 ${getPromoForPlan('quincenal') ? 'bg-pink-500 text-white' : 'bg-orange-500 text-white'}`}>
-                                                    {getPromoDiscountLabel('biweekly')}
-                                                </span>
-                                            </div>
-                                        </motion.button>
-                                    )}
-
-                                    <motion.button
-                                        onClick={() => {
-                                            setSelectedPlan('monthly');
-                                            if (isProteinsPack) setSelectedSize('500');
-                                        }}
-                                        className={`flex-1 min-w-0 py-2 sm:py-3 px-1 sm:px-3 rounded-2xl text-[11px] sm:text-sm font-bold transition-all relative border overflow-visible ${selectedPlan === 'monthly'
-                                            ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg shadow-orange-500/30 border-orange-500'
-                                            : 'bg-white text-gray-700 hover:bg-orange-50 border-gray-200 hover:border-orange-300'
-                                            }`}
-                                        whileHover={{ scale: 1.05 }}
-                                        whileTap={{ scale: 0.95 }}
-                                    >
-                                        <span className="block leading-tight mb-1 truncate text-[10px] sm:text-sm">
-                                            <span className="hidden sm:inline">Mensual</span>
-                                            <span className="sm:hidden">Mes</span>
-                                        </span>
-                                        <div className="flex justify-center -mt-0.5">
-                                            <span className={`flex items-center justify-center w-6 h-6 sm:w-9 sm:h-9 rounded-full text-[7px] sm:text-[11px] font-black shadow-md transition-transform hover:scale-110 ${getPromoForPlan('mensual') ? 'bg-pink-500 text-white' : (isTwoPack ? 'bg-purple-500 text-white' : 'bg-green-500 text-white')}`}>
-                                                {getPromoDiscountLabel('monthly')}
-                                            </span>
-                                        </div>
-                                    </motion.button>
-                                </div>
-                            )}
-
-
-                            {isPromocionPack && (
-                                <div className="mb-3 text-center">
-                                    <span className="inline-flex items-center gap-1 px-3 py-1 bg-gradient-to-r from-pink-500 to-orange-500 text-white text-xs font-bold rounded-full">
-                                        🎁 ¡Desayunos GRATIS incluidos!
                                     </span>
                                 </div>
-                            )}
-
-                            {/* Selector de Tamaño para Protein Packs en modo Standard */}
-                            {isProteinsPack && (
-                                <div className="flex justify-center mb-3">
-                                    <div className="bg-gray-100 p-1 rounded-xl flex gap-1">
-                                        <button
-                                            onClick={() => {
-                                                setSelectedSize('250');
-                                                if (selectedPlan === 'monthly') setSelectedPlan('weekly');
-                                            }}
-                                            className={`px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${selectedSize === '250'
-                                                ? 'bg-white text-orange-600 shadow-sm'
-                                                : 'text-gray-500 hover:text-gray-700'
-                                                }`}
-                                        >
-                                            250g
-                                        </button>
-                                        <button
-                                            onClick={() => setSelectedSize('500')}
-                                            className={`px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${selectedSize === '500'
-                                                ? 'bg-white text-orange-600 shadow-sm'
-                                                : 'text-gray-500 hover:text-gray-700'
-                                                }`}
-                                        >
-                                            500g
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
-
-                            <div className="text-center mb-4">
-                                {hasAnyDiscount ? (
-                                    <div className="flex flex-col items-center justify-center">
-                                        <span className="text-sm text-gray-400 line-through">
-                                            {formatPrice(getOriginalPrice())}
-                                        </span>
-                                        <span className="text-xl sm:text-3xl font-bold text-bikitchen-gold animate-in fade-in zoom-in duration-300">
-                                            {formatPrice(getFinalPrice())}
-                                        </span>
-                                        {isMonthlyPlan && (
-                                            <span className={`inline-flex items-center gap-1 mt-1 px-2 py-0.5 ${isTwoPack ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'} text-xs font-bold rounded-full`}>
-                                                <span>🎉</span> {MONTHLY_DISCOUNT_PERCENT}% OFF
-                                            </span>
-                                        )}
-                                        {hasPromoDiscount && (
-                                            <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 bg-pink-100 text-pink-700 text-xs font-bold rounded-full">
-                                                <span>🎁</span> ¡PROMO!
-                                            </span>
-                                        )}
-                                    </div>
-                                ) : (
-                                    <div className="text-xl sm:text-3xl font-bold text-bikitchen-orange">
-                                        {formatPrice(getOriginalPrice())}
-                                    </div>
-                                )}
-                                <div className="text-xs text-gray-500 mt-1">
-                                    {isPromocionPack
-                                        ? 'precio mensual'
-                                        : selectedPlan === 'weekly'
-                                            ? 'por semana'
-                                            : selectedPlan === 'biweekly'
-                                                ? 'por quincena'
-                                                : isProteinsPack // Proteínas no es mensual original, es descuento también
-                                                    ? 'por mes'
-                                                    : 'por mes'}
+                                <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 bg-green-50 text-green-600 rounded-full border border-green-100">
+                                    <span className="text-[10px] font-black uppercase tracking-tighter">
+                                        Ahorras {formatPrice(getOriginalPrice() - getFinalPrice())}
+                                    </span>
                                 </div>
                             </div>
-
-                            <div className={`rounded-xl p-3 mb-4 border ${(isMonthlyPlan || isPromocionPack) ? (isTwoPack ? 'bg-purple-50 border-purple-200' : 'bg-green-50 border-green-200') : 'bg-gray-50 border-gray-100'}`}>
-                                <div className="flex items-start gap-2">
-                                    <Truck size={16} className={`mt-0.5 flex-shrink-0 ${(isMonthlyPlan || isPromocionPack) ? (isTwoPack ? 'text-purple-600' : 'text-green-600') : 'text-gray-500'}`} />
-                                    <div>
-                                        <p className={`text-xs font-medium ${(isMonthlyPlan || isPromocionPack) ? (isTwoPack ? 'text-purple-700' : 'text-green-700') : 'text-gray-600'}`}>
-                                            {getShipping()}
-                                        </p>
-                                        {(isMonthlyPlan || isPromocionPack) && (
-                                            <p className={`text-xs font-bold mt-0.5 ${isTwoPack ? 'text-purple-600' : 'text-green-600'}`}>
-                                                ✨ {is15ComidasPack && selectedPlan === 'monthly' ? '¡Envío GRATIS!' : '🔥 50% OFF en envíos'}
-                                            </p>
-                                        )}
-                                    </div>
-                                </div>
+                        ) : (
+                            <div className="text-3xl sm:text-4xl font-black text-gray-900">
+                                {formatPrice(getOriginalPrice())}
                             </div>
+                        )}
+                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-2">
+                            Cobro {getPlanLabel().toLowerCase()}
+                        </p>
+                    </div>
 
-                            <motion.button
-                                onClick={isProteinsPack ? handleOpenModal : handleAddToCart}
-                                disabled={isMaintenance}
-                                className={`w-full font-black py-2.5 px-3 sm:py-4 sm:px-6 rounded-xl sm:rounded-2xl transition-all flex items-center justify-center gap-1.5 sm:gap-2 ${isMaintenance
-                                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                                    : 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-xl hover:shadow-2xl hover:shadow-orange-500/50'
-                                    }`}
-                                whileHover={!isMaintenance ? { scale: 1.05 } : {}}
-                                whileTap={!isMaintenance ? { scale: 0.95 } : {}}
-                            >
-                                {isMaintenance ? (
-                                    <>
-                                        <Info size={20} />
-                                        En mantenimiento
-                                    </>
-                                ) : (
-                                    <>
-                                        <ShoppingCart size={20} />
-                                        Agregar al Carrito
-                                    </>
-                                )}
-                            </motion.button>
-                        </>
-                    )}
+                    {/* Envío Info Box */}
+                    <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100 flex items-center gap-4">
+                        <div className="w-10 h-10 bg-white rounded-xl shadow-sm flex items-center justify-center text-gray-400">
+                            <Truck size={20} />
+                        </div>
+                        <div className="flex-1">
+                            <p className="text-[10px] sm:text-xs font-bold text-gray-600 leading-tight">
+                                {getShipping()}
+                            </p>
+                            {(isMonthlyPlan || isPromocionPack) && (
+                                <p className="text-[10px] font-black text-green-600 mt-1 uppercase tracking-tighter">
+                                    🔥 Beneficio Premium Activo
+                                </p>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Action Button */}
+                    <motion.button
+                        onClick={isProteinsPack || isFamiliarPack ? handleOpenModal : handleAddToCart}
+                        disabled={isMaintenance}
+                        className={`w-full group/btn relative overflow-hidden font-black py-4 sm:py-5 px-6 rounded-[1.5rem] transition-all flex items-center justify-center gap-3 shadow-xl ${
+                            isMaintenance
+                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                            : 'bg-gray-900 text-white hover:bg-orange-600 active:scale-95 shadow-gray-900/20'
+                        }`}
+                        whileHover={!isMaintenance ? { y: -2 } : {}}
+                    >
+                        {isMaintenance ? (
+                            <>
+                                <Info size={20} />
+                                Mantenimiento
+                            </>
+                        ) : (
+                            <>
+                                <ShoppingCart size={22} className="group-hover/btn:rotate-12 transition-transform" />
+                                <span>{isProteinsPack || isFamiliarPack ? 'Personalizar Ahora' : 'Agregar al Carrito'}</span>
+                            </>
+                        )}
+                    </motion.button>
                 </div>
             </motion.div>
 
@@ -1175,7 +1071,7 @@ const PackCard = memo(({ pack, shipping, category, promociones = [], customImage
     );
 });
 
-const PackSection = memo(({ category, data, promociones = [], packImages = {}, packsEspeciales }) => {
+const PackSection = memo(({ category, data, promociones = [], packImages = {}, packsEspeciales, ...rest }) => {
     return (
         <section id={`pack-${category}`} className="mb-16 sm:mb-24 scroll-mt-40">
             <motion.div
@@ -1197,16 +1093,19 @@ const PackSection = memo(({ category, data, promociones = [], packImages = {}, p
             <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-6">
                 {data.packs.map((pack, index) => (
                     <PackCard
-                        key={index}
+                        key={`${category}-${pack.name}-${index}`}
                         pack={pack}
-                        shipping={data.shipping}
-                        category={category}
+                        shipping={pack.shipping || data.shipping}
+                        category={pack.sectionKey || category}
+                        categoryLabel={pack.categoryLabel}
                         promociones={promociones}
                         customImage={packImages[pack.name]}
                         packsEspeciales={packsEspeciales}
+                        {...rest}
                     />
                 ))}
             </div>
+
         </section>
     );
 });
@@ -1219,11 +1118,179 @@ export default function PacksPage() {
     const [packsData, setPacksData] = useState(PACKS_DATA);
     const [promociones, setPromociones] = useState([]);
     const [activeFilter, setActiveFilter] = useState('todos');
+    const [activePackGroup, setActivePackGroup] = useState('todos');
+
+
+    // Filtrar filtros por grupo activo
+    const filteredFilters = useMemo(() => {
+        if (activePackGroup === 'todos') return PACK_FILTERS;
+        return PACK_FILTERS.filter(f => f.groupId === activePackGroup || f.id === 'todos');
+    }, [activePackGroup]);
+
+    // Calcular contadores para los filtros
+    const packFilterCounts = useMemo(() => {
+        const counts = {};
+        
+        // Iterar sobre todas las secciones y sus packs
+        Object.entries(packsData).forEach(([sectionKey, sectionData]) => {
+            sectionData.packs.forEach(pack => {
+                // Contar por filtros basados en packs específicos
+                PACK_FILTERS.forEach(filter => {
+                    if (filter.packs && filter.packs.includes(pack.name)) {
+                        counts[filter.id] = (counts[filter.id] || 0) + 1;
+                    }
+                });
+            });
+            
+            // Contar por filtros basados en secciones completas
+            PACK_FILTERS.forEach(filter => {
+                if (filter.section === sectionKey) {
+                    counts[filter.id] = sectionData.packs.length;
+                }
+            });
+        });
+        
+        counts['todos'] = Object.values(packsData).reduce((acc, sec) => acc + sec.packs.length, 0);
+        return counts;
+    }, [packsData]);
     const [isSticky, setIsSticky] = useState(false);
     const [packImages, setPackImages] = useState({}); // { packName: imageUrl }
     const [isLoading, setIsLoading] = useState(true);
     const [packsEspeciales, setPacksEspeciales] = useState(PACKS_ESPECIALES_BASE);
     const packsContainerRef = useRef(null);
+
+    // Estados para Desayunos
+    const [desayunosMenu, setDesayunosMenu] = useState([]);
+    const [desayunosVegetarianos, setDesayunosVegetarianos] = useState([]);
+    const [desayunosModalOpen, setDesayunosModalOpen] = useState(false);
+    const [editingDesayunos, setEditingDesayunos] = useState(false);
+    const [activeDesayunoTab, setActiveDesayunoTab] = useState('regular');
+    const [tempDesayunos, setTempDesayunos] = useState([]);
+    const [tempDesayunosVeg, setTempDesayunosVeg] = useState([]);
+    const DESAYUNOS_PRECIO = 15000;
+
+    // Estados para Edición de Proteínas
+    const [editingProteinas, setEditingProteinas] = useState(false);
+    const [tempProteinas, setTempProteinas] = useState([]);
+    const [nuevaProteina, setNuevaProteina] = useState('');
+    const [editandoIndice, setEditandoIndice] = useState(null);
+    const [nombreEditado, setNombreEditado] = useState('');
+
+    // Guardar desayunos en el menú oficial (sincronizado con packs)
+    const saveDesayunos = async () => {
+        try {
+            const docRef = doc(db, 'menus_oficial', 'current');
+            const docSnap = await getDoc(docRef);
+            const menuActual = docSnap.exists() ? docSnap.data() : {};
+
+            const desayunosFormato = tempDesayunos.map((desayuno, index) => ({
+                numero: index + 1,
+                proteina: desayuno,
+                vegetal: 'Tostada integral',
+                carbo: 'Fruta fresca'
+            }));
+
+            const desayunosVegFormato = tempDesayunosVeg.map((desayuno, index) => ({
+                numero: index + 1,
+                proteina: desayuno,
+                vegetal: 'Tostada integral',
+                carbo: 'Fruta fresca'
+            }));
+
+            await setDoc(docRef, {
+                ...menuActual,
+                desayuno: desayunosFormato,
+                desayunoVegetariano: desayunosVegFormato,
+                meta: {
+                    ...menuActual.meta,
+                    lastModifiedAt: new Date(),
+                    desayunosUpdatedBy: 'admin'
+                }
+            }, { merge: true });
+
+            invalidateCache('menus_official');
+            setDesayunosMenu(tempDesayunos);
+            setDesayunosVegetarianos(tempDesayunosVeg);
+            setEditingDesayunos(false);
+            toast.success('✅ Desayunos actualizados correctamente');
+        } catch (error) {
+            console.error('Error guardando desayunos:', error);
+            toast.error('Error al guardar desayunos');
+        }
+    };
+
+    // Guardar proteínas disponibles
+    const saveProteinas = async () => {
+        try {
+            const docRef = doc(db, 'menus_oficial', 'current');
+            const docSnap = await getDoc(docRef);
+            const menuActual = docSnap.exists() ? docSnap.data() : {};
+
+            await setDoc(docRef, {
+                ...menuActual,
+                proteinasDisponibles: tempProteinas,
+                meta: {
+                    ...menuActual.meta,
+                    lastModifiedAt: new Date(),
+                    proteinasUpdatedBy: 'admin'
+                }
+            }, { merge: true });
+
+            invalidateCache('menus_official');
+            setPacksEspeciales(prev => ({
+                ...prev,
+                'Pack 3 Proteínas': { ...prev['Pack 3 Proteínas'], proteinas: tempProteinas },
+                'Pack 5 Proteínas': { ...prev['Pack 5 Proteínas'], proteinas: tempProteinas }
+            }));
+            setEditingProteinas(false);
+            toast.success('✅ Proteínas actualizadas correctamente');
+        } catch (error) {
+            console.error('Error guardando proteínas:', error);
+            toast.error('Error al guardar proteínas');
+        }
+    };
+
+    const agregarProteina = () => {
+        if (nuevaProteina.trim() && !tempProteinas.includes(nuevaProteina.trim())) {
+            setTempProteinas([...tempProteinas, nuevaProteina.trim()]);
+            setNuevaProteina('');
+        }
+    };
+
+    const eliminarProteina = (index) => {
+        setTempProteinas(tempProteinas.filter((_, i) => i !== index));
+    };
+
+    // Handlers para abrir modales
+    const handleOpenDesayunos = () => setDesayunosModalOpen(true);
+    
+    const handleEditDesayunos = () => {
+        setTempDesayunos([...desayunosMenu]);
+        setTempDesayunosVeg([...desayunosVegetarianos]);
+        setEditingDesayunos(true);
+    };
+
+    const handleEditProteinas = () => {
+        setTempProteinas(packsEspeciales['Pack 3 Proteínas']?.proteinas || []);
+        setEditingProteinas(true);
+    };
+
+    const handleAgregarDesayunos = () => {
+        const item = {
+            id: 'pack-desayunos-semanal',
+            name: 'Pack de Desayunos (Semanal)',
+            price: DESAYUNOS_PRECIO,
+            quantity: 1,
+            type: 'desayunos',
+            plan: 'weekly',
+            menu: activeDesayunoTab === 'regular' ? desayunosMenu : desayunosVegetarianos,
+            category: 'desayunos'
+        };
+        addToCart(item);
+        setDesayunosModalOpen(false);
+        toast.success('🍳 Pack de desayunos agregado al carrito');
+    };
+
 
 
 
@@ -1295,11 +1362,38 @@ export default function PacksPage() {
         return packs;
     }, [activeFilter]);
 
-    // Datos filtrados memoizados - AHORA soporta secciones completas
+    // Datos filtrados memoizados - AHORA soporta secciones completas y VISTA APLANADA para dietas
     const filteredPacksData = useMemo(() => {
         const filterConfig = PACK_FILTERS.find(f => f.id === activeFilter);
-        const sectionFilter = filterConfig?.section;
+        
+        // MODO APLANADO: Si es un filtro de dieta específico (ej. Full Pack, Keto)
+        if (filterConfig?.packs) {
+            const allMatchingPacks = [];
+            Object.entries(packsData).forEach(([sectionKey, sectionData]) => {
+                const matches = sectionData.packs.filter(p => filterConfig.packs.includes(p.name));
+                matches.forEach(p => {
+                    allMatchingPacks.push({
+                        ...p,
+                        categoryLabel: sectionData.title, // Label de la sección (ej: "5 Comidas a la Semana")
+                        sectionKey: sectionKey, // Clave original para que el carrito sepa qué es
+                        shipping: sectionData.shipping // Información de envío de la sección original
+                    });
+                });
+            });
+            
+            return [{
+                key: 'flattened_results',
+                data: {
+                    title: `Variante: ${filterConfig.label}`,
+                    subtitle: `Encuéntralo en todas nuestras presentaciones y cantidades`,
+                    icon: filterConfig.icon,
+                    packs: allMatchingPacks
+                }
+            }];
+        }
 
+        // MODO NORMAL: Secciones estándar o Filtro de Sección (Two Pack, Familiar...)
+        const sectionFilter = filterConfig?.section;
         return Object.entries(packsData)
             .filter(([key]) => !sectionFilter || sectionFilter === key) // Filtro de nivel superior (Sección)
             .map(([key, data]) => ({
@@ -1317,6 +1411,24 @@ export default function PacksPage() {
         const loadAllData = async () => {
             setIsLoading(true);
             try {
+                // Cargar proteínas dinámicas desde Firestore si existen
+                if (menusData?.proteinasDisponibles) {
+                    setPacksEspeciales(prev => ({
+                        ...prev,
+                        'Pack 3 Proteínas': { ...prev['Pack 3 Proteínas'], proteinas: menusData.proteinasDisponibles },
+                        'Pack 5 Proteínas': { ...prev['Pack 5 Proteínas'], proteinas: menusData.proteinasDisponibles }
+                    }));
+                }
+
+                // Cargar desayunos
+                if (menusData?.desayunos) {
+                    setDesayunosMenu(menusData.desayunos);
+                    setTempDesayunos(menusData.desayunos);
+                }
+                if (menusData?.desayunosVegetarianos) {
+                    setDesayunosVegetarianos(menusData.desayunosVegetarianos);
+                    setTempDesayunosVeg(menusData.desayunosVegetarianos);
+                }
                 // Cargar imágenes, precios y promociones en paralelo
                 const [imagesMap, activePromos, pricesFromDb] = await Promise.all([
                     cachedFetch('packs_images_map', async () => {
@@ -1524,52 +1636,75 @@ export default function PacksPage() {
                     </div>
                 </header>
 
-                {/* Filtros */}
-                {/* Sticky Filter Bar - Mobile Optimized */}
-                <div className={`sticky top-0 z-40 transition-all duration-300 ${isSticky
-                    ? 'bg-white/95 backdrop-blur-xl shadow-lg shadow-gray-200/50 py-3'
+                {/* Filtros Agrupados e Inteligentes */}
+                <div className={`sticky top-0 z-30 transition-all duration-300 ${isSticky
+                    ? 'bg-white/95 backdrop-blur-xl shadow-lg shadow-gray-200/50 py-3 pt-8'
                     : 'bg-white py-4 border-b border-gray-100'
                     }`}
-                    style={{ top: isNavbarVisible && isSticky ? 'var(--navbar-height, 70px)' : '0px' }}
+                    style={{ top: isSticky ? 'var(--navbar-height, 70px)' : '0px' }}
                 >
-                    <div className="container mx-auto px-4">
-                        <div className="flex overflow-x-auto gap-2 pb-2 pt-1 hide-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0 items-center">
-                            {PACK_FILTERS.map((filter) => (
-                                <button
-                                    key={filter.id}
-                                    onClick={(e) => {
-                                        setActiveFilter(filter.id);
-                                        // 1. Centrar la píldora
-                                        e.currentTarget.scrollIntoView({
-                                            behavior: 'smooth',
-                                            block: 'nearest',
-                                            inline: 'center'
-                                        });
+                    <div className="container mx-auto px-4 max-w-6xl">
+                        {/* Indicador de más contenido sutil */}
+                        <div className="relative">
+                            <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-white/80 to-transparent z-10 pointer-events-none sm:hidden" />
+                            
+                            {/* Grupos de Filtros */}
+                            <div className="flex gap-2 mb-4 overflow-x-auto pb-1 md:scrollbar-premium hide-scrollbar px-0 shrink-0">
+                                {PACK_GROUPS.map((group) => (
+                                    <button
+                                        key={group.id}
+                                        onClick={() => {
+                                            setActivePackGroup(group.id);
+                                            const filterInGroup = PACK_FILTERS.find(f => f.groupId === group.id);
+                                            if (group.id !== 'todos' && !PACK_FILTERS.find(f => f.id === activeFilter && f.groupId === group.id)) {
+                                                if (filterInGroup) setActiveFilter(filterInGroup.id);
+                                            }
+                                        }}
+                                        className={`flex-shrink-0 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 border-2 ${activePackGroup === group.id
+                                            ? 'bg-gray-900 text-white border-gray-900'
+                                            : 'bg-white text-gray-400 border-gray-50 hover:border-gray-200'
+                                            }`}
+                                    >
+                                        <span>{group.icon}</span>
+                                        <span>{group.label}</span>
+                                    </button>
+                                ))}
+                            </div>
 
-                                        // 2. Scroll INMEDIATO (auto) para evitar "clamping" al footer
-                                        // Usamos setTimeout para esperar a que React renderice el nuevo contenido
-                                        // y la altura de la página se ajuste antes de scrolear.
-                                        if (window.scrollY > 500) {
-                                            setTimeout(() => {
-                                                window.scrollTo({
-                                                    top: 420,
-                                                    behavior: 'auto'
-                                                });
-                                            }, 0);
-                                        }
-                                    }}
-                                    className={`
-                                        whitespace-nowrap px-4 py-2.5 rounded-full text-sm font-bold transition-all duration-300 flex items-center gap-2 border flex-shrink-0
-                                        ${activeFilter === filter.id
-                                            ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white border-transparent shadow-lg shadow-orange-500/30 scale-105'
-                                            : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-white hover:border-orange-200 hover:text-orange-600'
-                                        }
-                                    `}
-                                >
-                                    <span className="text-lg">{filter.icon}</span>
-                                    {filter.label}
-                                </button>
-                            ))}
+                            {/* Píldoras de Filtro Específico */}
+                            <div className="flex overflow-x-auto gap-2.5 pb-2 pt-1 md:scrollbar-premium hide-scrollbar px-0 items-center">
+                                {filteredFilters.map((filter) => (
+                                    <button
+                                        key={filter.id}
+                                        onClick={(e) => {
+                                            setActiveFilter(filter.id);
+                                            e.currentTarget.scrollIntoView({
+                                                behavior: 'smooth',
+                                                block: 'nearest',
+                                                inline: 'center'
+                                            });
+                                            if (isSticky) {
+                                                window.scrollTo({ top: 410, behavior: 'smooth' });
+                                            }
+                                        }}
+                                        className={`
+                                            flex-shrink-0 px-5 py-3 rounded-2xl text-sm font-black transition-all flex items-center gap-3 whitespace-nowrap border-2
+                                            ${activeFilter === filter.id
+                                                ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white border-orange-500 shadow-xl shadow-orange-500/30 scale-105'
+                                                : 'bg-white text-gray-700 border-gray-100 hover:border-orange-200 shadow-sm'
+                                            }
+                                        `}
+                                    >
+                                        <span className="text-xl">{filter.icon}</span>
+                                        <div className="flex flex-col items-start leading-tight">
+                                            <span>{filter.label}</span>
+                                            <span className={`text-[10px] uppercase tracking-wider opacity-70 ${activeFilter === filter.id ? 'text-white' : 'text-orange-500'}`}>
+                                                {packFilterCounts[filter.id] || 0} opciones
+                                            </span>
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1583,6 +1718,7 @@ export default function PacksPage() {
                         scrollbar-width: none;
                     }
                 `}</style>
+
 
                 <main ref={packsContainerRef} className="container py-10 sm:py-16 pb-24 sm:pb-32">
                     {isLoading ? (
@@ -1628,8 +1764,16 @@ export default function PacksPage() {
                                             promociones={promociones}
                                             packImages={packImages}
                                             packsEspeciales={packsEspeciales}
+                                            // Passing new handlers
+                                            onOpenDesayunos={handleOpenDesayunos}
+                                            onEditDesayunos={handleEditDesayunos}
+                                            onEditProteinas={handleEditProteinas}
+                                            // States for modal display
+                                            desayunosMenu={desayunosMenu}
+                                            desayunosVegetarianos={desayunosVegetarianos}
                                         />
                                     ))
+
                                 ) : (
                                     <div className="text-center py-20">
                                         <div className="text-4xl mb-4">🔦</div>
@@ -1669,6 +1813,280 @@ export default function PacksPage() {
 
                 <Footer />
             </div>
+
+            {/* Modal de Ver Desayunos */}
+            {desayunosModalOpen && ReactDOM.createPortal(
+                <AnimatePresence>
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        onClick={() => setDesayunosModalOpen(false)}
+                        className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[9999] p-4"
+                        style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                            animate={{ scale: 1, opacity: 1, y: 0 }}
+                            exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] shadow-2xl overflow-hidden flex flex-col"
+                        >
+                            <div className="bg-gradient-to-r from-amber-400 to-yellow-500 p-6 text-white text-center relative">
+                                <button
+                                    type="button"
+                                    onClick={() => setDesayunosModalOpen(false)}
+                                    className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30 transition-colors"
+                                >
+                                    <X size={20} />
+                                </button>
+                                <div className="text-5xl mb-3">🍳</div>
+                                <h3 className="text-2xl font-black">Menú de Desayunos</h3>
+                                <p className="text-white/90 font-medium">Frescura y salud para comenzar tu día</p>
+                            </div>
+
+                            <div className="flex-1 overflow-y-auto p-6">
+                                <div className="space-y-6">
+                                    <div className="flex bg-gray-100 p-1.5 rounded-2xl gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setActiveDesayunoTab('regular')}
+                                            className={`flex-1 py-3.5 px-4 rounded-xl text-sm font-black transition-all ${activeDesayunoTab === 'regular'
+                                                    ? 'bg-white text-gray-900 shadow-xl scale-[1.02]'
+                                                    : 'text-gray-500 hover:text-gray-700'
+                                                }`}
+                                        >
+                                            Regulares
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setActiveDesayunoTab('vegetariano')}
+                                            className={`flex-1 py-3.5 px-4 rounded-xl text-sm font-black transition-all ${activeDesayunoTab === 'vegetariano'
+                                                    ? 'bg-white text-gray-900 shadow-xl scale-[1.02]'
+                                                    : 'text-gray-500 hover:text-gray-700'
+                                                }`}
+                                        >
+                                            Vegetarianos
+                                        </button>
+                                    </div>
+
+                                    <div className="space-y-4">
+                                        {(activeDesayunoTab === 'regular' ? desayunosMenu : desayunosVegetarianos).map((item, idx) => (
+                                            <motion.div
+                                                initial={{ opacity: 0, x: -10 }}
+                                                animate={{ opacity: 1, x: 0 }}
+                                                key={idx}
+                                                className="flex items-center gap-4 p-5 bg-gradient-to-r from-gray-50 to-white rounded-2xl border-2 border-gray-100 shadow-sm hover:shadow-md transition-all group"
+                                            >
+                                                <div className="w-10 h-10 bg-amber-100 text-amber-600 rounded-xl flex items-center justify-center font-black flex-shrink-0 group-hover:scale-110 transition-transform">
+                                                    {idx + 1}
+                                                </div>
+                                                <div className="flex-1">
+                                                    <p className="font-bold text-gray-800 text-base leading-tight">
+                                                        {item}
+                                                    </p>
+                                                    <p className="text-xs text-gray-500 mt-1 uppercase tracking-wider font-bold">Base de Frutas y Proteína</p>
+                                                </div>
+                                            </motion.div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="p-6 bg-gray-50 border-t border-gray-200">
+                                <div className="flex items-center justify-between mb-6 bg-white p-4 rounded-2xl border-2 border-amber-100">
+                                    <div className="flex flex-col">
+                                        <span className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-1">Precio Semanal</span>
+                                        <span className="text-2xl font-black text-amber-500">₡{DESAYUNOS_PRECIO.toLocaleString('es-CR')}</span>
+                                    </div>
+                                    <span className="px-4 py-2 bg-amber-50 text-amber-600 rounded-xl text-xs font-black uppercase tracking-widest border border-amber-100 shadow-sm">
+                                        5 Porciones
+                                    </span>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={handleAgregarDesayunos}
+                                    className="w-full bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-500 hover:to-yellow-600 text-white font-black py-4.5 px-4 rounded-2xl transition-all flex items-center justify-center gap-3 shadow-xl shadow-amber-500/30 hover:shadow-amber-500/50 hover:scale-[1.02]"
+                                >
+                                    <ShoppingCart size={22} className="text-white" />
+                                    Agregar al Carrito
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                </AnimatePresence>,
+                document.body
+            )}
+
+            {/* Modal de Edición de Desayunos (Admin) */}
+            {editingDesayunos && ReactDOM.createPortal(
+                <AnimatePresence>
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        onClick={() => setEditingDesayunos(false)}
+                        className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-[9999] p-4"
+                        style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.95, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.95, opacity: 0 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] shadow-2xl overflow-hidden flex flex-col"
+                        >
+                            <div className="bg-gradient-to-r from-amber-500 to-amber-600 p-6 text-white relative">
+                                <h3 className="text-2xl font-black">⚙️ Panel Admin: Desayunos</h3>
+                                <p className="text-amber-100 font-medium opacity-90">Configura el menú semanal disponible</p>
+                                <button
+                                    type="button"
+                                    onClick={() => setEditingDesayunos(false)}
+                                    className="absolute top-6 right-6 w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center hover:bg-white/30 transition-colors"
+                                >
+                                    <X size={20} />
+                                </button>
+                            </div>
+
+                            <div className="flex bg-amber-50 p-2 gap-2 border-b border-amber-100">
+                                <button
+                                    onClick={() => setActiveDesayunoTab('regular')}
+                                    className={`flex-1 py-3 px-4 rounded-xl text-sm font-black transition-all ${activeDesayunoTab === 'regular' ? 'bg-amber-500 text-white shadow-lg' : 'text-amber-700 hover:bg-amber-100'}`}
+                                >
+                                    Menú Regular
+                                </button>
+                                <button
+                                    onClick={() => setActiveDesayunoTab('vegetariano')}
+                                    className={`flex-1 py-3 px-4 rounded-xl text-sm font-black transition-all ${activeDesayunoTab === 'vegetariano' ? 'bg-amber-500 text-white shadow-lg' : 'text-amber-700 hover:bg-amber-100'}`}
+                                >
+                                    Menú Vegetariano
+                                </button>
+                            </div>
+
+                            <div className="p-6 overflow-y-auto space-y-4">
+                                {(activeDesayunoTab === 'regular' ? tempDesayunos : tempDesayunosVeg).map((item, idx) => (
+                                    <div key={idx} className="flex gap-3 group">
+                                        <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center font-black text-gray-400 group-hover:bg-amber-100 group-hover:text-amber-600 transition-colors">
+                                            {idx + 1}
+                                        </div>
+                                        <input
+                                            type="text"
+                                            value={item}
+                                            onChange={(e) => {
+                                                const newItems = [...(activeDesayunoTab === 'regular' ? tempDesayunos : tempDesayunosVeg)];
+                                                newItems[idx] = e.target.value;
+                                                if (activeDesayunoTab === 'regular') setTempDesayunos(newItems);
+                                                else setTempDesayunosVeg(newItems);
+                                            }}
+                                            placeholder={`Desayuno del día ${idx + 1}...`}
+                                            className="flex-1 px-5 py-3 rounded-2xl border-2 border-gray-100 focus:border-amber-400 focus:outline-none font-medium text-gray-800 shadow-sm"
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="p-6 bg-gray-50 border-t flex gap-4">
+                                <button
+                                    onClick={() => setEditingDesayunos(false)}
+                                    className="flex-1 py-4 px-6 rounded-2xl border-2 border-gray-200 text-gray-600 font-black hover:bg-white transition-all"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={saveDesayunos}
+                                    className="flex-1 py-4 px-6 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 text-white font-black shadow-xl shadow-amber-500/30 hover:shadow-amber-500/50 hover:scale-[1.02] transition-all"
+                                >
+                                    Guardar Cambios
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                </AnimatePresence>,
+                document.body
+            )}
+
+            {/* Modal de Edición de Proteínas (Admin) */}
+            {editingProteinas && ReactDOM.createPortal(
+                <AnimatePresence>
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        onClick={() => setEditingProteinas(false)}
+                        className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-[9999] p-4"
+                        style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.95, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.95, opacity: 0 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl overflow-hidden flex flex-col"
+                        >
+                            <div className="bg-gradient-to-r from-orange-500 to-amber-500 p-6 text-white relative">
+                                <h3 className="text-2xl font-black">🥩 Panel Admin: Proteínas</h3>
+                                <p className="text-orange-50/80 font-medium">Gestiona las opciones para los packs semanales</p>
+                                <button
+                                    onClick={() => setEditingProteinas(false)}
+                                    className="absolute top-6 right-6 w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center hover:bg-white/30 transition-colors"
+                                >
+                                    <X size={20} />
+                                </button>
+                            </div>
+
+                            <div className="p-6 space-y-6">
+                                <div className="flex gap-3">
+                                    <input
+                                        type="text"
+                                        placeholder="Nueva proteína (ej: Pollo al Limón)"
+                                        value={nuevaProteina}
+                                        onChange={(e) => setNuevaProteina(e.target.value)}
+                                        onKeyDown={(e) => e.key === 'Enter' && agregarProteina()}
+                                        className="flex-1 px-6 py-4 rounded-2xl border-2 border-gray-100 focus:border-orange-400 focus:outline-none font-bold text-gray-800 shadow-sm"
+                                    />
+                                    <button
+                                        onClick={agregarProteina}
+                                        className="aspect-square w-16 bg-orange-500 text-white rounded-2xl flex items-center justify-center hover:bg-orange-600 transition-all shadow-lg shadow-orange-500/20"
+                                    >
+                                        <Plus size={24} />
+                                    </button>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[40vh] overflow-y-auto pr-2">
+                                    {tempProteinas.map((pro, idx) => (
+                                        <div key={idx} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border-2 border-gray-100 border-dashed hover:border-orange-200 transition-colors group">
+                                            <span className="font-bold text-gray-700">{pro}</span>
+                                            <button
+                                                onClick={() => eliminarProteina(idx)}
+                                                className="w-9 h-9 bg-white text-red-500 rounded-xl flex items-center justify-center shadow-md hover:bg-red-50 transition-all active:scale-95"
+                                            >
+                                                <X size={16} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="p-6 bg-gray-50 border-t flex gap-4">
+                                <button
+                                    onClick={() => setEditingProteinas(false)}
+                                    className="flex-1 py-4 px-6 rounded-2xl border-2 border-gray-200 text-gray-600 font-black hover:bg-white transition-all"
+                                >
+                                    Cerrar
+                                </button>
+                                <button
+                                    onClick={saveProteinas}
+                                    className="flex-1 py-4 px-6 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 text-white font-black shadow-xl shadow-orange-500/30 hover:shadow-orange-500/50 hover:scale-[1.02] transition-all"
+                                >
+                                    Sincronizar Todo
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                </AnimatePresence>,
+                document.body
+            )}
         </PageTransition>
     );
 }

@@ -67,7 +67,12 @@ const formatItemsForEmail = (items) => {
         const itemTotal = (Number(item.price) || 0) * (Number(item.quantity) || 0);
         let line = `${item.quantity}× ${item.name}${itemPlan} - ₡${itemTotal.toLocaleString('es-CR')}`;
         
-        if (item.proteinas?.length) line += `\n└ Proteínas: ${item.proteinas.join(', ')}`;
+        // Soporta varios formatos de proteínas para asegurar que siempre se envíen
+        const proteinas = item.proteinas || (item.proteina ? [item.proteina] : []) || (item.protein ? [item.protein] : []);
+        if (proteinas.length > 0) {
+            line += `\n└ Proteínas: ${proteinas.join(', ')}`;
+        }
+        
         if (item.customizations?.notes) line += `\n└ Notas: ${item.customizations.notes}`;
         return line;
     }).join('\n\n');

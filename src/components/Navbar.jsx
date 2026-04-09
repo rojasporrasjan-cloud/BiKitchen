@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ShoppingCart, Menu, X, ChefHat, Utensils, Gift, Snowflake, HelpCircle, User, Soup, Search, Ticket } from 'lucide-react';
+import { ShoppingCart, Menu, X, ChefHat, Utensils, Gift, Snowflake, HelpCircle, User, Soup, Search, Ticket, Info } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { useChristmas } from '../context/ChristmasContext';
@@ -247,23 +247,23 @@ export default function Navbar() {
                     transform: visible ? 'translateY(0)' : 'translateY(-100%)',
                     top: visible && showBanner ? 'var(--promo-banner-height, 0px)' : '0'
                 }}
-                className={`fixed left-0 right-0 z-40 bg-gradient-to-b from-white via-white to-gray-50/30 backdrop-blur-xl border-b transition-all duration-300 ease-in-out ${scrolled
-                        ? 'shadow-2xl border-gray-100 py-2'
-                        : 'shadow-xl border-gray-100/50 py-3'
+                className={`fixed left-0 right-0 z-50 bg-white/70 backdrop-blur-2xl border-b transition-all duration-500 ease-in-out ${scrolled
+                        ? 'shadow-[0_10px_40px_rgba(0,0,0,0.08)] border-gray-100/50 py-2'
+                        : 'shadow-none border-transparent py-4'
                     }`}
             >
                 {/* Desktop: Logo izquierda + Nav centro + Acciones derecha */}
                 <div className="container hidden md:flex items-center justify-between">
                     {/* Logo */}
                     <Link to="/" className="group flex-shrink-0">
-                        <div className={`rounded-2xl p-2.5 transition-all duration-300 hover:scale-105 ${scrolled
-                                ? 'bg-gradient-to-br from-white to-gray-50 shadow-lg hover:shadow-xl border border-gray-100'
-                                : 'bg-gradient-to-br from-white via-orange-50/30 to-white shadow-xl hover:shadow-2xl border border-orange-100/50'
+                        <div className={`rounded-2xl p-2 transition-all duration-500 hover:scale-105 active:scale-95 ${scrolled
+                                ? 'bg-white shadow-lg border border-gray-100'
+                                : 'bg-white shadow-2xl shadow-orange-500/10 border border-orange-100/30'
                             }`}>
                             <img
                                 src="/assets/logo.jpg"
                                 alt="BiKitchen Food"
-                                className="h-10 md:h-11 w-auto object-contain"
+                                className="h-10 md:h-12 w-auto object-contain"
                             />
                         </div>
                     </Link>
@@ -277,11 +277,11 @@ export default function Navbar() {
                                 <Link
                                     key={item.name}
                                     to={item.path}
-                                    className={`group relative flex items-center gap-2 px-3 lg:px-4 py-2.5 rounded-xl text-xs lg:text-sm font-semibold transition-all duration-300 ${active
-                                            ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg shadow-orange-500/30 scale-105'
+                                    className={`group relative flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs lg:text-sm font-bold transition-all duration-500 ${active
+                                            ? 'bg-orange-500 text-white shadow-xl shadow-orange-500/25 scale-105'
                                             : item.highlight
-                                                ? 'text-orange-500 hover:bg-gradient-to-r hover:from-orange-50 hover:to-amber-50 hover:scale-102'
-                                                : 'text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 hover:scale-102'
+                                                ? 'text-orange-500 hover:bg-orange-50 hover:scale-105'
+                                                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 hover:scale-105'
                                         }`}
                                 >
                                     <Icon size={18} className={`transition-transform duration-300 ${active ? 'text-white scale-110' : item.highlight ? 'text-orange-500 group-hover:scale-110' : 'text-bikitchen-orange group-hover:scale-110'
@@ -321,10 +321,10 @@ export default function Navbar() {
                         {/* Mi Cuenta Button */}
                         <Link
                             to="/mi-cuenta"
-                            className="flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-gray-100 to-gray-50 hover:from-blue-50 hover:to-cyan-50 text-gray-600 hover:text-blue-600 transition-all duration-300 shadow-sm hover:shadow-md hover:scale-105 border border-gray-200/50 hover:border-blue-200"
+                            className="flex items-center justify-center w-11 h-11 rounded-xl bg-gray-50 text-gray-600 hover:bg-orange-500 hover:text-white transition-all duration-500 shadow-sm hover:shadow-xl hover:shadow-orange-500/20 hover:scale-110 border border-gray-100 group"
                             title="Mi Cuenta"
                         >
-                            <User size={18} />
+                            <User size={20} className="group-hover:scale-110 transition-transform" />
                         </Link>
 
                         {/* Mis Cupones Button (Desktop) */}
@@ -357,20 +357,20 @@ export default function Navbar() {
                 <div className="container flex md:hidden items-center justify-between">
                     {/* Mobile Toggle */}
                     <button
-                        className="p-2.5 rounded-xl text-gray-800 hover:bg-gradient-to-r hover:from-orange-50 hover:to-amber-50 hover:text-orange-600 transition-all duration-300 shadow-sm hover:shadow-md border border-transparent hover:border-orange-200"
+                        className="p-2.5 rounded-xl text-gray-800 bg-white/50 hover:bg-white hover:text-orange-600 transition-all duration-300 shadow-sm hover:shadow-md border border-gray-100/50 active:scale-90"
                         onClick={() => setIsOpen(!isOpen)}
                         aria-label="Toggle menu"
                     >
-                        <Menu size={26} strokeWidth={2} />
+                        <Menu size={24} strokeWidth={2.5} />
                     </button>
 
                     {/* Mobile Logo */}
                     <Link to="/" className="absolute left-1/2 -translate-x-1/2">
-                        <div className="rounded-xl p-2 bg-gradient-to-br from-white via-orange-50/30 to-white shadow-xl border border-orange-100/50">
+                        <div className="rounded-xl p-1.5 bg-white shadow-xl shadow-orange-500/10 border border-orange-100/30 active:scale-95 transition-transform">
                             <img
                                 src="/assets/logo.jpg"
                                 alt="BiKitchen Food"
-                                className="h-9 w-auto object-contain"
+                                className="h-8 w-auto object-contain"
                             />
                         </div>
                     </Link>
@@ -378,11 +378,11 @@ export default function Navbar() {
                     {/* Mobile Cart */}
                     <button
                         onClick={() => setIsCartOpen && setIsCartOpen(true)}
-                        className="relative p-2.5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-300"
+                        className="relative p-2.5 rounded-xl bg-orange-500 text-white shadow-lg shadow-orange-500/30 hover:shadow-orange-500/50 active:scale-90 transition-all duration-300"
                     >
-                        <ShoppingCart size={24} strokeWidth={2.5} />
+                        <ShoppingCart size={22} strokeWidth={2.5} />
                         {cartCount > 0 && (
-                            <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center bg-gradient-to-r from-red-500 to-rose-500 text-white text-[10px] font-bold rounded-full border-2 border-white shadow-lg animate-pulse">
+                            <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center bg-red-500 text-white text-[10px] font-bold rounded-full border-2 border-white shadow-lg">
                                 {cartCount}
                             </span>
                         )}
@@ -436,9 +436,14 @@ export default function Navbar() {
                                 </div>
                             </motion.div>
 
-                            {/* Navigation Links */}
+                            {/* Navigation Links - Simplified for Mobile to avoid redundancy with BottomNav */}
                             <div className="flex flex-col gap-4 text-center w-full max-w-xs">
-                                {navLinks.map((item, idx) => {
+                                {[
+                                    { name: 'Promociones', path: '/promociones', icon: Gift },
+                                    { name: 'Cómo Funciona', path: '/como-funciona', icon: HelpCircle },
+                                    { name: 'Sobre Nosotros', path: '/nosotros', icon: Info },
+                                    { name: 'Preguntas Frecuentes', path: '/faq', icon: HelpCircle }
+                                ].map((item, idx) => {
                                     const Icon = item.icon;
                                     const active = isActive(item.path);
                                     return (
@@ -450,6 +455,7 @@ export default function Navbar() {
                                         >
                                             <Link
                                                 to={item.path}
+                                                onClick={() => setIsOpen(false)}
                                                 className={`flex items-center justify-center gap-3 py-4 px-6 rounded-2xl font-bold text-lg transition-all duration-300 ${active
                                                         ? 'bg-white text-bikitchen-orange shadow-lg'
                                                         : 'bg-white/10 text-white hover:bg-white/20'
@@ -463,36 +469,33 @@ export default function Navbar() {
                                 })}
                             </div>
 
-                            {/* Divider */}
+                             {/* Divider */}
                             <div className="w-24 h-1 bg-white/30 mx-auto mt-8 mb-6 rounded-full"></div>
 
-                            {/* CTA Buttons */}
+                            {/* CTA Buttons - Simplified for Mobile */}
                             <motion.div
                                 initial={{ y: 30, opacity: 0 }}
                                 animate={{ y: 0, opacity: 1 }}
                                 transition={{ delay: 0.5 }}
                                 className="flex flex-col gap-3 w-full max-w-xs"
                             >
+                                {/* Botón de Búsqueda en móvil ya que no está en BottomNav */}
                                 <button
                                     onClick={() => {
                                         setIsOpen(false);
-                                        setIsCartOpen && setIsCartOpen(true);
+                                        setIsSearchOpen(true);
                                     }}
-                                    className="flex items-center justify-center gap-3 bg-orange-500 text-white font-bold px-8 py-4 rounded-2xl shadow-xl hover:shadow-2xl hover:bg-orange-600 transition-all duration-300"
+                                    className="flex items-center justify-center gap-3 bg-white/20 text-white font-bold px-8 py-4 rounded-2xl shadow-lg border border-white/30 transition-all active:scale-95"
                                 >
-                                    <ShoppingCart size={22} />
-                                    <span>Ver Carrito</span>
-                                    {cartCount > 0 && (
-                                        <span className="bg-white text-orange-500 text-sm font-bold px-2 py-0.5 rounded-full">
-                                            {cartCount}
-                                        </span>
-                                    )}
+                                    <Search size={22} />
+                                    <span>Buscar Platos</span>
                                 </button>
 
                                 {/* Admin Button - Solo visible para admins */}
                                 {currentUser && isAdmin && isAdmin() && (
                                     <Link
                                         to="/admin"
+                                        onClick={() => setIsOpen(false)}
                                         className="flex items-center justify-center gap-3 bg-white/10 text-white font-semibold px-8 py-3 rounded-2xl hover:bg-white/20 transition-all duration-300"
                                     >
                                         <ChefHat size={20} />
@@ -500,22 +503,12 @@ export default function Navbar() {
                                     </Link>
                                 )}
 
-                                {/* Mi Cuenta Mobile */}
-                                <Link
-                                    to="/mi-cuenta"
-                                    onClick={() => setIsOpen(false)}
-                                    className="flex items-center justify-center gap-3 bg-white/5 text-white/80 font-medium px-8 py-3 rounded-2xl hover:bg-white/10 transition-all duration-300"
-                                >
-                                    <User size={20} />
-                                    <span>Mi Cuenta</span>
-                                </Link>
-
                                 {/* Mis Cupones Mobile */}
                                 {currentUser && (
                                     <Link
                                         to="/mis-cupones"
                                         onClick={() => setIsOpen(false)}
-                                        className="flex items-center justify-center gap-3 bg-white/20 text-white font-bold px-8 py-4 rounded-2xl shadow-lg border border-white/30 transition-all active:scale-95"
+                                        className="flex items-center justify-center gap-3 bg-white/10 text-white/80 font-medium px-8 py-3 rounded-2xl hover:bg-white/20 transition-all duration-300"
                                     >
                                         <Ticket size={24} className="text-amber-200" />
                                         <span>Mis Cupones</span>
