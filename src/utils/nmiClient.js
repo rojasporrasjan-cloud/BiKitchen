@@ -35,19 +35,22 @@ export async function initGateway() {
         throw new Error('Gateway.js not loaded. Check index.html');
     }
     
-    // Diagnostic info (masked)
-    const isJWT = NMI_PUBLIC_KEY?.startsWith('eyJ');
-    const isCheckoutPublic = NMI_PUBLIC_KEY?.startsWith('checkout_public_');
     const keyLen = NMI_PUBLIC_KEY?.length || 0;
-    
     const maskedKey = NMI_PUBLIC_KEY ? 
-        `${NMI_PUBLIC_KEY.substring(0, 4)}...${NMI_PUBLIC_KEY.substring(NMI_PUBLIC_KEY.length - 4)}` : 
+        `${NMI_PUBLIC_KEY.substring(0, 6)}...${NMI_PUBLIC_KEY.substring(NMI_PUBLIC_KEY.length - 4)}` : 
         'MISSING';
     
-    console.log(`[NMI] Initializing Gateway with Key: ${maskedKey} (Length: ${keyLen}, Format: ${isJWT ? 'JWT' : (isCheckoutPublic ? 'CHECKOUT_PUBLIC' : 'INVALID')})`);
+    console.log(`[NMI] Initializing Gateway with Key: ${maskedKey} (Length: ${keyLen})`);
     
-    if (keyLen > 0 && !isJWT && !isCheckoutPublic) {
-        console.error('[NMI] CRITICAL ERROR: La llave VITE_NMI_PUBLIC_KEY no parece ser un formato válido (debería ser un token JWT "eyJ..." o una llave "checkout_public_...").');
+    // IMPORTANT: checkout_public_ keys are for "Collect Checkout" (hosted forms), 
+    // NOT for Gateway.create() which needs a Public Tokenization Key.
+    if (NMI_PUBLIC_KEY?.startsWith('checkout_public_')) {
+        console.error('[NMI] CRITICAL ERROR: La llave "checkout_public_" es para "Collect Checkout" (formularios alojados de NMI), NO para Gateway.js/3DS.');
+        console.error('[NMI] Necesitas una "Public Tokenization Key" de Settings -> Security Keys -> Add New Public Key (Permisos: Tokenization).');
+    }
+    
+    if (!NMI_PUBLIC_KEY || keyLen < 10) {
+        console.error('[NMI] CRITICAL ERROR: VITE_NMI_PUBLIC_KEY no está configurada o es demasiado corta.');
     }
 
     const gateway = window.Gateway.create(NMI_PUBLIC_KEY);
