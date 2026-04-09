@@ -28,7 +28,7 @@ export default function BottomNav() {
   if (isMobileMenuOpen || isAdminRoute) return null;
 
   return (
-    <nav className="md:hidden fixed bottom-6 left-6 right-6 z-50 bg-white/70 backdrop-blur-2xl border border-white/40 px-6 py-3.5 rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.15)] ring-1 ring-black/5">
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-md border-t border-gray-100 px-6 py-3 pb-[env(safe-area-inset-bottom,16px)] shadow-[0_-10px_30px_rgba(0,0,0,0.05)]">
       <div className="flex items-center justify-between max-w-md mx-auto">
         <NavItem to="/" icon={<Home size={22} />} label="Inicio" />
         <NavItem to="/packs" icon={<Package size={22} />} label="Packs" />
