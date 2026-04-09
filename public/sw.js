@@ -1,6 +1,6 @@
-// BiKitchen Service Worker - Enhanced v5
-// ACTUALIZACIÓN CRÍTICA: Forzar recarga para ver composición de platos y packs en promociones
-const CACHE_VERSION = 'v5';
+// BiKitchen Service Worker - Enhanced v6
+// ACTUALIZACIÓN: Fallback de pago sin 3DS + corrección de llaves NMI
+const CACHE_VERSION = 'v6';
 const STATIC_CACHE = `bikitchen-static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `bikitchen-dynamic-${CACHE_VERSION}`;
 const IMAGE_CACHE = `bikitchen-images-${CACHE_VERSION}`;
