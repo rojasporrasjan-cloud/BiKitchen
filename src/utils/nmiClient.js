@@ -140,10 +140,20 @@ export function authenticate3DS(gateway, paymentInfo) {
                 const threeDSInterface = threeDS.createUI(options);
 
                 if (!threeDSInterface) {
+                    // 3DS UI not available — this likely means Payer Authentication
+                    // isn't enabled on the BAC/NMI account. Fall back to payment
+                    // without 3DS instead of blocking the customer.
                     const keyLen = NMI_PUBLIC_KEY?.length || 0;
-                    const looksLikeId = keyLen < 15;
-                    const diag = `createUI returned null. Public Key Length: ${keyLen}. ${looksLikeId ? 'Llave corta (ID no es token).' : 'Llave con longitud de token rechazada.'}`;
-                    reject(new Error(`Error de Configuración (3DS): ${diag}`));
+                    console.warn(`[NMI] createUI returned null (Key Length: ${keyLen}). 3DS no disponible — procesando pago sin autenticación 3DS.`);
+                    resolve({
+                        cavv: '',
+                        xid: '',
+                        eci: '07', // ECI 07 = non-3DS ecommerce
+                        threeDsVersion: '',
+                        cardHolderAuth: '',
+                        directoryServerId: '',
+                        _fallback: true // internal flag
+                    });
                     return;
                 }
 

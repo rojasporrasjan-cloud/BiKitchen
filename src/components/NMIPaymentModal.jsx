@@ -155,6 +155,11 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
             // Start 3DS Authentication
             const authData = await authenticate3DS(gateway, authOptions);
             
+            // If 3DS was not available (fallback), log it
+            if (authData._fallback) {
+                console.log('[NMI] 3DS no disponible en esta cuenta — procesando pago directo.');
+            }
+            
             // Finalize Transaction
             setStep('processing');
             // Log ALL fields returned by Gateway.js 3DS for debugging
