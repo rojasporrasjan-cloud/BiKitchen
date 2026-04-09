@@ -23,9 +23,11 @@ export default function BottomNav() {
   }, [cartCount]);
 
   // No mostrar BottomNav si el menú lateral móvil o el carrito están abiertos
-  // ni en rutas de administrador
+  // ni en rutas de administrador o perfil
   const isAdminRoute = location.pathname.startsWith('/admin');
-  if (isMobileMenuOpen || isAdminRoute) return null;
+  const isProfileRoute = location.pathname === '/mi-cuenta';
+  
+  if (isMobileMenuOpen || isAdminRoute || isProfileRoute) return null;
 
   return (
     <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-md border-t border-gray-100 px-6 py-3 pb-[env(safe-area-inset-bottom,16px)] shadow-[0_-10px_30px_rgba(0,0,0,0.05)]">
