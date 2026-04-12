@@ -17,7 +17,7 @@ export default function AccesoDenegadoPage() {
             {/* Grid Pattern */}
             <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:50px_50px]"></div>
 
-            <motion.div 
+            <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5 }}
@@ -35,7 +35,7 @@ export default function AccesoDenegadoPage() {
                             <ShieldX size={48} className="text-red-400" />
                         </div>
                     </div>
-                    
+
                     {/* Floating Icons */}
                     <motion.div
                         animate={{ y: [-5, 5, -5] }}
@@ -46,7 +46,7 @@ export default function AccesoDenegadoPage() {
                             <Lock size={20} className="text-red-400" />
                         </div>
                     </motion.div>
-                    
+
                     <motion.div
                         animate={{ y: [5, -5, 5] }}
                         transition={{ repeat: Infinity, duration: 2.5 }}
@@ -87,7 +87,7 @@ export default function AccesoDenegadoPage() {
                     transition={{ delay: 0.5 }}
                     className="text-gray-400 mb-8 max-w-md mx-auto"
                 >
-                    ¡Ups! No tienes permisos para acceder a esta área. 
+                    ¡Ups! No tienes permisos para acceder a esta área.
                     Esta sección está reservada para administradores de BiKitchen.
                 </motion.p>
 
@@ -117,7 +117,7 @@ export default function AccesoDenegadoPage() {
                         <ArrowLeft size={20} />
                         Volver Atrás
                     </button>
-                    
+
                     <Link
                         to="/"
                         className="flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-bikitchen-orange to-orange-500 hover:from-bikitchen-orange-dark hover:to-orange-600 text-white rounded-xl font-semibold transition-all shadow-lg shadow-orange-500/25"
@@ -135,10 +135,10 @@ export default function AccesoDenegadoPage() {
                     className="mt-12"
                 >
                     <Link to="/" className="inline-block">
-                        <img 
-                            src="/assets/logo.jpg" 
-                            alt="BiKitchen" 
-                            className="h-10 w-auto mx-auto rounded-lg opacity-50 hover:opacity-100 transition-opacity"
+                        <img
+                            src="/assets/logo.png"
+                            alt="BiKitchen"
+                            className="h-14 w-auto mx-auto rounded-lg opacity-50 hover:opacity-100 transition-opacity"
                         />
                     </Link>
                 </motion.div>

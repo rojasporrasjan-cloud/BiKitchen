@@ -222,6 +222,7 @@ export default function OrdersView() {
     const [packsData, setPacksData] = useState(DEFAULT_PACKS_DATA);
     const [zoneFilter, setZoneFilter] = useState('all'); // Filtro por zona
     const [sourceFilter, setSourceFilter] = useState('all'); // Filtro por fuente marketing
+    const [deliveryDateFilter, setDeliveryDateFilter] = useState('all'); // Filtro por fecha de entrega (Cierre)
     const [customerHistory, setCustomerHistory] = useState(null); // Historial del cliente
     const [loadingHistory, setLoadingHistory] = useState(false);
     const [showClientProfile, setShowClientProfile] = useState(false);
@@ -386,7 +387,18 @@ export default function OrdersView() {
             const zona = order.zona_envio || order.details?.zona;
             if (zona) zones.add(zona);
         });
-        return ['all', ...Array.from(zones)];
+        return ['all', ...Array.from(zones)].sort();
+    }, [orders]);
+
+    // Obtener todas las fechas de entrega únicas presentes en los pedidos (para el filtro de Cierre)
+    const uniqueDeliveryDates = useMemo(() => {
+        const dates = new Set();
+        orders.forEach(order => {
+            const date = order.fecha_entrega || order.details?.fechaEntrega;
+            if (date) dates.add(date);
+        });
+        // Ordenar fechas (asumiendo formato YYYY-MM-DD o similar que se pueda sortear)
+        return ['all', ...Array.from(dates).sort((a, b) => b.localeCompare(a))];
     }, [orders]);
 
     // Cargar precios de packs desde Firestore
@@ -620,12 +632,12 @@ export default function OrdersView() {
     // Reparar pedidos antiguos (formato legacy / total 0)
     const repairOrders = async () => {
         if (!window.confirm('¿Deseas reparar pedidos con total 0 y migrar datos antiguos?')) return;
-        
+
         setIsRepairing(true);
         try {
             const querySnapshot = await getDocs(collection(db, 'pedidos'));
             let fixedCount = 0;
-            
+
             for (const d of querySnapshot.docs) {
                 const data = d.data();
                 let needsUpdate = false;
@@ -748,48 +760,66 @@ export default function OrdersView() {
                     // o si el total es exactamente 100 (usado típicamente para pruebas de admin)
                     const isManual = src === 'manual' || src === 'admin' || !!creator;
                     const isTestPrice = order.totalValue === 100 || order.total === 100 || order.total === '100' || order.total === '₡100';
-                    
+
                     return !isManual && !isTestPrice;
                 }
                 if (sourceFilter === 'meta') return src.includes('facebook') || src.includes('instagram') || src.includes('meta');
                 if (sourceFilter === 'google') return src.includes('google');
                 if (sourceFilter === 'directo') return src.includes('direct') || (!src && order.source !== 'manual' && order.source !== 'admin');
                 if (sourceFilter === 'manual') return src.includes('manual') || src.includes('admin');
-                
+
                 // Filtros específicos de Admin
                 if (sourceFilter === 'byron') return creator === 'bikitchenfood@gmail.com' || creator === 'rojasporrasjan@gmail.com';
                 if (sourceFilter === 'gina') return creator === 'ginamaroli@gmail.com';
-                
+
                 return true;
             });
         }
 
-        // 6. Filtro de Fecha
+        // 6. Filtro de Fecha de Creación / Rango Temporal
         if (dateFilter !== 'all') {
             const now = new Date();
-            const todayStr = now.toISOString().split('T')[0];
+            const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
             result = result.filter(order => {
-                let orderDate = '';
+                let orderDate = null;
                 try {
                     if (order.createdAt) {
-                        const d = new Date(order.createdAt);
+                        // Handle Firestore Timestamp or ISO String
+                        const d = order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt);
                         if (!isNaN(d.getTime())) {
-                            orderDate = d.toISOString().split('T')[0];
+                            orderDate = d;
                         }
                     }
                 } catch (e) {
                     console.warn('Invalid date in order:', order.id);
                 }
 
-                const deliveryDate = order.fecha_entrega || order.details?.fechaEntrega;
+                // Si no hay fecha, mostramos el pedido por defecto para evitar que desaparezca
+                if (!orderDate) return true;
 
                 if (dateFilter === 'today') {
-                    // Mostrar pedidos creados hoy O que se entregan hoy
-                    return (orderDate && orderDate === todayStr) || (deliveryDate && deliveryDate === todayStr);
+                    return orderDate >= startOfToday;
                 }
-                // Implementar otros filtros de fecha si es necesario
+                if (dateFilter === 'week') {
+                    const weekAgo = new Date(startOfToday);
+                    weekAgo.setDate(weekAgo.getDate() - 7);
+                    return orderDate >= weekAgo;
+                }
+                if (dateFilter === 'month') {
+                    const monthAgo = new Date(startOfToday);
+                    monthAgo.setMonth(monthAgo.getMonth() - 1);
+                    return orderDate >= monthAgo;
+                }
                 return true;
+            });
+        }
+
+        // 7. Filtro por Fecha de Entrega Específica (Cierre)
+        if (deliveryDateFilter !== 'all') {
+            result = result.filter(order => {
+                const d = order.fecha_entrega || order.details?.fechaEntrega;
+                return d === deliveryDateFilter;
             });
         }
 
@@ -1110,7 +1140,7 @@ export default function OrdersView() {
         };
 
         // Intentar cargar logo (opcional)
-        const logoDataUrl = await loadImageAsDataURL('/assets/logo.jpg');
+        const logoDataUrl = await loadImageAsDataURL('/assets/logo.png');
 
         ordersToExport.forEach((order, idx) => {
             if (idx > 0) doc.addPage();
@@ -1380,7 +1410,7 @@ export default function OrdersView() {
     };
 
     return (
-        <div className="h-full flex flex-col">
+        <div className="pb-20">
             {/* Header */}
             <div className="mb-6">
                 <AdminPageHeader
@@ -1405,11 +1435,10 @@ export default function OrdersView() {
                             key="repair"
                             disabled={isRepairing}
                             onClick={repairOrders}
-                            className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold shadow-md transition-colors ${
-                                isRepairing 
-                                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                                    : 'bg-orange-500 text-white hover:bg-orange-600'
-                            }`}
+                            className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold shadow-md transition-colors ${isRepairing
+                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                : 'bg-orange-500 text-white hover:bg-orange-600'
+                                }`}
                         >
                             <History size={16} className={isRepairing ? 'animate-spin' : ''} />
                             {isRepairing ? 'Reparando...' : 'Reparar Pedidos'}
@@ -1642,6 +1671,21 @@ export default function OrdersView() {
                         </select>
                     </div>
 
+                    {/* New Filter: Cierre de Pedidos (Delivery Date) */}
+                    <div className="flex items-center bg-white px-4 py-2.5 rounded-xl border border-gray-200 shadow-sm">
+                        <Calendar size={16} className="text-orange-500 mr-2" />
+                        <select
+                            className="bg-transparent border-none focus:ring-0 text-sm font-bold text-gray-800 cursor-pointer p-0"
+                            value={deliveryDateFilter}
+                            onChange={(e) => setDeliveryDateFilter(e.target.value)}
+                        >
+                            <option value="all">📅 Todos los Cierres</option>
+                            {uniqueDeliveryDates.filter(d => d !== 'all').map(date => (
+                                <option key={date} value={date}>{date}</option>
+                            ))}
+                        </select>
+                    </div>
+
                     {/* Status Filters - Only show helpful sub-filters based on Tab */}
                     <div className="flex gap-2 flex-wrap">
                         {activeTab === 'pending' && [
@@ -1680,8 +1724,8 @@ export default function OrdersView() {
             </div>
 
             {/* Orders Table - Desktop */}
-            <div className="flex-1 min-h-0 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hidden md:flex md:flex-col">
-                <div className="flex-1 min-h-0 overflow-auto">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 hidden md:block">
+                <div className="overflow-x-auto">
                     <table className="w-full">
                         <thead className="bg-gray-50 border-b border-gray-100">
                             <tr>

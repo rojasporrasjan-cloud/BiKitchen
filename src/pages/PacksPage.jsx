@@ -27,19 +27,19 @@ import { useChristmas } from '../context/ChristmasContext';
 // import { RatingDisplay } from '../components/ReviewSystem'; // Deshabilitado temporalmente
 import { formatDishItem } from '../utils/menuUtils';
 
-// Categorías de filtro para packs
+// Categorías de filtro para packs — orden definido por el usuario
 const PACK_FILTERS = [
     { id: 'todos', label: 'Todos', icon: '✨' },
+    { id: 'proteinas', label: 'Proteínas', icon: '🥩', packs: ['Pack 3 Proteínas', 'Pack 5 Proteínas'], groupId: 'diet' },
     { id: 'two_pack', label: 'Two Pack', icon: '👥', section: 'two_pack', groupId: 'main' },
+    { id: 'sin_carbos', label: 'Sin Carbos', icon: '🥩', packs: ['Pack Sin Carbos'], groupId: 'diet' },
+    { id: 'bajo_calorias', label: 'Bajo Calorías', icon: '🥗', packs: ['Pack Bajo Calorías'], groupId: 'diet' },
     { id: 'familiar', label: 'Familiar', icon: '👨‍👩‍👧‍👦', section: 'familiar', groupId: 'main' },
+    { id: 'casaditos', label: 'Casaditos', icon: '🍚', packs: ['Pack Casaditos'], groupId: 'diet' },
     { id: 'full_pack', label: 'Full Pack', icon: '🍽️', packs: ['Full Pack'], groupId: 'diet' },
     { id: 'keto', label: 'Keto', icon: '🥑', packs: ['Pack Keto'], groupId: 'diet' },
-    { id: 'bajo_calorias', label: 'Bajo Calorías', icon: '🥗', packs: ['Pack Bajo Calorías'], groupId: 'diet' },
-    { id: 'sin_carbos', label: 'Sin Carbos', icon: '🥩', packs: ['Pack Sin Carbos'], groupId: 'diet' },
-    { id: 'casaditos', label: 'Casaditos', icon: '🍚', packs: ['Pack Casaditos'], groupId: 'diet' },
     { id: 'vegetariano', label: 'Vegetariano', icon: '🥦', packs: ['Pack Vegetariano'], groupId: 'diet' },
-    { id: 'proteinas', label: 'Proteínas', icon: '🍗', section: 'proteinas', groupId: 'extra' },
-    { id: 'desayunos', label: 'Desayunos', icon: '🍳', section: 'desayunos', groupId: 'extra' }
+    { id: 'desayunos', label: 'Desayunos', icon: '🍳', section: 'desayunos', groupId: 'extra' },
 ];
 
 const PACK_GROUPS = [
@@ -160,6 +160,9 @@ const PackCard = memo(({ pack, shipping, category, categoryLabel: customCategory
     const { whatsappPhone } = useWhatsApp();
     const { isAdmin } = useAuth() || {};
     const isMaintenance = !!pack.maintenance;
+    
+    // Etiqueta de categoría para el badge flotante (Fallback: prop > PACKS_DATA > category)
+    const displayCategoryLabel = customCategoryLabel || PACKS_DATA[category]?.title || category;
 
     // Datos del pack especial memoizados (ahora disponibles para todos los que los necesiten)
     const packEspecialData = useMemo(() =>
@@ -453,16 +456,17 @@ const PackCard = memo(({ pack, shipping, category, categoryLabel: customCategory
     return (
         <>
             <motion.div
+                layout
                 variants={cardVariants}
                 initial="hidden"
                 whileInView="visible"
                 viewport={{ once: true, margin: "-50px" }}
                 whileHover={{ y: -8, scale: 1.01 }}
                 transition={{ duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
-                className={`group bg-white rounded-[2.5rem] shadow-xl hover:shadow-2xl transition-all duration-500 border-2 border-gray-50 hover:border-orange-200 overflow-hidden ${pack.featured ? 'ring-2 ring-orange-500 ring-offset-4' : ''}`}
+                className={`group bg-white rounded-[2.5rem] shadow-xl hover:shadow-2xl transition-all duration-500 border-2 border-gray-50 hover:border-orange-200 overflow-hidden h-full flex flex-col ${pack.featured ? 'ring-2 ring-orange-500 ring-offset-4' : ''}`}
             >
                 {/* Imagen principal del pack */}
-                <div className="relative h-44 sm:h-64 overflow-hidden">
+                <div className="relative h-52 sm:h-52 overflow-hidden">
                     <SmoothImage
                         src={packImage}
                         alt={pack.name}
@@ -493,9 +497,19 @@ const PackCard = memo(({ pack, shipping, category, categoryLabel: customCategory
                         {pack.icon}
                     </motion.div>
 
-                    {/* Badge de oferta o descuento */}
-                    {pack.featured && (
-                        <div className="absolute top-5 left-5 bg-gradient-to-r from-orange-500 to-amber-500 text-white px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.2em] shadow-lg">
+                    {/* Label de Categoría / Cantidad — MUY VISIBLE para evitar confusiones */}
+                    {displayCategoryLabel && (
+                        <div className="absolute top-5 left-5 z-20">
+                            <div className="bg-gray-900/90 backdrop-blur-md text-white px-4 py-2.5 rounded-2xl text-[10px] font-black flex items-center gap-2 shadow-2xl border border-white/20 uppercase tracking-widest">
+                                <Package size={14} className="text-orange-400" />
+                                {displayCategoryLabel}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Badge de Selección Pro (si es destacado y no hay etiqueta o se quiere mantener) */}
+                    {pack.featured && !displayCategoryLabel && (
+                        <div className="absolute top-5 left-5 z-10 bg-gradient-to-r from-orange-500 to-amber-500 text-white px-4 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg">
                             Selección Pro
                         </div>
                     )}
@@ -530,16 +544,11 @@ const PackCard = memo(({ pack, shipping, category, categoryLabel: customCategory
                     )}
                 </div>
 
-                <div className="p-6 sm:p-8 flex flex-col gap-5">
+                <div className="p-4 sm:p-5 flex flex-col gap-2.5 flex-1">
                     {/* Título y descripción */}
-                    <div>
-                        {customCategoryLabel && (
-                            <span className="inline-block px-3 py-1 bg-orange-100 text-orange-600 rounded-lg text-[10px] font-black uppercase tracking-wider mb-2">
-                                {customCategoryLabel}
-                            </span>
-                        )}
-                        <div className="flex items-center justify-between gap-4 mb-2">
-                            <h3 className="text-xl sm:text-2xl font-black text-gray-900 group-hover:text-orange-600 transition-colors leading-tight">
+                    <div className="flex-1">
+                        <div className="flex items-center justify-between gap-4 mb-1">
+                            <h3 className="text-lg sm:text-2xl font-black text-gray-900 group-hover:text-orange-600 transition-colors leading-tight">
                                 {pack.name}
                             </h3>
                             <button 
@@ -559,11 +568,11 @@ const PackCard = memo(({ pack, shipping, category, categoryLabel: customCategory
                     {!isPromocionPack && !isSpecialPack && (
                         <div className="space-y-3">
                             <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Selecciona tu Plan</p>
-                            <div className="grid grid-cols-3 gap-2 bg-gray-50 p-1.5 rounded-[1.5rem] border border-gray-100">
+                            <div className="grid grid-cols-3 gap-1.5 bg-gray-50 p-1.5 rounded-[1.5rem] border border-gray-100">
                                 {['weekly', 'biweekly', 'monthly'].map((plan) => {
                                     if (isProteinsPack && plan === 'biweekly') return null;
                                     const isActive = selectedPlan === plan;
-                                    const labels = { weekly: 'Semanal', biweekly: 'Quin.', monthly: 'Mensual' };
+                                    const labels = { weekly: 'Semanal', biweekly: 'Quinc.', monthly: 'Mensual' };
                                     return (
                                         <button
                                             key={plan}
@@ -571,13 +580,13 @@ const PackCard = memo(({ pack, shipping, category, categoryLabel: customCategory
                                                 setSelectedPlan(plan);
                                                 if (isProteinsPack && plan === 'monthly') setSelectedSize('500');
                                             }}
-                                            className={`py-2.5 rounded-2xl text-[10px] sm:text-xs font-black transition-all duration-300 relative ${
+                                            className={`py-1.5 px-0.5 rounded-xl text-[9px] xs:text-[9.5px] sm:text-[10px] font-black transition-all duration-300 relative whitespace-nowrap overflow-hidden text-ellipsis ${
                                                 isActive 
                                                 ? 'bg-white text-orange-600 shadow-md border-orange-100' 
                                                 : 'text-gray-400 hover:text-gray-600'
                                             } border border-transparent`}
                                         >
-                                            {labels[plan]}
+                                            <span className="relative z-10">{labels[plan]}</span>
                                             {isActive && (
                                                 <motion.div 
                                                     layoutId="activePlan" 
@@ -614,35 +623,30 @@ const PackCard = memo(({ pack, shipping, category, categoryLabel: customCategory
                     )}
 
                     {/* Area de Precio */}
-                    <div className="flex flex-col items-center py-2">
+                    <div className="flex flex-col items-center py-1">
                         {hasAnyDiscount ? (
                             <div className="flex flex-col items-center">
-                                <span className="text-sm text-gray-300 line-through font-bold mb-1">
+                                <span className="text-xs text-gray-300 line-through font-bold">
                                     {formatPrice(getOriginalPrice())}
                                 </span>
                                 <div className="flex items-baseline gap-1">
-                                    <span className="text-3xl sm:text-4xl font-black text-gray-900 group-hover:text-orange-600 transition-colors">
+                                    <span className="text-2xl sm:text-3xl font-black text-gray-900 group-hover:text-orange-600 transition-colors">
                                         {formatPrice(getFinalPrice())}
-                                    </span>
-                                </div>
-                                <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 bg-green-50 text-green-600 rounded-full border border-green-100">
-                                    <span className="text-[10px] font-black uppercase tracking-tighter">
-                                        Ahorras {formatPrice(getOriginalPrice() - getFinalPrice())}
                                     </span>
                                 </div>
                             </div>
                         ) : (
-                            <div className="text-3xl sm:text-4xl font-black text-gray-900">
+                            <div className="text-2xl sm:text-3xl font-black text-gray-900">
                                 {formatPrice(getOriginalPrice())}
                             </div>
                         )}
-                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-2">
+                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mt-1">
                             Cobro {getPlanLabel().toLowerCase()}
                         </p>
                     </div>
 
                     {/* Envío Info Box */}
-                    <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100 flex items-center gap-4">
+                    <div className="mt-auto bg-gray-50 rounded-2xl p-3 border border-gray-100 flex items-center gap-4">
                         <div className="w-10 h-10 bg-white rounded-xl shadow-sm flex items-center justify-center text-gray-400">
                             <Truck size={20} />
                         </div>
@@ -1073,31 +1077,17 @@ const PackCard = memo(({ pack, shipping, category, categoryLabel: customCategory
 
 const PackSection = memo(({ category, data, promociones = [], packImages = {}, packsEspeciales, ...rest }) => {
     return (
-        <section id={`pack-${category}`} className="mb-16 sm:mb-24 scroll-mt-40">
-            <motion.div
-                className="text-center mb-8 sm:mb-14"
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.5 }}
-            >
-                <div className="text-5xl sm:text-7xl mb-4 sm:mb-6">{data.icon}</div>
-                <div className="inline-block mb-4 sm:mb-5">
-                    <h2 className="text-2xl sm:text-4xl font-black text-white bg-gradient-to-r from-orange-500 to-amber-500 px-8 py-3 sm:px-10 sm:py-4 rounded-full shadow-2xl shadow-orange-500/40">
-                        {data.title}
-                    </h2>
-                </div>
-                <p className="text-base sm:text-xl text-gray-600 px-4 font-medium">{data.subtitle}</p>
-            </motion.div>
+        <>
+            <div className="scroll-mt-40 h-0" id={`pack-${category}`} />
 
-            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4 sm:gap-6 mb-16 sm:mb-24">
                 {data.packs.map((pack, index) => (
                     <PackCard
                         key={`${category}-${pack.name}-${index}`}
                         pack={pack}
                         shipping={pack.shipping || data.shipping}
                         category={pack.sectionKey || category}
-                        categoryLabel={pack.categoryLabel}
+                        categoryLabel={pack.categoryLabel || data.title}
                         promociones={promociones}
                         customImage={packImages[pack.name]}
                         packsEspeciales={packsEspeciales}
@@ -1105,8 +1095,7 @@ const PackSection = memo(({ category, data, promociones = [], packImages = {}, p
                     />
                 ))}
             </div>
-
-        </section>
+        </>
     );
 });
 
@@ -1120,12 +1109,8 @@ export default function PacksPage() {
     const [activeFilter, setActiveFilter] = useState('todos');
     const [activePackGroup, setActivePackGroup] = useState('todos');
 
-
-    // Filtrar filtros por grupo activo
-    const filteredFilters = useMemo(() => {
-        if (activePackGroup === 'todos') return PACK_FILTERS;
-        return PACK_FILTERS.filter(f => f.groupId === activePackGroup || f.id === 'todos');
-    }, [activePackGroup]);
+    // Mostrar todos los filtros (ya no hay grupos)
+    const filteredFilters = PACK_FILTERS;
 
     // Calcular contadores para los filtros
     const packFilterCounts = useMemo(() => {
@@ -1153,7 +1138,6 @@ export default function PacksPage() {
         counts['todos'] = Object.values(packsData).reduce((acc, sec) => acc + sec.packs.length, 0);
         return counts;
     }, [packsData]);
-    const [isSticky, setIsSticky] = useState(false);
     const [packImages, setPackImages] = useState({}); // { packName: imageUrl }
     const [isLoading, setIsLoading] = useState(true);
     const [packsEspeciales, setPacksEspeciales] = useState(PACKS_ESPECIALES_BASE);
@@ -1553,139 +1537,23 @@ export default function PacksPage() {
 
     return (
         <PageTransition>
-            <div className="min-h-screen bg-gradient-to-b from-bikitchen-beige to-white">
+            <div className="min-h-screen bg-gradient-to-b from-bikitchen-beige to-white pt-[76px]">
                 <Navbar />
 
-                {/* Hero Section */}
-                <header
-                    className="relative pt-28 pb-20 md:pt-36 md:pb-24 bg-gradient-to-br from-orange-500 via-amber-500 to-orange-600 text-white overflow-hidden"
-                    style={{
-                        paddingTop: showPromoBanner
-                            ? `calc(var(--promo-banner-height, 0px) + 112px)`
-                            : undefined
-                    }}
-                >
-                    {/* Decorative orbs */}
-                    <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-gradient-to-br from-white/20 to-transparent rounded-full blur-3xl"></div>
-                    <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-gradient-to-tr from-yellow-400/30 to-transparent rounded-full blur-3xl"></div>
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-br from-pink-500/10 via-purple-500/10 to-transparent rounded-full blur-3xl"></div>
-                    {/* Pattern overlay */}
-                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_70%,rgba(255,255,255,0.15)_1px,transparent_1px)] bg-[length:40px_40px] opacity-40"></div>
-
-                    <div className="container relative z-10 text-center">
-                        <motion.div
-                            initial={{ opacity: 0, y: 30 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] }}
-                        >
-                            <motion.span
-                                className="inline-block mb-6 px-6 py-3 bg-white/20 backdrop-blur-md rounded-full text-base font-bold border border-white/30 shadow-xl"
-                                initial={{ scale: 0.9 }}
-                                animate={{ scale: 1 }}
-                                transition={{ delay: 0.2, duration: 0.4 }}
-                            >
-                                🍽️ Planes Semanales Premium
-                            </motion.span>
-                            <h1 className="text-5xl md:text-6xl lg:text-7xl font-black mb-6 drop-shadow-lg leading-tight">
-                                Elige Tu Pack Ideal
-                            </h1>
-                            <p className="text-xl md:text-2xl mb-8 max-w-3xl mx-auto font-medium text-white/95 leading-relaxed">
-                                Planes flexibles que se adaptan a tu estilo de vida y objetivos
-                            </p>
-                            <motion.div
-                                className="flex flex-wrap justify-center gap-4 text-base mb-8"
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: 0.3, duration: 0.5 }}
-                            >
-                                <div className={`flex items-center gap-2 backdrop-blur-md px-5 py-3 rounded-2xl shadow-lg font-semibold ${isChristmasMode
-                                    ? 'bg-white border-2 border-white text-gray-800'
-                                    : 'bg-white/25 border border-white/30 text-white'
-                                    }`}>
-                                    <Check size={18} className={`flex-shrink-0 ${isChristmasMode ? 'text-green-600' : 'text-white'}`} />
-                                    <span>7 opciones de packs</span>
-                                </div>
-                                <div className={`flex items-center gap-2 backdrop-blur-md px-5 py-3 rounded-2xl shadow-lg font-semibold ${isChristmasMode
-                                    ? 'bg-white border-2 border-white text-gray-800'
-                                    : 'bg-white/25 border border-white/30 text-white'
-                                    }`}>
-                                    <Check size={18} className={`flex-shrink-0 ${isChristmasMode ? 'text-green-600' : 'text-white'}`} />
-                                    <span>Semanal, quincenal o mensual</span>
-                                </div>
-                                <div className={`flex items-center gap-2 backdrop-blur-md px-5 py-3 rounded-2xl shadow-lg font-semibold ${isChristmasMode
-                                    ? 'bg-white border-2 border-white text-gray-800'
-                                    : 'bg-white/25 border border-white/30 text-white'
-                                    }`}>
-                                    <Check size={18} className={`flex-shrink-0 ${isChristmasMode ? 'text-green-600' : 'text-white'}`} />
-                                    <span>Envío disponible</span>
-                                </div>
-                            </motion.div>
-                            <motion.a
-                                href="/comparador"
-                                className="inline-flex items-center gap-3 bg-white/90 text-orange-600 px-8 py-4 rounded-2xl font-black text-lg shadow-2xl hover:shadow-xl transition-all hover:bg-white"
-                                whileHover={{ scale: 1.05 }}
-                                whileTap={{ scale: 0.95 }}
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: 0.4, duration: 0.5 }}
-                            >
-                                <Package size={22} />
-                                Comparar todos los packs
-                            </motion.a>
-                        </motion.div>
-                    </div>
-                </header>
-
-                {/* Filtros Agrupados e Inteligentes */}
-                <div className={`sticky top-0 z-30 transition-all duration-300 ${isSticky
-                    ? 'bg-white/95 backdrop-blur-xl shadow-lg shadow-gray-200/50 py-3 pt-8'
-                    : 'bg-white py-4 border-b border-gray-100'
-                    }`}
-                    style={{ top: isSticky ? 'var(--navbar-height, 70px)' : '0px' }}
-                >
-                    <div className="container mx-auto px-4 max-w-6xl">
-                        {/* Indicador de más contenido sutil */}
+                {/* ── Barra de filtros SOLO MÓVIL (oculto en desktop lg+) ── */}
+                <div className="lg:hidden bg-white/95 backdrop-blur-md py-1 border-b border-gray-100 z-30 shadow-sm transition-all duration-300">
+                    <div className="w-full px-4">
                         <div className="relative">
                             <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-white/80 to-transparent z-10 pointer-events-none sm:hidden" />
-                            
-                            {/* Grupos de Filtros */}
-                            <div className="flex gap-2 mb-4 overflow-x-auto pb-1 md:scrollbar-premium hide-scrollbar px-0 shrink-0">
-                                {PACK_GROUPS.map((group) => (
-                                    <button
-                                        key={group.id}
-                                        onClick={() => {
-                                            setActivePackGroup(group.id);
-                                            const filterInGroup = PACK_FILTERS.find(f => f.groupId === group.id);
-                                            if (group.id !== 'todos' && !PACK_FILTERS.find(f => f.id === activeFilter && f.groupId === group.id)) {
-                                                if (filterInGroup) setActiveFilter(filterInGroup.id);
-                                            }
-                                        }}
-                                        className={`flex-shrink-0 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 border-2 ${activePackGroup === group.id
-                                            ? 'bg-gray-900 text-white border-gray-900'
-                                            : 'bg-white text-gray-400 border-gray-50 hover:border-gray-200'
-                                            }`}
-                                    >
-                                        <span>{group.icon}</span>
-                                        <span>{group.label}</span>
-                                    </button>
-                                ))}
-                            </div>
 
                             {/* Píldoras de Filtro Específico */}
-                            <div className="flex overflow-x-auto gap-2.5 pb-2 pt-1 md:scrollbar-premium hide-scrollbar px-0 items-center">
+                            <div className="flex overflow-x-auto gap-2.5 pb-2 pt-1 hide-scrollbar px-0 items-center">
                                 {filteredFilters.map((filter) => (
                                     <button
                                         key={filter.id}
                                         onClick={(e) => {
                                             setActiveFilter(filter.id);
-                                            e.currentTarget.scrollIntoView({
-                                                behavior: 'smooth',
-                                                block: 'nearest',
-                                                inline: 'center'
-                                            });
-                                            if (isSticky) {
-                                                window.scrollTo({ top: 410, behavior: 'smooth' });
-                                            }
+                                            e.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
                                         }}
                                         className={`
                                             flex-shrink-0 px-5 py-3 rounded-2xl text-sm font-black transition-all flex items-center gap-3 whitespace-nowrap border-2
@@ -1710,17 +1578,61 @@ export default function PacksPage() {
                 </div>
 
                 <style>{`
-                    .hide-scrollbar::-webkit-scrollbar {
-                        display: none;
-                    }
-                    .hide-scrollbar {
-                        -ms-overflow-style: none;
-                        scrollbar-width: none;
-                    }
+                    .hide-scrollbar::-webkit-scrollbar { display: none; }
+                    .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
                 `}</style>
 
+                {/* ── Contenedor principal: sidebar + contenido ── */}
+                <div className="flex flex-col lg:flex-row min-h-screen relative pt-4">
+                    {/* ── SIDEBAR DESKTOP (oculto en móvil) ── */}
+                    <aside className="hidden lg:flex flex-col gap-3 w-64 xl:w-72 flex-shrink-0 sticky top-[76px] h-[calc(100vh-76px)] z-20 overflow-y-auto hide-scrollbar bg-white border-r border-gray-100 shadow-xl shadow-gray-200/20">
+                        <div className="flex flex-col h-full">
+                            {/* Header del sidebar removido por petición del usuario */}
 
-                <main ref={packsContainerRef} className="container py-10 sm:py-16 pb-24 sm:pb-32">
+                            {/* Lista de filtros — orden del usuario */}
+                            <div className="p-3 space-y-0.5">
+                                {PACK_FILTERS.map((filter) => {
+                                    const isActive = activeFilter === filter.id;
+                                    return (
+                                        <button
+                                            key={filter.id}
+                                            onClick={() => {
+                                                setActiveFilter(filter.id);
+                                                setActivePackGroup(filter.groupId || 'todos');
+                                            }}
+                                            className={`w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all duration-200 ${isActive
+                                                ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg shadow-orange-500/20'
+                                                : 'text-gray-600 hover:bg-orange-50 hover:text-orange-600'
+                                                }`}
+                                        >
+                                            <span className="flex items-center gap-2.5">
+                                                <span className="text-base">{filter.icon}</span>
+                                                <span>{filter.label}</span>
+                                            </span>
+                                            <span className={`text-xs font-black rounded-full px-2 py-0.5 ${isActive ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'}`}>
+                                                {packFilterCounts[filter.id] || 0}
+                                            </span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Bottom bonito */}
+                            <div className="mx-3 mb-3 bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl border border-orange-100 p-4">
+                                <p className="text-sm font-black text-gray-800 mb-1">💡 ¿No sabes cuál elegir?</p>
+                                <p className="text-xs text-gray-500 mb-3 leading-relaxed">Compara todos los planes y encuentra el ideal para ti.</p>
+                                <a
+                                    href="/comparador"
+                                    className="flex items-center justify-center gap-2 bg-gradient-to-r from-orange-500 to-amber-500 text-white text-xs font-black py-2 px-3 rounded-lg hover:from-orange-600 hover:to-amber-600 transition-all shadow-sm"
+                                >
+                                    <span>⚡</span> Comparar packs
+                                </a>
+                            </div>
+                        </div>
+                    </aside>
+
+                    {/* ── CONTENIDO PRINCIPAL ── */}
+                    <main ref={packsContainerRef} className="flex-1 w-full p-4 sm:p-6 lg:p-10 pb-32">
                     {isLoading ? (
                         // Skeleton loader mientras cargan imágenes y datos
                         <div className="space-y-16">
@@ -1731,7 +1643,7 @@ export default function PacksPage() {
                                         <div className="h-10 w-64 bg-gray-200 rounded-full mx-auto mb-3 animate-pulse"></div>
                                         <div className="h-5 w-48 bg-gray-200 rounded mx-auto animate-pulse"></div>
                                     </div>
-                                    <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-6">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4 sm:gap-6">
                                         {[1, 2, 3, 4].map((card) => (
                                             <div key={card} className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100">
                                                 <div className="aspect-[4/3] bg-gray-200 animate-pulse"></div>
@@ -1810,6 +1722,7 @@ export default function PacksPage() {
                         </div>
                     </div>
                 </main>
+            </div>{/* ── end flex wrapper ── */}
 
                 <Footer />
             </div>

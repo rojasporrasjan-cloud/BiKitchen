@@ -156,6 +156,7 @@ function PublicRouteExtras() {
       <PromoBanner />
       <CartDrawer />
       {!hideFloating && <WhatsAppButton />}
+      {/* {!hideFloating && <AISommelier />} */}
       <PWAPrompt />
       {/* Christmas effects y banner deshabilitados */}
     </>

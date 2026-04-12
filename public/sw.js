@@ -1,6 +1,6 @@
-// BiKitchen Service Worker - Enhanced v6
-// ACTUALIZACIÓN: Fallback de pago sin 3DS + corrección de llaves NMI
-const CACHE_VERSION = 'v6';
+// BiKitchen Service Worker - Enhanced v7
+// ACTUALIZACIÓN: createUI con parámetros mínimos + reintentos
+const CACHE_VERSION = 'v7';
 const STATIC_CACHE = `bikitchen-static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `bikitchen-dynamic-${CACHE_VERSION}`;
 const IMAGE_CACHE = `bikitchen-images-${CACHE_VERSION}`;
@@ -11,7 +11,7 @@ const PRECACHE_ASSETS = [
   '/',
   '/offline.html',
   '/manifest.json',
-  '/assets/logo.jpg',
+  '/assets/logo.png',
   '/bikitchen-icon.svg'
 ];
 

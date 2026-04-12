@@ -24,10 +24,15 @@ img {
   -webkit-backface-visibility: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  
+
   /* Forzar rendering continuo */
   image-rendering: auto;
   -webkit-image-rendering: auto;
+}
+
+/* Logo transparente */
+img[src*="logo"] {
+  opacity: 0.9;
 }
 
 /* NO aplicar transiciones automáticas a imágenes */
@@ -333,23 +338,23 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--color-bg-secondary);
+  background: transparent;
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--color-secondary);
+  background: rgba(255, 103, 29, 0.3);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-primary);
+  background: rgba(255, 103, 29, 0.6);
 }
 
 /* Firefox */
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--color-secondary) var(--color-bg-secondary);
+  scrollbar-color: rgba(255, 103, 29, 0.3) transparent;
 }
 
 /* Animations for components */

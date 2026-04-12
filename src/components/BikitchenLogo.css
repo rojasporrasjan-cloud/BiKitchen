@@ -1,0 +1,231 @@
+/* =============================================
+   BikitchenLogo - Animaciones y Variaciones
+   ============================================ */
+
+/* Animación de las letras BIKITCHEN */
+@keyframes textSlideIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Animación de las letras FOOD */
+@keyframes textPopIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Animación: Logo aparece con efecto de escritura */
+@keyframes logoWriteIn {
+  0% {
+    stroke-dashoffset: 500;
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+}
+
+/* Animación de líneas decorativas al cargar */
+@keyframes lineExpandIn {
+  0% {
+    opacity: 0;
+    stroke-width: 0;
+  }
+  100% {
+    opacity: 1;
+    stroke-width: 3;
+  }
+}
+
+/* Animación completa del logo al cargar */
+@keyframes logoLoadSequence {
+  0% {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Animación: Giro suave del logo */
+@keyframes logoRotate {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* Animación: Pulso de brillo */
+@keyframes logoPulse {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 0px rgba(255, 103, 29, 0.3));
+  }
+  50% {
+    filter: drop-shadow(0 0 12px rgba(255, 103, 29, 0.8));
+  }
+}
+
+/* Animación: Flotación suave */
+@keyframes logoFloat {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+/* Animación: Movimiento de líneas decorativas */
+@keyframes lineShift {
+  0%,
+  100% {
+    transform: scaleX(1);
+  }
+  50% {
+    transform: scaleX(1.15);
+  }
+}
+
+/* Animación: Texto brillante */
+@keyframes textShine {
+  0% {
+    fill-opacity: 1;
+  }
+  50% {
+    fill-opacity: 0.7;
+  }
+  100% {
+    fill-opacity: 1;
+  }
+}
+
+/* ===== ANIMACIONES DE CARGA ===== */
+
+/* Animación para el texto BIKITCHEN */
+.logo-bikitchen-text {
+  animation: textSlideIn 0.8s ease-out 0.1s backwards;
+}
+
+/* Animación para el texto FOOD */
+.logo-food-text {
+  animation: textPopIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) 0.4s backwards;
+}
+
+/* Animación para las líneas decorativas */
+.logo-line-left line,
+.logo-line-left circle,
+.logo-line-right line,
+.logo-line-right circle {
+  animation: lineExpandIn 0.6s ease-out 0.5s backwards;
+}
+
+/* Variación: Logo con animación de escritura */
+.logo-writein svg {
+  animation: logoWriteIn 2s ease-out forwards;
+}
+
+/* Variación: Logo con rotación */
+.logo-rotate svg {
+  animation: logoRotate 8s linear infinite;
+  transform-origin: center;
+}
+
+/* Variación: Logo con pulso */
+.logo-pulse svg {
+  animation: logoPulse 2s ease-in-out infinite;
+}
+
+/* Variación: Logo flotante */
+.logo-float svg {
+  animation: logoFloat 3s ease-in-out infinite;
+}
+
+/* Variación: Combinado - Flotación + Pulso */
+.logo-float-pulse svg {
+  animation: logoFloat 3s ease-in-out infinite,
+    logoPulse 2s ease-in-out infinite;
+}
+
+/* Variación: Líneas animadas */
+.logo-line-left {
+  transform-origin: center;
+}
+
+.logo-line-right {
+  transform-origin: center;
+}
+
+.logo-animated-lines .logo-line-left {
+  animation: lineShift 2s ease-in-out infinite;
+}
+
+.logo-animated-lines .logo-line-right {
+  animation: lineShift 2s ease-in-out infinite reverse;
+}
+
+/* Efecto hover - Amplificación del pulso */
+.logo-interactive:hover svg {
+  animation: logoPulse 1s ease-in-out infinite;
+  filter: drop-shadow(0 0 8px rgba(255, 103, 29, 0.6));
+  cursor: pointer;
+}
+
+/* Efecto para pantallas grandes */
+@media (min-width: 768px) {
+  .logo-pulse-md svg {
+    animation: logoPulse 2.5s ease-in-out infinite;
+  }
+
+  .logo-float-md svg {
+    animation: logoFloat 4s ease-in-out infinite;
+  }
+}
+
+/* Efecto para pantallas pequeñas */
+@media (max-width: 768px) {
+  .logo-pulse-sm svg {
+    animation: logoPulse 1.5s ease-in-out infinite;
+  }
+
+  .logo-float-sm svg {
+    animation: logoFloat 2s ease-in-out infinite;
+  }
+}
+
+/* Clase para performance - desactivar animaciones en dispositivos con poca batería */
+@media (prefers-reduced-motion: reduce) {
+  svg[class*="logo"] {
+    animation: none !important;
+  }
+
+  .logo-writein svg,
+  .logo-rotate svg,
+  .logo-pulse svg,
+  .logo-float svg,
+  .logo-float-pulse svg,
+  .logo-animated-lines svg {
+    animation: none !important;
+  }
+}

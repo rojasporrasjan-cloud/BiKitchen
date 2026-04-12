@@ -45,8 +45,8 @@ export default function Login() {
         <div className="min-h-screen bg-gradient-to-br from-orange-500 via-orange-600 to-amber-600 flex items-center justify-center p-4">
             <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md">
                 <div className="text-center mb-8">
-                    <div className="w-16 h-16 bg-orange-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg overflow-hidden">
-                        <img src="/assets/logo.jpg" alt="BiKitchen" className="w-10 h-10 object-contain block mx-auto" />
+                    <div className="w-20 h-20 bg-orange-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg overflow-hidden">
+                        <img src="/assets/logo.png" alt="BiKitchen" className="w-14 h-14 object-contain block mx-auto" />
                     </div>
                     <h1 className="text-3xl font-bold text-gray-900 mb-2">BiKitchen Admin</h1>
                     <p className="text-gray-500">Ingresa para gestionar la operación.</p>

@@ -35,9 +35,9 @@ export default function CinematicPreloader() {
                     {/* Logo container with white background for contrast */}
                     <div className="bg-white rounded-3xl p-4 shadow-2xl inline-flex items-center justify-center mx-auto border-2 border-white/50">
                         <img
-                            src="/assets/logo.jpg"
+                            src="/assets/logo.png"
                             alt="BiKitchen Food"
-                            className="h-20 md:h-28 w-auto object-contain block"
+                            className="h-24 md:h-32 w-auto object-contain block"
                         />
                     </div>
                     {/* Brand text */}

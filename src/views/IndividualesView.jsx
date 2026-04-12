@@ -4,7 +4,7 @@ import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import PageTransition from '../components/PageTransition';
 import { INDIVIDUALES_CATEGORIES, CATEGORY_ICONS, getProductUnits, individualesData } from '../data/individualesData';
-import { Search, ShoppingCart, X, Minus, Plus, MessageSquare, ChevronDown, Check } from 'lucide-react';
+import { Search, ShoppingCart, X, Minus, Plus, MessageSquare, ChevronDown, Check, Package } from 'lucide-react';
 import IndividualCard from '../components/IndividualCard';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCart } from '../context/CartContext';
@@ -30,10 +30,6 @@ export default function IndividualesView() {
   const [loadingImages, setLoadingImages] = useState(true);
   const [isSticky, setIsSticky] = useState(false);
   const [activeGroup, setActiveGroup] = useState('Todos');
-
-
-
-
 
   // Bloquear scroll del body cuando el modal está abierto
   useEffect(() => {
@@ -80,9 +76,6 @@ export default function IndividualesView() {
     return group ? group.categories : INDIVIDUALES_CATEGORIES;
   }, [activeGroup, categoryGroups]);
 
-
-
-
   const handleUploadImage = (producto) => {
     if (!isAdmin || !isAdmin()) return;
 
@@ -96,11 +89,9 @@ export default function IndividualesView() {
 
       try {
         toast.loading('Subiendo imagen...', { id: 'upload-image' });
-        // Subir a Cloudinary (Optimización más agresiva: 1080px, 0.75 calidad)
         const result = await uploadOptimizedImage(file, 'bikitchen/individuales', { maxSize: 1080, quality: 0.75 });
         const url = result.url;
 
-        // Guardar en Firestore con unificación de escrituras y estructura anidada para merge correcto
         const confRef = doc(db, 'config', 'individual_images');
         await setDoc(confRef, { 
           updatedAt: new Date().toISOString(),
@@ -112,12 +103,8 @@ export default function IndividualesView() {
           }
         }, { merge: true });
         
-        // Legacy support por si otras partes usan la colección vieja
         await setDoc(doc(db, 'individuales_imagenes', producto.id), { imagenUrl: url, cloudinaryPublicId: result.publicId }, { merge: true });
-
-        // Invalidar caché local para que el cambio se vea al recargar
         invalidateCache('individuales_images_map');
-
         setImagenesCustom((prev) => ({ ...prev, [producto.id]: url }));
         toast.success('Imagen actualizada correctamente', { id: 'upload-image' });
       } catch (error) {
@@ -125,12 +112,9 @@ export default function IndividualesView() {
         toast.error(`No se pudo subir la imagen: ${error.message}`, { id: 'upload-image' });
       }
     };
-
     input.click();
   };
 
-  // Cargar imágenes personalizadas desde Firestore con caché (reduce lecturas)
-  // Lee primero el doc unificado: 'config/individual_images'; fallback a colecciones legacy
   useEffect(() => {
     const cargarImagenes = async () => {
       setLoadingImages(true);
@@ -179,24 +163,14 @@ export default function IndividualesView() {
         setLoadingImages(false);
       }
     };
-
     cargarImagenes();
   }, []);
 
-  const categorias = useMemo(
-    () => INDIVIDUALES_CATEGORIES,
-    []
-  );
-
-  // Filtrar productos por búsqueda
   const productosFiltrados = useMemo(() => {
     let base = individualesData;
-
-    // REGLA: Ocultar producto de prueba de producción a no-admins
     if (!isAdmin || !isAdmin()) {
       base = base.filter(p => !p.id?.includes('test-nmi-prod'));
     }
-
     if (!busqueda.trim()) return base;
     const termino = busqueda.toLowerCase().trim();
     return base.filter((p) =>
@@ -205,7 +179,6 @@ export default function IndividualesView() {
     );
   }, [busqueda, isAdmin]);
 
-  // Contadores por grupo para los selectores de arriba
   const groupCounts = useMemo(() => {
     const counts = { Todos: individualesData.length };
     categoryGroups.forEach(group => {
@@ -216,31 +189,25 @@ export default function IndividualesView() {
   }, [categoryGroups]);
 
   const productosPorCategoria = useMemo(() => {
-    // No calcular hasta que las imágenes estén cargadas
     if (loadingImages) return [];
-
     const base = INDIVIDUALES_CATEGORIES.filter((c) => c === categoriaActiva);
-
     return base.map((categoria) => ({
       categoria,
       productos: productosFiltrados
         .filter((p) => p.categoria === categoria)
         .map((p) => ({
           ...p,
-          // Si existe una imagen personalizada en Firestore, usarla; si no, usar la de data
           imagen: imagenesCustom[p.id] || p.imagen
         }))
     }));
   }, [categoriaActiva, productosFiltrados, imagenesCustom, loadingImages]);
 
-  // Contar total de resultados
   const totalResultados = useMemo(() => {
     return productosPorCategoria.reduce((acc, cat) => acc + cat.productos.length, 0);
   }, [productosPorCategoria]);
 
   const abrirModal = (producto) => {
     setProductoSeleccionado(producto);
-    // Por defecto seleccionar 500 g si existe, si no 1 kg
     if (producto.precio500) {
       setTamano('500');
     } else if (producto.precio1kg) {
@@ -267,13 +234,9 @@ export default function IndividualesView() {
       toast.error('Este tamaño no está disponible para este producto.');
       return;
     }
-
     const units = getProductUnits(productoSeleccionado.categoria);
     const labelUnidad = tamano === '500' ? units.labelPequeno : units.labelGrande;
-
-    // Obtener imagen (custom de Firestore o default del producto)
     const imagenProducto = imagenesCustom[productoSeleccionado.id] || productoSeleccionado.imagen;
-
     addToCart({
       id: `${productoSeleccionado.id}-${tamano}`,
       name: productoSeleccionado.nombre,
@@ -284,7 +247,6 @@ export default function IndividualesView() {
       planLabel: `Individual ${labelUnidad}`,
       image: imagenProducto
     });
-
     toast.success(`${productoSeleccionado.nombre} agregado al carrito`);
     cerrarModal();
   };
@@ -294,277 +256,207 @@ export default function IndividualesView() {
       <div className="min-h-screen bg-gradient-to-b from-gray-50 via-white to-gray-50 text-gray-900 flex flex-col">
         <Navbar />
 
-        <main className="flex-1">
-          {/* Hero estilo Planes Semanales */}
-          <header className="relative pt-28 pb-16 md:pt-32 md:pb-20 bg-gradient-to-br from-orange-500 via-amber-500 to-orange-600 text-white overflow-hidden">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_70%,rgba(255,255,255,0.15)_1px,transparent_1px)] bg-[length:32px_32px] opacity-40"></div>
-            <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-gradient-to-br from-white/20 to-transparent rounded-full blur-3xl"></div>
-            <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-gradient-to-tr from-yellow-400/20 to-transparent rounded-full blur-3xl"></div>
-            <div className="absolute top-1/2 left-1/2 w-[300px] h-[300px] bg-gradient-to-r from-pink-500/10 to-purple-500/10 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2"></div>
+        <main className="flex-1 pt-[76px]">
+          {/* Header de Búsqueda */}
+          {/* Barra de búsqueda removida de aquí y movida al Sidebar para mayor limpieza */}
 
-            <div className="container relative z-10 text-center">
-              <motion.div
-                initial={{ opacity: 0, y: -20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6 }}
-              >
-                <span className="inline-block mb-4 px-5 py-2 bg-white/20 backdrop-blur-md rounded-full text-sm font-bold shadow-lg">
-                  🍽️ Platos individuales
-                </span>
-                <h1 className="text-4xl md:text-5xl lg:text-6xl font-black mb-4 drop-shadow-lg">
-                  Platos Individuales BiKitchen
-                </h1>
-                <p className="text-base md:text-lg mb-8 max-w-2xl mx-auto font-medium text-white/95 leading-relaxed">
-                  Elegí tus comidas favoritas por porción o por kilo. Ideal para complementar tus packs o armar tu propia semana BiKitchen.
-                </p>
-                <div className="flex flex-wrap justify-center gap-3 text-sm mb-2">
-                  <div className="flex items-center gap-2 bg-white/20 backdrop-blur-md px-5 py-2.5 rounded-xl shadow-lg border border-white/20">
-                    <Check size={18} className="flex-shrink-0" />
-                    <span className="font-semibold">Variedad de proteínas y acompañamientos</span>
-                  </div>
-                  <div className="flex items-center gap-2 bg-white/20 backdrop-blur-md px-5 py-2.5 rounded-xl shadow-lg border border-white/20">
-                    <Check size={18} className="flex-shrink-0" />
-                    <span className="font-semibold">Por porción o por kilo</span>
-                  </div>
-                  <div className="flex items-center gap-2 bg-white/20 backdrop-blur-md px-5 py-2.5 rounded-xl shadow-lg border border-white/20">
-                    <Check size={18} className="flex-shrink-0" />
-                    <span className="font-semibold">Perfecto para complementar tus packs</span>
-                  </div>
-                </div>
-              </motion.div>
+          {/* ── Filtros MÓVIL (oculto en desktop) ── */}
+          <div className="lg:hidden bg-white/95 backdrop-blur-md py-2 border-b border-gray-100 z-30 shadow-sm transition-all duration-300">
+            <div className="w-full px-4">
+              <div className="flex gap-2 overflow-x-auto pb-2 hide-scrollbar">
+                {categoryGroups.map((group) => (
+                  <button
+                    key={group.id}
+                    onClick={() => {
+                      setActiveGroup(group.id);
+                      const firstCat = group.id === 'Todos' ? INDIVIDUALES_CATEGORIES[0] : group.categories[0];
+                      if (firstCat && !group.categories?.includes(categoriaActiva) && group.id !== 'Todos') {
+                        setCategoriaActiva(firstCat);
+                      }
+                    }}
+                    className={`flex-shrink-0 px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 border-2 ${activeGroup === group.id
+                      ? 'bg-gray-900 text-white border-gray-900 shadow-md'
+                      : 'bg-white text-gray-500 border-gray-100 hover:border-gray-200'
+                      }`}
+                  >
+                    <span className="text-sm">{group.icon}</span>
+                    <span>{group.label}</span>
+                  </button>
+                ))}
+              </div>
             </div>
-          </header>
+          </div>
 
-          <section className="pt-12 pb-16">
-            <div className="container">
+          <style>{`
+            .hide-scrollbar::-webkit-scrollbar { display: none; }
+            .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+          `}</style>
 
-              {/* Buscador */}
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.05, duration: 0.3 }}
-                className="mb-6"
-              >
-                <div className="relative max-w-xl">
-                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={22} />
-                  <input
-                    type="text"
-                    value={busqueda}
-                    onChange={(e) => setBusqueda(e.target.value)}
-                    placeholder="Buscar platos... (ej: pollo, pasta, ensalada)"
-                    className="w-full pl-14 pr-4 py-4 rounded-xl border-2 border-gray-200 bg-white text-gray-900 text-base focus:outline-none focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 transition-all shadow-lg hover:shadow-xl font-medium"
-                  />
-                  {busqueda && (
-                    <button
-                      type="button"
-                      onClick={() => setBusqueda('')}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 flex items-center justify-center transition-all"
-                    >
-                      <X size={18} />
-                    </button>
-                  )}
+          <div className="flex flex-col lg:flex-row min-h-screen relative">
+            {/* ── SIDEBAR DESKTOP ── */}
+            <aside className="hidden lg:flex flex-col gap-3 w-64 xl:w-72 flex-shrink-0 sticky top-[84px] h-[calc(100vh-84px)] z-20 overflow-y-auto hide-scrollbar bg-white border-r border-gray-100 shadow-xl shadow-gray-200/20">
+              <div className="flex flex-col h-full">
+                {/* Buscador Integrado en Sidebar */}
+                <div className="p-4 border-b border-gray-50 bg-gray-50/50">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                    <input
+                      type="text"
+                      value={busqueda}
+                      onChange={(e) => setBusqueda(e.target.value)}
+                      placeholder="Buscar..."
+                      className="w-full pl-9 pr-3 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all"
+                    />
+                    {busqueda && (
+                      <button 
+                        onClick={() => setBusqueda('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-orange-600"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
                 </div>
-                {busqueda && (
-                  <p className="text-sm text-gray-600 mt-3 font-medium">
-                    {totalResultados} resultado{totalResultados !== 1 ? 's' : ''} para "{busqueda}"
-                  </p>
-                )}
-              </motion.div>
+                <div className="p-3 space-y-0.5">
+                  <button
+                    onClick={() => {
+                      setCategoriaActiva(INDIVIDUALES_CATEGORIES[0]);
+                      setActiveGroup('Todos');
+                    }}
+                    className={`w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all duration-200 mb-2 ${activeGroup === 'Todos'
+                      ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg shadow-orange-500/20'
+                      : 'text-gray-600 hover:bg-orange-50 hover:text-orange-600'
+                      }`}
+                  >
+                    <span className="flex items-center gap-2.5">
+                      <span className="text-lg">✨</span>
+                      <span>Todos</span>
+                    </span>
+                    <span className={`text-[10px] font-black rounded-full px-2 py-0.5 ${activeGroup === 'Todos' ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'}`}>
+                      {Object.values(categoryCounts).reduce((a, b) => a + b, 0)}
+                    </span>
+                  </button>
 
-
-              {/* Filtros Agrupados e Inteligentes */}
-              <div className={`z-30 transition-all duration-500 ${isSticky
-                ? 'fixed top-[65px] left-0 right-0 bg-white/95 backdrop-blur-xl shadow-xl py-4 pb-2 px-0'
-                : 'relative mb-10'
-                }`}>
-                <div className="container mx-auto max-w-6xl relative">
-                  {/* Indicador de más contenido (Gradiente sutil a la derecha) */}
-                  <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-white/80 to-transparent z-10 pointer-events-none md:hidden" />
-                  
-                  {/* Selectores de Grupo */}
-                  <div className="flex gap-2 mb-4 overflow-x-auto pb-2 md:scrollbar-premium hide-scrollbar px-4 md:px-0">
-                    {categoryGroups.map((group) => (
-                      <button
-                        key={group.id}
-                        onClick={() => {
-                          setActiveGroup(group.id);
-                          const firstCat = group.id === 'Todos' ? INDIVIDUALES_CATEGORIES[0] : group.categories[0];
-                          if (firstCat && !group.categories?.includes(categoriaActiva) && group.id !== 'Todos') {
-                            setCategoriaActiva(firstCat);
-                          }
-                        }}
-                        className={`flex-shrink-0 px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 border-2 ${activeGroup === group.id
-                          ? 'bg-gray-900 text-white border-gray-900 shadow-md scale-105'
-                          : 'bg-white text-gray-500 border-gray-100 hover:border-gray-200'
-                          }`}
-                      >
-                        <span className="text-sm">{group.icon}</span>
-                        <span>{group.label}</span>
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-md ${activeGroup === group.id ? 'bg-white/20' : 'bg-gray-100 uppercase'}`}>
-                          {groupCounts[group.id]}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Píldoras de Categoría con Contadores */}
-                  <div className="flex flex-nowrap md:flex-wrap gap-2.5 overflow-x-auto pb-6 pt-1 px-4 md:px-0 hide-scrollbar">
-                    {categoriasFiltradasPorGrupo.map((cat) => (
-                      <button
-                        key={cat}
-                        type="button"
-                        onClick={() => {
-                          setCategoriaActiva(cat);
-                          if (isSticky) {
-                            window.scrollTo({ top: 380, behavior: 'smooth' });
-                          }
-                        }}
-                        className={`flex-shrink-0 px-5 py-3 rounded-2xl text-sm font-black border-2 transition-all flex items-center gap-3 whitespace-nowrap ${categoriaActiva === cat
-                          ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white border-orange-500 shadow-xl shadow-orange-500/30 scale-105'
-                          : 'bg-white text-gray-700 border-gray-100 hover:border-orange-200 shadow-sm'
-                          }`}
-                      >
-                        <span className="text-xl">{CATEGORY_ICONS[cat] || '📦'}</span>
-                        <div className="flex flex-col items-start leading-tight">
-                          <span>{cat}</span>
-                          <span className={`text-[10px] uppercase tracking-wider opacity-70 ${categoriaActiva === cat ? 'text-white' : 'text-orange-500'}`}>
-                            {categoryCounts[cat] || 0} platos
-                          </span>
+                  <div className="space-y-4">
+                    {categoryGroups.filter(g => g.id !== 'Todos').map((group) => {
+                      const groupCats = group.categories || [];
+                      return (
+                        <div key={group.id} className="pt-2">
+                          <p className="text-[10px] font-black uppercase tracking-[0.12em] text-gray-400 mb-1.5 px-1 flex items-center gap-1.5">
+                            <span>{group.icon}</span>
+                            {group.label}
+                          </p>
+                          <div className="space-y-0.5">
+                            {groupCats.map((cat) => {
+                              const isActive = categoriaActiva === cat;
+                              return (
+                                <button
+                                  key={cat}
+                                  onClick={() => {
+                                    setCategoriaActiva(cat);
+                                    setActiveGroup(group.id);
+                                  }}
+                                  className={`w-full flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 ${isActive
+                                    ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg shadow-orange-500/20'
+                                    : 'text-gray-600 hover:bg-orange-50 hover:text-orange-600'
+                                    }`}
+                                >
+                                  <span className="flex items-center gap-2.5">
+                                    <span className="text-base">{CATEGORY_ICONS[cat] || '📦'}</span>
+                                    <span>{cat}</span>
+                                  </span>
+                                  <span className={`text-[10px] font-black rounded-full px-2 py-0.5 ${isActive ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'}`}>
+                                    {categoryCounts[cat] || 0}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
-                      </button>
-                    ))}
+                      );
+                    })}
                   </div>
+                </div>
+
+                <div className="p-4 mt-auto">
+                  <a
+                    href="https://wa.me/50672044816"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full flex items-center justify-center gap-3 py-4 rounded-2xl bg-gradient-to-r from-green-500 to-emerald-600 text-white font-black text-sm shadow-lg hover:shadow-green-500/20 transition-all hover:scale-[1.02] active:scale-95"
+                  >
+                    <span>💬</span>
+                    WhatsApp
+                  </a>
                 </div>
               </div>
+            </aside>
 
-              {/* Skeleton loader mientras carga */}
-              {loadingImages && (
-                <div className="space-y-12 pb-16">
-                  {[1, 2, 3].map((section) => (
-                    <div key={section} className="space-y-5">
-                      <div className="flex items-center gap-3 border-b border-gray-200 pb-3">
-                        <div className="w-10 h-10 bg-gray-200 rounded-lg animate-pulse"></div>
-                        <div className="h-7 w-32 bg-gray-200 rounded animate-pulse"></div>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {[1, 2, 3, 4, 5, 6].map((card) => (
-                          <div key={card} className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100">
-                            <div className="aspect-[4/3] bg-gray-200 animate-pulse"></div>
-                            <div className="p-4 space-y-3">
-                              <div className="h-5 bg-gray-200 rounded animate-pulse w-3/4"></div>
-                              <div className="h-4 bg-gray-200 rounded animate-pulse w-1/2"></div>
-                              <div className="flex gap-2">
-                                <div className="h-8 bg-gray-200 rounded-full animate-pulse w-20"></div>
-                                <div className="h-8 bg-gray-200 rounded-full animate-pulse w-20"></div>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Secciones por categoría */}
-              {!loadingImages && (
-                <div className="space-y-12 pb-16">
-                  {productosPorCategoria.map(({ categoria, productos }) => (
-                    productos.length === 0 ? null : (
-                      <motion.section
-                        key={categoria}
-                        className="space-y-5"
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.3 }}
-                      >
-                        <div className="flex items-center justify-between border-b-2 border-gray-200 pb-4 mb-2">
-                          <h2 className="text-3xl font-black text-gray-900 flex items-center gap-3">
-                            <span className="text-4xl">{CATEGORY_ICONS[categoria] || '📦'}</span>
-                            <span className="bg-gradient-to-r from-orange-500 to-amber-500 bg-clip-text text-transparent">{categoria}</span>
-                          </h2>
-                          <span className="text-sm text-gray-600 bg-gradient-to-r from-gray-100 to-gray-50 px-4 py-2 rounded-full font-bold border border-gray-200 shadow-sm">
-                            {productos.length} plato{productos.length !== 1 ? 's' : ''}
-                          </span>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                          {productos.map((producto) => (
-                            <IndividualCard
-                              key={producto.id}
-                              producto={producto}
-                              onClick={() => abrirModal(producto)}
-                              canEditImage={isAdmin && isAdmin()}
-                              onUploadImage={() => handleUploadImage(producto)}
-                            />
-                          ))}
-                        </div>
-                      </motion.section>
-                    )
-                  ))}
-
-                  {productosPorCategoria.every((c) => c.productos.length === 0) && (
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="text-center py-16"
-                    >
-                      <div className="text-6xl mb-4">🔍</div>
-                      <p className="text-gray-500 text-lg font-medium">
-                        No se encontraron platos
-                      </p>
-                      <p className="text-gray-400 text-sm mt-1">
-                        Intenta con otra búsqueda o categoría
-                      </p>
-                      {busqueda && (
-                        <button
-                          type="button"
-                          onClick={() => setBusqueda('')}
-                          className="mt-4 px-4 py-2 text-sm text-bikitchen-orange hover:text-bikitchen-orange-dark font-medium"
-                        >
-                          Limpiar búsqueda
-                        </button>
-                      )}
-                    </motion.div>
-                  )}
-                  {/* Filtros de categoría al final para no tener que subir */}
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3 }}
-                    className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-gray-100"
-                  >
-                    {categorias.map((cat) => (
-                      <button
-                        key={cat}
-                        type="button"
-                        onClick={() => {
-                          setCategoriaActiva(cat);
-                          // Scroll suave al inicio solo en móvil (< 768px)
-                          if (window.innerWidth < 768) {
-                            window.scrollTo({ top: 0, behavior: 'smooth' });
-                          }
-                        }}
-                        className={`px-4 py-2 rounded-full text-xs sm:text-sm font-semibold border transition-all flex items-center gap-1.5 ${categoriaActiva === cat
-                          ? 'bg-bikitchen-orange text-white border-bikitchen-orange shadow-md shadow-bikitchen-orange/20'
-                          : 'bg-white/70 text-gray-700 border-gray-200 hover:bg-bikitchen-orange/10 hover:border-bikitchen-orange'
-                          }`}
-                      >
-                        <span>{CATEGORY_ICONS[cat] || '📦'}</span>
-                        {cat}
-                      </button>
+            {/* ── CONTENIDO PRINCIPAL ── */}
+            <section className="flex-1 p-4 sm:p-6 lg:p-10">
+              <div className="max-w-7xl mx-auto">
+                {/* Skeleton loader */}
+                {loadingImages && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {[1, 2, 3, 4, 5, 6].map((card) => (
+                      <div key={card} className="bg-white rounded-3xl h-80 animate-pulse border border-gray-100" />
                     ))}
-                  </motion.div>
-                </div>
-              )}
-            </div>
-          </section>
-        </main>
+                  </div>
+                )}
 
+                {/* Secciones por categoría */}
+                {!loadingImages && (
+                  <div className="space-y-12 pb-16">
+                    {productosPorCategoria.map(({ categoria, productos }) => (
+                      productos.length === 0 ? null : (
+                        <motion.section
+                          key={categoria}
+                          className="space-y-6"
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.3 }}
+                        >
+                          <div className="flex items-center justify-between border-b-2 border-gray-100 pb-4">
+                            <h2 className="text-2xl font-black text-gray-900 flex items-center gap-3">
+                              <span className="text-3xl">{CATEGORY_ICONS[categoria] || '📦'}</span>
+                              <span className="text-orange-600 capitalize">{categoria}</span>
+                            </h2>
+                            <span className="text-xs text-gray-400 font-black uppercase tracking-widest bg-gray-50 px-3 py-1.5 rounded-xl border border-gray-100">
+                              {productos.length} Platos
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {productos.map((producto) => (
+                              <IndividualCard
+                                key={producto.id}
+                                producto={producto}
+                                onClick={() => abrirModal(producto)}
+                                canEditImage={isAdmin && isAdmin()}
+                                onUploadImage={() => handleUploadImage(producto)}
+                              />
+                            ))}
+                          </div>
+                        </motion.section>
+                      )
+                    ))}
+
+                    {productosPorCategoria.every((c) => c.productos.length === 0) && (
+                      <div className="text-center py-20 bg-white rounded-[2.5rem] border-2 border-dashed border-gray-100">
+                        <div className="w-20 h-20 bg-gray-50 rounded-3xl flex items-center justify-center text-4xl mx-auto mb-4">🔍</div>
+                        <p className="text-gray-900 text-xl font-black">No hay resultados</p>
+                        <p className="text-gray-400 text-sm mt-2">Intenta con otra categoría o término de búsqueda</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </section>
+          </div>
+        </main>
         <Footer />
 
-
-        {/* Modal de detalle - usando Portal para renderizar fuera del flujo */}
+        {/* Modal de detalle */}
         {productoSeleccionado && ReactDOM.createPortal(
           <AnimatePresence>
             <motion.div
@@ -572,216 +464,151 @@ export default function IndividualesView() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={cerrarModal}
-              className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[9999] p-4"
-              style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4"
             >
               <motion.div
-                initial={{ scale: 0.95, opacity: 0, y: 30 }}
+                initial={{ scale: 0.9, opacity: 0, y: 40 }}
                 animate={{ scale: 1, opacity: 1, y: 0 }}
-                exit={{ scale: 0.95, opacity: 0, y: 30 }}
-                transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
+                exit={{ scale: 0.9, opacity: 0, y: 40 }}
                 onClick={(e) => e.stopPropagation()}
-                className="bg-white rounded-3xl max-w-lg w-full max-h-[90vh] shadow-2xl overflow-hidden flex flex-col"
+                className="bg-white rounded-[2.5rem] max-w-lg w-full max-h-[90vh] shadow-2xl overflow-hidden flex flex-col border-2 border-white/50"
               >
-                {/* Header con gradiente */}
-                <motion.div
-                  className="bg-gradient-to-r from-orange-500 to-amber-500 text-white px-6 py-5 flex-shrink-0 relative overflow-hidden"
-                  initial={{ y: -20, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{ delay: 0.1, duration: 0.3 }}
-                >
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2"></div>
+                {/* Header Modal */}
+                <div className="bg-gradient-to-r from-orange-500 to-amber-500 text-white px-8 py-6 flex-shrink-0 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
                   <div className="flex items-center justify-between relative z-10">
-                    <div className="flex items-center gap-3">
-                      <div className="w-14 h-14 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center text-3xl shadow-lg">
-                        🍽️
+                    <div className="flex items-center gap-4">
+                      <div className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center text-3xl shadow-xl border border-white/30">
+                        {CATEGORY_ICONS[productoSeleccionado.categoria] || '🍽️'}
                       </div>
                       <div>
-                        <h3 className="text-xl font-black">
+                        <h3 className="text-2xl font-black leading-tight">
                           {productoSeleccionado.nombre}
                         </h3>
-                        <p className="text-white/90 text-sm font-semibold">
+                        <p className="text-white/80 text-xs font-black uppercase tracking-widest mt-1">
                           {productoSeleccionado.categoria}
                         </p>
                       </div>
                     </div>
-                    <motion.button
-                      type="button"
+                    <button
                       onClick={cerrarModal}
-                      className="w-10 h-10 bg-white/20 backdrop-blur-sm hover:bg-white/30 rounded-full flex items-center justify-center transition-all shadow-lg"
-                      whileHover={{ scale: 1.1, backgroundColor: "rgba(255, 255, 255, 0.4)" }}
-                      whileTap={{ scale: 0.9 }}
+                      className="w-10 h-10 bg-white/20 backdrop-blur-md hover:bg-white text-white hover:text-orange-600 rounded-xl flex items-center justify-center transition-all"
                     >
                       <X size={20} />
-                    </motion.button>
+                    </button>
                   </div>
-                </motion.div>
+                </div>
 
-                {/* Contenido con scroll */}
-                <motion.div
-                  className="flex-1 overflow-y-auto p-6 space-y-6 bg-gradient-to-b from-white to-gray-50"
-                  initial={{ y: 20, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{ delay: 0.2, duration: 0.3 }}
-                >
+                <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar">
                   {productoSeleccionado.descripcion && (
-                    <p className="text-sm text-gray-600 bg-gradient-to-r from-orange-50 to-amber-50 p-4 rounded-2xl border border-orange-100 font-medium leading-relaxed">
-                      ℹ️ {productoSeleccionado.descripcion}
-                    </p>
+                    <div className="bg-orange-50/50 p-5 rounded-3xl border border-orange-100/50">
+                      <p className="text-sm text-gray-700 font-medium leading-relaxed italic">
+                        "{productoSeleccionado.descripcion}"
+                      </p>
+                    </div>
                   )}
 
-                  {/* Tamaño */}
-                  {(() => {
-                    const units = getProductUnits(productoSeleccionado.categoria);
-                    return (
-                      <div className="space-y-4">
-                        <p className="text-base font-black text-gray-900 flex items-center gap-2">
-                          <span className="text-2xl">📦</span>
-                          Elige tu porción
-                        </p>
-                        <div className="grid grid-cols-2 gap-4">
-                          <motion.button
-                            type="button"
-                            disabled={!productoSeleccionado.precio500}
-                            onClick={() => setTamano('500')}
-                            className={`relative px-5 py-5 rounded-2xl border-2 text-sm font-bold transition-all ${tamano === '500'
-                              ? 'bg-gradient-to-br from-orange-500 to-amber-500 text-white border-orange-500 shadow-xl shadow-orange-500/30'
-                              : 'bg-white text-gray-700 border-gray-200 hover:border-orange-300 hover:shadow-md'
-                              } ${!productoSeleccionado.precio500
-                                ? 'opacity-50 cursor-not-allowed'
-                                : 'cursor-pointer'
-                              }`}
-                            whileHover={productoSeleccionado.precio500 ? { scale: 1.03, y: -2 } : {}}
-                            whileTap={productoSeleccionado.precio500 ? { scale: 0.98 } : {}}
-                          >
-                            <span className="text-2xl block mb-2">🥡</span>
-                            <span className="block text-base">{units.unidadPequena}</span>
-                            {productoSeleccionado.precio500 && (
-                              <span className={`block text-sm mt-2 font-black ${tamano === '500' ? 'text-white' : 'bg-gradient-to-r from-orange-600 to-amber-600 bg-clip-text text-transparent'}`}>
-                                ₡{productoSeleccionado.precio500.toLocaleString('es-CR')}
-                              </span>
-                            )}
-                            {tamano === '500' && (
-                              <div className="absolute -top-2 -right-2 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
-                                <Check size={14} className="text-white" />
-                              </div>
-                            )}
-                          </motion.button>
-                          <motion.button
-                            type="button"
-                            disabled={!productoSeleccionado.precio1kg}
-                            onClick={() => setTamano('1000')}
-                            className={`relative px-5 py-5 rounded-2xl border-2 text-sm font-bold transition-all ${tamano === '1000'
-                              ? 'bg-gradient-to-br from-orange-500 to-amber-500 text-white border-orange-500 shadow-xl shadow-orange-500/30'
-                              : 'bg-white text-gray-700 border-gray-200 hover:border-orange-300 hover:shadow-md'
-                              } ${!productoSeleccionado.precio1kg
-                                ? 'opacity-50 cursor-not-allowed'
-                                : 'cursor-pointer'
-                              }`}
-                            whileHover={productoSeleccionado.precio1kg ? { scale: 1.03, y: -2 } : {}}
-                            whileTap={productoSeleccionado.precio1kg ? { scale: 0.98 } : {}}
-                          >
-                            <span className="text-2xl block mb-2">🍱</span>
-                            <span className="block text-base">{units.unidadGrande}</span>
-                            {productoSeleccionado.precio1kg && (
-                              <span className={`block text-sm mt-2 font-black ${tamano === '1000' ? 'text-white' : 'bg-gradient-to-r from-orange-600 to-amber-600 bg-clip-text text-transparent'}`}>
-                                ₡{productoSeleccionado.precio1kg.toLocaleString('es-CR')}
-                              </span>
-                            )}
-                            {tamano === '1000' && (
-                              <div className="absolute -top-2 -right-2 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
-                                <Check size={14} className="text-white" />
-                              </div>
-                            )}
-                          </motion.button>
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  {/* Cantidad */}
                   <div className="space-y-4">
-                    <p className="text-base font-black text-gray-900 flex items-center gap-2">
-                      <span className="text-2xl">🔢</span>
-                      Cantidad
-                    </p>
-                    <div className="flex items-center gap-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-2xl p-3 w-fit border border-gray-200">
-                      <motion.button
-                        type="button"
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Selecciona Tamaño</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      {['500', '1000'].map((size) => {
+                        const units = getProductUnits(productoSeleccionado.categoria);
+                        const label = size === '500' ? units.unidadPequena : units.unidadGrande;
+                        const price = size === '500' ? productoSeleccionado.precio500 : productoSeleccionado.precio1kg;
+                        if (!price) return null;
+                        const isActive = tamano === size;
+
+                        return (
+                          <button
+                            key={size}
+                            onClick={() => setTamano(size)}
+                            className={`p-5 rounded-3xl border-2 transition-all flex flex-col items-center text-center gap-2 ${isActive
+                              ? 'bg-orange-50 border-orange-500 ring-4 ring-orange-500/10 shadow-lg'
+                              : 'bg-white border-gray-100 hover:border-orange-200'
+                              }`}
+                          >
+                            <span className="text-2xl">{size === '500' ? '🥡' : '🍱'}</span>
+                            <span className={`text-base font-black ${isActive ? 'text-orange-600' : 'text-gray-900'}`}>{label}</span>
+                            <span className="text-sm font-bold text-gray-500">₡{price.toLocaleString()}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Cantidad</p>
+                    <div className="flex items-center gap-6 bg-gray-50 p-3 rounded-[1.5rem] w-fit border border-gray-100">
+                      <button
                         onClick={() => setCantidad(Math.max(1, cantidad - 1))}
-                        className="w-12 h-12 flex items-center justify-center text-gray-700 bg-white rounded-xl shadow-md font-bold text-lg"
-                        whileHover={{ scale: 1.1, backgroundColor: "rgb(249, 115, 22)", color: "white" }}
-                        whileTap={{ scale: 0.9 }}
+                        className="w-12 h-12 bg-white text-gray-900 rounded-xl shadow-sm border border-gray-100 flex items-center justify-center hover:bg-orange-500 hover:text-white transition-all disabled:opacity-50"
+                        disabled={cantidad <= 1}
                       >
                         <Minus size={20} />
-                      </motion.button>
-                      <span className="w-12 text-center font-black text-gray-900 text-2xl">{cantidad}</span>
-                      <motion.button
-                        type="button"
+                      </button>
+                      <span className="text-2xl font-black w-10 text-center">{cantidad}</span>
+                      <button
                         onClick={() => setCantidad(cantidad + 1)}
-                        className="w-12 h-12 flex items-center justify-center text-gray-700 bg-white rounded-xl shadow-md font-bold text-lg"
-                        whileHover={{ scale: 1.1, backgroundColor: "rgb(249, 115, 22)", color: "white" }}
-                        whileTap={{ scale: 0.9 }}
+                        className="w-12 h-12 bg-white text-gray-900 rounded-xl shadow-sm border border-gray-100 flex items-center justify-center hover:bg-orange-500 hover:text-white transition-all"
                       >
                         <Plus size={20} />
-                      </motion.button>
+                      </button>
                     </div>
                   </div>
 
-                  {/* Nota */}
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     <button
-                      type="button"
                       onClick={() => setShowNotes(!showNotes)}
-                      className="flex items-center gap-2 text-sm text-gray-600 hover:text-bikitchen-orange:text-bikitchen-gold transition-colors"
+                      className="w-full flex items-center justify-between p-4 bg-gray-50 rounded-2xl text-gray-600 hover:bg-gray-100 transition-all border border-gray-100"
                     >
-                      <MessageSquare size={16} />
-                      <span>Agregar nota especial</span>
-                      <ChevronDown size={14} className={`transition-transform ${showNotes ? 'rotate-180' : ''}`} />
+                      <div className="flex items-center gap-3">
+                        <MessageSquare size={18} className="text-orange-500" />
+                        <span className="text-sm font-bold">¿Alguna nota especial?</span>
+                      </div>
+                      <ChevronDown size={18} className={`transition-transform duration-300 ${showNotes ? 'rotate-180' : ''}`} />
                     </button>
-
-                    {showNotes && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }}
-                      >
-                        <textarea
-                          rows={2}
-                          value={nota}
-                          onChange={(e) => setNota(e.target.value)}
-                          placeholder="Ej: Sin cebolla, por favor..."
-                          className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm text-gray-900 resize-none focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
-                        />
-                      </motion.div>
-                    )}
+                    <AnimatePresence>
+                      {showNotes && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                        >
+                          <textarea
+                            value={nota}
+                            onChange={(e) => setNota(e.target.value)}
+                            placeholder="Ej: Sin cebolla, por favor..."
+                            className="w-full p-4 rounded-2xl border-2 border-gray-100 focus:border-orange-500 transition-all text-sm outline-none resize-none font-medium text-gray-700 bg-white shadow-inner"
+                            rows={3}
+                          />
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
-                </motion.div>
+                </div>
 
-                {/* Footer */}
-                <div className="flex-shrink-0 px-5 py-4 bg-gray-50 border-t border-gray-100">
-                  {/* Resumen de precio */}
-                  <div className="space-y-1 mb-3">
-                    <div className="flex justify-between text-sm text-gray-600">
-                      <span>Precio unitario:</span>
-                      <span>₡{getPrecioSeleccionado().toLocaleString('es-CR')}</span>
+                <div className="p-8 bg-gray-50/80 backdrop-blur-md border-t border-gray-100">
+                  <div className="flex items-center justify-between mb-6">
+                    <div>
+                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Total a pagar</p>
+                      <p className="text-3xl font-black text-gray-900">₡{(getPrecioSeleccionado() * cantidad).toLocaleString()}</p>
                     </div>
-                    <div className="flex justify-between text-base font-bold text-gray-900 pt-1 border-t border-gray-200">
-                      <span>Total:</span>
-                      <span className="text-bikitchen-orange">
-                        ₡{(getPrecioSeleccionado() * cantidad).toLocaleString('es-CR')}
-                      </span>
+                    <div className="text-right">
+                      <p className="text-[10px] font-black text-orange-500 uppercase tracking-widest">Entrega inmediata</p>
+                      <div className="flex items-center gap-1 text-gray-400 overflow-hidden text-ellipsis">
+                         <Check size={14} className="text-green-500" />
+                         <span className="text-xs font-bold">Stock disponible</span>
+                      </div>
                     </div>
                   </div>
-
                   <button
-                    type="button"
                     onClick={handleAgregarCarrito}
-                    disabled={!getPrecioSeleccionado()}
-                    className="w-full bg-gradient-to-r from-bikitchen-orange to-orange-600 hover:from-bikitchen-orange-dark hover:to-orange-700:to-amber-600 text-white font-bold py-3.5 px-4 rounded-xl transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-bikitchen-orange/30 active:scale-[0.98]"
+                    className="w-full bg-gray-900 hover:bg-orange-600 text-white font-black py-5 rounded-[1.5rem] transition-all flex items-center justify-center gap-3 shadow-xl shadow-gray-900/20 active:scale-95 group"
                   >
-                    <ShoppingCart size={20} />
-                    <span>Agregar al carrito — ₡{(getPrecioSeleccionado() * cantidad).toLocaleString('es-CR')}</span>
+                    <ShoppingCart size={22} className="group-hover:rotate-12 transition-transform" />
+                    <span>Agregar al Carrito</span>
                   </button>
                 </div>
               </motion.div>
@@ -789,7 +616,6 @@ export default function IndividualesView() {
           </AnimatePresence>,
           document.body
         )}
-
       </div>
     </PageTransition>
   );

@@ -18,6 +18,7 @@ import { trackViewContent } from '../services/facebookPixel';
 import MenuDetailsModal from '../components/menus/MenuDetailsModal';
 import PromoMenuModal from '../components/menus/PromoMenuModal';
 import { PACK_TO_MENU_KEY } from '../data/packsData';
+import useIsMobile from '../hooks/useIsMobile';
 
 // Categorías de filtro - ELIMINADAS por solicitud del usuario
 
@@ -106,7 +107,7 @@ const PromoCard = ({ promo, onClick, onAddToCart, customImage, onUploadImage, is
             />
 
             {/* Card container */}
-            <div className="relative bg-white rounded-3xl overflow-hidden">
+            <div className="relative bg-white rounded-3xl overflow-hidden h-full flex flex-col">
                 {/* Animated border */}
                 <motion.div
                     className="absolute inset-0 rounded-3xl p-[3px] bg-gradient-to-br from-orange-400 via-amber-400 to-orange-500"
@@ -118,7 +119,7 @@ const PromoCard = ({ promo, onClick, onAddToCart, customImage, onUploadImage, is
                 </motion.div>
 
                 {/* Content */}
-                <div className="relative z-10">
+                <div className="relative z-10 flex flex-col h-full">
                     {/* Imagen */}
                     <div className="relative h-56 overflow-hidden">
                         <motion.img
@@ -197,7 +198,7 @@ const PromoCard = ({ promo, onClick, onAddToCart, customImage, onUploadImage, is
                     </div>
 
                     {/* Contenido */}
-                    <div className="p-7">
+                    <div className="p-7 flex flex-col flex-1">
                         <h3 className="text-2xl font-black text-gray-900 mb-3 leading-tight">
                             {promo.titulo}
                         </h3>
@@ -211,37 +212,7 @@ const PromoCard = ({ promo, onClick, onAddToCart, customImage, onUploadImage, is
                                 <Clock size={16} />
                                 <span>Válido hasta {new Date(promo.fechaFin).toLocaleDateString('es-CR', { day: 'numeric', month: 'long' })}</span>
                             </div>
-                        )}
-
-                        {/* Cuadro de oferta configurable */}
-                        {hasSpecialPrice && (
-                            <div className="bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl p-4 mb-4 text-white relative overflow-hidden">
-                                {/* Decoración de fondo */}
-                                <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2"></div>
-                                <div className="absolute bottom-0 left-0 w-16 h-16 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2"></div>
-
-                                {/* Badge de descuento dinámico */}
-                                <div className="absolute top-2 right-2 bg-yellow-400 text-gray-900 text-xs font-black px-2 py-1 rounded-full shadow-lg animate-pulse">
-                                    🔥 {percentOff}% OFF
-                                </div>
-
-                                <div className="relative z-10">
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <span className="text-white/80 text-xs font-medium">Precio Regular:</span>
-                                        <span className="text-white/70 line-through text-sm">
-                                            {formatPrice(pRegular)}
-                                        </span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-yellow-300 text-xs font-bold">Precio Promoción:</span>
-                                        <span className="text-2xl font-black text-white drop-shadow-lg">
-                                            {formatPrice(pPromo)}
-                                        </span>
-                                    </div>
-                                    <p className="text-white/70 text-[10px] mt-2">*Precio desde. Varía según el pack seleccionado</p>
-                                </div>
-                            </div>
-                        )}
+                                 )}
 
                         {/* Beneficios preview */}
                         {promo.detalles?.beneficios && (
@@ -256,7 +227,7 @@ const PromoCard = ({ promo, onClick, onAddToCart, customImage, onUploadImage, is
                         )}
 
                         {/* Botones de acción */}
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 mt-auto">
                             <button
                                 onClick={(e) => {
                                     e.stopPropagation();
@@ -836,6 +807,7 @@ export default function PromocionesPage() {
     const [imagenesCustom, setImagenesCustom] = useState({});
     const { addToCart } = useCart() || {};
     const { isAdmin } = useAuth();
+    const isMobile = useIsMobile();
 
     // Estados para el modal de menú detallado
     const [showMenuModal, setShowMenuModal] = useState(false);
@@ -1103,70 +1075,17 @@ export default function PromocionesPage() {
             <div className="min-h-screen bg-gradient-to-b from-bikitchen-beige to-white">
                 <Navbar />
 
-                {/* Hero Section */}
-                <header
-                    className="relative pt-28 pb-20 md:pt-36 md:pb-24 bg-gradient-to-br from-orange-500 via-amber-500 to-yellow-500 text-white overflow-hidden"
-                    style={{
-                        paddingTop: showPromoBanner
-                            ? `calc(var(--promo-banner-height, 0px) + 112px)`
-                            : undefined
-                    }}
-                >
-                    {/* Decorative orbs */}
-                    <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-gradient-to-br from-white/20 to-transparent rounded-full blur-3xl"></div>
-                    <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-gradient-to-tr from-yellow-400/30 to-transparent rounded-full blur-3xl"></div>
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-br from-orange-400/10 via-white/10 to-transparent rounded-full blur-3xl"></div>
-                    {/* Pattern overlay */}
-                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_70%,rgba(255,255,255,0.15)_1px,transparent_1px)] bg-[length:40px_40px] opacity-40"></div>
-
-                    {/* Decorative elements */}
-                    <div className="hidden md:block absolute top-44 left-10 text-6xl opacity-30 animate-bounce">🎁</div>
-                    <div className="hidden md:block absolute bottom-20 right-20 text-5xl opacity-30 animate-pulse">✨</div>
-
-                    <div className="container relative z-10 text-center">
-                        <motion.div
-                            initial={{ opacity: 0, y: 30 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] }}
-                        >
-                            <motion.span
-                                className="inline-block mb-6 px-6 py-3 bg-white/20 backdrop-blur-md rounded-full text-base font-bold text-white border border-white/30 shadow-xl"
-                                initial={{ scale: 0.9 }}
-                                animate={{ scale: 1 }}
-                                transition={{ delay: 0.2, duration: 0.4 }}
-                            >
-                                ✨ Ofertas Especiales ✨
-                            </motion.span>
-                            <h1 className="text-5xl md:text-6xl lg:text-7xl font-black mb-8 leading-tight drop-shadow-2xl">
-                                Promociones del Mes
-                            </h1>
-                            <p className="text-xl md:text-2xl mb-10 max-w-3xl mx-auto font-medium text-white/95 leading-relaxed">
-                                Combos y packs especiales con precios que no encontrarás en el menú regular
-                            </p>
-                            <div className="flex flex-wrap justify-center gap-3 text-sm">
-                                <div className="flex items-center gap-2 bg-white/20 backdrop-blur-sm px-4 py-2 rounded-xl">
-                                    <Gift size={16} />
-                                    <span>Ofertas exclusivas</span>
-                                </div>
-                                <div className="flex items-center gap-2 bg-white/20 backdrop-blur-sm px-4 py-2 rounded-xl">
-                                    <Truck size={16} />
-                                    <span>Envíos con descuento</span>
-                                </div>
-                                <div className="flex items-center gap-2 bg-white/20 backdrop-blur-sm px-4 py-2 rounded-xl">
-                                    <Heart size={16} />
-                                    <span>Sabor de casa</span>
-                                </div>
-                            </div>
-                        </motion.div>
-                    </div>
-                </header>
-
-                {/* Filtros */}
-                {/* Placeholder para evitar salto cuando se pone fixed */}
                 {/* Filtros eliminados por solicitud del usuario */}
 
                 {/* Main Content */}
-                <main className="container py-16 pb-32">
+                <main 
+                    className="container"
+                    style={{
+                        paddingTop: showPromoBanner
+                            ? `calc(var(--promo-banner-height, 0px) + ${isMobile ? '100px' : '120px'})`
+                            : (isMobile ? '90px' : '104px')
+                    }}
+                >
 
                     {loading ? (
                         // Skeleton loader mientras cargan datos e imágenes
@@ -1210,19 +1129,13 @@ export default function PromocionesPage() {
                                         initial={{ opacity: 0, y: 20 }}
                                         whileInView={{ opacity: 1, y: 0 }}
                                         viewport={{ once: true }}
-                                        className="text-center mb-12"
+                                        className="text-center mb-8"
                                     >
-                                        <span
-                                            className="inline-block px-5 py-2 rounded-full text-sm font-bold mb-4 text-white shadow-lg"
-                                            style={{ background: 'linear-gradient(90deg, #FFB347 0%, #FF8C42 100%)' }}
-                                        >
-                                            🔥 Lo más destacado del mes
-                                        </span>
-                                        <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-3">
+                                        <h2 className="text-3xl md:text-5xl font-black text-gray-900 mb-2">
                                             Promociones del Mes
                                         </h2>
-                                        <p className="text-gray-600 text-lg max-w-2xl mx-auto">
-                                            Aprovecha nuestras mejores ofertas y ahorra en tus packs favoritos
+                                        <p className="text-gray-500 text-base md:text-lg max-w-2xl mx-auto font-medium">
+                                            Aprovecha estas ofertas exclusivas y ahorra en tus packs favoritos
                                         </p>
                                     </motion.div>
 

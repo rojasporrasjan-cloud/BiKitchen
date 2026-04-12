@@ -17,7 +17,7 @@ export default function NotFoundPage() {
             {/* Pattern */}
             <div className="absolute inset-0 opacity-5 bg-[radial-gradient(circle_at_50%_50%,rgba(0,0,0,0.8)_1px,transparent_1px)] bg-[length:32px_32px]"></div>
 
-            <motion.div 
+            <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5 }}
@@ -35,7 +35,7 @@ export default function NotFoundPage() {
                             <ChefHat size={48} className="text-bikitchen-orange" />
                         </div>
                     </div>
-                    
+
                     {/* Floating Icons */}
                     <motion.div
                         animate={{ rotate: 360 }}
@@ -46,7 +46,7 @@ export default function NotFoundPage() {
                             <UtensilsCrossed size={20} className="text-bikitchen-orange" />
                         </div>
                     </motion.div>
-                    
+
                     <motion.div
                         animate={{ y: [5, -5, 5] }}
                         transition={{ repeat: Infinity, duration: 2.5 }}
@@ -87,7 +87,7 @@ export default function NotFoundPage() {
                     transition={{ delay: 0.5 }}
                     className="text-gray-600 mb-8 max-w-md mx-auto"
                 >
-                    Parece que este plato no está en nuestro menú. 
+                    Parece que este plato no está en nuestro menú.
                     La página que buscas no existe o ha sido movida.
                 </motion.p>
 
@@ -117,7 +117,7 @@ export default function NotFoundPage() {
                         <ArrowLeft size={20} />
                         Volver Atrás
                     </button>
-                    
+
                     <Link
                         to="/"
                         className="flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-bikitchen-orange to-bikitchen-gold hover:from-bikitchen-orange-dark hover:to-yellow-500 text-white rounded-xl font-semibold transition-all shadow-lg shadow-bikitchen-orange/25"
@@ -159,10 +159,10 @@ export default function NotFoundPage() {
                     className="mt-8"
                 >
                     <Link to="/" className="inline-block">
-                        <img 
-                            src="/assets/logo.jpg" 
-                            alt="BiKitchen" 
-                            className="h-10 w-auto mx-auto rounded-lg opacity-50 hover:opacity-100 transition-opacity"
+                        <img
+                            src="/assets/logo.png"
+                            alt="BiKitchen"
+                            className="h-14 w-auto mx-auto rounded-lg opacity-50 hover:opacity-100 transition-opacity"
                         />
                     </Link>
                 </motion.div>

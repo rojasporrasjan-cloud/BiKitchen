@@ -97,7 +97,7 @@ export default function LoginPage() {
                     <div className="text-center mb-8">
                         <div className="inline-flex items-center justify-center bg-white rounded-2xl p-3 shadow-lg mb-4">
                             <img
-                                src="/assets/logo.jpg"
+                                src="/assets/logo.png"
                                 alt="BiKitchen"
                                 className="h-16 w-auto object-contain block mx-auto"
                             />

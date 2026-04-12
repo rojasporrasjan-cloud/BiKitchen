@@ -110,34 +110,56 @@ export function authenticate3DS(gateway, paymentInfo) {
             console.log('[NMI] Attempting createUI with masked Info:', maskedInfo);
             
             try {
-                // Add Device Data for better reliability (as per NMI docs)
-                let javaEnabled = "false";
-                try { javaEnabled = String(window.navigator.javaEnabled()); } catch (e) { }
-
-                const deviceData = {
-                    browserUserAgent: window.navigator.userAgent,
-                    browserAcceptHeader: "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-                    browserJavaEnabled: javaEnabled,
-                    browserJavascriptEnabled: "true",
-                    browserLanguage: window.navigator.language,
-                    browserColorDepth: String(window.screen.colorDepth),
-                    browserScreenHeight: String(window.screen.height),
-                    browserScreenWidth: String(window.screen.width),
-                    browserTimeZone: String(new Date().getTimezoneOffset()),
-                    deviceChannel: "Browser"
-                };
-
-                const options = {
-                    ...paymentInfo,
-                    ...deviceData,
-                    size: '390x400' // Better fit for mobile devices (~375-414px)
-                };
-
                 // THE FIX: always unmount any previous 3DS UI before starting a new one.
                 unmount3DS();
 
+                // Use ONLY the fields documented by NMI for createUI
+                // Extra fields (device data, size) may cause createUI to return null
+                const options = {
+                    amount: paymentInfo.amount,
+                    currency: paymentInfo.currency,
+                    cardNumber: paymentInfo.cardNumber,
+                    cardExpMonth: paymentInfo.cardExpMonth,
+                    cardExpYear: paymentInfo.cardExpYear,
+                    firstName: paymentInfo.firstName,
+                    lastName: paymentInfo.lastName,
+                    email: paymentInfo.email,
+                    address1: paymentInfo.address1,
+                    city: paymentInfo.city,
+                    state: paymentInfo.state,
+                    country: paymentInfo.country,
+                    postalCode: paymentInfo.postalCode
+                };
+                
+                console.log('[NMI] createUI options (minimal):', { ...options, cardNumber: 'XXXX' });
+
                 // The documentation uses createUI(options) and then .start()
-                const threeDSInterface = threeDS.createUI(options);
+                let threeDSInterface = threeDS.createUI(options);
+                
+                // If fails, retry without currency (CRC may not be supported for 3DS)
+                if (!threeDSInterface) {
+                    console.warn('[NMI] createUI returned null with CRC. Retrying without currency...');
+                    delete options.currency;
+                    threeDSInterface = threeDS.createUI(options);
+                }
+                
+                // If still null, try with USD
+                if (!threeDSInterface) {
+                    console.warn('[NMI] createUI still null. Retrying with USD...');
+                    options.currency = 'USD';
+                    threeDSInterface = threeDS.createUI(options);
+                }
+
+                // Last resort: try with absolute minimum (just card + amount)
+                if (!threeDSInterface) {
+                    console.warn('[NMI] createUI still null. Trying absolute minimum options...');
+                    threeDSInterface = threeDS.createUI({
+                        amount: paymentInfo.amount,
+                        cardNumber: paymentInfo.cardNumber,
+                        cardExpMonth: paymentInfo.cardExpMonth,
+                        cardExpYear: paymentInfo.cardExpYear
+                    });
+                }
 
                 if (!threeDSInterface) {
                     // 3DS UI not available — this likely means Payer Authentication

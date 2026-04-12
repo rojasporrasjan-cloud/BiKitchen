@@ -27,6 +27,7 @@ function useIsMobile() {
 
 // Layout principal del panel de administración - BiKitchen Brand
 export default function AdminLayout() {
+    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
     const { logout, currentUser } = useAuth();
@@ -128,22 +129,28 @@ export default function AdminLayout() {
         navigate('/');
     };
 
-    const SidebarContent = ({ mobile = false }) => (
+    const SidebarContent = ({ mobile = false, collapsed = false }) => (
         <>
             {/* Header del Sidebar */}
-            <div className="p-5 border-b border-white/10 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex justify-between items-center">
+            <div className={`p-5 border-b border-white/10 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex justify-between items-center ${collapsed ? 'px-4' : ''}`}>
                 <Link to="/" className="flex items-center gap-3 group">
-                    <div className="w-12 h-12 bg-gradient-to-br from-orange-500 via-amber-500 to-orange-600 rounded-2xl flex items-center justify-center shadow-lg group-hover:shadow-xl group-hover:scale-105 transition-all duration-300 overflow-hidden">
+                    <div className="shrink-0 w-12 h-12 bg-gradient-to-br from-orange-500 via-amber-500 to-orange-600 rounded-2xl flex items-center justify-center shadow-lg group-hover:shadow-xl group-hover:scale-105 transition-all duration-300 overflow-hidden">
                         <img
-                            src="/assets/logo.jpg"
+                            src="/assets/logo.png"
                             alt="BiKitchen Food"
                             className="h-8 w-auto object-contain block mx-auto"
                         />
                     </div>
-                    <div className="flex flex-col">
-                        <span className="text-base font-bold tracking-wide bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">BiKitchen</span>
-                        <span className="text-[10px] text-orange-400 tracking-widest uppercase font-semibold">Panel Admin</span>
-                    </div>
+                    {!collapsed && (
+                        <motion.div
+                            initial={{ opacity: 0, x: -10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            className="flex flex-col"
+                        >
+                            <span className="text-base font-bold tracking-wide bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">BiKitchen</span>
+                            <span className="text-[10px] text-orange-400 tracking-widest uppercase font-semibold">Panel Admin</span>
+                        </motion.div>
+                    )}
                 </Link>
                 {mobile && (
                     <button
@@ -168,28 +175,37 @@ export default function AdminLayout() {
                             to={item.to}
                             end={item.end}
                             onClick={() => mobile && setIsMobileMenuOpen(false)}
+                            title={collapsed ? item.label : ''}
                             className={({ isActive }) =>
                                 `flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 group ${isActive
                                     ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg shadow-orange-500/40 scale-105'
                                     : item.highlight
                                         ? 'text-bikitchen-gold hover:text-white hover:bg-gradient-to-r hover:from-orange-500/20 hover:to-amber-500/20'
                                         : 'text-gray-400 hover:text-white hover:bg-white/10 hover:scale-102'
-                                }`
+                                } ${collapsed ? 'justify-center px-0' : ''}`
                             }
                         >
                             {({ isActive }) => (
                                 <>
-                                    <div className={`transition-transform duration-300 ${isActive ? 'scale-110' : 'group-hover:scale-110'
+                                    <div className={`shrink-0 transition-transform duration-300 ${isActive ? 'scale-110' : 'group-hover:scale-110'
                                         }`}>
                                         <item.icon size={20} />
                                     </div>
-                                    <span className="text-sm font-semibold">{item.label}</span>
+                                    {!collapsed && (
+                                        <motion.span
+                                            initial={{ opacity: 0, x: -10 }}
+                                            animate={{ opacity: 1, x: 0 }}
+                                            className="text-sm font-semibold whitespace-nowrap"
+                                        >
+                                            {item.label}
+                                        </motion.span>
+                                    )}
                                     {item.badge > 0 && (
-                                        <span className="ml-auto min-w-[22px] h-6 flex items-center justify-center text-[11px] bg-gradient-to-r from-red-500 to-rose-500 text-white px-2 rounded-full font-bold shadow-lg animate-pulse">
+                                        <span className={`${collapsed ? 'absolute -top-1 -right-1' : 'ml-auto'} min-w-[22px] h-6 flex items-center justify-center text-[11px] bg-gradient-to-r from-red-500 to-rose-500 text-white px-2 rounded-full font-bold shadow-lg animate-pulse`}>
                                             {item.badge}
                                         </span>
                                     )}
-                                    {item.highlight && !item.badge && (
+                                    {item.highlight && !item.badge && !collapsed && (
                                         <span className="ml-auto text-[10px] bg-gradient-to-r from-yellow-400 to-orange-400 text-gray-900 px-2 py-1 rounded-full font-bold shadow-md">
                                             NEW
                                         </span>
@@ -202,20 +218,25 @@ export default function AdminLayout() {
             </nav>
 
             {/* Footer del Sidebar */}
-            <div className="p-3 border-t border-white/10 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+            <div className={`p-3 border-t border-white/10 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 ${collapsed ? 'px-2' : ''}`}>
                 {/* User Info */}
-                {currentUser && (
-                    <div className="px-4 py-3 mb-2 bg-white/5 rounded-xl border border-white/10">
+                {currentUser && !collapsed && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="px-4 py-3 mb-2 bg-white/5 rounded-xl border border-white/10"
+                    >
                         <p className="text-xs text-gray-300 truncate font-medium">{currentUser.email}</p>
                         <p className="text-[10px] text-orange-400 font-bold uppercase tracking-wider mt-0.5">Administrador</p>
-                    </div>
+                    </motion.div>
                 )}
                 <button
                     onClick={handleLogout}
-                    className="flex items-center gap-3 px-4 py-3 rounded-xl text-white/70 hover:text-white hover:bg-gradient-to-r hover:from-red-500/20 hover:to-rose-500/20 w-full transition-all text-sm font-medium group"
+                    title={collapsed ? 'Cerrar Sesión' : ''}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-xl text-white/70 hover:text-white hover:bg-gradient-to-r hover:from-red-500/20 hover:to-rose-500/20 w-full transition-all text-sm font-medium group ${collapsed ? 'justify-center px-0' : ''}`}
                 >
-                    <LogOut size={18} className="group-hover:scale-110 transition-transform" />
-                    <span>Cerrar Sesión</span>
+                    <LogOut size={18} className="shrink-0 group-hover:scale-110 transition-transform" />
+                    {!collapsed && <span>Cerrar Sesión</span>}
                 </button>
             </div>
         </>
@@ -224,9 +245,14 @@ export default function AdminLayout() {
     return (
         <div className="flex h-screen bg-gray-50 font-sans text-gray-800 overflow-hidden">
             {/* Desktop Sidebar */}
-            <aside className="w-64 bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 hidden md:flex flex-col shadow-2xl border-r border-white/5 z-20">
-                <SidebarContent />
-            </aside>
+            <motion.aside
+                initial={false}
+                animate={{ width: isSidebarCollapsed ? 80 : 256 }}
+                transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                className="bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 hidden md:flex flex-col shadow-2xl border-r border-white/5 z-20 overflow-hidden"
+            >
+                <SidebarContent collapsed={isSidebarCollapsed} />
+            </motion.aside>
 
             {/* Mobile Sidebar Drawer */}
             <AnimatePresence>
@@ -259,12 +285,23 @@ export default function AdminLayout() {
             <div className="flex-1 flex flex-col h-full overflow-hidden relative">
                 {/* Header */}
                 <header className="bg-gradient-to-r from-white via-gray-50 to-white shadow-sm p-3 md:p-4 flex justify-between items-center sticky top-0 z-10 border-b border-gray-200 backdrop-blur-sm shrink-0">
-                    <button
-                        onClick={() => setIsMobileMenuOpen(true)}
-                        className="md:hidden p-2.5 text-gray-700 hover:text-orange-500 hover:bg-orange-50 rounded-xl transition-all active:scale-95"
-                    >
-                        <MenuIcon size={24} />
-                    </button>
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={() => setIsMobileMenuOpen(true)}
+                            className="md:hidden p-2.5 text-gray-700 hover:text-orange-500 hover:bg-orange-50 rounded-xl transition-all active:scale-95"
+                        >
+                            <MenuIcon size={24} />
+                        </button>
+
+                        {/* Toggle Sidebar Desktop */}
+                        <button
+                            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                            className="hidden md:flex p-2.5 text-gray-700 hover:text-orange-500 hover:bg-orange-50 rounded-xl transition-all active:scale-95"
+                            title={isSidebarCollapsed ? "Expandir menú" : "Contraer menú"}
+                        >
+                            <MenuIcon size={24} className={`transition-transform duration-300 ${isSidebarCollapsed ? 'rotate-180' : ''}`} />
+                        </button>
+                    </div>
 
                     {/* Global Search */}
                     <div className="hidden md:flex items-center bg-gradient-to-r from-gray-100 to-gray-50 px-4 py-2.5 rounded-2xl w-96 border border-gray-200 hover:border-orange-300 transition-all shadow-sm hover:shadow-md">

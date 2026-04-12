@@ -11,11 +11,11 @@ export default function IndividualCard({ producto, onClick, canEditImage, onUplo
     <motion.div
       whileHover={{ y: -8, scale: 1.02 }}
       transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-      className="group rounded-[2rem] shadow-lg hover:shadow-2xl bg-white border-2 border-gray-50 hover:border-orange-200 overflow-hidden flex flex-col cursor-pointer transition-all duration-300"
+      className="group rounded-[2rem] h-full shadow-lg hover:shadow-2xl bg-white border-2 border-gray-50 hover:border-orange-200 overflow-hidden flex flex-col cursor-pointer transition-all duration-300"
       onClick={onClick}
     >
       {/* Imagen con Overlay */}
-      <div className="h-44 sm:h-48 w-full overflow-hidden relative">
+      <div className="h-44 sm:h-40 w-full overflow-hidden relative">
         <img
           src={producto.imagen}
           alt={producto.nombre}
@@ -48,7 +48,7 @@ export default function IndividualCard({ producto, onClick, canEditImage, onUplo
         )}
       </div>
 
-      <div className="p-5 flex flex-col gap-3 flex-1">
+      <div className="p-3.5 sm:p-5 flex flex-col gap-2 flex-1">
         <div>
           <h3 className="text-lg font-black text-gray-900 group-hover:text-bikitchen-orange transition-colors line-clamp-1">
             {producto.nombre}
@@ -66,7 +66,7 @@ export default function IndividualCard({ producto, onClick, canEditImage, onUplo
         </div>
 
         {/* Bottom Action Area */}
-        <div className="pt-2 flex items-center justify-between border-t border-gray-50 group-hover:border-orange-50 transition-colors">
+        <div className="mt-auto pt-2 flex items-center justify-between border-t border-gray-50 group-hover:border-orange-50 transition-colors">
           <div className="flex items-center gap-1.5 text-xs font-black text-orange-600 uppercase tracking-tight">
             <Plus size={14} strokeWidth={3} />
             Seleccionar

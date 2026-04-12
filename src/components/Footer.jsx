@@ -47,9 +47,9 @@ export default function Footer() {
                             <Link to="/" className="inline-block group mb-6">
                                 <div className="bg-gradient-to-br from-white via-orange-50 to-white rounded-2xl p-4 shadow-xl group-hover:shadow-2xl group-hover:scale-105 transition-all duration-300 border border-orange-100/20">
                                     <img
-                                        src="/assets/logo.jpg"
+                                        src="/assets/logo.png"
                                         alt="BiKitchen Food"
-                                        className="h-16 w-auto object-contain"
+                                        className="h-20 w-auto object-contain"
                                     />
                                 </div>
                             </Link>
