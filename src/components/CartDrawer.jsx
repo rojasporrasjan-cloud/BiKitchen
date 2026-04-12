@@ -62,31 +62,36 @@ export default function CartDrawer() {
                         animate={{ x: 0 }}
                         exit={{ x: '100%' }}
                         transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                        className="fixed right-0 top-0 h-full w-full sm:w-96 bg-white shadow-2xl z-[60] flex flex-col"
+                        className="fixed right-0 top-0 h-full w-full sm:w-96 bg-white z-[60] flex flex-col border-l border-gray-100"
                     >
                         {/* Header */}
-                        <div className="flex items-center justify-between p-6 border-b border-gray-200">
-                            <div className="flex items-center gap-2">
-                                <ShoppingCart size={24} className="text-orange-500" />
-                                <h2 className="text-xl font-bold text-gray-900">Tu Carrito</h2>
+                        <div className="flex items-center justify-between p-5 border-b border-gray-100">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-orange-50 rounded-xl">
+                                    <ShoppingCart size={20} className="text-orange-500" />
+                                </div>
+                                <h2 className="text-lg font-bold text-gray-900">Carrito</h2>
                             </div>
                             <button
                                 onClick={() => setIsCartOpen(false)}
-                                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                                className="p-2 hover:bg-gray-100 rounded-full transition-all duration-200 hover:scale-110"
                             >
-                                <X size={24} />
+                                <X size={22} className="text-gray-500" />
                             </button>
                         </div>
 
                         {/* Cart Items */}
-                        <div className="flex-1 overflow-y-auto p-4 pt-2">
+                        <div className="flex-1 overflow-y-auto p-4">
                             {cart.length === 0 ? (
-                                <div className="text-center py-12 text-gray-400">
-                                    <ShoppingCart size={48} className="mx-auto mb-4 opacity-50" />
-                                    <p>Tu carrito está vacío</p>
+                                <div className="text-center py-16 text-gray-400 flex flex-col items-center">
+                                    <div className="p-4 bg-gray-100/50 rounded-2xl mb-4">
+                                        <ShoppingCart size={40} className="opacity-30" />
+                                    </div>
+                                    <p className="font-medium">Tu carrito está vacío</p>
+                                    <p className="text-xs text-gray-400 mt-1">Agrega items para ver el resumen aquí</p>
                                 </div>
                             ) : (
-                                <div className="space-y-4">
+                                <div className="space-y-3">
                                     {cart.map((item, index) => (
                                         <motion.div
                                             key={`${item.id || 'item'}-${index}`}
@@ -94,7 +99,7 @@ export default function CartDrawer() {
                                             initial={{ opacity: 0, y: 20 }}
                                             animate={{ opacity: 1, y: 0 }}
                                             exit={{ opacity: 0, y: -20 }}
-                                            className="flex gap-3 p-3 bg-gray-50 rounded-xl"
+                                            className="flex gap-3 p-3 bg-white border border-gray-100 rounded-xl hover:shadow-md hover:border-gray-200 transition-all duration-200"
                                         >
                                             <div className="w-20 h-20 rounded-lg overflow-hidden bg-gray-200 flex-shrink-0">
                                                 {item.image ? (
@@ -132,25 +137,25 @@ export default function CartDrawer() {
                                                         Subtotal: ₡{((Number(item.price) || 0) * (Number(item.quantity) || 0)).toLocaleString('es-CR')}
                                                     </span>
                                                 </div>
-                                                <div className="flex items-center gap-2 mt-2">
+                                                <div className="flex items-center gap-2 mt-2 bg-gray-50 w-fit px-2 py-1.5 rounded-lg">
                                                     <button
                                                         onClick={() => updateQuantity(item.id, item.plan, Math.max(1, item.quantity - 1))}
-                                                        className="p-1 hover:bg-gray-200 rounded"
+                                                        className="p-1 hover:bg-gray-200 rounded transition-colors"
                                                     >
-                                                        <Minus size={14} />
+                                                        <Minus size={14} className="text-gray-600" />
                                                     </button>
-                                                    <span className="text-sm font-medium w-8 text-center">{item.quantity}</span>
+                                                    <span className="text-sm font-semibold w-6 text-center text-gray-900">{item.quantity}</span>
                                                     <button
                                                         onClick={() => updateQuantity(item.id, item.plan, item.quantity + 1)}
-                                                        className="p-1 hover:bg-gray-200 rounded"
+                                                        className="p-1 hover:bg-orange-100 rounded transition-colors"
                                                     >
-                                                        <Plus size={14} />
+                                                        <Plus size={14} className="text-orange-500" />
                                                     </button>
                                                 </div>
                                             </div>
                                             <button
                                                 onClick={() => removeFromCart(item.id, item.plan)}
-                                                className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors self-start"
+                                                className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all duration-200 self-start"
                                             >
                                                 <Trash2 size={18} />
                                             </button>
@@ -162,7 +167,7 @@ export default function CartDrawer() {
 
                         {/* Footer */}
                         {cart.length > 0 && (
-                            <div className="border-t border-gray-200 p-4 sm:p-6 space-y-4">
+                            <div className="border-t border-gray-100 p-5 space-y-4 bg-gray-50/50">
                                 
                                 {/* Cupones y Referidos */}
                                 <div className="space-y-3">
@@ -271,60 +276,56 @@ export default function CartDrawer() {
                                 </div>
 
                                 {/* Resumen de precios */}
-                                <div className="space-y-1.5 pt-4 border-t border-gray-100">
-                                    <div className="flex justify-between text-sm text-gray-500">
-                                        <span>Subtotal productos</span>
+                                <div className="space-y-2 pt-3 border-t border-gray-200 bg-white rounded-xl p-4 -mx-5 mb-4 mx-4 border">
+                                    <div className="flex justify-between text-xs text-gray-600">
+                                        <span className="font-medium">Subtotal</span>
                                         <span>₡{getSubtotal().toLocaleString('es-CR')}</span>
                                     </div>
-                                    
+
                                     {(appliedCoupon || appliedReferral) && getDiscount() > 0 && (
-                                        <div className="flex justify-between text-sm text-green-600 font-medium">
+                                        <div className="flex justify-between text-xs text-green-600 font-semibold">
                                             <span className="flex items-center gap-1">
-                                                <CheckCircle size={14} />
-                                                Descuentos aplicados
+                                                <CheckCircle size={13} />
+                                                Descuentos
                                             </span>
                                             <span>-₡{getDiscount().toLocaleString('es-CR')}</span>
                                         </div>
                                     )}
 
                                     {shippingDiscount > 0 && (
-                                        <div className="flex justify-between text-sm text-blue-600 font-medium italic">
+                                        <div className="flex justify-between text-xs text-blue-600 font-semibold">
                                             <span className="flex items-center gap-1">
-                                                <Truck size={14} />
-                                                ¡Envío con {shippingDiscount}% descuento!
+                                                <Truck size={13} />
+                                                Envío {shippingDiscount}%
                                             </span>
                                         </div>
                                     )}
 
-                                    <div className="flex justify-between items-center text-xl font-bold pt-2 text-gray-900 border-t border-gray-50 mt-1">
-                                        <span>Total estimado</span>
-                                        <span className="text-bikitchen-orange">₡{getTotalPrice().toLocaleString('es-CR')}</span>
+                                    <div className="flex justify-between items-center text-lg font-bold text-gray-900 border-t border-gray-100 pt-2 mt-1">
+                                        <span>Total</span>
+                                        <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-orange-600">₡{getTotalPrice().toLocaleString('es-CR')}</span>
                                     </div>
-                                    <p className="text-[10px] text-gray-400 text-center uppercase tracking-tighter">I.V.A Incluido • Costo de envío según zona</p>
+                                    <p className="text-[9px] text-gray-400 text-center uppercase tracking-wider font-medium">IVA incluido</p>
                                 </div>
 
                                 {/* Botones de checkout */}
-                                <div className="pt-2">
+                                <div className="pt-0 -mx-5 px-5">
                                     <button
                                         onClick={() => setShowStepsCheckout(true)}
-                                        className="w-full py-4 bg-gradient-to-r from-bikitchen-orange to-bikitchen-gold text-white rounded-xl font-bold hover:shadow-lg hover:shadow-orange-200 transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
+                                        className="w-full py-3.5 bg-gradient-to-r from-bikitchen-orange to-orange-600 text-white rounded-xl font-bold hover:shadow-lg hover:shadow-orange-300/30 transition-all duration-300 flex items-center justify-center gap-2 active:scale-[0.98] text-sm tracking-wide"
                                     >
                                         Finalizar Pedido
-                                        <ArrowRight size={20} />
+                                        <ArrowRight size={18} />
                                     </button>
                                 </div>
 
                                 {/* Métodos de pago aceptados */}
-                                <div className="mt-4 pt-4 border-t border-gray-100">
-                                    <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
-                                        <p className="text-[10px] text-gray-400 font-black uppercase tracking-[0.2em] text-center mb-3">Medios de Pago Seguros</p>
-                                        <div className="flex items-center justify-center">
-                                            <div className="flex items-center gap-3 opacity-90">
-                                                <img src="https://cdn.jsdelivr.net/gh/aaronfagan/svg-credit-card-payment-icons@master/flat/visa.svg" alt="Visa" className="h-[14px] w-auto" />
-                                                <img src="https://cdn.jsdelivr.net/gh/aaronfagan/svg-credit-card-payment-icons@master/flat/mastercard.svg" alt="Mastercard" className="h-[18px] w-auto" />
-                                                <img src="https://cdn.jsdelivr.net/gh/aaronfagan/svg-credit-card-payment-icons@master/flat/amex.svg" alt="Amex" className="h-[16px] w-auto" />
-                                            </div>
-                                        </div>
+                                <div className="mt-2 pt-3 border-t border-gray-200 -mx-5 px-5 pb-2">
+                                    <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest text-center mb-2.5">Pagos Seguros</p>
+                                    <div className="flex items-center justify-center gap-4 opacity-70 hover:opacity-100 transition-opacity">
+                                        <img src="https://cdn.jsdelivr.net/gh/aaronfagan/svg-credit-card-payment-icons@master/flat/visa.svg" alt="Visa" className="h-[12px] w-auto" />
+                                        <img src="https://cdn.jsdelivr.net/gh/aaronfagan/svg-credit-card-payment-icons@master/flat/mastercard.svg" alt="Mastercard" className="h-[15px] w-auto" />
+                                        <img src="https://cdn.jsdelivr.net/gh/aaronfagan/svg-credit-card-payment-icons@master/flat/amex.svg" alt="Amex" className="h-[14px] w-auto" />
                                     </div>
                                 </div>
                             </div>

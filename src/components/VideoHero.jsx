@@ -36,7 +36,7 @@ const VideoHero = ({ videoSrc, title, subtitle, primaryCTA, secondaryCTA }) => {
     }, []);
 
     return (
-        <section className="relative min-h-[100dvh] md:h-screen w-full overflow-hidden flex items-center bg-black">
+        <section className="relative min-h-screen md:h-screen w-full overflow-hidden flex items-center bg-black" style={{ minHeight: '100dvh' }}>
             {/* Background Video Layers */}
             <div className="absolute inset-0 z-0">
                 {/* Layer 1: Blurred Background (Full Screen) - Desktop Only */}

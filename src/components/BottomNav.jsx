@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { Home, Package, Utensils, ShoppingCart, User } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -9,9 +9,23 @@ export default function BottomNav() {
   const { cart, setIsCartOpen } = useCart();
   const { isMobileMenuOpen } = useUI();
   const location = useLocation();
-  const [isBouncing, setIsBouncing] = React.useState(false);
+  const [isBouncing, setIsBouncing] = useState(false);
+  const [isHeroArea, setIsHeroArea] = useState(false);
 
   const cartCount = cart.reduce((total, item) => total + item.quantity, 0);
+
+  // Detectar si estamos en el hero (scroll cercano al top en landing page)
+  useEffect(() => {
+    const handleScroll = () => {
+      const isLanding = location.pathname === '/';
+      const scrollY = window.scrollY || window.pageYOffset;
+      setIsHeroArea(isLanding && scrollY < 200);
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    handleScroll(); // Llamar al montar para establecer estado inicial
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [location.pathname]);
 
   // Animación de rebote cuando el carrito cambia
   React.useEffect(() => {
@@ -30,7 +44,11 @@ export default function BottomNav() {
   if (isMobileMenuOpen || isAdminRoute || isProfileRoute) return null;
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-md border-t border-gray-100 px-6 py-3 pb-[env(safe-area-inset-bottom,16px)] shadow-[0_-10px_30px_rgba(0,0,0,0.05)]">
+    <nav className={`md:hidden fixed bottom-0 left-0 right-0 z-50 px-6 py-3 transition-all duration-300 ${
+      isHeroArea
+        ? 'bg-transparent border-t border-transparent'
+        : 'bg-white/95 backdrop-blur-xl border-t border-gray-100 shadow-[0_-10px_30px_rgba(0,0,0,0.05)]'
+    }`} style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 16px))' }}>
       <div className="flex items-center justify-between max-w-md mx-auto">
         <NavItem to="/" icon={<Home size={22} />} label="Inicio" />
         <NavItem to="/packs" icon={<Package size={22} />} label="Packs" />
