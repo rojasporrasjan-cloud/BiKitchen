@@ -8,6 +8,11 @@
   # This 26s limit is the outer safety net.
   node_bundler = "esbuild"
 
+# Explicit timeout for the payment function (default is 10s which is too short for BAC)
+# NOTE: Netlify Free plan maxes at 10s. Netlify Pro allows up to 26s.
+[functions."nmi-charge"]
+  timeout = 26
+
 [[redirects]]
   from = "/*"
   to = "/index.html"

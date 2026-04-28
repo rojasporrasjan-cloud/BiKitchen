@@ -16,7 +16,7 @@ import { useWhatsApp } from '../hooks/useWhatsApp';
 const GIFT_CARD_AMOUNTS = [
     { value: 15000, label: '₡15,000', popular: false, meals: '~3 comidas' },
     { value: 25000, label: '₡25,000', popular: false, meals: '~5 comidas' },
-    { value: 45000, label: '₡45,000', popular: true, meals: '~10 comidas' },
+    { value: 45000, label: '₡45,000', popular: true, meals: '~10 Almuerzos y Cenas' },
     { value: 65000, label: '₡65,000', popular: false, meals: '~15 comidas' },
     { value: 100000, label: '₡100,000', popular: false, meals: '~22 comidas' }
 ];

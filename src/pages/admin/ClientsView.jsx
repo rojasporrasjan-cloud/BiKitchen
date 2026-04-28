@@ -10,10 +10,19 @@ import {
     Trash2,
     Eye,
     Copy,
-    UserPlus
+    UserPlus,
+    MessageSquare,
+    RefreshCw,
+    Globe,
+    Bell,
+    Send,
+    CheckCircle2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { db } from '../../firebase/config';
+import { upsertClient, sendClientNotification } from '../../services/clientService';
+import { sendBulkEmail } from '../../services/emailNotifications';
+import toast from 'react-hot-toast';
 import {
     collection,
     addDoc,
@@ -22,7 +31,9 @@ import {
     orderBy,
     limit,
     deleteDoc,
-    doc
+    doc,
+    getDocs,
+    where
 } from 'firebase/firestore';
 import AdminPageHeader from '../../components/admin/AdminPageHeader';
 import { useOrders } from '../../context/OrdersContext';
@@ -40,12 +51,19 @@ export default function ClientsView() {
     const [profileRelatedOrders, setProfileRelatedOrders] = useState([]);
     const [profilePoints, setProfilePoints] = useState(null);
 
+    // Global Actions state
+    const [showGlobalModal, setShowGlobalModal] = useState(false);
+    const [globalType, setGlobalType] = useState('popup'); // popup, email
+    const [globalTitle, setGlobalTitle] = useState('');
+    const [globalMessage, setGlobalMessage] = useState('');
+    const [isProcessing, setIsProcessing] = useState(false);
+
     const [loading, setLoading] = useState(true);
 
     // Cargar clientes desde Firebase
     useEffect(() => {
-        // LIMITAR LECTITRAS: Solo cargar los primeros 50 clientes por defecto
-        const q = query(collection(db, "clientes"), orderBy("nombre", "asc"), limit(50));
+        // LIMITAR LECTITRAS: Cargar hasta 150 clientes
+        const q = query(collection(db, "clientes"), orderBy("nombre", "asc"), limit(150));
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const clientsData = snapshot.docs.map(doc => ({
@@ -91,6 +109,111 @@ export default function ClientsView() {
         }
     };
 
+    const handleMigrateClients = async () => {
+        if (!window.confirm('Esto registrará/actualizará todos los clientes basados en los pedidos históricos. ¿Continuar?')) return;
+
+        const tid = toast.loading('Migrando clientes...');
+        try {
+            let processed = 0;
+            const uniqueClients = new Map();
+            const pedidosSnap = await getDocs(collection(db, "pedidos"));
+            const ordersSnap = await getDocs(collection(db, "orders"));
+
+            const allOrders = [
+                ...pedidosSnap.docs.map(d => ({ id: d.id, ...d.data() })),
+                ...ordersSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+            ];
+
+            console.log(`[Migration] Total pedidos encontrados: ${allOrders.length}`);
+
+            allOrders.forEach(order => {
+                const nombre = order.cliente || order.client || order.details?.name;
+                const rawTel = (order.telefono || order.details?.phone || '');
+                const telefono = rawTel.replace(/[^0-9]/g, '');
+                const correo = (order.correo || order.details?.email || '').toLowerCase().trim();
+
+                if (!nombre) return;
+                const key = correo || `tel_${telefono}`;
+                if (!key || key === 'tel_') return;
+
+                if (!uniqueClients.has(key)) {
+                    uniqueClients.set(key, {
+                        nombre,
+                        telefono,
+                        correo,
+                        direccion: order.direccion || order.details?.address,
+                        orderCount: 1
+                    });
+                } else {
+                    const existing = uniqueClients.get(key);
+                    existing.orderCount += 1;
+                    if (!existing.direccion && (order.direccion || order.details?.address)) {
+                        existing.direccion = order.direccion || order.details?.address;
+                    }
+                }
+            });
+
+            console.log(`[Migration] Iniciando upsert de ${uniqueClients.size} clientes únicos`);
+
+            for (const [key, data] of uniqueClients) {
+                const { orderCount, ...clientInfo } = data;
+                await upsertClient(clientInfo, false, { manualTotalOrders: orderCount });
+                processed++;
+            }
+
+            toast.success(`Migración completada: ${processed} clientes registrados`, { id: tid });
+        } catch (error) {
+            console.error("Error migrating clients:", error);
+            toast.error("Error durante la migración", { id: tid });
+        }
+    };
+
+    const handleVerifyAccounts = async () => {
+        const tid = toast.loading('Verificando cuentas de sistema y pedidos...');
+        try {
+            const pedidosSnap = await getDocs(collection(db, "pedidos"));
+            const ordersLegacySnap = await getDocs(collection(db, "orders"));
+
+            const allOrders = [
+                ...pedidosSnap.docs.map(d => ({ id: d.id, ...d.data() })),
+                ...ordersLegacySnap.docs.map(d => ({ id: d.id, ...d.data() }))
+            ];
+
+            console.log(`[CRM] Total historial: ${allOrders.length} pedidos`);
+
+            let updated = 0;
+            for (const client of clients) {
+                if (client.correo || client.telefono) {
+                    const cPhone = (client.telefono || '').replace(/[^0-9]/g, '');
+                    const cEmail = (client.correo || '').toLowerCase().trim();
+
+                    const count = allOrders.filter(o => {
+                        const oPhone = (o.details?.phone || o.telefono || '').replace(/[^0-9]/g, '');
+                        const oEmail = (o.details?.email || o.correo || '').toLowerCase().trim();
+
+                        // Comparación robusta de correo
+                        const emailMatch = cEmail && oEmail === cEmail;
+
+                        // Comparación robusta de teléfono (últimos 8 dígitos para evitar problemas con 506)
+                        const phoneMatch = cPhone && oPhone && (
+                            oPhone === cPhone ||
+                            (oPhone.length >= 8 && cPhone.length >= 8 && oPhone.slice(-8) === cPhone.slice(-8))
+                        );
+
+                        return emailMatch || phoneMatch;
+                    }).length;
+
+                    await upsertClient(client, false, { manualTotalOrders: count });
+                    updated++;
+                }
+            }
+            toast.success(`Verificación completa: ${updated} clientes revisados`, { id: tid });
+        } catch (error) {
+            console.error("Error verifying accounts:", error);
+            toast.error("Error en verificación", { id: tid });
+        }
+    };
+
     const handleViewClient = async (client) => {
         // Find related orders using phone (primary) or email/name
         const cPhone = (client.telefono || '').replace(/[^0-9]/g, '');
@@ -127,11 +250,63 @@ export default function ClientsView() {
             totalSpent,
             deliveredOrders,
             coupons,
+            tieneCuenta: client.tieneCuenta,
             clienteDb: client // It IS a registered client
         });
         setProfileRelatedOrders(related);
         setProfilePoints(null); // Placeholder
         setShowProfileModal(true);
+    };
+
+    const handleGlobalAction = async () => {
+        if (!globalMessage) return toast.error('El mensaje es obligatorio');
+
+        const count = clients.length;
+        if (count === 0) return toast.error('No hay clientes en la lista');
+
+        const confirmMsg = globalType === 'popup'
+            ? `¿Enviar notificación popup a ${count} clientes?`
+            : `¿Enviar correo masivo a ${count} clientes?`;
+
+        if (!window.confirm(confirmMsg)) return;
+
+        setIsProcessing(true);
+        const tid = toast.loading('Procesando envío global...');
+
+        try {
+            if (globalType === 'popup') {
+                // Enviar a todos los clientes (Popup)
+                const promises = clients.map(c =>
+                    sendClientNotification(c.id, {
+                        title: globalTitle || 'Novedades de BiKitchen',
+                        message: globalMessage,
+                        type: 'popup'
+                    })
+                );
+                await Promise.all(promises);
+                toast.success(`Popups enviados a ${count} clientes`, { id: tid });
+            } else {
+                // Enviar correo masivo
+                const recipients = clients.map(c => c.correo).filter(Boolean);
+                if (recipients.length === 0) throw new Error('Ningún cliente tiene correo registrado');
+
+                const result = await sendBulkEmail(recipients, globalTitle, globalMessage);
+                if (result.success) {
+                    toast.success(`Correos enviados: ${result.count}/${recipients.length}`, { id: tid });
+                } else {
+                    throw new Error(result.error);
+                }
+            }
+
+            setShowGlobalModal(false);
+            setGlobalMessage('');
+            setGlobalTitle('');
+        } catch (error) {
+            console.error("[GlobalAction] Error:", error);
+            toast.error(`Error: ${error.message}`, { id: tid });
+        } finally {
+            setIsProcessing(false);
+        }
     };
 
     return (
@@ -160,6 +335,27 @@ export default function ClientsView() {
                         className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white text-blue-600 text-sm font-semibold hover:bg-blue-50 shadow-md transition-colors"
                     >
                         <Plus size={16} /> Nuevo Cliente
+                    </button>,
+                    <button
+                        key="migrate"
+                        onClick={handleMigrateClients}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 shadow-md transition-colors"
+                    >
+                        <RefreshCw size={16} /> Sincronizar Historial
+                    </button>,
+                    <button
+                        key="global"
+                        onClick={() => setShowGlobalModal(true)}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-orange-600 text-white text-sm font-semibold hover:bg-orange-700 shadow-md transition-colors"
+                    >
+                        <Globe size={16} /> Envío Global
+                    </button>,
+                    <button
+                        key="verify-accounts"
+                        onClick={handleVerifyAccounts}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gray-600 text-white text-sm font-semibold hover:bg-gray-700 shadow-md transition-colors"
+                    >
+                        <UserPlus size={16} /> Validar Cuentas
                     </button>
                 ]}
             />
@@ -260,9 +456,20 @@ export default function ClientsView() {
                                     </div>
                                     <div>
                                         <h3 className="font-bold text-gray-900">{client.nombre}</h3>
-                                        <span className="text-xs text-gray-500">
-                                            {client.totalPedidos || 0} pedidos
-                                        </span>
+                                        <div className="flex items-center gap-2 mt-1">
+                                            <span className="text-[10px] text-gray-500 font-medium">
+                                                {client.totalPedidos || 0} pedidos
+                                            </span>
+                                            {client.tieneCuenta ? (
+                                                <span className="bg-green-100 text-green-700 text-[9px] px-1.5 py-0.5 rounded-full font-bold flex items-center gap-0.5 border border-green-200">
+                                                    <CheckCircle2 size={8} /> SISTEMA
+                                                </span>
+                                            ) : (
+                                                <span className="bg-gray-100 text-gray-500 text-[9px] px-1.5 py-0.5 rounded-full font-bold border border-gray-200">
+                                                    INVITADO
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -274,8 +481,28 @@ export default function ClientsView() {
                                 </div>
                                 <div className="flex items-center gap-2 text-sm text-gray-600">
                                     <Mail size={14} className="text-gray-400" />
-                                    <span className="truncate">{client.correo}</span>
+                                    <span className="truncate">{client.correo || 'Sin correo'}</span>
                                 </div>
+                            </div>
+
+                            {/* Contact Shortcuts */}
+                            <div className="flex gap-2 mb-4">
+                                <a
+                                    href={`https://wa.me/506${(client.telefono || '').replace(/[^0-9]/g, '')}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex-1 flex items-center justify-center gap-2 py-2 px-3 bg-green-50 text-green-600 rounded-xl text-xs font-bold hover:bg-green-100 transition-all border border-green-100"
+                                >
+                                    <MessageSquare size={14} />
+                                    WhatsApp
+                                </a>
+                                <a
+                                    href={`mailto:${client.correo}`}
+                                    className="flex-1 flex items-center justify-center gap-2 py-2 px-3 bg-blue-50 text-blue-600 rounded-xl text-xs font-bold hover:bg-blue-100 transition-all border border-blue-100"
+                                >
+                                    <Mail size={14} />
+                                    Gmail
+                                </a>
                             </div>
 
                             <div className="flex gap-2 pt-4 border-t border-gray-100">
@@ -373,6 +600,91 @@ export default function ClientsView() {
                                     </button>
                                 </div>
                             </form>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Global Action Modal */}
+            <AnimatePresence>
+                {showGlobalModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.9 }}
+                            className="bg-white rounded-3xl p-8 max-w-lg w-full shadow-2xl"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div className="flex justify-between items-center mb-6">
+                                <h2 className="text-2xl font-black text-gray-900 flex items-center gap-3">
+                                    <Globe className="text-orange-500" /> Acciones Globales
+                                </h2>
+                                <button onClick={() => setShowGlobalModal(false)} className="p-2 hover:bg-gray-100 rounded-full text-gray-400">
+                                    <Edit2 size={20} />
+                                </button>
+                            </div>
+
+                            {/* Type Selector */}
+                            <div className="flex p-1 bg-gray-100 rounded-2xl mb-8">
+                                <button
+                                    onClick={() => setGlobalType('popup')}
+                                    className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm transition-all ${globalType === 'popup' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                                >
+                                    <Bell size={18} /> Notificación (Popup)
+                                </button>
+                                <button
+                                    onClick={() => setGlobalType('email')}
+                                    className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm transition-all ${globalType === 'email' ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                                >
+                                    <Mail size={18} /> Email Masivo
+                                </button>
+                            </div>
+
+                            <div className="space-y-6">
+                                <div>
+                                    <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Asunto / Título</label>
+                                    <input
+                                        type="text"
+                                        value={globalTitle}
+                                        onChange={(e) => setGlobalTitle(e.target.value)}
+                                        placeholder={globalType === 'popup' ? "Ej: ¡Menu de Semana Santa!" : "Asunto del correo..."}
+                                        className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:border-blue-500 focus:outline-none text-sm transition-colors"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-2">Mensaje</label>
+                                    <textarea
+                                        value={globalMessage}
+                                        onChange={(e) => setGlobalMessage(e.target.value)}
+                                        placeholder="Escribe el contenido del mensaje aquí..."
+                                        rows="4"
+                                        className="w-full p-4 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:border-blue-500 focus:outline-none text-sm transition-colors resize-none"
+                                    />
+                                </div>
+
+                                <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100 mb-4">
+                                    <p className="text-[11px] text-amber-700 font-medium">
+                                        <strong>⚠️ Aviso:</strong> Esta acción enviará el mensaje a los <strong>{clients.length}</strong> clientes listados actualmente.
+                                    </p>
+                                </div>
+
+                                <div className="flex gap-4">
+                                    <button
+                                        onClick={() => setShowGlobalModal(false)}
+                                        className="flex-1 py-4 bg-gray-100 text-gray-600 rounded-2xl font-black hover:bg-gray-200 transition-all active:scale-95"
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        onClick={handleGlobalAction}
+                                        disabled={isProcessing}
+                                        className={`flex-[2] py-4 rounded-2xl font-black text-white shadow-lg transition-all active:scale-95 disabled:opacity-50 ${globalType === 'popup' ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/20' : 'bg-orange-600 hover:bg-orange-700 shadow-orange-500/20'}`}
+                                    >
+                                        {isProcessing ? 'Procesando...' : globalType === 'popup' ? 'Enviar Notificación' : 'Enviar Correo Global'}
+                                    </button>
+                                </div>
+                            </div>
                         </motion.div>
                     </div>
                 )}

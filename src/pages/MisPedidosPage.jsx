@@ -10,7 +10,7 @@ import useOrderHistory from '../hooks/useOrderHistory';
 import { 
     Package, Clock, CheckCircle, Truck, XCircle, ChevronDown,
     ShoppingBag, Calendar, MapPin, CreditCard, ArrowRight,
-    Receipt, TrendingUp, Utensils, RefreshCw, Eye, X
+    Receipt, TrendingUp, Utensils, RefreshCw, Eye, X, Loader2
 } from 'lucide-react';
 
 const STATUS_CONFIG = {
@@ -257,7 +257,7 @@ function OrderCard({ order, onClick }) {
 }
 
 export default function MisPedidosPage() {
-    const { orders, getStats, hasOrders } = useOrderHistory();
+    const { orders, getStats, hasOrders, loading } = useOrderHistory();
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [filter, setFilter] = useState('all');
 
@@ -266,6 +266,18 @@ export default function MisPedidosPage() {
     const filteredOrders = filter === 'all' 
         ? orders 
         : orders.filter(order => order.status === filter);
+
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-bikitchen-beige flex items-center justify-center">
+                <Navbar />
+                <div className="text-center">
+                    <Loader2 className="w-12 h-12 text-bikitchen-orange animate-spin mx-auto mb-4" />
+                    <p className="text-gray-600 font-medium">Cargando tus pedidos...</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <PageTransition>

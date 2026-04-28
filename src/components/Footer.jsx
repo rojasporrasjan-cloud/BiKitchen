@@ -17,7 +17,7 @@ export default function Footer() {
                 {/* Decorative Elements */}
                 <div className="absolute top-0 left-0 w-[500px] h-[500px] bg-gradient-to-br from-orange-500/20 to-amber-500/20 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2"></div>
                 <div className="absolute bottom-0 right-0 w-[400px] h-[400px] bg-gradient-to-tl from-orange-400/15 to-yellow-400/15 rounded-full blur-3xl translate-x-1/3 translate-y-1/3"></div>
-                <div className="absolute top-1/2 left-1/2 w-[300px] h-[300px] bg-gradient-to-r from-purple-500/10 to-pink-500/10 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2"></div>
+                <div className="absolute top-1/2 left-1/2 w-[400px] h-[400px] bg-gradient-to-r from-orange-500/5 to-amber-500/5 rounded-full blur-[120px] -translate-x-1/2 -translate-y-1/2"></div>
 
                 {/* Pattern overlay */}
                 <div className="absolute inset-0 opacity-[0.03] bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.8)_1px,transparent_1px)] bg-[length:32px_32px]"></div>
@@ -39,10 +39,8 @@ export default function Footer() {
                     </div>
                 </div>
 
-                <div className="container relative z-10 pt-16 pb-12">
+                <div className="container relative z-10 pt-20 pb-16">
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 lg:gap-8">
-
-                        {/* Brand Column */}
                         <div className="lg:col-span-1">
                             <Link to="/" className="inline-block group mb-6">
                                 <div className="bg-gradient-to-br from-white via-orange-50 to-white rounded-2xl p-4 shadow-xl group-hover:shadow-2xl group-hover:scale-105 transition-all duration-300 border border-orange-100/20">
@@ -76,7 +74,7 @@ export default function Footer() {
                             </div>
                         </div>
 
-                        {/* Quick Links */}
+                        {/* Explora */}
                         <div>
                             <h4 className="text-white font-bold text-lg mb-6 flex items-center gap-3">
                                 <span className="w-1 h-6 bg-gradient-to-b from-orange-500 to-amber-500 rounded-full shadow-lg shadow-orange-500/50"></span>
@@ -108,7 +106,7 @@ export default function Footer() {
                                 <span className="w-1 h-6 bg-gradient-to-b from-orange-500 to-amber-500 rounded-full shadow-lg shadow-orange-500/50"></span>
                                 Contacto
                             </h4>
-                            <ul className="space-y-4">
+                            <ul className="space-y-4 list-none p-0">
                                 <li className="flex items-start gap-3 group cursor-pointer">
                                     <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500/20 to-amber-500/20 border border-orange-500/30 flex items-center justify-center flex-shrink-0 group-hover:from-orange-500 group-hover:to-amber-500 group-hover:border-orange-400 transition-all duration-300 shadow-lg group-hover:shadow-orange-500/50">
                                         <MapPin size={18} className="text-orange-400 group-hover:text-white transition-colors" />
@@ -128,14 +126,6 @@ export default function Footer() {
                                         </p>
                                     </a>
                                 </li>
-                                <li className="group">
-                                    <a href="mailto:bikitchenfood@gmail.com" className="flex items-center gap-3">
-                                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500/20 to-cyan-500/20 border border-blue-500/30 flex items-center justify-center flex-shrink-0 group-hover:from-blue-500 group-hover:to-cyan-500 group-hover:border-blue-400 transition-all duration-300 shadow-lg group-hover:shadow-blue-500/50">
-                                            <Mail size={18} className="text-blue-400 group-hover:text-white transition-colors" />
-                                        </div>
-                                        <p className="text-gray-300 text-sm font-medium group-hover:text-white transition-colors">bikitchenfood@gmail.com</p>
-                                    </a>
-                                </li>
                             </ul>
                         </div>
 
@@ -145,46 +135,70 @@ export default function Footer() {
                                 <span className="w-1 h-6 bg-gradient-to-b from-orange-500 to-amber-500 rounded-full shadow-lg shadow-orange-500/50"></span>
                                 Newsletter
                             </h4>
-                            <p className="text-gray-300 text-sm mb-4 font-medium">Recibe menús exclusivos y consejos de nutrición.</p>
+                            <p className="text-gray-300 text-sm mb-4 font-medium">Recibe menús exclusivos.</p>
                             <form className="relative">
                                 <input
                                     type="email"
-                                    placeholder="Tu correo electrónico"
-                                    className="w-full bg-gradient-to-br from-white/10 to-white/5 border border-white/20 rounded-xl px-4 py-3.5 text-sm text-white placeholder-gray-400 focus:outline-none focus:border-orange-400 focus:bg-white/15 transition-all shadow-lg"
+                                    placeholder="Tu email"
+                                    className="w-full bg-gradient-to-br from-white/10 to-white/5 border border-white/20 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-orange-400 transition-all shadow-lg"
                                 />
-                                <button
-                                    type="submit"
-                                    className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 rounded-xl flex items-center justify-center text-white transition-all shadow-lg hover:shadow-orange-500/50 hover:scale-105"
-                                >
-                                    <Send size={18} />
-                                </button>
+                                <button className="absolute right-1 top-1/2 -translate-y-1/2 w-8 h-8 bg-gradient-to-r from-orange-500 to-amber-500 rounded-lg flex items-center justify-center text-white"><Send size={14} /></button>
                             </form>
                         </div>
                     </div>
                 </div>
 
-                {/* Large Brand Text */}
-                <div className="w-full overflow-hidden opacity-[0.04] select-none pointer-events-none">
-                    <h1 className="text-[18vw] font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-orange-200 to-white leading-none text-center tracking-tighter whitespace-nowrap">
+                {/* Large Brand Text Watermark */}
+                <div className="absolute inset-x-0 bottom-40 overflow-hidden pointer-events-none opacity-[0.03] z-0">
+                    <h1 className="text-[18vw] font-black text-white text-center tracking-tighter whitespace-nowrap leading-none select-none">
                         BIKITCHEN
                     </h1>
                 </div>
 
-                {/* Bottom Bar */}
-                <div className="border-t border-white/10 relative z-20 bg-black/20">
+                <div className="border-t border-white/5 relative z-20 bg-black/40 pb-32 md:pb-16">
                     <div className="container py-6 flex flex-col md:flex-row justify-between items-center gap-4">
                         <p className="text-gray-400 text-xs flex items-center gap-1.5 font-medium">
                             © {new Date().getFullYear()} BiKitchen Food. Ingredientes frescos,
                             <Heart size={14} className="text-orange-400 fill-orange-400 animate-pulse" />
                             sabor de casa
                         </p>
-                        <div className="flex flex-col items-center md:items-end gap-3 translate-y-[-2px]">
-                            <div className="flex gap-6 text-[10px] text-gray-500 font-bold uppercase tracking-wider mb-1">
-                                <Link to="/privacidad" className="hover:text-orange-400 transition-colors cursor-pointer">Privacidad</Link>
-                                <Link to="/terminos" className="hover:text-orange-400 transition-colors cursor-pointer">Términos</Link>
-                                <Link to="/cookies" className="hover:text-orange-400 transition-colors cursor-pointer">Cookies</Link>
-                                <Link to="/reembolsos" className="hover:text-orange-400 transition-colors cursor-pointer">Reembolsos</Link>
+                        <div className="flex flex-col items-center md:items-end gap-5 translate-y-[-2px]">
+                            {/* Legal Horizontal Strip */}
+                            <div className="flex flex-wrap justify-center md:justify-end gap-x-6 gap-y-2">
+                                {[
+                                    { name: 'Privacidad', path: '/privacidad' },
+                                    { name: 'Términos', path: '/terminos' },
+                                    { name: 'Cookies', path: '/cookies' },
+                                    { name: 'Reembolsos', path: '/reembolsos' }
+                                ].map((item) => (
+                                    <Link
+                                        key={item.name}
+                                        to={item.path}
+                                        className="text-[10px] md:text-xs font-bold uppercase tracking-[0.2em] text-gray-400 hover:text-orange-400 transition-all duration-300"
+                                    >
+                                        {item.name}
+                                    </Link>
+                                ))}
                             </div>
+
+                            {/* Discrete SEO Keywords */}
+                            <div className="flex flex-wrap justify-center md:justify-end gap-x-4 gap-y-1 opacity-40 mb-2">
+                                {[
+                                    "Comida Saludable Alajuela",
+                                    "Meal Prep CR",
+                                    "Planes Semanales",
+                                    "Nutrición Real"
+                                ].map((kw, i) => (
+                                    <span key={i} className="text-[8px] font-bold uppercase tracking-widest text-gray-500">
+                                        {kw}
+                                    </span>
+                                ))}
+                            </div>
+                            
+                            <p className="text-[9px] text-gray-500 max-w-[200px] text-center md:text-right leading-tight opacity-50 mb-2">
+                                BiKitchen Food: Soluciones de alimentación consciente y casera en Alajuela, Costa Rica.
+                            </p>
+
                             <div className="flex items-center gap-4 group transition-all duration-500">
                                 <div className="flex items-center gap-3">
                                     <img src="https://cdn.jsdelivr.net/gh/aaronfagan/svg-credit-card-payment-icons@master/flat/visa.svg" alt="Visa" className="h-[14px] w-auto" />

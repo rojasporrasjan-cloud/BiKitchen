@@ -39,6 +39,7 @@ const PACK_FILTERS = [
     { id: 'full_pack', label: 'Full Pack', icon: '🍽️', packs: ['Full Pack'], groupId: 'diet' },
     { id: 'keto', label: 'Keto', icon: '🥑', packs: ['Pack Keto'], groupId: 'diet' },
     { id: 'vegetariano', label: 'Vegetariano', icon: '🥦', packs: ['Pack Vegetariano'], groupId: 'diet' },
+    { id: 'regular', label: 'Pack Regular', icon: '🍲', packs: ['Pack Regular'], groupId: 'diet' },
     { id: 'desayunos', label: 'Desayunos', icon: '🍳', section: 'desayunos', groupId: 'extra' },
 ];
 
@@ -126,11 +127,11 @@ const PACKS_ESPECIALES_BASE = {
     }
 };
 
-const PackCard = memo(({ pack, shipping, category, categoryLabel: customCategoryLabel, promociones = [], customImage, packsEspeciales, 
+const PackCard = memo(({ pack, shipping, category, categoryLabel: customCategoryLabel, promociones = [], customImage, packsEspeciales,
     desayunosMenu = [], desayunosVegetarianos = [], onOpenDesayunos, onEditDesayunos, onEditProteinas }) => {
     const isProteinsPack =
-        category === 'proteinas' &&
-        (pack.name.includes('Pack 3 Proteínas') || pack.name.includes('Pack 5 Proteínas'));
+        (category === 'proteinas') ||
+        (pack.name && (pack.name.includes('Pack 3 Proteínas') || pack.name.includes('Pack 5 Proteínas') || pack.name.toLowerCase().includes('proteína')));
 
     const isBreakfastPack = category === 'desayunos';
 
@@ -156,18 +157,50 @@ const PackCard = memo(({ pack, shipping, category, categoryLabel: customCategory
     const [showSpecialModal, setShowSpecialModal] = useState(false);
     const [proteinasSeleccionadas, setProteinasSeleccionadas] = useState([]);
     const [imageLoaded, setImageLoaded] = useState(false);
+    const [notes, setNotes] = useState('');
+    const [showNotes, setShowNotes] = useState(false);
     const { addToCart } = useCart();
     const { whatsappPhone } = useWhatsApp();
     const { isAdmin } = useAuth() || {};
     const isMaintenance = !!pack.maintenance;
-    
+
     // Etiqueta de categoría para el badge flotante (Fallback: prop > PACKS_DATA > category)
-    const displayCategoryLabel = customCategoryLabel || PACKS_DATA[category]?.title || category;
+    // INTERCEPTAR: Forzar "Almuerzo y Cena" si el valor es el antiguo "10 Comidas"
+    let displayCategoryLabel = customCategoryLabel || PACKS_DATA[category]?.title || category;
+    if (displayCategoryLabel === '10 Comidas') {
+        displayCategoryLabel = 'Almuerzo y Cena';
+    }
 
     // Datos del pack especial memoizados (ahora disponibles para todos los que los necesiten)
-    const packEspecialData = useMemo(() =>
-        (isFamiliarPack || isProteinsPack) ? packsEspeciales[pack.name] : null
-        , [isFamiliarPack, isProteinsPack, pack.name, packsEspeciales]);
+    const packEspecialData = useMemo(() => {
+        if (!isFamiliarPack && !isProteinsPack) return null;
+        
+        // Intento 1: Match exacto
+        if (packsEspeciales[pack.name]) return packsEspeciales[pack.name];
+        
+        // Intento 2: Fallback para packs de proteínas mediante palabras clave (evita caídas si el nombre en Firestore varía levemente)
+        if (isProteinsPack) {
+            const nameLower = pack.name.toLowerCase();
+            if (nameLower.includes('3')) return packsEspeciales['Pack 3 Proteínas'];
+            if (nameLower.includes('5')) return packsEspeciales['Pack 5 Proteínas'];
+            // Fallback total para proteínas si no hay dígito: usar el de 5 como base
+            return packsEspeciales['Pack 5 Proteínas'] || packsEspeciales['Pack 3 Proteínas'] || { cantidad: 5, proteinas: [] };
+        }
+        
+        return null;
+    }, [isFamiliarPack, isProteinsPack, pack.name, packsEspeciales]);
+
+    // Función segura para obtener la lista de proteínas/items a mostrar
+    const getDisplayItems = useCallback(() => {
+        if (isProteinsPack) {
+            // 1. Intentar del packEspecialData (que viene de Firebase/Estado)
+            if (packEspecialData?.proteinas && packEspecialData.proteinas.length > 0) return packEspecialData.proteinas;
+            // 2. Fallback al objeto global BASE
+            const baseKey = pack.name.includes('3') ? 'Pack 3 Proteínas' : 'Pack 5 Proteínas';
+            return PACKS_ESPECIALES_BASE[baseKey]?.proteinas || [];
+        }
+        return packEspecialData?.items || [];
+    }, [isProteinsPack, pack.name, packEspecialData]);
 
     // Bloquear scroll del body cuando el modal especial está abierto
     useEffect(() => {
@@ -462,233 +495,106 @@ const PackCard = memo(({ pack, shipping, category, categoryLabel: customCategory
                 whileInView="visible"
                 viewport={{ once: true, margin: "-50px" }}
                 whileHover={{ y: -8, scale: 1.01 }}
-                transition={{ duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
-                className={`group bg-white rounded-[2.5rem] shadow-xl hover:shadow-2xl transition-all duration-500 border-2 border-gray-50 hover:border-orange-200 overflow-hidden h-full flex flex-col ${pack.featured ? 'ring-2 ring-orange-500 ring-offset-4' : ''}`}
+                whileTap={{ scale: 0.98 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                className={`group rounded-[2.5rem] h-80 sm:h-96 w-full shadow-xl hover:shadow-2xl bg-gray-900 overflow-hidden relative cursor-pointer transition-all duration-500 ${pack.featured ? 'ring-2 ring-orange-500 ring-offset-4' : ''}`}
+                onClick={() => {
+                    if (isBreakfastPack) onOpenDesayunos?.();
+                    else if (isProteinsPack || isFamiliarPack) handleOpenModal();
+                    else setShowMenuModal(true);
+                }}
             >
-                {/* Imagen principal del pack */}
-                <div className="relative h-52 sm:h-52 overflow-hidden">
-                    <SmoothImage
-                        src={packImage}
-                        alt={pack.name}
-                        className="h-full w-full object-cover transition-transform duration-1000 group-hover:scale-110"
-                        aspectRatio=""
-                        placeholderColor="bg-gradient-to-br from-gray-100 to-gray-50"
-                    />
-                    
-                    {/* Overlay Gradiente Premium y Acción de Click */}
-                    <div 
-                        className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-60 group-hover:opacity-80 transition-opacity duration-500 cursor-pointer flex flex-col items-center justify-center"
-                        onClick={() => setShowMenuModal(true)}
-                    >
-                        <motion.div 
-                            className="bg-white/20 backdrop-blur-md rounded-full p-4 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-4 group-hover:translate-y-0"
-                            whileHover={{ scale: 1.1 }}
-                        >
-                            <Eye className="text-white" size={32} />
-                        </motion.div>
-                        <span className="text-white text-[10px] font-black uppercase tracking-widest mt-2 opacity-0 group-hover:opacity-100 transition-all duration-300">Ver Menú Semanal</span>
-                    </div>
+                {/* Imagen Full Background */}
+                <SmoothImage
+                    src={packImage}
+                    alt={pack.name}
+                    className="absolute inset-0 w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110 opacity-70 group-hover:opacity-100"
+                    aspectRatio=""
+                    placeholderColor="bg-gradient-to-br from-gray-100 to-gray-50"
+                />
 
-                    {/* Emoji flotante con Glassmorphism */}
-                    <motion.div
-                        className="absolute bottom-5 left-5 w-16 h-16 bg-white/20 backdrop-blur-xl rounded-2xl flex items-center justify-center text-4xl shadow-2xl border border-white/30"
-                        whileHover={{ scale: 1.1, rotate: 10 }}
-                    >
-                        {pack.icon}
-                    </motion.div>
+                {/* Gradient Overlay Inmersivo */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
 
-                    {/* Label de Categoría / Cantidad — MUY VISIBLE para evitar confusiones */}
-                    {displayCategoryLabel && (
-                        <div className="absolute top-5 left-5 z-20">
-                            <div className="bg-gray-900/90 backdrop-blur-md text-white px-4 py-2.5 rounded-2xl text-[10px] font-black flex items-center gap-2 shadow-2xl border border-white/20 uppercase tracking-widest">
-                                <Package size={14} className="text-orange-400" />
-                                {displayCategoryLabel}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Badge de Selección Pro (si es destacado y no hay etiqueta o se quiere mantener) */}
-                    {pack.featured && !displayCategoryLabel && (
-                        <div className="absolute top-5 left-5 z-10 bg-gradient-to-r from-orange-500 to-amber-500 text-white px-4 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg">
-                            Selección Pro
-                        </div>
-                    )}
-                    
-                    {/* Botón de Edición para Admins (Proteínas o Desayunos) */}
-                    {isAdmin && (isProteinsPack || isBreakfastPack) && (
-                        <button
-                            type="button"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                if (isProteinsPack) onEditProteinas?.();
-                                else onEditDesayunos?.();
-                            }}
-                            className="absolute bottom-5 right-5 z-20 bg-white/30 backdrop-blur-md hover:bg-white/50 text-white p-2.5 rounded-xl shadow-lg border border-white/20 transition-all hover:scale-110 active:scale-95"
-                        >
-                            <Edit size={18} />
-                        </button>
-                    )}
-
-                    {/* Sello de Descuento / Promo */}
-                    {(hasDiscount || tienePromo) && (
-                        <motion.div
-                            className="absolute top-5 right-5 z-10"
-                            initial={{ scale: 0 }}
-                            animate={{ scale: 1 }}
-                        >
-                            <div className="bg-white/95 backdrop-blur-md text-orange-600 px-4 py-2 rounded-2xl text-xs font-black flex items-center gap-2 shadow-xl border border-orange-100">
-                                <Gift size={14} className="animate-bounce" />
-                                {pack.etiquetaTexto || 'OFERTA'}
-                            </div>
-                        </motion.div>
-                    )}
-                </div>
-
-                <div className="p-4 sm:p-5 flex flex-col gap-2.5 flex-1">
-                    {/* Título y descripción */}
-                    <div className="flex-1">
-                        <div className="flex items-center justify-between gap-4 mb-1">
-                            <h3 className="text-lg sm:text-2xl font-black text-gray-900 group-hover:text-orange-600 transition-colors leading-tight">
-                                {pack.name}
-                            </h3>
-                            <button 
-                                onClick={() => setShowMenuModal(true)}
-                                className="w-10 h-10 bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center hover:bg-orange-600 hover:text-white transition-all shadow-sm"
-                                title="Ver detalles del menú"
-                            >
-                                <Eye size={20} />
-                            </button>
-                        </div>
-                        <p className="text-xs sm:text-sm text-gray-500 font-medium leading-relaxed line-clamp-2">
-                            {pack.desc}
-                        </p>
-                    </div>
-
-                    {/* Selector de plan con UI mejorada */}
-                    {!isPromocionPack && !isSpecialPack && (
-                        <div className="space-y-3">
-                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-1">Selecciona tu Plan</p>
-                            <div className="grid grid-cols-3 gap-1.5 bg-gray-50 p-1.5 rounded-[1.5rem] border border-gray-100">
-                                {['weekly', 'biweekly', 'monthly'].map((plan) => {
-                                    if (isProteinsPack && plan === 'biweekly') return null;
-                                    const isActive = selectedPlan === plan;
-                                    const labels = { weekly: 'Semanal', biweekly: 'Quinc.', monthly: 'Mensual' };
-                                    return (
-                                        <button
-                                            key={plan}
-                                            onClick={() => {
-                                                setSelectedPlan(plan);
-                                                if (isProteinsPack && plan === 'monthly') setSelectedSize('500');
-                                            }}
-                                            className={`py-1.5 px-0.5 rounded-xl text-[9px] xs:text-[9.5px] sm:text-[10px] font-black transition-all duration-300 relative whitespace-nowrap overflow-hidden text-ellipsis ${
-                                                isActive 
-                                                ? 'bg-white text-orange-600 shadow-md border-orange-100' 
-                                                : 'text-gray-400 hover:text-gray-600'
-                                            } border border-transparent`}
-                                        >
-                                            <span className="relative z-10">{labels[plan]}</span>
-                                            {isActive && (
-                                                <motion.div 
-                                                    layoutId="activePlan" 
-                                                    className="absolute inset-0 bg-white rounded-2xl shadow-sm -z-10 border border-orange-100" 
-                                                />
-                                            )}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Selector de Tamaño para Proteínas */}
-                    {isProteinsPack && (
-                        <div className="flex items-center justify-between px-2">
-                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Tamaño</span>
-                            <div className="flex gap-2">
-                                {['250', '500'].map(size => (
-                                    <button
-                                        key={size}
-                                        onClick={() => setSelectedSize(size)}
-                                        className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all ${
-                                            selectedSize === size 
-                                            ? 'bg-orange-500 text-white shadow-md' 
-                                            : 'bg-gray-50 text-gray-500 hover:bg-gray-100'
-                                        }`}
-                                    >
-                                        {size}g
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Area de Precio */}
-                    <div className="flex flex-col items-center py-1">
-                        {hasAnyDiscount ? (
-                            <div className="flex flex-col items-center">
-                                <span className="text-xs text-gray-300 line-through font-bold">
-                                    {formatPrice(getOriginalPrice())}
-                                </span>
-                                <div className="flex items-baseline gap-1">
-                                    <span className="text-2xl sm:text-3xl font-black text-gray-900 group-hover:text-orange-600 transition-colors">
-                                        {formatPrice(getFinalPrice())}
+                {/* Content Overlay */}
+                <div className="absolute inset-0 p-6 flex flex-col justify-between z-10">
+                    <div className="flex justify-between items-start">
+                        {/* Status/Category Badge with Glassmorphism */}
+                        <div className="flex flex-col gap-2">
+                            {displayCategoryLabel && (
+                                <div className="bg-white/20 backdrop-blur-xl px-4 py-2 rounded-2xl border border-white/20 shadow-xl">
+                                    <span className="text-[10px] sm:text-xs font-black text-white tracking-tight flex items-center gap-2">
+                                        <Package size={14} className="text-orange-400" />
+                                        {displayCategoryLabel}
                                     </span>
                                 </div>
-                            </div>
-                        ) : (
-                            <div className="text-2xl sm:text-3xl font-black text-gray-900">
-                                {formatPrice(getOriginalPrice())}
-                            </div>
-                        )}
-                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mt-1">
-                            Cobro {getPlanLabel().toLowerCase()}
-                        </p>
-                    </div>
+                            )}
 
-                    {/* Envío Info Box */}
-                    <div className="mt-auto bg-gray-50 rounded-2xl p-3 border border-gray-100 flex items-center gap-4">
-                        <div className="w-10 h-10 bg-white rounded-xl shadow-sm flex items-center justify-center text-gray-400">
-                            <Truck size={20} />
-                        </div>
-                        <div className="flex-1">
-                            <p className="text-[10px] sm:text-xs font-bold text-gray-600 leading-tight">
-                                {getShipping()}
-                            </p>
-                            {(isMonthlyPlan || isPromocionPack) && (
-                                <p className="text-[10px] font-black text-green-600 mt-1 uppercase tracking-tighter">
-                                    🔥 Beneficio Premium Activo
-                                </p>
+                            {isTwoPack && (
+                                <motion.div
+                                    initial={{ x: -20, opacity: 0 }}
+                                    animate={{ x: 0, opacity: 1 }}
+                                    className="bg-orange-600/90 backdrop-blur-md text-white px-3 py-1.5 rounded-xl text-[9px] font-black flex items-center gap-1.5 shadow-xl border border-orange-400/30 uppercase tracking-tighter"
+                                >
+                                    <Users size={12} />
+                                    10 Comidas (5 x Pers.)
+                                </motion.div>
                             )}
                         </div>
+
+                        {/* Promo Badge */}
+                        {(hasDiscount || tienePromo) && (
+                            <div className="bg-orange-600 text-white px-4 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg animate-pulse">
+                                {pack.etiquetaTexto || 'OFERTA'}
+                            </div>
+                        )}
                     </div>
 
-                    {/* Action Button */}
-                    <motion.button
-                        onClick={isProteinsPack || isFamiliarPack ? handleOpenModal : handleAddToCart}
-                        disabled={isMaintenance}
-                        className={`w-full group/btn relative overflow-hidden font-black py-4 sm:py-5 px-6 rounded-[1.5rem] transition-all flex items-center justify-center gap-3 shadow-xl ${
-                            isMaintenance
-                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                            : 'bg-gray-900 text-white hover:bg-orange-600 active:scale-95 shadow-gray-900/20'
-                        }`}
-                        whileHover={!isMaintenance ? { y: -2 } : {}}
-                    >
-                        {isMaintenance ? (
-                            <>
-                                <Info size={20} />
-                                Mantenimiento
-                            </>
-                        ) : (
-                            <>
-                                <ShoppingCart size={22} className="group-hover/btn:rotate-12 transition-transform" />
-                                <span>{isProteinsPack || isFamiliarPack ? 'Personalizar Ahora' : 'Agregar al Carrito'}</span>
-                            </>
-                        )}
-                    </motion.button>
+                    <div className="space-y-3">
+                        {/* Icon/Emoji Floating */}
+                        <motion.div
+                            className="w-12 h-12 bg-white/10 backdrop-blur-xl rounded-2xl flex items-center justify-center text-3xl shadow-2xl border border-white/10"
+                            whileHover={{ scale: 1.1, rotate: 10 }}
+                        >
+                            {pack.icon}
+                        </motion.div>
+
+                        <div>
+                            <h3 className="text-xl sm:text-3xl font-black text-white leading-tight drop-shadow-lg">
+                                {pack.name}
+                            </h3>
+                            <p className="text-xs sm:text-sm text-slate-200 line-clamp-2 mt-2 font-medium leading-relaxed drop-shadow-md">
+                                {pack.desc}
+                            </p>
+                        </div>
+
+                        {/* Price & Action Badge */}
+                        <div className="flex items-center justify-between pt-2">
+                            <div className="flex flex-col">
+                                <span className="text-[10px] font-black text-white/60 uppercase tracking-widest">Desde</span>
+                                <span className="text-xl sm:text-2xl font-black text-white">
+                                    {formatPrice(getOriginalPrice('weekly'))}
+                                </span>
+                            </div>
+
+                            <div className="flex items-center gap-2 text-[10px] font-black text-white bg-orange-600 px-4 py-2.5 rounded-2xl shadow-xl hover:bg-orange-500 transition-colors uppercase tracking-widest">
+                                <Plus size={14} strokeWidth={4} />
+                                <span>Personalizar</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
+
+                {/* Maintenance Overlay */}
+                {isMaintenance && (
+                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm z-20 flex flex-col items-center justify-center text-white">
+                        <Info size={32} className="mb-2" />
+                        <span className="font-black uppercase tracking-widest">Mantenimiento</span>
+                    </div>
+                )}
             </motion.div>
 
-            {/* Modal para packs especiales - usando Portal */}
+            {/* Modal para packs especiales (Proteínas / Familiar) - Premium Zero-Scroll */}
             {showSpecialModal && packEspecialData && ReactDOM.createPortal(
                 <AnimatePresence>
                     <motion.div
@@ -696,271 +602,301 @@ const PackCard = memo(({ pack, shipping, category, categoryLabel: customCategory
                         initial="hidden"
                         animate="visible"
                         exit="exit"
+                        className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[10000] p-4 sm:p-6"
                         onClick={handleCloseModal}
-                        className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[9999] p-3 sm:p-4"
-                        style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
                     >
                         <motion.div
                             variants={modalContentVariants}
-                            initial="hidden"
-                            animate="visible"
-                            exit="exit"
-                            transition={{ duration: 0.2 }}
+                            className="bg-white rounded-3xl w-full max-w-5xl h-[92vh] sm:h-[90vh] lg:h-[80vh] shadow-2xl overflow-hidden flex flex-col relative sm:border border-slate-100"
                             onClick={(e) => e.stopPropagation()}
-                            className="bg-white rounded-2xl w-full max-w-lg max-h-[85vh] sm:max-h-[90vh] shadow-2xl overflow-hidden flex flex-col"
                         >
-                            {/* Header */}
-                            <div className={`bg-gradient-to-r ${packEspecialData.color === 'green'
-                                ? 'from-green-500 to-emerald-600'
-                                : packEspecialData.color === 'purple'
-                                    ? 'from-purple-500 to-indigo-600'
-                                    : 'from-bikitchen-orange to-orange-600'
-                                } text-white px-4 py-3 sm:px-5 sm:py-4 flex-shrink-0`}>
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2 sm:gap-3">
-                                        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white/20 rounded-xl flex items-center justify-center text-xl sm:text-2xl">
-                                            {packEspecialData.emoji}
-                                        </div>
-                                        <div>
-                                            <h3 className="text-base sm:text-lg font-bold">
-                                                {isFamiliarPack ? packEspecialData.nombre : `Arma tu ${packEspecialData.nombre}`}
-                                            </h3>
-                                            <p className="text-white/80 text-xs sm:text-sm">
-                                                {isFamiliarPack
-                                                    ? `${packEspecialData.items.length} platos para 4 porciones`
-                                                    : `Selecciona ${packEspecialData.cantidad} opciones`
-                                                }
-                                            </p>
-                                        </div>
+                            {/* Hero Header Section */}
+                            <div className="relative h-[20vh] sm:h-[25vh] lg:h-[30vh] flex-shrink-0">
+                                <SmoothImage
+                                    src={packImage}
+                                    alt={pack.name}
+                                    className="w-full h-full object-cover"
+                                />
+
+
+                                <div className="absolute top-6 left-6 right-6 flex justify-between items-start">
+                                    <div className="bg-slate-900/10 backdrop-blur-md px-4 py-2 rounded-2xl border border-slate-900/10">
+                                        <span className="text-slate-900 text-xs font-black uppercase tracking-widest">{isFamiliarPack ? 'Pack Familiar' : 'Pack Proteínas'}</span>
                                     </div>
                                     <button
-                                        type="button"
                                         onClick={handleCloseModal}
-                                        className="w-8 h-8 bg-white/20 active:bg-white/30 rounded-full flex items-center justify-center"
+                                        className="w-12 h-12 bg-white/90 backdrop-blur-md hover:bg-white rounded-full flex items-center justify-center text-slate-900 shadow-xl transition-all active:scale-90 border border-slate-100 z-50"
                                     >
-                                        <X size={18} />
+                                        <X size={24} />
                                     </button>
+                                </div>
+
+                                <div className="absolute bottom-6 left-6 right-6">
+                                    <h2 className="text-2xl sm:text-4xl lg:text-5xl font-black text-slate-900 leading-tight mb-2 tracking-tighter">
+                                        {isFamiliarPack ? packEspecialData.nombre : `Arma tu ${packEspecialData.nombre}`}
+                                    </h2>
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex items-center gap-2 px-3 py-1 bg-orange-500 rounded-lg shadow-lg shadow-orange-500/20">
+                                            <Package size={14} className="text-white" />
+                                            <span className="text-white text-[10px] font-black uppercase tracking-wider">
+                                                {isFamiliarPack ? `${packEspecialData.items.length} Platos` : `${packEspecialData.cantidad} Porciones`}
+                                            </span>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
-                            {/* Contenido con scroll */}
-                            <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 sm:space-y-5 overscroll-contain">
-                                {/* Lista de items o proteínas */}
-                                <div className="space-y-2 sm:space-y-3">
-                                    {isProteinsPack && packEspecialData.proteinas ? (
-                                        <>
-                                            <div className="flex items-center justify-between">
-                                                <p className="text-sm font-bold text-gray-800 flex items-center gap-2">
-                                                    <span className="w-6 h-6 bg-bikitchen-orange text-white rounded-lg flex items-center justify-center text-xs">🍗</span>
-                                                    Elige tus proteínas
-                                                </p>
-                                                <span className={`text-xs sm:text-sm font-semibold px-2 sm:px-3 py-1 rounded-full ${proteinasSeleccionadas.length === packEspecialData.cantidad
-                                                    ? 'bg-green-100 text-green-700'
-                                                    : 'bg-orange-100 text-orange-700'
+                            {/* Content Section - Unified Scroll on Mobile, Split on Desktop */}
+                            <div className="flex-1 overflow-y-auto bg-slate-50 custom-scrollbar">
+                                <div className="flex flex-col lg:flex-row min-h-full">
+                                    {/* Left Side: Selections/Items */}
+                                    <div className="flex-1 p-5 sm:p-10 lg:border-r border-slate-100 bg-white">
+                                    <div className="max-w-xl mx-auto">
+                                        <div className="flex items-center justify-between mb-6">
+                                            <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">
+                                                {isProteinsPack ? 'Elige tus proteínas' : 'Contenido del pack'}
+                                            </h3>
+                                            {isProteinsPack && (
+                                                <div className={`px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest ${proteinasSeleccionadas.length === packEspecialData.cantidad
+                                                        ? 'bg-green-100 text-green-700 border border-green-200'
+                                                        : 'bg-orange-100 text-orange-700 border border-orange-200'
                                                     }`}>
-                                                    {proteinasSeleccionadas.length} de {packEspecialData.cantidad}
-                                                </span>
-                                            </div>
-                                            <div className="space-y-1.5 sm:space-y-2">
-                                                {packEspecialData.proteinas.map((proteina, index) => {
-                                                    const seleccionada = proteinasSeleccionadas.includes(proteina);
-                                                    const bloqueada = !seleccionada && proteinasSeleccionadas.length >= packEspecialData.cantidad;
+                                                    {proteinasSeleccionadas.length} / {packEspecialData.cantidad}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-8">
+                                            {isProteinsPack ? (
+                                                (getDisplayItems() || []).map((rawProtein, idx) => {
+                                                    // Normalizar a string si viene como objeto desde Firebase
+                                                    const proteinName = typeof rawProtein === 'string' ? rawProtein : (rawProtein.proteina || rawProtein.nombre || 'Proteína');
+                                                    const isSelected = proteinasSeleccionadas.includes(proteinName);
+                                                    // Fallback seguro para cantidad si packEspecialData es null
+                                                    const maxCantidad = packEspecialData?.cantidad || (pack.name.includes('3') ? 3 : 5);
+                                                    const isDisabled = !isSelected && proteinasSeleccionadas.length >= maxCantidad;
 
                                                     return (
                                                         <button
-                                                            key={index}
-                                                            type="button"
-                                                            onClick={() => toggleProteina(proteina)}
-                                                            disabled={bloqueada}
-                                                            className={`w-full flex items-center justify-between p-2.5 sm:p-3 rounded-xl border-2 transition-colors ${seleccionada
-                                                                ? 'bg-bikitchen-orange/10 border-bikitchen-orange'
-                                                                : bloqueada
-                                                                    ? 'bg-gray-100 border-gray-200 opacity-50'
-                                                                    : 'bg-white border-gray-200'
+                                                            key={idx}
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                toggleProteina(proteinName);
+                                                            }}
+                                                            disabled={isDisabled}
+                                                            className={`p-4 rounded-2xl flex items-center justify-between transition-all border-2 text-left appearance-none outline-none ${isSelected
+                                                                    ? 'bg-orange-50 border-orange-500 text-orange-900 shadow-md ring-2 ring-orange-500/10'
+                                                                    : isDisabled
+                                                                        ? 'bg-slate-50 border-transparent opacity-30 grayscale cursor-not-allowed'
+                                                                        : 'bg-slate-50 border-slate-100 hover:border-orange-200 text-slate-600 hover:text-slate-900'
                                                                 }`}
                                                         >
-                                                            <span className={`font-medium text-sm ${seleccionada
-                                                                ? 'text-bikitchen-orange'
-                                                                : 'text-gray-700'
+                                                            <span className="font-bold text-sm sm:text-base leading-tight pr-2">{proteinName}</span>
+                                                            <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all flex-shrink-0 ${isSelected ? 'bg-orange-500 border-orange-500' : 'border-slate-300'
                                                                 }`}>
-                                                                {proteina}
-                                                            </span>
-                                                            <div className={`w-5 h-5 sm:w-6 sm:h-6 rounded-full border-2 flex items-center justify-center ${seleccionada
-                                                                ? 'bg-bikitchen-orange border-bikitchen-orange'
-                                                                : 'border-gray-300'
-                                                                }`}>
-                                                                {seleccionada && <Check size={12} className="text-white" />}
+                                                                {isSelected && <Check size={14} strokeWidth={4} className="text-white" />}
                                                             </div>
                                                         </button>
                                                     );
-                                                })}
-                                            </div>
-                                        </>
-                                    ) : packEspecialData.items ? (
-                                        <>
-                                            <p className="text-sm font-bold text-gray-800 flex items-center gap-2">
-                                                <span className={`w-6 h-6 ${packEspecialData.color === 'green' ? 'bg-green-500' : 'bg-purple-500'} text-white rounded-lg flex items-center justify-center text-xs`}>📋</span>
-                                                Este pack incluye:
-                                            </p>
-                                            {/* Lista de Items / Proteínas para selección */}
-                                            <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3 custom-scrollbar">
-                                                {isProteinsPack && packEspecialData.proteinas ? (
-                                                    <div className="space-y-4">
-                                                        <div className="bg-orange-50 p-4 rounded-xl border border-orange-100">
-                                                            <p className="text-sm text-orange-800 font-medium text-center">
-                                                                Selecciona <span className="font-bold">{packEspecialData.cantidad}</span> proteínas para tu pack
-                                                            </p>
-                                                        </div>
-                                                        <div className="grid grid-cols-1 gap-3">
-                                                            {packEspecialData.proteinas.map((proteina, idx) => {
-                                                                const isSelected = proteinasSeleccionadas.includes(proteina);
-                                                                const isDisabled = !isSelected && proteinasSeleccionadas.length >= packEspecialData.cantidad;
-
-                                                                return (
-                                                                    <motion.div
-                                                                        key={idx}
-                                                                        onClick={() => {
-                                                                            if (isDisabled) return;
-                                                                            if (isSelected) {
-                                                                                setProteinasSeleccionadas(prev => prev.filter(p => p !== proteina));
-                                                                            } else {
-                                                                                setProteinasSeleccionadas(prev => [...prev, proteina]);
-                                                                            }
-                                                                        }}
-                                                                        className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex items-center justify-between ${isSelected
-                                                                            ? 'border-orange-500 bg-orange-50 shadow-md'
-                                                                            : isDisabled
-                                                                                ? 'border-gray-100 bg-gray-50 opacity-50 cursor-not-allowed'
-                                                                                : 'border-gray-100 hover:border-orange-200 hover:bg-white'
-                                                                            }`}
-                                                                        whileHover={!isDisabled ? { scale: 1.01 } : {}}
-                                                                        whileTap={!isDisabled ? { scale: 0.99 } : {}}
-                                                                    >
-                                                                        <span className={`font-medium ${isSelected ? 'text-orange-900' : 'text-gray-700'}`}>
-                                                                            {proteina}
-                                                                        </span>
-                                                                        {isSelected && (
-                                                                            <div className="w-6 h-6 bg-orange-500 rounded-full flex items-center justify-center text-white">
-                                                                                <Check size={14} strokeWidth={3} />
-                                                                            </div>
-                                                                        )}
-                                                                    </motion.div>
-                                                                );
-                                                            })}
-                                                        </div>
+                                                })
+                                            ) : (
+                                                packEspecialData.items.map((item, idx) => (
+                                                    <div key={idx} className="p-4 rounded-2xl bg-slate-50 flex items-start gap-4 border border-slate-100 group hover:bg-slate-100 transition-all">
+                                                        <span className="w-6 h-6 flex-shrink-0 bg-slate-200 rounded-lg flex items-center justify-center text-[10px] font-black text-slate-600 group-hover:bg-orange-500 group-hover:text-white transition-all">{idx + 1}</span>
+                                                        <span className="text-slate-600 font-medium text-sm leading-snug">{item}</span>
                                                     </div>
-                                                ) : (
-                                                    /* Renderizado normal para otros packs */
-                                                    packEspecialData.items && packEspecialData.items.map((item, index) => (
-                                                        <motion.div
-                                                            key={index}
-                                                            initial={{ opacity: 0, x: -10 }}
-                                                            animate={{ opacity: 1, x: 0 }}
-                                                            transition={{ delay: index * 0.05 }}
-                                                            className={`p-3 sm:p-4 rounded-xl border border-gray-100 flex items-start gap-3 ${index % 2 === 0 ? 'bg-gray-50/50' : 'bg-white'}`}
-                                                        >
-                                                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5 ${packEspecialData.color === 'green'
-                                                                ? 'bg-green-100 text-green-700'
-                                                                : packEspecialData.color === 'purple'
-                                                                    ? 'bg-purple-100 text-purple-700'
-                                                                    : 'bg-orange-100 text-orange-700'
-                                                                }`}>
-                                                                {index + 1}
-                                                            </div>
-                                                            <span className="text-gray-700 text-sm sm:text-base font-medium leading-tight">{item}</span>
-                                                        </motion.div>
-                                                    ))
-                                                )}
-                                            </div>
-                                        </>
-                                    ) : null}
-                                </div>
-                            </div>
-
-                            {/* Footer */}
-                            <div className="flex-shrink-0 px-4 py-3 sm:px-5 sm:py-4 bg-gray-50 border-t border-gray-100">
-                                <div className="space-y-1 mb-2 sm:mb-3">
-                                    <div className="flex justify-between text-sm sm:text-base font-bold text-gray-900">
-                                        <span>Precio total ({getPlanLabel()}):</span>
-                                        <span className={
-                                            packEspecialData.color === 'green'
-                                                ? 'text-green-600'
-                                                : packEspecialData.color === 'purple'
-                                                    ? 'text-purple-600'
-                                                    : 'text-bikitchen-orange'
-                                        }>
-                                            {formatPrice(getFinalPrice())}
-                                        </span>
+                                                ))
+                                            )}
+                                        </div>
                                     </div>
-                                    {isProteinsPack && proteinasSeleccionadas.length > 0 && (
-                                        <p className="text-xs text-gray-500 truncate">
-                                            {proteinasSeleccionadas.join(', ')}
-                                        </p>
-                                    )}
                                 </div>
 
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        if (isProteinsPack) {
-                                            if (proteinasSeleccionadas.length !== packEspecialData.cantidad) return;
+                                    {/* Right Side: Summary & Action */}
+                                    <div className="w-full lg:w-[380px] bg-slate-50/50 p-5 sm:p-10 flex flex-col justify-between border-t lg:border-t-0 lg:border-l border-slate-100 flex-shrink-0 lg:flex-shrink">
+                                    <div className="space-y-4 sm:space-y-6">
+                                        {/* Portions/Size Info */}
+                                        <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-100 space-y-4 sm:space-y-5 shadow-sm">
+                                            <div className="flex items-center gap-3 mb-2">
+                                                <div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center text-orange-600">
+                                                    <Edit size={18} />
+                                                </div>
+                                                <span className="text-xs font-black text-slate-900 uppercase tracking-widest">Configuración</span>
+                                            </div>
 
-                                            // Usar precio ya calculado del periodo seleccionado
-                                            const finalPrice = getFinalPrice();
-                                            const categoryLabel = PACKS_DATA?.[category]?.title;
+                                            {/* Selector de Plan */}
+                                            <div className="space-y-3">
+                                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Frecuencia del Plan</span>
+                                                <div className="grid grid-cols-3 gap-2">
+                                                    {[
+                                                        { id: 'weekly', label: 'Semanal' },
+                                                        { id: 'biweekly', label: 'Quincenal' },
+                                                        { id: 'monthly', label: 'Mensual' }
+                                                    ].map((plan) => (
+                                                        <button
+                                                            key={plan.id}
+                                                            onClick={() => setSelectedPlan(plan.id)}
+                                                            className={`py-2 px-1 rounded-xl text-[10px] font-black uppercase transition-all border-2 ${selectedPlan === plan.id
+                                                                    ? 'bg-orange-500 border-orange-500 text-white shadow-lg'
+                                                                    : 'bg-slate-100 border-transparent text-slate-500 hover:bg-slate-200'
+                                                                }`}
+                                                        >
+                                                            {plan.label}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
 
-                                            addToCart({
-                                                id: `${category}-${pack.name}-${Date.now()}`,
-                                                name: pack.name, // Nombre completo con (250g)
-                                                desc: `Incluye: ${proteinasSeleccionadas.join(', ')}`,
-                                                proteinas: proteinasSeleccionadas,
-                                                price: finalPrice,
-                                                quantity: 1,
-                                                plan: selectedPlan, // Usar plan seleccionado (weekly/biweekly/monthly)
-                                                planLabel: getPlanLabel(),
-                                                image: packImage,
-                                                category,
-                                                categoryLabel
-                                            });
-                                            toast.success(`${pack.name} agregado al carrito`);
-                                        } else {
-                                            addToCart({
-                                                id: `pack-familiar-${pack.name.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}`,
-                                                name: packEspecialData.nombre,
-                                                desc: `Incluye ${packEspecialData.items?.length || 0} platos para 4 porciones`,
-                                                price: getFinalPrice(), // USAR PRECIO CALCULADO
-                                                quantity: 1,
-                                                plan: selectedPlan, // USAR PLAN SELECCIONADO
-                                                planLabel: getPlanLabel(),
-                                                image: packImage,
-                                                // Metadatos adicionales
-                                                category,
-                                                categoryLabel: PACKS_DATA?.[category]?.title
-                                            });
-                                            toast.success(`${packEspecialData.nombre} agregado al carrito`);
-                                        }
-                                        handleCloseModal();
-                                        setProteinasSeleccionadas([]);
-                                    }}
-                                    disabled={isProteinsPack && proteinasSeleccionadas.length !== packEspecialData.cantidad}
-                                    className={`w-full ${packEspecialData.color === 'green'
-                                        ? 'bg-green-500 active:bg-green-600'
-                                        : packEspecialData.color === 'purple'
-                                            ? 'bg-purple-500 active:bg-purple-600'
-                                            : 'bg-bikitchen-orange active:bg-bikitchen-orange-dark'
-                                        } text-white font-bold py-3 sm:py-3.5 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed`}
-                                >
-                                    <ShoppingCart size={18} />
-                                    <span className="text-sm sm:text-base">
-                                        {isProteinsPack
-                                            ? (proteinasSeleccionadas.length === packEspecialData.cantidad
-                                                ? `Agregar — ${formatPrice(getFinalPrice())}`
-                                                : `Selecciona ${packEspecialData.cantidad - proteinasSeleccionadas.length} más`)
-                                            : `Agregar — ${formatPrice(getFinalPrice())}`
-                                        }
-                                    </span>
-                                </button>
+                                            {/* Selector de Tamaño (Solo para Proteínas) */}
+                                            {isProteinsPack && (
+                                                <div className="space-y-3 pt-2">
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Tamaño Porción</span>
+                                                        <span className="text-[10px] font-black text-orange-600 bg-orange-100 px-2 py-0.5 rounded-md">
+                                                            {selectedSize}g
+                                                        </span>
+                                                    </div>
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        {[
+                                                            { id: '250', label: '250g (Estándar)' },
+                                                            { id: '500', label: '500g (Pro)' }
+                                                        ].map((size) => (
+                                                            <button
+                                                                key={size.id}
+                                                                onClick={() => setSelectedSize(size.id)}
+                                                                className={`py-3 rounded-xl text-[10px] font-black uppercase transition-all border-2 ${selectedSize === size.id
+                                                                        ? 'bg-orange-500 border-orange-400 text-white shadow-lg'
+                                                                        : 'bg-slate-100 border-transparent text-slate-500 hover:bg-slate-200'
+                                                                    }`}
+                                                            >
+                                                                {size.label}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {!isProteinsPack && isFamiliarPack && (
+                                                <div className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                                    <span className="text-slate-500 text-sm">Porciones</span>
+                                                    <span className="text-slate-900 font-bold text-sm">4 por plato</span>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="bg-orange-50 rounded-2xl p-5 border border-orange-100">
+                                            <span className="text-[10px] font-black text-orange-600 uppercase tracking-widest block mb-1">Inversión Final</span>
+                                            <span className="text-3xl font-black text-slate-900 tracking-tight">₡{getFinalPrice().toLocaleString()}</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Footer Actions - Redesigned for Maximum Prominence */}
+                                    <div className="mt-8 space-y-4">
+                                        <button
+                                            onClick={() => setShowNotes(true)}
+                                            className="w-full flex items-center justify-center gap-3 py-4 bg-white border border-slate-200 rounded-2xl text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-all group active:scale-95 shadow-sm"
+                                        >
+                                            <MessageSquare size={18} />
+                                            <span className="text-xs font-black uppercase tracking-widest">Agregar Instrucciones</span>
+                                            {notes.trim().length > 0 && (
+                                                <span className="h-2 w-2 bg-green-500 rounded-full animate-pulse" />
+                                            )}
+                                        </button>
+
+                                        <button
+                                            disabled={isProteinsPack && proteinasSeleccionadas.length !== packEspecialData.cantidad}
+                                            onClick={() => {
+                                                const finalPrice = getFinalPrice();
+                                                const categoryLabel = PACKS_DATA?.[category]?.title;
+
+                                                if (isProteinsPack) {
+                                                    addToCart({
+                                                        id: `${category}-${pack.name}-${Date.now()}`,
+                                                        name: `${pack.name} (${selectedSize}g)`,
+                                                        desc: `Incluye: ${proteinasSeleccionadas.join(', ')} • Porción: ${selectedSize}g`,
+                                                        notes,
+                                                        proteinas: proteinasSeleccionadas,
+                                                        size: `${selectedSize}g`,
+                                                        price: finalPrice,
+                                                        quantity: 1,
+                                                        plan: selectedPlan,
+                                                        planLabel: getPlanLabel(),
+                                                        image: packImage,
+                                                        category,
+                                                        categoryLabel
+                                                    });
+                                                    toast.success(`${pack.name} de ${selectedSize}g agregado`);
+                                                } else {
+                                                    addToCart({
+                                                        id: `pack-familiar-${pack.name.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}`,
+                                                        name: packEspecialData.nombre,
+                                                        desc: `Incluye ${packEspecialData.items?.length || 0} platos p/4 pers.`,
+                                                        notes,
+                                                        price: finalPrice,
+                                                        quantity: 1,
+                                                        plan: selectedPlan,
+                                                        planLabel: getPlanLabel(),
+                                                        image: packImage,
+                                                        category,
+                                                        categoryLabel: PACKS_DATA?.[category]?.title
+                                                    });
+                                                    toast.success(`${packEspecialData.nombre} agregado`);
+                                                }
+                                                handleCloseModal();
+                                                setProteinasSeleccionadas([]);
+                                                setNotes('');
+                                            }}
+                                            className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-4 sm:py-7 rounded-2xl shadow-xl shadow-slate-900/10 active:scale-[0.98] transition-all text-sm sm:text-base uppercase tracking-[0.1em] flex items-center justify-center gap-4 group disabled:opacity-30 disabled:grayscale disabled:cursor-not-allowed"
+                                        >
+                                            <ShoppingCart size={24} className="group-hover:rotate-12 transition-transform" />
+                                            <span>
+                                                {isProteinsPack && proteinasSeleccionadas.length !== packEspecialData.cantidad
+                                                    ? `Faltan ${packEspecialData.cantidad - proteinasSeleccionadas.length}`
+                                                    : 'Agregar al carrito'}
+                                            </span>
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
+                        </div>
+
+                        {/* Instruction Overlay (Sub-modal) */}
+                            <AnimatePresence>
+                                {showNotes && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 100 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        exit={{ opacity: 0, y: 100 }}
+                                        className="absolute inset-0 bg-white/95 backdrop-blur-xl z-[101] flex flex-col p-8 sm:p-12 items-center justify-center"
+                                    >
+                                        <div className="w-full max-w-lg space-y-6">
+                                            <div className="flex items-center gap-4 mb-8">
+                                                <div className="w-16 h-16 bg-orange-100 rounded-3xl flex items-center justify-center text-orange-500">
+                                                    <MessageSquare size={32} />
+                                                </div>
+                                                <div>
+                                                    <h3 className="text-3xl font-black text-slate-900 uppercase tracking-tight">Instrucciones</h3>
+                                                    <p className="text-slate-500 text-base font-medium">¿Algún cambio o detalle especial?</p>
+                                                </div>
+                                            </div>
+
+                                            <textarea
+                                                className="w-full h-48 bg-slate-50 border-2 border-slate-100 rounded-[2rem] p-6 text-slate-900 text-lg placeholder:text-slate-400 focus:border-orange-500 focus:outline-none transition-all resize-none shadow-inner"
+                                                placeholder="Ej: Sin sal, entregar en recepción, etc..."
+                                                value={notes}
+                                                onChange={(e) => setNotes(e.target.value)}
+                                                autoFocus
+                                            />
+
+                                            <button
+                                                onClick={() => setShowNotes(false)}
+                                                className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black py-5 rounded-2xl active:scale-95 transition-all shadow-lg shadow-orange-500/20 uppercase tracking-widest text-sm"
+                                            >
+                                                Guardar Instrucciones
+                                            </button>
+                                        </div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
                         </motion.div>
                     </motion.div>
                 </AnimatePresence>,
@@ -983,7 +919,12 @@ const PackCard = memo(({ pack, shipping, category, categoryLabel: customCategory
                         originalPrice: hasDiscount ? formatPrice(getOriginalPrice()) : null,
                         plan: selectedPlan,
                         planLabel: getPlanLabel(),
-                        image: packImage
+                        image: packImage,
+                        // Pasar data cruda para cálculo dinámico en modal
+                        pack: pack,
+                        hasDiscount,
+                        isPromocionPack,
+                        isProteinsPack
                     }}
                 />
             ) : category === 'desayuno_almuerzo_cena' ? (
@@ -1032,7 +973,12 @@ const PackCard = memo(({ pack, shipping, category, categoryLabel: customCategory
                         discountBadge: tienePromo ? '🎁 PROMO Activa' :
                             (isPromocionPack ? '🎁 PROMO Desayunos' :
                                 (isMonthlyPlan ? `${MONTHLY_DISCOUNT_PERCENT}% OFF Mensual` :
-                                    (hasDiscount ? pack.etiquetaTexto : null)))
+                                    (hasDiscount ? pack.etiquetaTexto : null))),
+                        // Pasar data cruda para cálculo dinámico en modal
+                        pack: pack,
+                        hasDiscount,
+                        isPromocionPack,
+                        isProteinsPack
                     }}
                 />
             ) : isPromocionPack ? (
@@ -1050,7 +996,12 @@ const PackCard = memo(({ pack, shipping, category, categoryLabel: customCategory
                         originalPrice: hasDiscount ? formatPrice(getOriginalPrice()) : null,
                         plan: selectedPlan,
                         planLabel: getPlanLabel(),
-                        image: packImage
+                        image: packImage,
+                        // Pasar data cruda para cálculo dinámico en modal
+                        pack: pack,
+                        hasDiscount,
+                        isPromocionPack,
+                        isProteinsPack
                     }}
                 />
             ) : (
@@ -1067,7 +1018,12 @@ const PackCard = memo(({ pack, shipping, category, categoryLabel: customCategory
                         originalPrice: hasDiscount ? formatPrice(getOriginalPrice()) : null,
                         plan: selectedPlan,
                         planLabel: getPlanLabel(),
-                        image: packImage
+                        image: packImage,
+                        // Pasar data cruda para cálculo dinámico en modal
+                        pack: pack,
+                        hasDiscount,
+                        isPromocionPack,
+                        isProteinsPack
                     }}
                 />
             )}
@@ -1099,15 +1055,30 @@ const PackSection = memo(({ category, data, promociones = [], packImages = {}, p
     );
 });
 
+import { useQuery } from '../hooks/useQuery';
+
 export default function PacksPage() {
+    const query = useQuery();
     const location = useLocation();
+
+    /**
+     * Senior Deep Linking Logic:
+     * 1. Check for 'filter', 'cat', or 'diet' parameters.
+     * 2. Validate against available PACK_FILTERS.
+     * 3. Set the active filter and its corresponding group.
+     */
+    const urlFilter = query.get('filter') || query.get('cat') || query.get('diet');
+    const validFilter = PACK_FILTERS.find(f => f.id === urlFilter);
+    const initialFilter = validFilter ? validFilter.id : 'todos';
+    const initialGroup = validFilter ? (validFilter.groupId || 'todos') : 'todos';
+
     const { isChristmasMode } = useChristmas();
     const showPromoBanner = usePromoBanner();
     const { whatsappPhone } = useWhatsApp();
     const [packsData, setPacksData] = useState(PACKS_DATA);
     const [promociones, setPromociones] = useState([]);
-    const [activeFilter, setActiveFilter] = useState('todos');
-    const [activePackGroup, setActivePackGroup] = useState('todos');
+    const [activeFilter, setActiveFilter] = useState(initialFilter);
+    const [activePackGroup, setActivePackGroup] = useState(initialGroup);
 
     // Mostrar todos los filtros (ya no hay grupos)
     const filteredFilters = PACK_FILTERS;
@@ -1115,7 +1086,7 @@ export default function PacksPage() {
     // Calcular contadores para los filtros
     const packFilterCounts = useMemo(() => {
         const counts = {};
-        
+
         // Iterar sobre todas las secciones y sus packs
         Object.entries(packsData).forEach(([sectionKey, sectionData]) => {
             sectionData.packs.forEach(pack => {
@@ -1126,7 +1097,7 @@ export default function PacksPage() {
                     }
                 });
             });
-            
+
             // Contar por filtros basados en secciones completas
             PACK_FILTERS.forEach(filter => {
                 if (filter.section === sectionKey) {
@@ -1134,7 +1105,7 @@ export default function PacksPage() {
                 }
             });
         });
-        
+
         counts['todos'] = Object.values(packsData).reduce((acc, sec) => acc + sec.packs.length, 0);
         return counts;
     }, [packsData]);
@@ -1192,7 +1163,8 @@ export default function PacksPage() {
                 }
             }, { merge: true });
 
-            invalidateCache('menus_official');
+            invalidateCache('menus_official_current');
+            invalidateCacheByType('menus_official');
             setDesayunosMenu(tempDesayunos);
             setDesayunosVegetarianos(tempDesayunosVeg);
             setEditingDesayunos(false);
@@ -1220,7 +1192,8 @@ export default function PacksPage() {
                 }
             }, { merge: true });
 
-            invalidateCache('menus_official');
+            invalidateCache('menus_official_current');
+            invalidateCacheByType('menus_official');
             setPacksEspeciales(prev => ({
                 ...prev,
                 'Pack 3 Proteínas': { ...prev['Pack 3 Proteínas'], proteinas: tempProteinas },
@@ -1247,7 +1220,7 @@ export default function PacksPage() {
 
     // Handlers para abrir modales
     const handleOpenDesayunos = () => setDesayunosModalOpen(true);
-    
+
     const handleEditDesayunos = () => {
         setTempDesayunos([...desayunosMenu]);
         setTempDesayunosVeg([...desayunosVegetarianos]);
@@ -1349,7 +1322,7 @@ export default function PacksPage() {
     // Datos filtrados memoizados - AHORA soporta secciones completas y VISTA APLANADA para dietas
     const filteredPacksData = useMemo(() => {
         const filterConfig = PACK_FILTERS.find(f => f.id === activeFilter);
-        
+
         // MODO APLANADO: Si es un filtro de dieta específico (ej. Full Pack, Keto)
         if (filterConfig?.packs) {
             const allMatchingPacks = [];
@@ -1364,7 +1337,7 @@ export default function PacksPage() {
                     });
                 });
             });
-            
+
             return [{
                 key: 'flattened_results',
                 data: {
@@ -1404,42 +1377,62 @@ export default function PacksPage() {
                     }));
                 }
 
-                // Cargar desayunos
-                if (menusData?.desayunos) {
-                    setDesayunosMenu(menusData.desayunos);
-                    setTempDesayunos(menusData.desayunos);
-                }
-                if (menusData?.desayunosVegetarianos) {
-                    setDesayunosVegetarianos(menusData.desayunosVegetarianos);
-                    setTempDesayunosVeg(menusData.desayunosVegetarianos);
-                }
                 // Cargar imágenes, precios y promociones en paralelo
                 const [imagesMap, activePromos, pricesFromDb] = await Promise.all([
                     cachedFetch('packs_images_map', async () => {
-                        // 1) Intentar leer un único documento agregado: config/pack_images
+                        const map = {};
+
+                        // 1) Intentar leer de la colección 'imagenes' (Nuevo estándar del panel admin)
+                        try {
+                            const snapImg = await getDocs(collection(db, 'imagenes'));
+                            snapImg.forEach((docSnap) => {
+                                const data = docSnap.data();
+                                const docId = docSnap.id;
+
+                                // Si es un pack (ID empieza con pack-)
+                                if (docId.startsWith('pack-') && data?.url) {
+                                    // Mapear ID de admin a Nombre de pack en frontend
+                                    // Ejem: 'pack-sin-carbos' -> 'Pack Sin Carbos'
+                                    const name = docId
+                                        .split('-')
+                                        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                                        .join(' ');
+
+                                    map[name] = cleanFirebaseUrl(data.url);
+                                }
+                            });
+                        } catch (error) {
+                            console.warn('[PacksPage] Error loading from imagenes collection:', error);
+                        }
+
+                        // 2) Intentar leer config/pack_images (Configuración centralizada)
                         try {
                             const ref = doc(db, 'config', 'pack_images');
                             const snap = await getDoc(ref);
                             if (snap.exists()) {
                                 const data = snap.data() || {};
                                 const source = data.images || data;
-                                const map = {};
                                 Object.keys(source || {}).forEach((name) => {
                                     const url = source[name];
                                     if (url) map[name] = cleanFirebaseUrl(url);
                                 });
-                                return map;
                             }
                         } catch (_) { }
-                        // 2) Fallback: coleccion packs_imagenes (legacy)
-                        const map = {};
-                        const snap = await getDocs(collection(db, 'packs_imagenes'));
-                        snap.forEach((docSnap) => {
-                            const data = docSnap.data();
-                            if (data?.imagenUrl && data?.packName) {
-                                map[data.packName] = cleanFirebaseUrl(data.imagenUrl);
-                            }
-                        });
+
+                        // 3) Fallback: coleccion packs_imagenes (legacy)
+                        try {
+                            const snapLegacy = await getDocs(collection(db, 'packs_imagenes'));
+                            snapLegacy.forEach((docSnap) => {
+                                const data = docSnap.data();
+                                if (data?.imagenUrl && data?.packName) {
+                                    // Solo sobreescribir si no lo tenemos ya del nuevo sistema
+                                    if (!map[data.packName]) {
+                                        map[data.packName] = cleanFirebaseUrl(data.imagenUrl);
+                                    }
+                                }
+                            });
+                        } catch (_) { }
+
                         return map;
                     }, 'pack_images'),
                     getActivePromotions(),
@@ -1505,7 +1498,8 @@ export default function PacksPage() {
     // Procesar menús cuando cambien (se ejecuta cuando dataVersion cambia)
     useEffect(() => {
         if (menusData) {
-            const updatedPacksEspeciales = { ...PACKS_ESPECIALES_BASE };
+            // Crear copia profunda para evitar mutar el objeto BASE global
+            const updatedPacksEspeciales = JSON.parse(JSON.stringify(PACKS_ESPECIALES_BASE));
 
             // Pack Familiar Premium
             if (menusData.familiarPremium && Array.isArray(menusData.familiarPremium)) {
@@ -1522,13 +1516,29 @@ export default function PacksPage() {
             }
 
             // Cargar proteínas disponibles para packs de 3 y 5 proteínas
-            if (menusData.proteinasDisponibles && Array.isArray(menusData.proteinasDisponibles)) {
+            if (menusData.proteinasDisponibles && Array.isArray(menusData.proteinasDisponibles) && menusData.proteinasDisponibles.length > 0) {
                 if (updatedPacksEspeciales['Pack 3 Proteínas']) {
                     updatedPacksEspeciales['Pack 3 Proteínas'].proteinas = menusData.proteinasDisponibles;
                 }
                 if (updatedPacksEspeciales['Pack 5 Proteínas']) {
                     updatedPacksEspeciales['Pack 5 Proteínas'].proteinas = menusData.proteinasDisponibles;
                 }
+            }
+
+            // Cargar desayunos (normalizar a strings si son objetos)
+            if (menusData.desayuno) {
+                const normalized = menusData.desayuno.map(item =>
+                    typeof item === 'string' ? item : formatDishItem(item)
+                );
+                setDesayunosMenu(normalized);
+                setTempDesayunos(normalized);
+            }
+            if (menusData.desayunoVegetariano) {
+                const normalizedVeg = menusData.desayunoVegetariano.map(item =>
+                    typeof item === 'string' ? item : formatDishItem(item)
+                );
+                setDesayunosVegetarianos(normalizedVeg);
+                setTempDesayunosVeg(normalizedVeg);
             }
 
             setPacksEspeciales(updatedPacksEspeciales);
@@ -1633,96 +1643,96 @@ export default function PacksPage() {
 
                     {/* ── CONTENIDO PRINCIPAL ── */}
                     <main ref={packsContainerRef} className="flex-1 w-full p-4 sm:p-6 lg:p-10 pb-32">
-                    {isLoading ? (
-                        // Skeleton loader mientras cargan imágenes y datos
-                        <div className="space-y-16">
-                            {[1, 2, 3].map((section) => (
-                                <div key={section} className="space-y-8">
-                                    <div className="text-center">
-                                        <div className="w-16 h-16 bg-gray-200 rounded-full mx-auto mb-4 animate-pulse"></div>
-                                        <div className="h-10 w-64 bg-gray-200 rounded-full mx-auto mb-3 animate-pulse"></div>
-                                        <div className="h-5 w-48 bg-gray-200 rounded mx-auto animate-pulse"></div>
-                                    </div>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4 sm:gap-6">
-                                        {[1, 2, 3, 4].map((card) => (
-                                            <div key={card} className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100">
-                                                <div className="aspect-[4/3] bg-gray-200 animate-pulse"></div>
-                                                <div className="p-4 space-y-3">
-                                                    <div className="h-6 bg-gray-200 rounded animate-pulse w-3/4"></div>
-                                                    <div className="h-4 bg-gray-200 rounded animate-pulse w-1/2"></div>
-                                                    <div className="h-10 bg-gray-200 rounded-xl animate-pulse"></div>
+                        {isLoading ? (
+                            // Skeleton loader mientras cargan imágenes y datos
+                            <div className="space-y-16">
+                                {[1, 2, 3].map((section) => (
+                                    <div key={section} className="space-y-8">
+                                        <div className="text-center">
+                                            <div className="w-16 h-16 bg-gray-200 rounded-full mx-auto mb-4 animate-pulse"></div>
+                                            <div className="h-10 w-64 bg-gray-200 rounded-full mx-auto mb-3 animate-pulse"></div>
+                                            <div className="h-5 w-48 bg-gray-200 rounded mx-auto animate-pulse"></div>
+                                        </div>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4 sm:gap-6">
+                                            {[1, 2, 3, 4].map((card) => (
+                                                <div key={card} className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100">
+                                                    <div className="aspect-[4/3] bg-gray-200 animate-pulse"></div>
+                                                    <div className="p-4 space-y-3">
+                                                        <div className="h-6 bg-gray-200 rounded animate-pulse w-3/4"></div>
+                                                        <div className="h-4 bg-gray-200 rounded animate-pulse w-1/2"></div>
+                                                        <div className="h-10 bg-gray-200 rounded-xl animate-pulse"></div>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        ))}
+                                            ))}
+                                        </div>
                                     </div>
-                                </div>
-                            ))}
+                                ))}
+                            </div>
+                        ) : (
+                            <AnimatePresence mode="popLayout">
+                                <motion.div
+                                    key={activeFilter}
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: -20 }}
+                                    transition={{ duration: 0.3 }}
+                                >
+                                    {filteredPacksData.length > 0 ? (
+                                        filteredPacksData.map(({ key, data }) => (
+                                            <PackSection
+                                                key={key}
+                                                category={key}
+                                                data={data}
+                                                promociones={promociones}
+                                                packImages={packImages}
+                                                packsEspeciales={packsEspeciales}
+                                                // Passing new handlers
+                                                onOpenDesayunos={handleOpenDesayunos}
+                                                onEditDesayunos={handleEditDesayunos}
+                                                onEditProteinas={handleEditProteinas}
+                                                // States for modal display
+                                                desayunosMenu={desayunosMenu}
+                                                desayunosVegetarianos={desayunosVegetarianos}
+                                            />
+                                        ))
+
+                                    ) : (
+                                        <div className="text-center py-20">
+                                            <div className="text-4xl mb-4">🔦</div>
+                                            <h3 className="text-xl font-bold text-gray-800">No encontramos packs con ese filtro</h3>
+                                            <button
+                                                onClick={() => setActiveFilter('todos')}
+                                                className="mt-4 text-orange-500 hover:underline font-bold"
+                                            >
+                                                Ver todos los packs
+                                            </button>
+                                        </div>
+                                    )}
+                                </motion.div>
+                            </AnimatePresence>
+                        )}
+
+                        <div className="mt-16 bg-gradient-to-r from-bikitchen-orange/10 to-bikitchen-gold/10 border border-bikitchen-orange/20 rounded-2xl p-8 text-center">
+                            <Info size={28} className="text-bikitchen-orange mx-auto mb-4" />
+                            <p className="text-gray-600 text-sm max-w-2xl mx-auto">
+                                *Los menús se actualizan cada sábado según la planificación del equipo BiKitchen.
+                                Los ingredientes pueden variar levemente según disponibilidad.
+                            </p>
                         </div>
-                    ) : (
-                        <AnimatePresence mode="popLayout">
-                            <motion.div
-                                key={activeFilter}
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, y: -20 }}
-                                transition={{ duration: 0.3 }}
-                            >
-                                {filteredPacksData.length > 0 ? (
-                                    filteredPacksData.map(({ key, data }) => (
-                                        <PackSection
-                                            key={key}
-                                            category={key}
-                                            data={data}
-                                            promociones={promociones}
-                                            packImages={packImages}
-                                            packsEspeciales={packsEspeciales}
-                                            // Passing new handlers
-                                            onOpenDesayunos={handleOpenDesayunos}
-                                            onEditDesayunos={handleEditDesayunos}
-                                            onEditProteinas={handleEditProteinas}
-                                            // States for modal display
-                                            desayunosMenu={desayunosMenu}
-                                            desayunosVegetarianos={desayunosVegetarianos}
-                                        />
-                                    ))
 
-                                ) : (
-                                    <div className="text-center py-20">
-                                        <div className="text-4xl mb-4">🔦</div>
-                                        <h3 className="text-xl font-bold text-gray-800">No encontramos packs con ese filtro</h3>
-                                        <button
-                                            onClick={() => setActiveFilter('todos')}
-                                            className="mt-4 text-orange-500 hover:underline font-bold"
-                                        >
-                                            Ver todos los packs
-                                        </button>
-                                    </div>
-                                )}
-                            </motion.div>
-                        </AnimatePresence>
-                    )}
-
-                    <div className="mt-16 bg-gradient-to-r from-bikitchen-orange/10 to-bikitchen-gold/10 border border-bikitchen-orange/20 rounded-2xl p-8 text-center">
-                        <Info size={28} className="text-bikitchen-orange mx-auto mb-4" />
-                        <p className="text-gray-600 text-sm max-w-2xl mx-auto">
-                            *Los menús se actualizan cada sábado según la planificación del equipo BiKitchen.
-                            Los ingredientes pueden variar levemente según disponibilidad.
-                        </p>
-                    </div>
-
-                    <div className="mt-6 bg-bikitchen-gold/10 border border-bikitchen-gold/30 rounded-2xl p-6">
-                        <div className="flex items-start gap-3">
-                            <Info size={22} className="text-bikitchen-orange flex-shrink-0 mt-0.5" />
-                            <div>
-                                <h3 className="font-bold text-gray-900 mb-1">Información Importante</h3>
-                                <p className="text-gray-600 text-sm">
-                                    Consulta con nosotros las zonas de entrega y costos de envío.
-                                </p>
+                        <div className="mt-6 bg-bikitchen-gold/10 border border-bikitchen-gold/30 rounded-2xl p-6">
+                            <div className="flex items-start gap-3">
+                                <Info size={22} className="text-bikitchen-orange flex-shrink-0 mt-0.5" />
+                                <div>
+                                    <h3 className="font-bold text-gray-900 mb-1">Información Importante</h3>
+                                    <p className="text-gray-600 text-sm">
+                                        Consulta con nosotros las zonas de entrega y costos de envío.
+                                    </p>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                </main>
-            </div>{/* ── end flex wrapper ── */}
+                    </main>
+                </div>{/* ── end flex wrapper ── */}
 
                 <Footer />
             </div>
@@ -1766,8 +1776,8 @@ export default function PacksPage() {
                                             type="button"
                                             onClick={() => setActiveDesayunoTab('regular')}
                                             className={`flex-1 py-3.5 px-4 rounded-xl text-sm font-black transition-all ${activeDesayunoTab === 'regular'
-                                                    ? 'bg-white text-gray-900 shadow-xl scale-[1.02]'
-                                                    : 'text-gray-500 hover:text-gray-700'
+                                                ? 'bg-white text-gray-900 shadow-xl scale-[1.02]'
+                                                : 'text-gray-500 hover:text-gray-700'
                                                 }`}
                                         >
                                             Regulares
@@ -1776,8 +1786,8 @@ export default function PacksPage() {
                                             type="button"
                                             onClick={() => setActiveDesayunoTab('vegetariano')}
                                             className={`flex-1 py-3.5 px-4 rounded-xl text-sm font-black transition-all ${activeDesayunoTab === 'vegetariano'
-                                                    ? 'bg-white text-gray-900 shadow-xl scale-[1.02]'
-                                                    : 'text-gray-500 hover:text-gray-700'
+                                                ? 'bg-white text-gray-900 shadow-xl scale-[1.02]'
+                                                : 'text-gray-500 hover:text-gray-700'
                                                 }`}
                                         >
                                             Vegetarianos
@@ -1799,7 +1809,7 @@ export default function PacksPage() {
                                                     <p className="font-bold text-gray-800 text-base leading-tight">
                                                         {item}
                                                     </p>
-                                                    <p className="text-xs text-gray-500 mt-1 uppercase tracking-wider font-bold">Base de Frutas y Proteína</p>
+                                                    {/* Sub-label removido por redundancia */}
                                                 </div>
                                             </motion.div>
                                         ))}

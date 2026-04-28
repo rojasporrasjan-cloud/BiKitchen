@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MapPin, Truck, ChevronDown, ChevronUp, Search, Check } from 'lucide-react';
-import { SHIPPING_ZONES } from '../data/shippingZones';
+import { useShipping } from '../context/ShippingContext';
 
 const PROVINCE_COLORS = {
     'San José': {
@@ -47,6 +47,7 @@ const PROVINCE_COLORS = {
 };
 
 export default function ShippingZoneSelector({ selectedZone, onZoneChange, error }) {
+    const { SHIPPING_ZONES } = useShipping();
     const [isOpen, setIsOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [expandedProvince, setExpandedProvince] = useState(null);

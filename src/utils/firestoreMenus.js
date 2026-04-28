@@ -222,6 +222,13 @@ export async function saveOfficialMenus(data, meta = {}) {
   };
 
   console.log('[saveOfficialMenus] Guardando payload.cena:', payload.cena);
+  console.log('[saveOfficialMenus] Guardando payload.desayuno:', payload.desayuno?.length, 'platos');
+  
+  if (Array.isArray(payload.desayuno)) {
+      payload.desayuno.forEach((d, i) => {
+          console.log(`  [Desayuno ${i+1}]:`, d.proteina);
+      });
+  }
 
   // VALIDACIÓN DE SEGURIDAD
   const isReset = meta.resetBy === 'admin' || meta.desayunosInitialized;
@@ -282,8 +289,11 @@ export async function ensureDesayunosExist() {
     }
 
     const data = snap.data();
-    if (!data.desayuno || data.desayuno.length === 0) {
-      // Si existe el documento pero no tiene desayunos, agregarlos
+    // Mejorar validación: Solo inicializar si el campo falta por COMPLETO o es nulo
+    // Si ya tiene un array (aunque sea corto o con campos vacíos), respetarlo para no borrar cambios de Gina
+    if (data.desayuno === undefined || data.desayuno === null) {
+      console.log('⚠️ Desayunos no encontrados en current. Inicializando...');
+      // Si existe el documento pero no tiene la propiedad desayuno, agregarla
       await setDoc(ref, {
         desayuno: DEFAULT_MENUS.desayuno,
         meta: {

@@ -14,17 +14,22 @@ export default function BottomNav() {
 
   const cartCount = cart.reduce((total, item) => total + item.quantity, 0);
 
-  // Detectar si estamos en el hero (scroll cercano al top en landing page)
+  // Detectar si estamos en el hero (scroll cercano al top en landing page) - v1.1 Brute Force
   useEffect(() => {
-    const handleScroll = () => {
-      const isLanding = location.pathname === '/';
-      const scrollY = window.scrollY || window.pageYOffset;
-      setIsHeroArea(isLanding && scrollY < 200);
+    const checkScroll = () => {
+      const isLanding = location.pathname === '/' || location.pathname === '/home';
+      const scrollY = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
+      // Umbral agresivo: deja de ser hero apenas se baja un poquito
+      setIsHeroArea(isLanding && scrollY < 15);
     };
 
-    window.addEventListener('scroll', handleScroll);
-    handleScroll(); // Llamar al montar para establecer estado inicial
-    return () => window.removeEventListener('scroll', handleScroll);
+    window.addEventListener('scroll', checkScroll, { passive: true });
+    const interval = setInterval(checkScroll, 100);
+    checkScroll();
+    return () => {
+      window.removeEventListener('scroll', checkScroll);
+      clearInterval(interval);
+    };
   }, [location.pathname]);
 
   // Animación de rebote cuando el carrito cambia
@@ -44,12 +49,17 @@ export default function BottomNav() {
   if (isMobileMenuOpen || isAdminRoute || isProfileRoute) return null;
 
   return (
-    <nav className={`md:hidden fixed bottom-0 left-0 right-0 z-50 px-6 py-3 transition-all duration-300 ${
-      isHeroArea
-        ? 'bg-transparent border-t border-transparent'
-        : 'bg-white/95 backdrop-blur-xl border-t border-gray-100 shadow-[0_-10px_30px_rgba(0,0,0,0.05)]'
-    }`} style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 16px))' }}>
-      <div className="flex items-center justify-between max-w-md mx-auto">
+    <nav 
+      style={{ 
+        paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 16px))',
+        backgroundColor: isHeroArea ? 'transparent' : '#FFFFFF',
+        borderTop: isHeroArea ? '1px solid transparent' : '1px solid #F3F4F6',
+        boxShadow: isHeroArea ? 'none' : '0 -10px 30px rgba(0,0,0,0.08)',
+        transition: 'all 0.4s ease'
+      }}
+      className="md:hidden fixed bottom-0 left-0 right-0 z-50 px-4 py-3"
+    >
+      <div className="grid grid-cols-5 items-center max-w-md mx-auto relative">
         <NavItem to="/" icon={<Home size={22} />} label="Inicio" />
         <NavItem to="/packs" icon={<Package size={22} />} label="Packs" />
         <NavItem to="/individuales" icon={<Utensils size={22} />} label="Menú" />

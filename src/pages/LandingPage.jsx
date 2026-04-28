@@ -50,6 +50,13 @@ export default function LandingPage() {
     const { isChristmasMode } = useChristmas();
     const showPromoBanner = usePromoBanner();
     const { menus } = useMenus();
+    
+    // Nueva lógica de detección de scroll por visibilidad del Hero
+    const heroRef = useRef(null);
+    const isHeroInView = useInView(heroRef, { 
+        margin: "-20% 0px 0px 0px", // Activamos el cambio un poco antes d salir del todo
+        amount: 0.1 
+    });
 
     const [navbarVisible, setNavbarVisible] = useState(true);
 
@@ -138,7 +145,7 @@ export default function LandingPage() {
         <PageTransition>
             <SEOHead {...SEO_CONFIG.home} />
             <div className="min-h-screen flex flex-col overflow-x-hidden font-sans text-gray-800 bg-bikitchen-beige">
-                <Navbar />
+                <Navbar forceSolid={!isHeroInView} />
 
                 <Link
                     to={promos[currentPromoIndex]?.link || "/promociones"}
@@ -187,14 +194,16 @@ export default function LandingPage() {
                 </Link>
 
                 <main className="flex-1 pt-0">
-                    {/* Hero Section */}
-                    <VideoHero 
-                        videoSrc="/videos/hero_optimized.mp4"
-                        title="Comida saludable lista para comer, toda la semana."
-                        subtitle="🍳 Comida casera • Saludable • Lista para calentar"
-                        primaryCTA={{ text: "Ver Planes", link: "/packs" }}
-                        secondaryCTA={{ text: "Promociones", link: "/promociones" }}
-                    />
+                    {/* Hero Section - Envuelto en ref para detectar visibilidad */}
+                    <motion.div ref={heroRef} className="relative">
+                        <VideoHero 
+                            videoSrc="/videos/hero_optimized.mp4"
+                            title="Comida saludable lista para comer, toda la semana."
+                            subtitle="🍳 Comida casera • Saludable • Lista para calentar"
+                            primaryCTA={{ text: "Ver Planes", link: "/packs" }}
+                            secondaryCTA={{ text: "Promociones", link: "/promociones" }}
+                        />
+                    </motion.div>
 
                     {/* Sección "Ventajas BiKitchen" */}
                     <section className="py-20 bg-white">
@@ -328,8 +337,8 @@ export default function LandingPage() {
                                     },
                                     {
                                         icon: "⭐",
-                                        title: "10 Comidas",
-                                        subtitle: "Almuerzo + Cena",
+                                        title: "Almuerzo y Cena",
+                                        subtitle: "Lunes a Viernes",
                                         desc: "Olvidate de cocinar entre semana.",
                                         price: `Desde ${formatPrice(packPrices.tenComidas)}`,
                                         features: ["Doble porción diaria", "Máxima variedad", "Ahorro garantizado"],
@@ -492,6 +501,7 @@ export default function LandingPage() {
 
                     {/* Testimonials Section */}
                     <TestimonialsSection />
+
                 </main>
 
                 <Footer />

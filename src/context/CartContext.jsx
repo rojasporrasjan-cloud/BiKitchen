@@ -2,10 +2,10 @@ import React, { createContext, useState, useContext, useEffect } from 'react';
 import { validateCoupon as validateCouponAPI, useCoupon } from '../utils/firestoreCoupons';
 import { db } from '../firebase/config';
 import { collection, query, where, getDocs } from 'firebase/firestore';
-import { SHIPPING_ZONES, getZoneById, getShippingCost, zoneRequiresContact } from '../data/shippingZones';
 import { trackAddToCart, trackInitiateCheckout } from '../services/facebookPixel';
 import { useShippingDiscount } from './ShippingDiscountContext';
 import { useAuth } from './AuthContext';
+import { useShipping } from './ShippingContext';
 
 const CartContext = createContext();
 
@@ -59,6 +59,7 @@ export function CartProvider({ children }) {
 
     const { discountConfig } = useShippingDiscount();
     const { currentUser, isAdmin } = useAuth();
+    const { getShippingCost: getStaticShippingCost, getZoneById, zoneRequiresContact, SHIPPING_ZONES } = useShipping();
 
     // Save cart to localStorage whenever it changes
     useEffect(() => {
@@ -236,7 +237,7 @@ export function CartProvider({ children }) {
     // Obtener costo de envío base (multiplicado por cantidad de envíos según plan)
     const getShippingCostBase = () => {
         if (!selectedZone) return 0;
-        const costPerShipment = getShippingCost(selectedZone);
+        const costPerShipment = getStaticShippingCost(selectedZone);
 
         // Determinar cantidad de envíos según el plan del carrito
         let shipmentCount = 1; // Por defecto: 1 envío (semanal)

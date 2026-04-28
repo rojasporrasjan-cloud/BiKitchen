@@ -156,7 +156,7 @@ export default function MiImpactoPage() {
     const achievements = [
         { id: 1, name: 'Primera Comida', icon: '🎉', requirement: 1, unlocked: totalMeals >= 1 },
         { id: 2, name: '5 Comidas', icon: '🌟', requirement: 5, unlocked: totalMeals >= 5 },
-        { id: 3, name: '10 Comidas', icon: '✨', requirement: 10, unlocked: totalMeals >= 10 },
+        { id: 3, name: '10 Almuerzos y Cenas', icon: '✨', requirement: 10, unlocked: totalMeals >= 10 },
         { id: 4, name: '20 Comidas', icon: '🔥', requirement: 20, unlocked: totalMeals >= 20 },
         { id: 5, name: '50 Comidas', icon: '⭐', requirement: 50, unlocked: totalMeals >= 50 },
         { id: 6, name: '100 Comidas', icon: '🏆', requirement: 100, unlocked: totalMeals >= 100 },

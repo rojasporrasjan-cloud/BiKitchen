@@ -4,6 +4,7 @@ import { CheckCircle, XCircle, Loader2, Home, ShoppingBag } from 'lucide-react';
 import { db } from '../firebase/config';
 import { collection, query, where, getDocs, updateDoc, doc } from 'firebase/firestore';
 import { useCart } from '../context/CartContext';
+import { upsertClient } from '../services/clientService';
 
 export default function TilopayReturnPage() {
     const [searchParams] = useSearchParams();
@@ -64,16 +65,75 @@ export default function TilopayReturnPage() {
                             
                             if (!snapshot.empty) {
                                 const pedidoDoc = snapshot.docs[0];
-                                await updateDoc(doc(db, 'pedidos', pedidoDoc.id), {
-                                    status: 'confirmed',
-                                    paymentStatus: 'paid',
-                                    paymentProvider: 'tilopay',
-                                    tilopayTransactionId: tilopayTransactionId || null,
-                                    tilopayStatus: tilopayStatus,
-                                    paidAt: new Date().toISOString(),
-                                    updatedAt: new Date().toISOString()
-                                });
-                                console.log('[TilopayReturn] Pedido actualizado como pagado');
+                                const orderData = pedidoDoc.data();
+
+                                // Solo proceder si no estaba ya marcado como pagado para evitar duplicar emails
+                                if (orderData.paymentStatus !== 'paid') {
+                                    await updateDoc(doc(db, 'pedidos', pedidoDoc.id), {
+                                        status: 'confirmed',
+                                        paymentStatus: 'paid',
+                                        paymentProvider: 'tilopay',
+                                        tilopayTransactionId: tilopayTransactionId || null,
+                                        tilopayStatus: tilopayStatus,
+                                        paidAt: new Date().toISOString(),
+                                        updatedAt: new Date().toISOString()
+                                    });
+                                    console.log('[TilopayReturn] Pedido actualizado como pagado. Iniciando notificaciones...');
+
+                                    // Preparar datos para los emails
+                                    try {
+                                        const { sendOrderNotification, sendCustomerOrderConfirmation } = await import('../services/emailNotifications');
+                                        const { getScheduleFromOrder } = await import('../utils/orderDates');
+
+                                        const schedule = getScheduleFromOrder({
+                                            ...orderData,
+                                            id: pedidoDoc.id
+                                        });
+
+                                        const fullOrderDataForEmail = {
+                                            orderNumber: orderData.numeroOrden || finalOrderNumber,
+                                            orderDate: orderData.createdAt ? new Date(orderData.createdAt.seconds * 1000).toLocaleDateString('es-CR') : new Date().toLocaleDateString('es-CR'),
+                                            cliente: orderData.cliente,
+                                            telefono: orderData.telefono,
+                                            correo: orderData.correo,
+                                            items: orderData.items,
+                                            total: orderData.total,
+                                            subtotal: orderData.subtotal,
+                                            descuento: orderData.descuento_aplicado || 0,
+                                            costoEnvio: orderData.costo_envio,
+                                            zona: orderData.zona_envio,
+                                            direccion: orderData.direccion,
+                                            referencias: orderData.detalles_direccion,
+                                            metodoPago: 'tilopay',
+                                            fechaEntrega: orderData.fecha_entrega,
+                                            fechasEntrega: schedule,
+                                            observaciones: orderData.observaciones,
+                                            cedula: orderData.cedula
+                                        };
+
+                                        // 1.5 Registrar/Actualizar cliente en el CRM
+                                        try {
+                                            await upsertClient({
+                                                nombre: orderData.cliente,
+                                                telefono: orderData.telefono,
+                                                correo: orderData.correo,
+                                                direccion: orderData.direccion
+                                            });
+                                            console.log('[CRM] Cliente registrado desde Tilopay');
+                                        } catch (crmErr) {
+                                            console.error('[CRM] Error registrando cliente desde Tilopay:', crmErr);
+                                        }
+
+                                        // Enviar emails asíncronamente
+                                        sendOrderNotification(fullOrderDataForEmail).catch(e => console.error('Error email admin:', e));
+                                        sendCustomerOrderConfirmation(fullOrderDataForEmail).catch(e => console.error('Error email cliente:', e));
+                                        
+                                    } catch (notifErr) {
+                                        console.error('[TilopayReturn] Error al cargar o enviar notificaciones:', notifErr);
+                                    }
+                                } else {
+                                    console.log('[TilopayReturn] El pedido ya estaba marcado como pagado, saltando notificaciones.');
+                                }
                             }
                         } catch (updateError) {
                             console.error('[TilopayReturn] Error actualizando pedido:', updateError);

@@ -9,6 +9,7 @@ import { CartProvider } from './CartContext';
 import { OrdersProvider } from './OrdersContext';
 import { MenusProvider } from './MenusContext';
 import { UIProvider } from './UIContext';
+import { ShippingProvider } from './ShippingContext';
 
 /**
  * AppProviders - Unified component to wrap the application with all necessary contexts.
@@ -19,21 +20,23 @@ export const AppProviders = ({ children }) => {
         <AuthProvider>
             <UIProvider>
                 <ContactConfigProvider>
-                    <ShippingDiscountProvider>
-                        <AudioProvider>
-                            <ThemeProvider>
-                                <ChristmasProvider>
-                                    <CartProvider>
-                                        <OrdersProvider>
-                                            <MenusProvider>
-                                                {children}
-                                            </MenusProvider>
-                                        </OrdersProvider>
-                                    </CartProvider>
-                                </ChristmasProvider>
-                            </ThemeProvider>
-                        </AudioProvider>
-                    </ShippingDiscountProvider>
+                    <ShippingProvider>
+                        <ShippingDiscountProvider>
+                            <AudioProvider>
+                                <ThemeProvider>
+                                    <ChristmasProvider>
+                                        <CartProvider>
+                                            <OrdersProvider>
+                                                <MenusProvider>
+                                                    {children}
+                                                </MenusProvider>
+                                            </OrdersProvider>
+                                        </CartProvider>
+                                    </ChristmasProvider>
+                                </ThemeProvider>
+                            </AudioProvider>
+                        </ShippingDiscountProvider>
+                    </ShippingProvider>
                 </ContactConfigProvider>
             </UIProvider>
         </AuthProvider>

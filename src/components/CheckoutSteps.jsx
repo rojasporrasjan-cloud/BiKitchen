@@ -21,8 +21,10 @@ import { trackInitiateCheckout, trackPurchase, trackContact, trackAddPaymentInfo
 import ShippingZoneSelector from './ShippingZoneSelector';
 import NMIPaymentModal from './NMIPaymentModal';
 import { useOrders } from '../context/OrdersContext';
+import { getScheduleFromOrder } from '../utils/orderDates';
 // TILOPAY: Desactivado temporalmente - pendiente aprobación
 // import { processTilopayPayment } from '../utils/tilopayClient';
+import { upsertClient } from '../services/clientService';
 
 const STEPS = [
     { id: 1, name: 'Datos', icon: User },
@@ -43,8 +45,8 @@ const getNextDeliveryDates = () => {
         deadline.setHours(22, 0, 0, 0); // 10:00 PM
 
         const day = deliveryDate.getDay();
-        if (day === 1) { // Lunes -> Sábado anterior (2 días antes) - Corregido de 3 a 2
-            deadline.setDate(deliveryDate.getDate() - 2);
+        if (day === 1) { // Lunes -> Viernes anterior (3 días antes por cierre domingos)
+            deadline.setDate(deliveryDate.getDate() - 3);
         } else if (day === 3) { // Miércoles -> Lunes anterior (2 días antes)
             deadline.setDate(deliveryDate.getDate() - 2);
         } else if (day === 6) { // Sábado -> Jueves anterior (2 días antes)
@@ -231,24 +233,10 @@ export default function CheckoutSteps({ isOpen, onClose }) {
 
     // Calcular programa de entregas a partir de una fecha base
     const computeDeliverySchedule = (baseDateStr) => {
-        if (!baseDateStr) return [];
-        try {
-            const base = new Date(`${baseDateStr}T00:00:00`);
-            const count = getShipmentCountFromCart();
-            // Biweekly: cada 14 días si el plan predominante es quincenal (2 envíos)
-            const hasBiweekly = cart.some(i => (i.plan || '').toLowerCase() === 'biweekly');
-            const stepDays = (count === 2 && hasBiweekly) ? 7 : 7; // Changed from 14 to 7
-            const out = [];
-            for (let i = 0; i < count; i++) {
-                const d = new Date(base);
-                d.setDate(base.getDate() + (i * stepDays));
-                const iso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-                out.push(iso);
-            }
-            return out;
-        } catch {
-            return [baseDateStr];
-        }
+        return getScheduleFromOrder({
+            items: cart,
+            fecha_entrega: baseDateStr
+        });
     };
 
     // Track InitiateCheckout cuando se abre el modal
@@ -547,11 +535,12 @@ export default function CheckoutSteps({ isOpen, onClose }) {
             const total = isZoneOutOfCoverage() ? getTotalPrice() : getTotalWithShipping();
             const deliverySchedule = computeDeliverySchedule(formData.fechaEntrega);
 
-            const productionOrder = {
+             const productionOrder = {
                 numeroOrden: newOrderNumber,
+                userId: currentUser?.uid || null, // Vínculo CRUCIAL para historial senior
                 cliente: formData.nombre,
                 telefono: formData.telefono,
-                correo: formData.correo,
+                correo: formData.correo?.toLowerCase().trim(), // Normalización forzada
                 cedula: formData.cedula || '-',
                 direccion: formData.direccion,
                 referencias: formData.referencias || '',
@@ -595,13 +584,27 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                 createdAt: serverTimestamp()
             };
 
+            console.log(`[OrderCreation] Creando documento para orden ${newOrderNumber} (UID: ${currentUser?.uid || 'GUEST'})`);
+
             // Guardar en Firestore (colección unificada 'pedidos')
             const safeOrder = stripUndefined(productionOrder);
-            const orderRef = await addDoc(collection(db, 'pedidos'), safeOrder);
-            // Nota: Ya no se duplica en 'orders', todo está unificado en 'pedidos'
+            
+            let orderRefId = pendingOrderDocId;
+            if (orderRefId) {
+                console.log(`[OrderCreation] Reutilizando documento ${orderRefId} para reintento de pago`);
+                await updateDoc(doc(db, 'pedidos', orderRefId), {
+                    ...safeOrder,
+                    updatedAt: serverTimestamp()
+                });
+            } else {
+                const orderRef = await addDoc(collection(db, 'pedidos'), safeOrder);
+                orderRefId = orderRef.id;
+                setPendingOrderDocId(orderRefId); 
+                console.log(`[OrderCreation] Nuevo documento creado: ${orderRefId}`);
+            }
 
             setLoading(false); // Just in case, so it shows numbers during transition
-            
+
             // Track Purchase event para Facebook Pixel
             trackPurchase({
                 orderNumber: newOrderNumber,
@@ -612,7 +615,7 @@ export default function CheckoutSteps({ isOpen, onClose }) {
             // Si es Tarjeta (BAC / NMI), abrir el modal y no finalizar aún
             if (formData.metodoPago === 'nmi') {
                 setOrderNumber(newOrderNumber);
-                setPendingOrderDocId(orderRef.id);
+                // El pendingOrderDocId ya se guardó arriba (orderRefId)
                 setShowNMIModal(true);
                 setLoading(false);
                 return;
@@ -648,7 +651,7 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                 message += `👤 *CLIENTE*: ${formData.nombre}\n`;
                 message += `🚚 *ENTREGA*: ${formData.fechaEntrega}\n`;
                 message += `💳 *PAGO*: ${formData.metodoPago.toUpperCase()}\n`;
-                
+
                 if (formData.observaciones) {
                     message += `📝 *NOTAS*: ${formData.observaciones}\n`;
                 }
@@ -660,7 +663,7 @@ export default function CheckoutSteps({ isOpen, onClose }) {
             // Finalizar orden (Notificaciones, Puntos, Limpiar Carrito)
             await handleOrderCompletion({
                 orderNumber: newOrderNumber,
-                docId: orderRef.id
+                docId: orderRefId
             });
 
         } catch (error) {
@@ -715,10 +718,57 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                 orderDate: new Date().toLocaleDateString('es-CR')
             };
 
+            // 1.5 Registrar/Actualizar cliente en el CRM
+            try {
+                await upsertClient({
+                    nombre: formData.nombre,
+                    telefono: formData.telefono,
+                    correo: formData.correo,
+                    direccion: formData.direccion
+                });
+                console.log('✅ Cliente registrado/actualizado en CRM');
+            } catch (crmErr) {
+                console.error('⚠️ Error detallado CRM:', crmErr);
+            }
+
+            // 1.6 Actualizar estado en Firestore si tenemos el ID del documento
+            // Esto es CRUCIAL para que en el Admin salga como "confirmado" inmediatamente si es pago digital
+            const docIdToUpdate = orderDetails.docId || pendingOrderDocId;
+            
+            console.log(`[OrderHistory] Intentando actualizar estado para Documento: ${docIdToUpdate || 'NO ENCONTRADO'}`);
+
+            if (docIdToUpdate) {
+                try {
+                    const orderRef = doc(db, 'pedidos', docIdToUpdate);
+                    const updates = {
+                        updatedAt: serverTimestamp()
+                    };
+
+                    // Si es tarjeta o PayPal, ya está pagado
+                    if (['nmi', 'paypal', 'tilopay'].includes(formData.metodoPago)) {
+                        updates.status = 'confirmed';
+                        updates.paymentStatus = 'paid';
+                        updates.paymentConfirmed = true;
+                        if (orderDetails.paymentResult?.transactionid) {
+                            updates.transactionId = orderDetails.paymentResult.transactionid;
+                        }
+                        console.log(`[OrderHistory] Sincronizando estado CONFIRMADO (PAGO EXITOSO) para pedido ${currentOrderNumber}`);
+                    } else {
+                        // Para otros métodos, lo dejamos en pending_payment pero actualizamos el timestamp
+                        updates.status = 'pending_payment';
+                    }
+
+                    await updateDoc(orderRef, updates);
+                    console.log(`✅ Documento ${docIdToUpdate} actualizado en Firestore`);
+                } catch (dbErr) {
+                    console.error('⚠️ Error actualizando estado en Firestore:', dbErr);
+                }
+            }
+
             // 2. Enviar notificaciones por email (Admin y Cliente)
             try {
                 const { sendOrderNotification, sendCustomerOrderConfirmation } = await import('../services/emailNotifications');
-                
+
                 // Admin (Gina)
                 await sendOrderNotification(fullOrderData);
                 console.log('✅ Email de notificación enviado al admin');
@@ -787,7 +837,7 @@ export default function CheckoutSteps({ isOpen, onClose }) {
             setOrderNumber(currentOrderNumber);
             setOrderComplete(true);
             clearCart();
-            
+
             // Limpiar datos del formulario de localStorage
             localStorage.removeItem('bikitchen-checkout-form');
 
@@ -894,16 +944,14 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                                     </h3>
 
                                     {/* Estado del pedido */}
-                                    <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium mb-4 ${
-                                        formData.metodoPago === 'nmi' && orderComplete 
-                                            ? 'bg-green-100 text-green-700' 
+                                    <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium mb-4 ${formData.metodoPago === 'nmi' && orderComplete
+                                            ? 'bg-green-100 text-green-700'
                                             : 'bg-orange-100 text-orange-700'
-                                    }`}>
-                                        <div className={`w-2 h-2 rounded-full ${
-                                            formData.metodoPago === 'nmi' && orderComplete 
-                                                ? 'bg-green-500' 
+                                        }`}>
+                                        <div className={`w-2 h-2 rounded-full ${formData.metodoPago === 'nmi' && orderComplete
+                                                ? 'bg-green-500'
                                                 : 'bg-orange-500 animate-pulse'
-                                        }`}></div>
+                                            }`}></div>
                                         {formData.metodoPago === 'nmi' && orderComplete ? 'Pago Procesado' : 'Pendiente de pago'}
                                     </div>
 
@@ -1320,7 +1368,7 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                                                                 }`}
                                                         >
                                                             {formData.fechaEntrega === dateObj.value && (
-                                                                <motion.div 
+                                                                <motion.div
                                                                     layoutId="activeDate"
                                                                     className="absolute inset-0 bg-gradient-to-br from-orange-500 to-orange-600"
                                                                 />
@@ -1375,74 +1423,74 @@ export default function CheckoutSteps({ isOpen, onClose }) {
 
                                             <div className="space-y-3">
                                                 {PAYMENT_METHODS
-                                                  .map((method) => (
-                                                    <button
-                                                        key={method.id}
-                                                        type="button"
-                                                        onClick={() => !method.disabled && updateField('metodoPago', method.id)}
-                                                        disabled={method.disabled}
-                                                        className={`w-full p-4 rounded-2xl border-2 text-left transition-all flex items-center gap-4 relative ${method.disabled
-                                                            ? 'border-gray-100 bg-gray-50 cursor-not-allowed opacity-60'
-                                                            : formData.metodoPago === method.id
-                                                                ? method.id === 'nmi'
-                                                                    ? 'border-orange-500 bg-orange-50/50 shadow-lg shadow-orange-100'
-                                                                    : 'border-bikitchen-orange bg-bikitchen-orange/5 shadow-md shadow-orange-50'
-                                                                : 'border-gray-100 hover:border-gray-200 hover:bg-gray-50/50 shadow-sm'
-                                                            }`}
-                                                    >
-                                                        {method.recommended && (
-                                                            <span className="absolute -top-2.5 right-4 bg-gradient-to-r from-green-500 to-green-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm z-10 uppercase tracking-wider">
-                                                                Recomendado
-                                                            </span>
-                                                        )}
-                                                        {method.comingSoon && (
-                                                            <span className="absolute -top-2 right-3 bg-gray-400 text-white text-xs font-bold px-2 py-0.5 rounded-full">
-                                                                Próximamente
-                                                            </span>
-                                                        )}
-                                                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${method.disabled ? 'bg-gray-100 text-gray-400' :
-                                                            method.color === 'green' ? 'bg-green-100 text-green-600' :
-                                                                method.color === 'blue' ? 'bg-blue-100 text-blue-600' :
-                                                                    method.color === 'purple' ? 'bg-purple-100 text-purple-600' :
-                                                                        'bg-gray-100 text-gray-400'
-                                                            }`}>
-                                                            <method.icon size={24} />
-                                                        </div>
-                                                        <div className="flex-1">
-                                                            <div className="flex items-center gap-2">
-                                                                <p className={`font-semibold ${method.disabled ? 'text-gray-400' : 'text-gray-900'}`}>{method.name}</p>
-                                                                {method.id === 'nmi' && (
-                                                                    <div className="flex items-center gap-2 opacity-90 group-hover:opacity-100 transition-all">
-                                                                        <img src="https://cdn.jsdelivr.net/gh/aaronfagan/svg-credit-card-payment-icons@master/flat/visa.svg" alt="Visa" className="h-[14px] w-auto" />
-                                                                        <img src="https://cdn.jsdelivr.net/gh/aaronfagan/svg-credit-card-payment-icons@master/flat/mastercard.svg" alt="MC" className="h-[18px] w-auto" />
-                                                                        <img src="https://cdn.jsdelivr.net/gh/aaronfagan/svg-credit-card-payment-icons@master/flat/amex.svg" alt="Amex" className="h-[16px] w-auto" />
-                                                                    </div>
+                                                    .map((method) => (
+                                                        <button
+                                                            key={method.id}
+                                                            type="button"
+                                                            onClick={() => !method.disabled && updateField('metodoPago', method.id)}
+                                                            disabled={method.disabled}
+                                                            className={`w-full p-4 rounded-2xl border-2 text-left transition-all flex items-center gap-4 relative ${method.disabled
+                                                                ? 'border-gray-100 bg-gray-50 cursor-not-allowed opacity-60'
+                                                                : formData.metodoPago === method.id
+                                                                    ? method.id === 'nmi'
+                                                                        ? 'border-orange-500 bg-orange-50/50 shadow-lg shadow-orange-100'
+                                                                        : 'border-bikitchen-orange bg-bikitchen-orange/5 shadow-md shadow-orange-50'
+                                                                    : 'border-gray-100 hover:border-gray-200 hover:bg-gray-50/50 shadow-sm'
+                                                                }`}
+                                                        >
+                                                            {method.recommended && (
+                                                                <span className="absolute -top-2.5 right-4 bg-gradient-to-r from-green-500 to-green-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm z-10 uppercase tracking-wider">
+                                                                    Recomendado
+                                                                </span>
+                                                            )}
+                                                            {method.comingSoon && (
+                                                                <span className="absolute -top-2 right-3 bg-gray-400 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                                                                    Próximamente
+                                                                </span>
+                                                            )}
+                                                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${method.disabled ? 'bg-gray-100 text-gray-400' :
+                                                                method.color === 'green' ? 'bg-green-100 text-green-600' :
+                                                                    method.color === 'blue' ? 'bg-blue-100 text-blue-600' :
+                                                                        method.color === 'purple' ? 'bg-purple-100 text-purple-600' :
+                                                                            'bg-gray-100 text-gray-400'
+                                                                }`}>
+                                                                <method.icon size={24} />
+                                                            </div>
+                                                            <div className="flex-1">
+                                                                <div className="flex items-center gap-2">
+                                                                    <p className={`font-semibold ${method.disabled ? 'text-gray-400' : 'text-gray-900'}`}>{method.name}</p>
+                                                                    {method.id === 'nmi' && (
+                                                                        <div className="flex items-center gap-2 opacity-90 group-hover:opacity-100 transition-all">
+                                                                            <img src="https://cdn.jsdelivr.net/gh/aaronfagan/svg-credit-card-payment-icons@master/flat/visa.svg" alt="Visa" className="h-[14px] w-auto" />
+                                                                            <img src="https://cdn.jsdelivr.net/gh/aaronfagan/svg-credit-card-payment-icons@master/flat/mastercard.svg" alt="MC" className="h-[18px] w-auto" />
+                                                                            <img src="https://cdn.jsdelivr.net/gh/aaronfagan/svg-credit-card-payment-icons@master/flat/amex.svg" alt="Amex" className="h-[16px] w-auto" />
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                                <p className={`text-sm ${method.disabled ? 'text-gray-400' : 'text-gray-500'}`}>{method.description}</p>
+                                                                {method.id === 'nmi' && formData.metodoPago === 'nmi' && (
+                                                                    <motion.div
+                                                                        initial={{ opacity: 0, y: 5 }}
+                                                                        animate={{ opacity: 1, y: 0 }}
+                                                                        className="flex items-center gap-1.5 mt-1 text-[10px] font-bold text-green-600 uppercase tracking-tight"
+                                                                    >
+                                                                        <LucideLock size={10} strokeWidth={3} />
+                                                                        <span>Pago 100% Seguro</span>
+                                                                    </motion.div>
                                                                 )}
                                                             </div>
-                                                            <p className={`text-sm ${method.disabled ? 'text-gray-400' : 'text-gray-500'}`}>{method.description}</p>
-                                                            {method.id === 'nmi' && formData.metodoPago === 'nmi' && (
-                                                                <motion.div 
-                                                                    initial={{ opacity: 0, y: 5 }} 
-                                                                    animate={{ opacity: 1, y: 0 }}
-                                                                    className="flex items-center gap-1.5 mt-1 text-[10px] font-bold text-green-600 uppercase tracking-tight"
-                                                                >
-                                                                    <LucideLock size={10} strokeWidth={3} />
-                                                                    <span>Pago 100% Seguro</span>
-                                                                </motion.div>
-                                                            )}
-                                                        </div>
-                                                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${method.disabled
-                                                            ? 'border-gray-300'
-                                                            : formData.metodoPago === method.id
-                                                                ? 'border-bikitchen-orange bg-bikitchen-orange'
-                                                                : 'border-gray-300'
-                                                            }`}>
-                                                            {formData.metodoPago === method.id && !method.disabled && (
-                                                                <Check size={12} className="text-white" />
-                                                            )}
-                                                        </div>
-                                                    </button>
-                                                ))}
+                                                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${method.disabled
+                                                                ? 'border-gray-300'
+                                                                : formData.metodoPago === method.id
+                                                                    ? 'border-bikitchen-orange bg-bikitchen-orange'
+                                                                    : 'border-gray-300'
+                                                                }`}>
+                                                                {formData.metodoPago === method.id && !method.disabled && (
+                                                                    <Check size={12} className="text-white" />
+                                                                )}
+                                                            </div>
+                                                        </button>
+                                                    ))}
                                             </div>
 
                                             <div>
@@ -1577,8 +1625,8 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                                                     <div className="mt-2 text-sm">
                                                         <p className="font-medium text-gray-900">Entregas programadas</p>
                                                         <ul className="list-disc pl-5 text-gray-600">
-                                                            {formData.fechasEntrega.map(d => (
-                                                                <li key={d}>{d} • 9:00 AM - 2:00 PM</li>
+                                                            {formData.fechasEntrega.map((d, idx) => (
+                                                                <li key={d || `date-${idx}`}>{d} • 9:00 AM - 2:00 PM</li>
                                                             ))}
                                                         </ul>
                                                     </div>
@@ -1697,53 +1745,50 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                     )}
                 </motion.div>
             </motion.div>
-            {/* BAC (NMI) Payment Modal */}
-            <NMIPaymentModal 
-                isOpen={showNMIModal}
-                onClose={() => setShowNMIModal(false)}
-                total={isZoneOutOfCoverage() ? getTotalPrice() : getTotalWithShipping()}
-                orderId={orderNumber || 'ORD-NEW'}
-                customerInfo={formData}
-                onPaymentSuccess={async (nmiResult) => {
-                    // 1. Obtener el ID del pedido - Intentar varias fuentes para robustez
-                    const orderIdToUpdate = pendingOrderDocId || nmiResult.orderid || nmiResult.order_id;
-                    
-                    console.log('[Checkout] ✅ Pago NMI exitoso. Actualizando Firestore:', { orderIdToUpdate, transactionid: nmiResult.transactionid });
+            {/* BAC (NMI) Payment Modal - Conditionally rendered to ensure fresh state */}
+            {showNMIModal && (
+                <NMIPaymentModal
+                    isOpen={showNMIModal}
+                    onClose={() => setShowNMIModal(false)}
+                    total={isZoneOutOfCoverage() ? getTotalPrice() : getTotalWithShipping()}
+                    orderId={orderNumber}
+                    customerInfo={formData}
+                    onPaymentSuccess={async (nmiResult) => {
+                        // 1. Obtener el ID del pedido
+                        const orderIdToUpdate = pendingOrderDocId || nmiResult.orderid || nmiResult.order_id || orderNumber;
 
-                    // 2. Actualizar el pedido en Firestore a 'confirmed' y 'paid'
-                    try {
-                        if (orderIdToUpdate) {
-                            await updateOrderStatus(orderIdToUpdate, 'confirmed', {
-                                paymentStatus: 'paid',
-                                paymentProvider: 'Tarjeta',
-                                transactionId: nmiResult.transactionid || nmiResult.transaction_id || 'NMI',
-                                isDuplicateDetection: nmiResult.isDuplicate || false,
-                                paidAt: serverTimestamp(),
-                                updatedAt: serverTimestamp(),
-                                nmiDetails: stripUndefined(nmiResult)
-                            });
-                            console.log('[Checkout] Pedido actualizado exitosamente en Firestore');
-                        } else {
-                            console.warn('[Checkout] ⚠️ No se encontró ID de documento para actualizar. Intentando continuar con notificaciones.');
+                        console.log('[Checkout] ✅ Pago NMI exitoso. Iniciando actualización con id:', orderIdToUpdate);
+
+                        // 2. Actualizar el pedido en Firestore a 'confirmed' y 'paid'
+                        try {
+                            if (orderIdToUpdate) {
+                                await updateOrderStatus(orderIdToUpdate, 'confirmed', {
+                                    paymentStatus: 'paid',
+                                    paymentProvider: 'Tarjeta',
+                                    transactionId: nmiResult.transactionid || nmiResult.transaction_id || 'NMI',
+                                    isDuplicateDetection: nmiResult.isDuplicate || false,
+                                    paidAt: serverTimestamp(),
+                                    updatedAt: serverTimestamp(),
+                                    nmiDetails: stripUndefined(nmiResult)
+                                });
+                            }
+                        } catch (error) {
+                            console.error('[Checkout] Error actualizando pedido tras pago NMI:', error);
                         }
-                    } catch (error) {
-                        console.error('[Checkout] Error actualizando pedido tras pago NMI:', error);
-                    }
 
-                    // 3. Finalizar orden CENTRALIZADAMENTE (Envía Emails, suma Puntos, limpia Carrito)
-                    // Importante: handleOrderCompletion YA hace clearCart() y setOrderComplete(true)
-                    await handleOrderCompletion({
-                        orderNumber: orderNumber,
-                        docId: orderIdToUpdate,
-                        metodoPago: 'nmi'
-                    });
+                        // 3. Finalizar orden CENTRALIZADAMENTE
+                        await handleOrderCompletion({
+                            orderNumber: orderNumber,
+                            docId: orderIdToUpdate,
+                            metodoPago: 'nmi'
+                        });
 
-                    // 4. Cerrar el modal de NMI
-                    setShowNMIModal(false);
-                    
-                    console.log('[Checkout] Flujo de pago NMI con notificaciones completado ✅');
-                }}
-            />
+                        // 4. Cerrar el modal y Limpiar estado de orden pendiente
+                        setShowNMIModal(false);
+                        setPendingOrderDocId(null);
+                    }}
+                />
+            )}
         </AnimatePresence>
     );
 }

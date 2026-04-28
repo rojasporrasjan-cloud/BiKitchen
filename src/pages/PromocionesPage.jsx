@@ -3,7 +3,7 @@ import { usePromoBanner } from '../hooks/usePromoBanner';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import PageTransition from '../components/PageTransition';
-import { Gift, Calendar, Truck, Check, Clock, Users, Heart, Sparkles, ChevronRight, RefreshCw, ShoppingCart, X, Filter, Camera } from 'lucide-react';
+import { Gift, Calendar, Truck, Check, Clock, Users, Heart, Sparkles, ChevronRight, RefreshCw, ShoppingCart, X, Filter, Camera, Utensils, Star, MessageCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getActivePromotions } from '../utils/firestorePromotions';
 import { useCart } from '../context/CartContext';
@@ -20,10 +20,18 @@ import PromoMenuModal from '../components/menus/PromoMenuModal';
 import { PACK_TO_MENU_KEY } from '../data/packsData';
 import useIsMobile from '../hooks/useIsMobile';
 
-// Categorías de filtro - ELIMINADAS por solicitud del usuario
+// Formateador de moneda local
+const formatPrice = (price) => {
+    return new Intl.NumberFormat('es-CR', {
+        style: 'currency',
+        currency: 'CRC',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0
+    }).format(price).replace('CRC', '₡');
+};
 
-// Helper: optimizar a WebP con resize
-const optimizeToWebp = (file, maxSize = 1280) => new Promise((resolve, reject) => {
+// Utilidad para optimización de imágenes (WebP)
+const optimizeToWebp = (file, maxSize = 1200) => new Promise((resolve, reject) => {
     try {
         const imgEl = new Image();
         const reader = new FileReader();
@@ -52,8 +60,6 @@ const optimizeToWebp = (file, maxSize = 1280) => new Promise((resolve, reject) =
 
 // IMPORTANTE: NO usar datos hardcodeados - SIEMPRE cargar desde Firebase
 // Si Firebase falla, mostrar mensaje de error en lugar de datos antiguos
-
-const formatPrice = (price) => `₡${price.toLocaleString('es-CR')}`;
 
 const PromoCard = ({ promo, onClick, onAddToCart, customImage, onUploadImage, isAdmin }) => {
     const [addedToCart, setAddedToCart] = useState(false);
@@ -107,15 +113,18 @@ const PromoCard = ({ promo, onClick, onAddToCart, customImage, onUploadImage, is
             />
 
             {/* Card container */}
-            <div className="relative bg-white rounded-3xl overflow-hidden h-full flex flex-col">
-                {/* Animated border */}
+            <div className="relative bg-white rounded-[2.5rem] overflow-hidden h-full flex flex-col border border-slate-100 shadow-xl shadow-slate-200/50 transition-all duration-500 group-hover:border-orange-500/30 group-hover:shadow-2xl">
+                {/* Border accent delicate */}
+                <div className="absolute inset-0 rounded-[2.5rem] p-[1.5px] bg-gradient-to-br from-orange-500/10 to-transparent pointer-events-none" />
+
+                {/* Hover animated border luxury */}
                 <motion.div
-                    className="absolute inset-0 rounded-3xl p-[3px] bg-gradient-to-br from-orange-400 via-amber-400 to-orange-500"
+                    className="absolute inset-0 rounded-[2.5rem] p-[2px] bg-gradient-to-br from-orange-400 via-amber-200 to-orange-600"
                     initial={{ opacity: 0 }}
                     whileHover={{ opacity: 1 }}
-                    transition={{ duration: 0.4 }}
+                    transition={{ duration: 0.6 }}
                 >
-                    <div className="absolute inset-[3px] rounded-3xl bg-white" />
+                    <div className="absolute inset-[2px] rounded-[2.5rem] bg-white/40 backdrop-blur-xl" />
                 </motion.div>
 
                 {/* Content */}
@@ -190,7 +199,7 @@ const PromoCard = ({ promo, onClick, onAddToCart, customImage, onUploadImage, is
 
                         {/* Overlay gradient */}
                         <motion.div
-                            className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent pointer-events-none"
+                            className="absolute inset-0 bg-gradient-to-t from-white/40 via-transparent to-transparent pointer-events-none"
                             initial={{ opacity: 0 }}
                             whileHover={{ opacity: 1 }}
                             transition={{ duration: 0.4 }}
@@ -198,28 +207,29 @@ const PromoCard = ({ promo, onClick, onAddToCart, customImage, onUploadImage, is
                     </div>
 
                     {/* Contenido */}
-                    <div className="p-7 flex flex-col flex-1">
-                        <h3 className="text-2xl font-black text-gray-900 mb-3 leading-tight">
+                    <div className="p-7 flex flex-col flex-1 bg-white">
+                        <h3 className="text-2xl font-black text-slate-900 mb-3 leading-tight">
                             {promo.titulo}
                         </h3>
-                        <p className="text-gray-500 text-sm mb-5 line-clamp-2 leading-relaxed">
+                        <p className="text-slate-500 text-sm mb-5 line-clamp-2 leading-relaxed font-medium">
                             {promo.descripcion}
                         </p>
 
+
                         {/* Fecha de vigencia */}
                         {promo.fechaFin && (
-                            <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-xl text-xs text-gray-600 mb-5 font-semibold">
-                                <Clock size={16} />
+                            <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-xs text-slate-400 mb-5 font-bold">
+                                <Clock size={16} className="text-orange-500" />
                                 <span>Válido hasta {new Date(promo.fechaFin).toLocaleDateString('es-CR', { day: 'numeric', month: 'long' })}</span>
                             </div>
-                                 )}
+                        )}
 
                         {/* Beneficios preview */}
                         {promo.detalles?.beneficios && (
                             <div className="space-y-1 mb-4">
                                 {promo.detalles.beneficios.slice(0, 2).map((beneficio, idx) => (
-                                    <div key={idx} className="flex items-center gap-2 text-xs text-gray-600">
-                                        <Check size={12} className="text-bikitchen-orange flex-shrink-0" />
+                                    <div key={idx} className="flex items-center gap-2 text-xs text-slate-400 font-medium">
+                                        <Check size={12} className="text-orange-500 flex-shrink-0" />
                                         <span>{beneficio}</span>
                                     </div>
                                 ))}
@@ -233,16 +243,16 @@ const PromoCard = ({ promo, onClick, onAddToCart, customImage, onUploadImage, is
                                     e.stopPropagation();
                                     onClick(promo);
                                 }}
-                                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-3 px-4 rounded-xl transition-all duration-300 flex items-center justify-center gap-2"
+                                className="flex-1 bg-slate-50 hover:bg-slate-100 text-slate-600 font-bold py-3 px-4 rounded-xl transition-all duration-300 flex items-center justify-center gap-2 border border-slate-100"
                             >
                                 <Filter size={18} />
                                 Detalles
                             </button>
                             <button
                                 onClick={handleAddToCartClick}
-                                className={`flex-[1.5] font-bold py-3 px-4 rounded-xl transition-all duration-300 flex items-center justify-center gap-2 group-hover:scale-[1.02] shadow-sm ${addedToCart
+                                className={`flex-[1.5] font-black py-3 px-4 rounded-xl transition-all duration-300 flex items-center justify-center gap-2 group-hover:scale-[1.02] shadow-xl ${addedToCart
                                     ? 'bg-green-500 text-white'
-                                    : 'bg-gradient-to-r from-bikitchen-orange to-orange-500 text-white hover:shadow-lg'
+                                    : 'bg-orange-600 text-white hover:bg-orange-500 shadow-orange-500/20 hover:scale-[1.02]'
                                     }`}
                             >
                                 {addedToCart ? (
@@ -254,7 +264,7 @@ const PromoCard = ({ promo, onClick, onAddToCart, customImage, onUploadImage, is
                                     <>
                                         {promo.detalles?.packs && promo.detalles.packs.length > 0 ? (
                                             <>
-                                                Ver opciones
+                                                Opciones
                                                 <ChevronRight size={18} />
                                             </>
                                         ) : (
@@ -274,7 +284,7 @@ const PromoCard = ({ promo, onClick, onAddToCart, customImage, onUploadImage, is
     );
 };
 
-// Modal de detalle de promoción
+// Modal de detalle
 function PromoDetail({ promo, onClose, addToCart, onPackClick }) {
     const { getWhatsAppUrl } = useWhatsApp();
     const [selectedPack, setSelectedPack] = useState(null);
@@ -302,7 +312,7 @@ function PromoDetail({ promo, onClose, addToCart, onPackClick }) {
         const es50DescuentoEnvio = promo.titulo && promo.titulo.includes('50%') && promo.titulo.includes('descuento');
         const esTwoPack = promo.titulo && promo.titulo.includes('Two Pack');
 
-        const cartItemId = esTwoPack 
+        const cartItemId = esTwoPack
             ? `promo-${promo.id}-two_pack${selectedPack ? `-${selectedPack.nombre}` : ''}`
             : `promo-${promo.id}${selectedPack ? `-${selectedPack.nombre}` : ''}`;
 
@@ -320,15 +330,10 @@ function PromoDetail({ promo, onClose, addToCart, onPackClick }) {
             planLabel: esDesayunosGratis ? 'Promo Desayunos Gratis' : (esTwoPack ? 'Two Pack' : (es50DescuentoEnvio ? 'Promo 50% Envío' : 'Promoción Mensual'))
         };
 
-        console.log('[PromoDetail] Agregando al carrito:', cartItem);
-        console.log('[PromoDetail] onAddToCart existe?', typeof addToCart);
-
         if (addToCart && typeof addToCart === 'function') {
             addToCart(cartItem);
             setAddedToCart(true);
             setTimeout(() => setAddedToCart(false), 2000);
-        } else {
-            console.error('[PromoDetail] addToCart no es una función válida');
         }
     };
 
@@ -338,9 +343,9 @@ function PromoDetail({ promo, onClose, addToCart, onPackClick }) {
 
     return (
         <Dialog open={true} onOpenChange={(open) => { if (!open) onClose(); }}>
-            <DialogContent className="max-w-3xl p-0 max-h-[90vh]">
+            <DialogContent className="max-w-3xl lg:max-w-4xl p-0 max-h-[90vh] !bg-white !border-slate-100 !text-slate-900 overflow-hidden shadow-2xl">
                 <motion.div
-                    className="flex flex-col max-h-[90vh] overflow-y-auto"
+                    className="flex flex-col max-h-[90vh] overflow-y-auto bg-white custom-scrollbar"
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
@@ -348,7 +353,7 @@ function PromoDetail({ promo, onClose, addToCart, onPackClick }) {
                     <div className="flex flex-col">
                         {/* Header con imagen */}
                         <motion.div
-                            className="relative h-64 md:h-72 overflow-hidden flex-shrink-0"
+                            className="relative h-64 md:h-72 overflow-hidden flex-shrink-0 bg-slate-50"
                             initial={{ y: -20, opacity: 0 }}
                             animate={{ y: 0, opacity: 1 }}
                             transition={{ delay: 0.1, duration: 0.4 }}
@@ -360,62 +365,61 @@ function PromoDetail({ promo, onClose, addToCart, onPackClick }) {
                                 initial={{ scale: 1.1 }}
                                 animate={{ scale: 1 }}
                                 transition={{ duration: 0.6 }}
-                                onError={(e) => {
-                                    e.target.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80';
-                                }}
                             />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent"></div>
 
-                            {/* Título sobre imagen */}
-                            <motion.div
-                                className="absolute bottom-0 left-0 right-0 p-6 md:p-8"
-                                initial={{ y: 20, opacity: 0 }}
-                                animate={{ y: 0, opacity: 1 }}
-                                transition={{ delay: 0.2, duration: 0.4 }}
-                            >
-                                <div className="flex flex-wrap items-center gap-2 mb-3">
-                                    <motion.span
-                                        className="bg-gradient-to-r from-orange-500 to-amber-500 text-white px-4 py-2 rounded-full text-sm font-black flex items-center gap-2 shadow-xl"
-                                        whileHover={{ scale: 1.05 }}
-                                    >
-                                        <Gift size={16} />
-                                        Promoción activa
-                                    </motion.span>
-                                    {promo.fechaFin && (
-                                        <span className="bg-white/20 backdrop-blur-md text-white px-4 py-2 rounded-full text-sm font-semibold border border-white/30">
-                                            Hasta {new Date(promo.fechaFin).toLocaleDateString('es-CR', { day: 'numeric', month: 'long' })}
-                                        </span>
-                                    )}
-                                </div>
-                                <h2 className="text-2xl md:text-3xl font-black text-white drop-shadow-lg">{promo.titulo}</h2>
-                                {promo.precio && promo.precio > 0 && (
-                                    <div className="mt-3 inline-flex items-center gap-2 bg-white/20 backdrop-blur-md text-white px-4 py-2 rounded-full border border-white/30">
-                                        <span className="text-2xl font-black">₡{promo.precio.toLocaleString('es-CR')}</span>
-                                    </div>
-                                )}
-                            </motion.div>
 
                             {/* Botón cerrar */}
                             <motion.button
                                 onClick={onClose}
-                                className="absolute top-4 right-4 w-12 h-12 bg-white/20 backdrop-blur-md hover:bg-white/30 rounded-full flex items-center justify-center text-white transition-all shadow-lg"
-                                whileHover={{ scale: 1.1, backgroundColor: "rgba(255, 255, 255, 0.4)" }}
+                                className="absolute top-4 right-4 z-50 w-12 h-12 bg-white/80 backdrop-blur-md hover:bg-white rounded-full flex items-center justify-center text-slate-900 transition-all shadow-xl border border-slate-100"
+                                whileHover={{ scale: 1.1 }}
                                 whileTap={{ scale: 0.9 }}
                             >
                                 <X size={22} />
                             </motion.button>
                         </motion.div>
 
+
                         {/* Contenido */}
                         <motion.div
-                            className="p-6 md:p-8 bg-gradient-to-b from-white to-gray-50"
+                            className="p-6 md:p-10 bg-white flex-1"
                             initial={{ y: 20, opacity: 0 }}
                             animate={{ y: 0, opacity: 1 }}
                             transition={{ delay: 0.3, duration: 0.4 }}
                         >
-                            <p className="text-gray-600 text-base leading-relaxed mb-6">
-                                {promo.descripcion}
+                            <div className="mb-6">
+                                <div className="flex flex-wrap items-center gap-2 mb-4">
+                                    <motion.span
+                                        className="bg-orange-600 text-white px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 shadow-xl shadow-orange-500/20"
+                                        whileHover={{ scale: 1.05 }}
+                                    >
+                                        <Gift size={14} />Oferta Activa
+                                    </motion.span>
+                                    {promo.fechaFin && (
+                                        <span className="bg-slate-50 text-slate-900 px-4 py-1.5 rounded-full text-[11px] font-bold border border-slate-100">
+                                            Hasta {new Date(promo.fechaFin).toLocaleDateString('es-CR', { day: 'numeric', month: 'long' })}
+                                        </span>
+                                    )}
+                                </div>
+                                <h2 className="text-xl md:text-3xl font-black text-slate-900 tracking-tighter leading-tight mb-4">
+                                    {(promo.titulo || '').toString().replace(/^o\s+/i, '').trim()}
+                                </h2>
+                                {promo.precio && promo.precio > 0 && (
+                                    <div className="inline-flex items-center gap-3 bg-slate-50 border border-slate-100 text-slate-900 px-4 py-2 rounded-xl">
+                                        <span className="text-[9px] font-black text-orange-500 uppercase tracking-widest">Precio Especial</span>
+                                        <span className="text-xl font-black tracking-tighter">{formatPrice(promo.precio)}</span>
+                                    </div>
+                                )}
+                            </div>
+                            <p className="text-slate-500 text-base leading-relaxed mb-8 font-medium border-l-2 border-orange-500 pl-4 py-1">
+                                {(promo.descripcion || '').toString().replace(/^o\s+/i, '').trim()}
                             </p>
+
+
+
+
+
+
 
                             {/* Pestañas para Desayunos Gratis - NUEVO */}
                             {esDesayunosGratis && (
@@ -425,12 +429,12 @@ function PromoDetail({ promo, onClose, addToCart, onPackClick }) {
                                     animate={{ y: 0, opacity: 1 }}
                                     transition={{ delay: 0.35, duration: 0.4 }}
                                 >
-                                    <div className="flex gap-3 bg-gray-100 p-2 rounded-2xl">
+                                    <div className="flex items-center bg-slate-100 rounded-2xl p-1 border border-slate-200">
                                         <button
                                             onClick={() => setActiveTab('pack')}
                                             className={`flex-1 py-3 px-6 rounded-xl font-black transition-all duration-300 ${activeTab === 'pack'
-                                                ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg'
-                                                : 'bg-transparent text-gray-600 hover:bg-white'
+                                                ? 'bg-white text-slate-900 shadow-md'
+                                                : 'bg-transparent text-slate-400 hover:text-slate-600'
                                                 }`}
                                         >
                                             🍽️ Pack Mensual
@@ -438,8 +442,8 @@ function PromoDetail({ promo, onClose, addToCart, onPackClick }) {
                                         <button
                                             onClick={() => setActiveTab('desayuno')}
                                             className={`flex-1 py-3 px-6 rounded-xl font-black transition-all duration-300 ${activeTab === 'desayuno'
-                                                ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg'
-                                                : 'bg-transparent text-gray-600 hover:bg-white'
+                                                ? 'bg-white text-slate-900 shadow-md'
+                                                : 'bg-transparent text-slate-400 hover:text-slate-600'
                                                 }`}
                                         >
                                             ☕ Desayuno Gratis
@@ -448,43 +452,44 @@ function PromoDetail({ promo, onClose, addToCart, onPackClick }) {
                                 </motion.div>
                             )}
 
-                            {/* Composición del Plato - NUEVO */}
+                            {/* Composición del Plato - PREMIUM REDESIGN */}
                             {promo.composicionPlato && (
                                 <motion.div
-                                    className="mb-6 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-5 border-2 border-blue-200"
+                                    className="mb-8 relative"
                                     initial={{ y: 20, opacity: 0 }}
                                     animate={{ y: 0, opacity: 1 }}
                                     transition={{ delay: 0.35, duration: 0.4 }}
                                 >
-                                    <h3 className="text-lg font-black text-gray-900 mb-4 flex items-center gap-2">
-                                        <span className="text-2xl">🍽️</span> Composición del Plato
-                                    </h3>
-                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                                        {promo.composicionPlato.proteinas > 0 && (
-                                            <div className="bg-white rounded-xl p-3 text-center border border-blue-100">
-                                                <div className="text-2xl mb-1">🥩</div>
-                                                <div className="text-2xl font-black text-blue-600">{promo.composicionPlato.proteinas}g</div>
-                                                <div className="text-xs text-gray-600 font-medium">Proteína</div>
+                                    <div className="flex items-center justify-between mb-6">
+                                        <h3 className="text-xl font-black text-slate-900 flex items-center gap-3">
+                                            <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center text-orange-600">
+                                                <Utensils size={20} />
                                             </div>
-                                        )}
-                                        {promo.composicionPlato.vegetales > 0 && (
-                                            <div className="bg-white rounded-xl p-3 text-center border border-blue-100">
-                                                <div className="text-2xl mb-1">🥗</div>
-                                                <div className="text-2xl font-black text-green-600">{promo.composicionPlato.vegetales}</div>
-                                                <div className="text-xs text-gray-600 font-medium">
-                                                    Vegetales {promo.composicionPlato.vegetalesCocidos ? '(cocidos)' : ''}
+                                            Tu Plato BiKitchen
+                                        </h3>
+                                        <span className="text-[10px] font-bold text-slate-300 tracking-[0.2em] uppercase">Porción Diaria</span>
+                                    </div>
+
+                                    <div className="grid grid-cols-3 gap-4">
+                                        {[
+                                            { label: 'Proteína', value: `${promo.composicionPlato.proteinas}g`, icon: '🥩', color: 'orange', active: promo.composicionPlato.proteinas > 0 },
+                                            { label: 'Vegetales', value: promo.composicionPlato.vegetales, icon: '🥗', color: 'emerald', active: promo.composicionPlato.vegetales > 0 },
+                                            { label: 'Carbos', value: promo.composicionPlato.carbohidrato === 0 ? 'Sin' : promo.composicionPlato.carbohidrato, icon: promo.composicionPlato.carbohidrato === 0 ? '🚫' : '🍚', color: 'amber', active: promo.composicionPlato.carbohidrato !== undefined }
+                                        ].filter(item => item.active).map((item, idx) => (
+                                            <motion.div
+                                                key={idx}
+                                                className="relative group h-full"
+                                                whileHover={{ y: -4 }}
+                                            >
+                                                <div className="relative bg-slate-50 border border-slate-100 rounded-2xl p-4 flex flex-col items-center justify-center h-full transition-all duration-300 group-hover:border-orange-200 group-hover:bg-white shadow-sm">
+                                                    <div className="text-2xl mb-3 flex items-center justify-center w-12 h-12 rounded-full bg-white border border-slate-100 shadow-sm">
+                                                        {item.icon}
+                                                    </div>
+                                                    <div className={`text-xl font-black text-slate-900 mb-0.5`}>{item.value}</div>
+                                                    <div className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">{item.label}</div>
                                                 </div>
-                                            </div>
-                                        )}
-                                        {promo.composicionPlato.carbohidrato !== undefined && (
-                                            <div className="bg-white rounded-xl p-3 text-center border border-blue-100">
-                                                <div className="text-2xl mb-1">{promo.composicionPlato.carbohidrato === 0 ? '🚫' : '🍚'}</div>
-                                                <div className="text-2xl font-black text-amber-600">
-                                                    {promo.composicionPlato.carbohidrato === 0 ? 'Sin' : promo.composicionPlato.carbohidrato}
-                                                </div>
-                                                <div className="text-xs text-gray-600 font-medium">Carbohidratos</div>
-                                            </div>
-                                        )}
+                                            </motion.div>
+                                        ))}
                                     </div>
                                 </motion.div>
                             )}
@@ -492,22 +497,19 @@ function PromoDetail({ promo, onClose, addToCart, onPackClick }) {
                             {/* Contenido de la pestaña DESAYUNO */}
                             {esDesayunosGratis && activeTab === 'desayuno' && (
                                 <motion.div
-                                    className="mb-6 bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl p-6 border-2 border-amber-200"
+                                    className="mb-8 bg-slate-50 rounded-3xl p-6 border border-slate-100"
                                     initial={{ y: 20, opacity: 0 }}
                                     animate={{ y: 0, opacity: 1 }}
                                     transition={{ delay: 0.4, duration: 0.4 }}
                                 >
-                                    <h3 className="text-2xl font-black text-gray-900 mb-4 flex items-center gap-3">
+                                    <h3 className="text-2xl font-black text-slate-900 mb-4 flex items-center gap-3">
                                         <span className="text-3xl">☕</span> Desayuno Gratis Incluido
                                     </h3>
-                                    <p className="text-gray-700 text-lg leading-relaxed mb-4">
-                                        Con tu pack mensual, recibís <strong className="text-orange-600">5 desayunos gratis</strong> cada semana.
-                                    </p>
                                     <div className="bg-white rounded-xl p-5 border border-amber-200">
-                                        <h4 className="font-black text-gray-900 mb-3 flex items-center gap-2">
+                                        <h4 className="font-black text-slate-900 mb-3 flex items-center gap-2">
                                             <span className="text-xl">🍳</span> Menú de Desayunos
                                         </h4>
-                                        <ul className="space-y-2 text-gray-700">
+                                        <ul className="space-y-2 text-slate-600 font-medium">
                                             <li className="flex items-start gap-2">
                                                 <span className="text-orange-500 font-black">•</span>
                                                 <span>Gallo pinto con huevos revueltos y queso fresco</span>
@@ -530,276 +532,287 @@ function PromoDetail({ promo, onClose, addToCart, onPackClick }) {
                                             </li>
                                         </ul>
                                     </div>
-                                    <p className="text-sm text-gray-600 mt-4 font-medium">
-                                        💡 Los desayunos varían cada semana para que disfrutes variedad
-                                    </p>
                                 </motion.div>
                             )}
 
                             {/* Contenido de la pestaña PACK - Solo mostrar si NO es desayunos gratis O si la pestaña activa es 'pack' */}
                             {(!esDesayunosGratis || activeTab === 'pack') && (
                                 <>
-                                    {/* Packs Incluidos - NUEVO - Clickeables para ver menú */}
+                                    {/* Packs Incluidos - PREMIUM CHIPS */}
                                     {promo.packsRelacionados && promo.packsRelacionados.length > 0 && (
                                         <motion.div
-                                            className="mb-6 bg-gradient-to-br from-orange-50 to-amber-50 rounded-2xl p-5 border-2 border-orange-200"
+                                            className="mb-8 relative rounded-[2rem] overflow-hidden group"
                                             initial={{ y: 20, opacity: 0 }}
                                             animate={{ y: 0, opacity: 1 }}
                                             transition={{ delay: 0.4, duration: 0.4 }}
                                         >
-                                            <h3 className="text-lg font-black text-gray-900 mb-4 flex items-center gap-2">
-                                                <span className="text-2xl">📦</span> Packs Incluidos en esta Promoción
-                                            </h3>
-                                            <div className="flex flex-wrap gap-2">
-                                                {promo.packsRelacionados.map((pack, idx) => (
-                                                    <motion.button
-                                                        key={idx}
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            if (onPackClick) {
-                                                                // Buscar el precio específico del pack en el array de precios mejorado
-                                                                let promoPrice = 0;
-                                                                const normalizedPack = pack.toLowerCase();
-                                                                if (promo.precios && Array.isArray(promo.precios)) {
-                                                                    const packPrice = promo.precios.find(p =>
-                                                                        p.nombre.toLowerCase() === normalizedPack ||
-                                                                        p.nombre.toLowerCase().includes(normalizedPack) ||
-                                                                        normalizedPack.includes(p.nombre.toLowerCase())
-                                                                    );
-                                                                    promoPrice = packPrice?.precio || 0;
-                                                                } else if (promo.detalles?.packs) {
-                                                                    const packDetail = promo.detalles.packs.find(p =>
-                                                                        p.nombre.toLowerCase() === normalizedPack ||
-                                                                        p.nombre.toLowerCase().includes(normalizedPack) ||
-                                                                        normalizedPack.includes(p.nombre.toLowerCase())
-                                                                    );
-                                                                    promoPrice = packDetail?.precio || 0;
-                                                                } else {
-                                                                    promoPrice = promo.precio || 0;
+                                            <div className="relative bg-slate-50 rounded-[2rem] p-7 border border-slate-100 group-hover:border-orange-200 transition-all duration-500 shadow-sm">
+                                                <div className="flex items-center justify-between mb-6">
+                                                    <h3 className="text-lg font-black text-slate-900 flex items-center gap-3">
+                                                        <div className="w-9 h-9 rounded-xl bg-orange-500 flex items-center justify-center text-white shadow-lg">
+                                                            <Star size={18} className="fill-current" />
+                                                        </div>
+                                                        Packs Disponibles
+                                                    </h3>
+                                                    <span className="text-[9px] font-black text-orange-500/50 uppercase tracking-[0.2em]">Especiales</span>
+                                                </div>
+
+                                                <div className="flex flex-wrap gap-2.5">
+                                                    {promo.packsRelacionados.map((pack, idx) => (
+                                                        <motion.button
+                                                            key={idx}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                if (onPackClick) {
+                                                                    let promoPrice = 0;
+                                                                    const normalizedPack = pack.toLowerCase();
+                                                                    if (promo.precios && Array.isArray(promo.precios)) {
+                                                                        const packPrice = promo.precios.find(p => p.nombre.toLowerCase() === normalizedPack || p.nombre.toLowerCase().includes(normalizedPack));
+                                                                        promoPrice = packPrice?.precio || 0;
+                                                                    } else if (promo.detalles?.packs) {
+                                                                        const packDetail = promo.detalles.packs.find(p => p.nombre.toLowerCase() === normalizedPack || p.nombre.toLowerCase().includes(normalizedPack));
+                                                                        promoPrice = packDetail?.precio || 0;
+                                                                    } else { promoPrice = promo.precio || 0; }
+                                                                    onPackClick(pack, promoPrice, promo.imagen || '', promo);
                                                                 }
-                                                                const promoImage = promo.imagen || '';
-                                                                onPackClick(pack, promoPrice, promoImage, promo);
-                                                            }
-                                                        }}
-                                                        className="bg-white px-4 py-2 rounded-xl border-2 border-orange-300 shadow-sm hover:shadow-lg hover:scale-105 hover:border-orange-500 hover:bg-orange-50 transition-all duration-200 cursor-pointer"
-                                                        initial={{ scale: 0.9, opacity: 0 }}
-                                                        animate={{ scale: 1, opacity: 1 }}
-                                                        transition={{ delay: 0.4 + (idx * 0.05) }}
-                                                        whileHover={{ y: -2 }}
-                                                        whileTap={{ scale: 0.95 }}
-                                                    >
-                                                        <span className="text-sm font-bold text-gray-800">{pack}</span>
-                                                    </motion.button>
-                                                ))}
+                                                            }}
+                                                            className="px-5 py-2.5 rounded-full bg-white border border-slate-200 text-slate-700 text-xs font-bold hover:bg-orange-500 hover:text-white hover:border-orange-400 hover:shadow-lg transition-all duration-300"
+                                                            whileHover={{ scale: 1.05, y: -2 }}
+                                                            whileTap={{ scale: 0.95 }}
+                                                        >
+                                                            {pack}
+                                                        </motion.button>
+                                                    ))}
+                                                </div>
                                             </div>
-                                            <p className="text-xs text-gray-600 mt-3 font-medium">
-                                                💡 Haz clic en cualquier pack para ver su menú detallado
-                                            </p>
                                         </motion.div>
                                     )}
 
-                                    {/* Precios de packs si existen - Seleccionables */}
+                                    {/* Precios de packs - PREMIUM SELECTION GRID */}
                                     {promo.detalles?.packs && promo.detalles.packs.length > 0 && (
                                         <motion.div
-                                            className="mb-6"
+                                            className="mb-10"
                                             initial={{ y: 20, opacity: 0 }}
                                             animate={{ y: 0, opacity: 1 }}
-                                            transition={{ delay: 0.4, duration: 0.4 }}
+                                            transition={{ delay: 0.45, duration: 0.4 }}
                                         >
-                                            <h3 className="text-2xl font-black text-gray-900 mb-6 flex items-center gap-3">
-                                                <span className="text-3xl">💰</span> Selecciona tu pack
-                                            </h3>
-                                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                            <div className="flex items-center gap-3 mb-6">
+                                                <div className="w-1.5 h-6 bg-orange-500 rounded-full" />
+                                                <h3 className="text-xl font-black text-slate-900">Selecciona tu Pack</h3>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
                                                 {promo.detalles.packs.map((pack, idx) => (
                                                     <motion.button
                                                         key={idx}
                                                         onClick={() => setSelectedPack(pack)}
-                                                        className={`rounded-2xl p-5 text-center transition-all border-2 ${selectedPack?.nombre === pack.nombre
-                                                            ? 'border-orange-500 bg-gradient-to-br from-orange-50 to-amber-50 shadow-xl ring-2 ring-orange-500 ring-offset-2'
-                                                            : 'border-gray-200 bg-white hover:border-orange-400 hover:shadow-lg'
+                                                        className={`relative group rounded-[2rem] p-6 text-center transition-all duration-500 border overflow-hidden ${selectedPack?.nombre === pack.nombre
+                                                            ? 'border-orange-500 bg-orange-50 shadow-md'
+                                                            : 'border-slate-100 bg-slate-50 hover:border-slate-200'
                                                             }`}
-                                                        whileHover={{ scale: 1.05, y: -4 }}
-                                                        whileTap={{ scale: 0.95 }}
+                                                        whileHover={{ y: -6 }}
+                                                        whileTap={{ scale: 0.98 }}
                                                     >
-                                                        <span className="block text-base font-black text-gray-900 mb-3">{pack.nombre}</span>
-                                                        {pack.precioRegular ? (
-                                                            <div className="flex flex-col items-center">
-                                                                <span className="text-sm text-gray-400 line-through mb-2 font-medium">
+                                                        <span className={`text-[10px] uppercase tracking-[0.25em] font-black mb-3 transition-colors ${selectedPack?.nombre === pack.nombre ? 'text-orange-600' : 'text-slate-500'}`}>
+                                                            {pack.nombre}
+                                                        </span>
+
+                                                        <div className="flex flex-col items-center">
+                                                            {pack.precioRegular > pack.precio && (
+                                                                <span className="text-xs text-slate-400 line-through mb-1 font-bold">
                                                                     {formatPrice(pack.precioRegular)}
                                                                 </span>
-                                                                <span className="block font-black text-green-600 text-2xl">
-                                                                    {formatPrice(pack.precio)}
-                                                                </span>
-                                                            </div>
-                                                        ) : (
-                                                            <span className="block font-black bg-gradient-to-r from-orange-600 to-amber-600 bg-clip-text text-transparent text-2xl">
-                                                                {formatPrice(pack.precio)}
+                                                            )}
+                                                            <span className="text-2xl font-black text-slate-900 tracking-tighter">
+                                                                {formatPrice(pack.precio || 0)}
                                                             </span>
-                                                        )}
+                                                        </div>
+
+
+                                                        {/* Selection indicator */}
+                                                        <div className={`absolute top-4 right-4 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all duration-300 ${selectedPack?.nombre === pack.nombre ? 'bg-orange-500 border-orange-500 scale-110' : 'border-slate-200'}`}>
+                                                            {selectedPack?.nombre === pack.nombre && <Check size={12} className="text-white font-black" />}
+                                                        </div>
                                                     </motion.button>
                                                 ))}
                                             </div>
                                         </motion.div>
                                     )}
 
-                                    {/* Selector de Cantidad */}
+                                    {/* Selector de Cantidad - REFINED 3-COLUMN GRID */}
                                     {selectedPack && (
                                         <motion.div
-                                            className="mb-8 flex items-center gap-6 bg-gradient-to-r from-orange-50 to-amber-50 p-6 rounded-3xl border-2 border-orange-200 shadow-lg"
+                                            className="mb-12 bg-slate-50 p-6 md:p-8 rounded-[2.5rem] border border-slate-100 relative shadow-sm"
                                             initial={{ scale: 0.95, opacity: 0 }}
                                             animate={{ scale: 1, opacity: 1 }}
-                                            transition={{ duration: 0.3 }}
+                                            transition={{ duration: 0.4 }}
                                         >
-                                            <span className="text-lg font-black text-gray-900">Cantidad:</span>
-                                            <div className="flex items-center gap-4">
-                                                <motion.button
-                                                    onClick={() => updateQuantity(-1)}
-                                                    className="w-12 h-12 rounded-2xl bg-white shadow-lg flex items-center justify-center text-orange-600 font-black text-xl border-2 border-orange-200"
-                                                    whileHover={{ scale: 1.15, backgroundColor: "rgb(249, 115, 22)", color: "white", borderColor: "rgb(249, 115, 22)" }}
-                                                    whileTap={{ scale: 0.9 }}
-                                                >
-                                                    -
-                                                </motion.button>
-                                                <span className="font-black text-3xl w-12 text-center text-orange-600">{quantity}</span>
-                                                <motion.button
-                                                    onClick={() => updateQuantity(1)}
-                                                    className="w-12 h-12 rounded-2xl bg-white shadow-lg flex items-center justify-center text-orange-600 font-black text-xl border-2 border-orange-200"
-                                                    whileHover={{ scale: 1.15, backgroundColor: "rgb(249, 115, 22)", color: "white", borderColor: "rgb(249, 115, 22)" }}
-                                                    whileTap={{ scale: 0.9 }}
-                                                >
-                                                    +
-                                                </motion.button>
-                                            </div>
-                                            <div className="ml-auto text-right">
-                                                <span className="text-sm text-gray-600 block font-bold uppercase tracking-wide mb-1">Total</span>
-                                                <span className="font-black text-3xl bg-gradient-to-r from-orange-600 to-amber-600 bg-clip-text text-transparent">
-                                                    {formatPrice(selectedPack.precio * quantity)}
-                                                </span>
+                                            <div className="grid grid-cols-1 md:grid-cols-3 items-center gap-8 px-2 md:px-6">
+                                                {/* Col 1: Label */}
+                                                <div className="flex flex-col items-center md:items-start gap-1">
+                                                    <span className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em]">Configuración</span>
+                                                    <span className="text-sm font-black text-slate-900 uppercase tracking-widest text-center md:text-left">¿Cuántos Packs?</span>
+                                                </div>
+
+                                                {/* Col 2: Stepper */}
+                                                <div className="flex items-center justify-center gap-6">
+                                                    <motion.button
+                                                        onClick={() => updateQuantity(-1)}
+                                                        className="w-12 h-12 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-400 font-black text-2xl hover:bg-orange-500 hover:text-white hover:border-orange-400 transition-all duration-300 shadow-sm"
+                                                        whileHover={{ scale: 1.05 }}
+                                                        whileTap={{ scale: 0.9 }}
+                                                    >
+                                                        -
+                                                    </motion.button>
+                                                    <div className="relative min-w-[3rem] text-center">
+                                                        <span className="font-black text-3xl md:text-4xl text-slate-900">{quantity}</span>
+                                                    </div>
+                                                    <motion.button
+                                                        onClick={() => updateQuantity(1)}
+                                                        className="w-12 h-12 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-400 font-black text-2xl hover:bg-orange-500 hover:text-white hover:border-orange-400 transition-all duration-300 shadow-sm"
+                                                        whileHover={{ scale: 1.05 }}
+                                                        whileTap={{ scale: 0.9 }}
+                                                    >
+                                                        +
+                                                    </motion.button>
+                                                </div>
+
+                                                {/* Col 3: Price */}
+                                                <div className="text-center md:text-right flex flex-col md:min-w-[150px]">
+                                                    <span className="text-[10px] text-orange-500/70 block font-black uppercase tracking-[0.3em] mb-1">Total</span>
+                                                    <span className="font-black text-3xl md:text-4xl text-slate-900 tracking-tighter whitespace-nowrap">
+                                                        {formatPrice((selectedPack.precio || 0) * quantity)}
+                                                    </span>
+                                                </div>
                                             </div>
                                         </motion.div>
                                     )}
 
-                                    {/* Menú del pack seleccionado */}
+                                    {/* Menú del pack seleccionado - PREMIUM LIST */}
                                     {selectedPack?.menu && selectedPack.menu.length > 0 && (
                                         <motion.div
-                                            className="mb-8 bg-gradient-to-br from-green-50 to-emerald-50 rounded-3xl p-6 border-2 border-green-200 shadow-lg"
+                                            className="mb-10"
                                             initial={{ scale: 0.95, opacity: 0 }}
                                             animate={{ scale: 1, opacity: 1 }}
                                             transition={{ duration: 0.3 }}
                                         >
-                                            <h3 className="text-2xl font-black text-gray-900 mb-6 flex items-center gap-3">
-                                                <span className="text-3xl">🍽️</span> Menú del {selectedPack.nombre}
-                                            </h3>
-                                            <ul className="space-y-3">
+                                            <div className="flex items-center gap-3 mb-6">
+                                                <div className="w-1.5 h-6 bg-orange-500 rounded-full shadow-sm" />
+                                                <h3 className="text-xl font-black text-slate-900 px-1">Menú del Pack</h3>
+                                            </div>
+
+                                            <div className="grid gap-3">
                                                 {selectedPack.menu.map((item, idx) => (
-                                                    <motion.li
-                                                        key={idx}
-                                                        className="flex items-start gap-4 text-gray-700 text-base font-medium"
+                                                    <motion.div
+                                                        key={`menu-item-${idx}`}
+                                                        className="flex items-center gap-4 bg-slate-50 p-5 rounded-[1.5rem] border border-slate-100 shadow-sm hover:bg-white transition-colors"
                                                         initial={{ x: -10, opacity: 0 }}
                                                         animate={{ x: 0, opacity: 1 }}
                                                         transition={{ delay: idx * 0.05 }}
+                                                        whileHover={{ x: 5 }}
                                                     >
-                                                        <div className="w-7 h-7 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 shadow-lg">
-                                                            <Check size={18} className="text-white" />
+                                                        <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center flex-shrink-0 border border-orange-200">
+                                                            <Check size={16} className="text-orange-500" />
                                                         </div>
-                                                        <span className="font-medium">{item}</span>
-                                                    </motion.li>
+                                                        <span className="font-bold text-sm text-slate-700">{item}</span>
+                                                    </motion.div>
                                                 ))}
-                                            </ul>
+                                            </div>
                                         </motion.div>
                                     )}
 
-                                    {/* Incluye si existe */}
-                                    {promo.detalles?.incluye && (
-                                        <div className="mb-5">
-                                            <h3 className="font-bold text-gray-900 mb-2 flex items-center gap-2">
-                                                <span className="text-xl">📦</span> Incluye
-                                            </h3>
-                                            <ul className="space-y-1.5">
-                                                {promo.detalles.incluye.map((item, idx) => (
-                                                    <li key={idx} className="flex items-center gap-2 text-gray-700 text-sm">
-                                                        <Check size={16} className="text-bikitchen-orange flex-shrink-0" />
-                                                        {item}
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                        </div>
-                                    )}
-
-                                    {/* Beneficios */}
+                                    {/* Beneficios - PREMIUM BADGES */}
                                     {promo.beneficios && promo.beneficios.length > 0 && (
                                         <motion.div
-                                            className="mb-6"
+                                            className="mb-8"
                                             initial={{ y: 20, opacity: 0 }}
                                             animate={{ y: 0, opacity: 1 }}
                                             transition={{ delay: 0.5, duration: 0.4 }}
                                         >
-                                            <h3 className="text-xl font-black text-gray-900 mb-4 flex items-center gap-2">
-                                                <span className="text-2xl">✨</span> Beneficios incluidos
-                                            </h3>
-                                            <ul className="space-y-3">
+                                            <div className="flex items-center gap-3 mb-6">
+                                                <div className="w-1.5 h-6 bg-emerald-500 rounded-full shadow-sm" />
+                                                <h3 className="text-xl font-black text-slate-900 px-1">Beneficios VIP</h3>
+                                            </div>
+
+                                            <div className="grid md:grid-cols-2 gap-3">
                                                 {promo.beneficios.map((beneficio, idx) => (
-                                                    <motion.li
-                                                        key={idx}
-                                                        className="flex items-center gap-3 text-gray-700 text-base"
+                                                    <motion.div
+                                                        key={`benefit-${idx}`}
+                                                        className="flex gap-4 bg-emerald-50 p-4 rounded-2xl border border-emerald-100 shadow-sm"
                                                         initial={{ x: -10, opacity: 0 }}
                                                         animate={{ x: 0, opacity: 1 }}
                                                         transition={{ delay: 0.5 + (idx * 0.05) }}
+                                                        whileHover={{ scale: 1.02 }}
                                                     >
-                                                        <div className="w-6 h-6 bg-gradient-to-br from-orange-400 to-amber-400 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
-                                                            <Check size={14} className="text-white" />
+                                                        <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center flex-shrink-0 text-emerald-600">
+                                                            <Star size={20} className="fill-current" />
                                                         </div>
-                                                        <span className="font-medium">{beneficio}</span>
-                                                    </motion.li>
+                                                        <span className="text-sm font-black text-emerald-900 leading-tight flex items-center">{beneficio}</span>
+                                                    </motion.div>
                                                 ))}
-                                            </ul>
+                                            </div>
                                         </motion.div>
                                     )}
 
                                 </>
                             )}
 
-                            {/* Botones de acción */}
-                            <div className="flex flex-col sm:flex-row gap-3 mt-auto">
-                                {/* Agregar al carrito */}
-                                {(promo.precio > 0 || promo.precioEspecial > 0 || promo.precioRegular > 0 || (promo.detalles?.packs && promo.detalles.packs.length > 0) || (promo.precios && promo.precios.length > 0)) && (
+                            {/* Botones de acción - FIXED PREMIUM FOOTER */}
+                            <div className="sticky bottom-0 left-0 right-0 pt-8 pb-4 bg-white/90 backdrop-blur-xl border-t border-slate-100 mt-auto z-30">
+                                <div className="flex flex-col md:flex-row gap-4 px-6 md:px-8 max-w-lg mx-auto md:max-w-none">
+                                    <a
+                                        href={whatsappUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-900 font-bold py-4 px-6 rounded-2xl transition-all duration-300 flex items-center justify-center gap-2 border border-slate-200 group"
+                                    >
+                                        <MessageCircle size={20} className="text-orange-500 group-hover:scale-110 transition-transform" />
+                                        <span className="text-sm">Consultar</span>
+                                    </a>
+                                    <button
+                                        onClick={onClose}
+                                        className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-900 font-bold py-4 px-6 rounded-2xl transition-all duration-300 border border-slate-200"
+                                    >
+                                        Cerrar
+                                    </button>
                                     <button
                                         onClick={handleAddToCart}
-                                        disabled={((promo.detalles?.packs && promo.detalles.packs.length > 0) || (promo.precios && promo.precios.length > 0)) && !selectedPack}
-                                        className={`w-full flex items-center justify-center gap-2 font-bold py-3.5 px-6 rounded-xl transition-all duration-300 ${addedToCart
+                                        disabled={addedToCart}
+                                        className={`flex-[1.5] py-4 px-8 rounded-2xl font-black shadow-xl transition-all duration-300 flex items-center justify-center gap-3 active:scale-95 ${addedToCart
                                             ? 'bg-green-500 text-white'
-                                            : (selectedPack || (!promo.detalles?.packs?.length && !promo.precios?.length))
-                                                ? 'bg-bikitchen-orange hover:bg-bikitchen-orange-dark text-white hover:shadow-lg'
-                                                : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                            : 'bg-slate-900 hover:bg-slate-800 text-white shadow-slate-900/10'
                                             }`}
                                     >
                                         {addedToCart ? (
                                             <>
                                                 <Check size={20} />
-                                                ¡Agregado!
+                                                <span>Añadido</span>
                                             </>
                                         ) : (
                                             <>
                                                 <ShoppingCart size={20} />
-                                                {(selectedPack || (!promo.detalles?.packs?.length && !promo.precios?.length))
-                                                    ? `Agregar ${quantity > 1 ? `(${quantity})` : ''} • ${formatPrice((selectedPack?.precio || promo.precio || promo.precioEspecial || promo.precioRegular || 0) * quantity)}`
-                                                    : 'Selecciona un pack'}
+                                                <span>{promo.detalles?.packs ? 'Confirmar Pack' : 'Añadir a Pedido'}</span>
                                             </>
                                         )}
                                     </button>
-                                )}
+                                </div>
                             </div>
                         </motion.div>
                     </div>
                 </motion.div>
+                <style>{`
+                    .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+                    .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+                    .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+                `}</style>
             </DialogContent>
         </Dialog>
     );
 }
 
 export default function PromocionesPage() {
-    const showPromoBanner = usePromoBanner();
     const { getWhatsAppUrl } = useWhatsApp();
+    const { showPromoBanner } = usePromoBanner();
     const [selectedPromo, setSelectedPromo] = useState(null);
     const [promociones, setPromociones] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -860,7 +873,6 @@ export default function PromocionesPage() {
         handleAddToCart(cartItem);
     };
 
-    // Manejar clic en pack incluido para ver su menú detallado
     const handlePackClick = (packName, promoPrice = 0, promoImage = '', fullPromo = null) => {
         const menuKey = PACK_TO_MENU_KEY[packName];
         if (menuKey) {
@@ -1078,7 +1090,7 @@ export default function PromocionesPage() {
                 {/* Filtros eliminados por solicitud del usuario */}
 
                 {/* Main Content */}
-                <main 
+                <main
                     className="container"
                     style={{
                         paddingTop: showPromoBanner
@@ -1096,25 +1108,25 @@ export default function PromocionesPage() {
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                 {[1, 2].map((card) => (
-                                    <div key={card} className="bg-white rounded-3xl overflow-hidden shadow-lg">
-                                        <div className="h-48 bg-gray-200 animate-pulse"></div>
+                                    <div key={card} className="bg-white/5 backdrop-blur-md rounded-3xl overflow-hidden border border-white/10">
+                                        <div className="h-48 bg-white/5 animate-pulse"></div>
                                         <div className="p-6 space-y-4">
-                                            <div className="h-6 bg-gray-200 rounded animate-pulse w-3/4"></div>
-                                            <div className="h-4 bg-gray-200 rounded animate-pulse w-full"></div>
-                                            <div className="h-4 bg-gray-200 rounded animate-pulse w-2/3"></div>
-                                            <div className="h-10 bg-gray-200 rounded-xl animate-pulse w-1/2"></div>
+                                            <div className="h-6 bg-white/10 rounded animate-pulse w-3/4"></div>
+                                            <div className="h-4 bg-white/5 rounded animate-pulse w-full"></div>
+                                            <div className="h-4 bg-white/5 rounded animate-pulse w-2/3"></div>
+                                            <div className="h-10 bg-white/10 rounded-xl animate-pulse w-1/2"></div>
                                         </div>
                                     </div>
                                 ))}
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                 {[1, 2, 3].map((card) => (
-                                    <div key={card} className="bg-white rounded-3xl overflow-hidden shadow-lg">
-                                        <div className="h-48 bg-gray-200 animate-pulse"></div>
+                                    <div key={card} className="bg-white/5 backdrop-blur-md rounded-3xl overflow-hidden border border-white/10">
+                                        <div className="h-48 bg-white/5 animate-pulse"></div>
                                         <div className="p-6 space-y-4">
-                                            <div className="h-6 bg-gray-200 rounded animate-pulse w-3/4"></div>
-                                            <div className="h-4 bg-gray-200 rounded animate-pulse w-full"></div>
-                                            <div className="h-10 bg-gray-200 rounded-xl animate-pulse w-1/2"></div>
+                                            <div className="h-6 bg-white/10 rounded animate-pulse w-3/4"></div>
+                                            <div className="h-4 bg-white/5 rounded animate-pulse w-full"></div>
+                                            <div className="h-10 bg-white/10 rounded-xl animate-pulse w-1/2"></div>
                                         </div>
                                     </div>
                                 ))}
@@ -1140,9 +1152,9 @@ export default function PromocionesPage() {
                                     </motion.div>
 
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                        {promocionesDestacadas.map((promo) => (
+                                        {promocionesDestacadas.map((promo, idx) => (
                                             <PromoCard
-                                                key={promo.id}
+                                                key={promo.id || `promo-card-${idx}`}
                                                 promo={promo}
                                                 onClick={setSelectedPromo}
                                                 onAddToCart={handleDirectAddToCart}

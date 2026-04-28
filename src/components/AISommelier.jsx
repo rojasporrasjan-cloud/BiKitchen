@@ -18,7 +18,7 @@ Si el cliente quiere comprar, explicalo así:
 Menciona SIEMPRE el precio semanal primero.
 - TWO PACK (Para 2 personas): Sin Carbos (₡49k), Bajo Calorías (₡51.7k), Regular/Tico (₡55.7k), Keto/Full (₡67.8k).
 - 5 COMIDAS (Lunes a Viernes): Sin Carbos (₡24.5k), Bajo Calorías (₡25.8k), Regular/Tico/Vegetariano (₡27.8k), Keto/Full (₡33.9k).
-- 10 COMIDAS (Almuerzo+Cena): Precios inician desde ₡49k (Sin Carbos).
+- ALMUERZO Y CENA (10 Platos): Precios inician desde ₡49k (Sin Carbos).
 - PACK FAMILIAR: Premium (₡41.5k), Deluxe (₡47.5k).
 
 📅 CIERRES DE PEDIDOS (CRÍTICO):

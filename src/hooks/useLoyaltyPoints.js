@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase/config';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, onSnapshot } from 'firebase/firestore';
 
 // Configuración del programa (BiPuntos)
 const POINTS_CONFIG = {
@@ -60,60 +60,55 @@ export default function useLoyaltyPoints() {
     });
     const [loading, setLoading] = useState(true);
 
-    // Cargar datos desde Firestore
+    // Cargar datos desde Firestore en tiempo real
     useEffect(() => {
-        const loadPointsFromFirestore = async () => {
-            if (!currentUser) {
+        if (!currentUser) {
+            setPointsData({
+                currentPoints: 0,
+                totalEarned: 0,
+                totalRedeemed: 0,
+                history: [],
+                completedMissions: []
+            });
+            setLoading(false);
+            return;
+        }
+
+        const docRef = doc(db, 'loyalty', currentUser.email.toLowerCase());
+        
+        const unsubscribe = onSnapshot(docRef, async (docSnap) => {
+            if (docSnap.exists()) {
+                const data = docSnap.data();
                 setPointsData({
-                    currentPoints: 0,
-                    totalEarned: 0,
-                    totalRedeemed: 0,
-                    history: [],
-                    completedMissions: []
+                    ...data,
+                    completedMissions: data.completedMissions || []
                 });
                 setLoading(false);
-                return;
+            } else {
+                // Crear documento inicial si no existe
+                console.log('[Loyalty] Creando cuenta de puntos para nuevo usuario...');
+                const initialData = {
+                    currentPoints: POINTS_CONFIG.welcomeBonus,
+                    totalEarned: POINTS_CONFIG.welcomeBonus,
+                    totalRedeemed: 0,
+                    completedMissions: ['welcome'],
+                    history: [
+                        {
+                            id: 'welcome-bonus',
+                            type: 'earned',
+                            points: POINTS_CONFIG.welcomeBonus,
+                            description: '¡Bienvenido! Bono inicial BiKitchen',
+                            date: new Date().toISOString()
+                        }
+                    ],
+                    createdAt: new Date().toISOString()
+                };
+                await setDoc(docRef, initialData);
+                // No llamamos a setLoading(false) aquí: el próximo snapshot lo hará
             }
+        });
 
-            try {
-                const docRef = doc(db, 'loyalty', currentUser.email.toLowerCase());
-                const docSnap = await getDoc(docRef);
-                
-                if (docSnap.exists()) {
-                    const data = docSnap.data();
-                    setPointsData({
-                        ...data,
-                        completedMissions: data.completedMissions || []
-                    });
-                } else {
-                    // Crear documento inicial para el usuario con bono de bienvenida
-                    const initialData = {
-                        currentPoints: POINTS_CONFIG.welcomeBonus,
-                        totalEarned: POINTS_CONFIG.welcomeBonus,
-                        totalRedeemed: 0,
-                        completedMissions: ['welcome'],
-                        history: [
-                            {
-                                id: 'welcome-bonus',
-                                type: 'earned',
-                                points: POINTS_CONFIG.welcomeBonus,
-                                description: '¡Bienvenido! Bono inicial BiKitchen',
-                                date: new Date().toISOString()
-                            }
-                        ],
-                        createdAt: new Date().toISOString()
-                    };
-                    await setDoc(docRef, initialData);
-                    setPointsData(initialData);
-                }
-            } catch (error) {
-                console.error('Error loading loyalty points:', error);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        loadPointsFromFirestore();
+        return () => unsubscribe();
     }, [currentUser]);
 
     // Guardar en Firestore

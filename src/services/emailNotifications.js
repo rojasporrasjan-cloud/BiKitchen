@@ -64,8 +64,9 @@ const formatItemsForEmail = (items) => {
     if (!items || !Array.isArray(items)) return "Sin items";
     return items.map(item => {
         const itemPlan = item.planLabel && item.planLabel !== 'Mensual' ? ` (${item.planLabel})` : '';
+        const categoryPrefix = item.categoryLabel ? `${item.categoryLabel} - ` : '';
         const itemTotal = (Number(item.price) || 0) * (Number(item.quantity) || 0);
-        let line = `${item.quantity}× ${item.name}${itemPlan} - ₡${itemTotal.toLocaleString('es-CR')}`;
+        let line = `${item.quantity}× ${categoryPrefix}${item.name}${itemPlan} - ₡${itemTotal.toLocaleString('es-CR')}`;
         
         // Soporta varios formatos de proteínas para asegurar que siempre se envíen
         const proteinas = item.proteinas || (item.proteina ? [item.proteina] : []) || (item.protein ? [item.protein] : []);
@@ -235,6 +236,44 @@ export const sendTestNotification = async (targetEmail) => {
     } catch (error) {
         console.error('[Email Test] Error:', error);
         return { success: false, error: error.message || error };
+    }
+};
+
+/**
+ * Envía un correo electrónico masivo a una lista de destinatarios.
+ */
+export const sendBulkEmail = async (recipients, subject, message) => {
+    try {
+        if (!EMAILJS_CONFIG.publicKey) return { success: false, error: 'EmailJS no configurado' };
+        
+        const templateParams = {
+            subject: subject || 'Novedades de BiKitchen',
+            message: message,
+            to_name: 'Cliente',
+            // Usamos una variable genérica que la plantilla de EmailJS debe soportar
+            to_email: '' 
+        };
+
+        const results = await Promise.all(recipients.map(async (email) => {
+            try {
+                return await emailjs.send(
+                    EMAILJS_CONFIG.serviceId, 
+                    EMAILJS_CONFIG.customerTemplateId, // Usamos la de cliente
+                    { ...templateParams, to_email: email }, 
+                    EMAILJS_CONFIG.publicKey
+                );
+            } catch (err) {
+                console.error(`Error enviando a ${email}:`, err);
+                return null;
+            }
+        }));
+
+        const successCount = results.filter(r => r !== null).length;
+        console.log(`✅ Bulk Email: ${successCount}/${recipients.length} enviados`);
+        return { success: true, count: successCount };
+    } catch (error) {
+        console.error('❌ Error en envío masivo:', error);
+        return { success: false, error: error.message };
     }
 };
 

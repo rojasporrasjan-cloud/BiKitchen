@@ -28,6 +28,7 @@ import AdminPageHeader from '../../components/admin/AdminPageHeader';
 import AdminCard from '../../components/admin/AdminCard';
 import { cachedFetch, invalidateCache } from '../../utils/firestoreCache';
 import { useOrders } from '../../context/OrdersContext';
+import { parseFirebaseDate } from '../../utils/dateUtils';
 
 
 /**
@@ -36,21 +37,15 @@ import { useOrders } from '../../context/OrdersContext';
  */
 export default function DashboardView() {
     const [loading, setLoading] = useState(true);
-    const [stats, setStats] = useState({
-        totalPedidos: 0,
-        pedidosHoy: 0,
-        pedidosPendientes: 0,
-        pedidosConfirmados: 0,
-        pedidosEnRuta: 0,
-        pedidosEntregados: 0,
-        totalClientes: 0,
-        totalVentas: 0
-    });
-    const [recentOrders, setRecentOrders] = useState([]);
+    const [totalClientes, setTotalClientes] = useState(0);
     const [lowStockItems, setLowStockItems] = useState([]);
-    const [topProducts, setTopProducts] = useState([]);
-    const [topSources, setTopSources] = useState([]);
-
+    
+    const [timeRange, setTimeRange] = useState('all'); // 'all', 'month', 'week', 'custom'
+    const [customStartDate, setCustomStartDate] = useState('');
+    const [customEndDate, setCustomEndDate] = useState('');
+    const [selectedSource, setSelectedSource] = useState('all');
+    const [showAudit, setShowAudit] = useState(false);
+    
     const { orders: contextOrders, loading: contextLoading } = useOrders();
     // Cache de pedidos históricos (para totales y estadísticas globales)
     const [historicalOrders, setHistoricalOrders] = useState([]);
@@ -64,12 +59,7 @@ export default function DashboardView() {
         });
     }, []);
 
-    // Recalcular estadísticas cuando cambia el contexto o los datos históricos
-    useEffect(() => {
-        if (contextLoading && historicalOrders.length === 0) return;
-
-        calculateStats();
-    }, [contextOrders, historicalOrders, contextLoading]);
+    // No effects for calculation anymore, everything is Memoized
 
     const loadHistoricalData = async (force = false) => {
         if (force) {
@@ -115,7 +105,7 @@ export default function DashboardView() {
             const stockBajo = inventario.filter(i => i.status === 'critical' || i.status === 'warning').slice(0, 4);
 
             // Actualizar estados que dependen puramente de histórico/inventario
-            setStats(prev => ({ ...prev, totalClientes }));
+            setTotalClientes(totalClientes);
             setLowStockItems(stockBajo);
 
         } catch (error) {
@@ -125,124 +115,179 @@ export default function DashboardView() {
         }
     };
 
-    const calculateStats = () => {
-        const today = new Date().toISOString().split('T')[0];
+    const dashboardData = React.useMemo(() => {
+        const now = new Date();
+        const todayStr = now.toISOString().split('T')[0];
+        
+        // 1. Unificación de Fuentes (The Merge)
+        const combinedOrdersMap = new Map();
+        historicalOrders.forEach(o => { if (o.id) combinedOrdersMap.set(o.id, o); });
+        (contextOrders || []).forEach(o => { if (o.id) combinedOrdersMap.set(o.id, o); });
+        
+        const allOrders = Array.from(combinedOrdersMap.values());
 
-        // 1. Métricas Operativas (Usar Contexto - Tiempo Real)
-        // Usamos contextOrders para lo que requiere inmediatez (estados activos)
-        // Nota: contextOrders tiene un límite (ej. 100), pero suficiente para operaciones diarias
-        const liveOrders = contextOrders || [];
+        // 2. Filtro por Canal (Marketing)
+        const filterBySource = (list) => {
+            if (selectedSource === 'all') return list;
+            return list.filter(o => {
+                const src = (o.fuente || o.source || 'Directo').toLowerCase().trim();
+                const sourceMatches = {
+                    'google': src.includes('google'),
+                    'facebook': src.includes('facebook') || src.includes('instagram') || src.includes('meta'),
+                    'tiktok': src.includes('tiktok'),
+                    'directo': src === 'directo' || src === 'desconocido' || src === ''
+                }[selectedSource];
+                return sourceMatches ?? src.includes(selectedSource);
+            });
+        }
+        const filteredBySource = filterBySource(allOrders);
 
-        const pedidosHoy = liveOrders.filter(p => {
-            let pDate;
-            try {
-                pDate = p.createdAt?.toDate ? p.createdAt.toDate() : new Date(p.createdAt || 0);
-                // Validar si la fecha es válida
-                if (isNaN(pDate.getTime())) return false;
-            } catch (e) {
-                return false;
-            }
-            return pDate.toISOString().split('T')[0] === today || p.fecha_entrega === today;
-        }).length;
+        // 3. Filtro por Rango (Nuclear Engine)
+        const filterByRange = (ordersList) => {
+            if (timeRange === 'all') return ordersList;
+            const nowTime = now.getTime();
+            let startLimit = null;
+            let endLimit = nowTime + 86400000; 
 
-        const pedidosPendientes = liveOrders.filter(p =>
-            p.status === 'pending' || p.status === 'new' || p.status === 'pending_payment'
-        ).length;
-
-        const pedidosConfirmados = liveOrders.filter(p => p.status === 'confirmed').length;
-        const pedidosEnRuta = liveOrders.filter(p => p.status === 'in_transit' || p.deliveryStatus === 'in_transit').length;
-
-        // Pedidos recientes (siempre del contexto para ver cambios al instante)
-        const recent = [...liveOrders]
-            .sort((a, b) => {
-                const getDate = (d) => {
-                    try {
-                        if (!d) return 0;
-                        const date = d.toDate ? d.toDate() : new Date(d);
-                        return isNaN(date.getTime()) ? 0 : date.getTime();
-                    } catch { return 0; }
+            if (timeRange === 'week') {
+                const weekAgo = new Date(now);
+                weekAgo.setDate(now.getDate() - 7);
+                weekAgo.setHours(0, 0, 0, 0); 
+                startLimit = weekAgo.getTime();
+            } else if (timeRange === 'month') {
+                const monthAgo = new Date(now);
+                monthAgo.setMonth(now.getMonth() - 1);
+                monthAgo.setHours(0, 0, 0, 0);
+                startLimit = monthAgo.getTime();
+            } else if (timeRange === 'custom') {
+                const parseManualDate = (dateStr, isEnd) => {
+                    if (!dateStr) return null;
+                    if (dateStr.includes('-') && !dateStr.includes('/')) {
+                        const d = new Date(dateStr + (isEnd ? 'T23:59:59' : 'T00:00:00'));
+                        return isNaN(d.getTime()) ? null : d.getTime();
+                    }
+                    if (dateStr.includes('/')) {
+                        const parts = dateStr.split('/');
+                        if (parts.length === 3) {
+                            let d, m, y;
+                            const p1 = parseInt(parts[0], 10), p2 = parseInt(parts[1], 10), p3 = parseInt(parts[2], 10);
+                            if (p1 <= 12 && p2 > 12) { m = p1; d = p2; y = p3; } 
+                            else if (p1 > 12 && p2 <= 12) { d = p1; m = p2; y = p3; }
+                            else { d = p1; m = p2; y = p3; }
+                            const dateObj = new Date(y, m - 1, d);
+                            if (isEnd) dateObj.setHours(23, 59, 59, 999); else dateObj.setHours(0, 0, 0, 0);
+                            return dateObj.getTime();
+                        }
+                    }
+                    const d = new Date(dateStr);
+                    return isNaN(d.getTime()) ? null : d.getTime();
                 };
-                return getDate(b.createdAt) - getDate(a.createdAt);
-            })
-            .slice(0, 5);
-
-        // 2. Métricas Históricas (Usar Historical - Caché)
-        // Para totales acumulados, usamos la carga completa
-        const allOrders = historicalOrders.length > 0 ? historicalOrders : liveOrders;
-
-        const totalPedidos = allOrders.length;
-        const pedidosEntregados = allOrders.filter(p => p.status === 'delivered' || p.deliveryStatus === 'delivered').length;
-
-        // Calcular ventas totales (Historical)
-        const totalVentas = allOrders
-            .filter(p => ['confirmed', 'delivered'].includes(p.status) || p.deliveryStatus === 'delivered')
-            .reduce((acc, p) => {
-                let precio = 0;
-                if (typeof p.total === 'number') precio = p.total;
-                else if (typeof p.total === 'string') precio = parseInt(p.total.replace(/\D/g, '')) || 0;
-                return acc + precio;
-            }, 0);
-
-        // Top Productos (Historical)
-        const planCounts = {};
-        const sourceCounts = {};
-
-        allOrders.forEach(p => {
-            const plan = p.plan || 'Sin Plan';
-            planCounts[plan] = (planCounts[plan] || 0) + 1;
-
-            // Aggregating Marketing Sources
-            let rawSource = p.fuente || p.source || 'Directo';
-            const s = rawSource.toLowerCase();
-
-            if (s.includes('instagram') || s.includes('ig')) {
-                rawSource = 'Instagram';
-            } else if (s.includes('facebook') || s.includes('fb')) {
-                rawSource = 'Facebook';
-            } else if (s.includes('google') || s.includes('ads')) {
-                rawSource = 'Google';
-            } else if (s.includes('tiktok')) {
-                rawSource = 'TikTok';
-            } else if (s.includes('admin') || s.includes('manual')) {
-                rawSource = 'Admin / Manual';
-            } else {
-                rawSource = 'Directo';
+                startLimit = parseManualDate(customStartDate, false);
+                endLimit = parseManualDate(customEndDate, true) || (nowTime + 86400000);
             }
+            if (startLimit === null && timeRange !== 'all') return [];
 
-            sourceCounts[rawSource] = (sourceCounts[rawSource] || 0) + 1;
+            const result = ordersList.filter(p => {
+                const pDate = parseFirebaseDate(p.createdAt) || parseFirebaseDate(p.fecha_entrega) || parseFirebaseDate(p.timestamp);
+                if (!pDate) return false;
+                const pTime = pDate.getTime();
+                return pTime >= startLimit && pTime <= endLimit;
+            });
+            return result;
+        };
+
+        const filteredHistorical = filterByRange(filteredBySource);
+
+        // 4. Métricas de Operación (Hoy)
+        const liveOrders = contextOrders || [];
+        const dashboardStats = {
+            pedidosHoy: liveOrders.filter(p => {
+                const pDate = parseFirebaseDate(p.createdAt) || parseFirebaseDate(p.fecha_entrega);
+                return pDate && pDate.toISOString().split('T')[0] === todayStr;
+            }).length,
+            pedidosPendientes: liveOrders.filter(p => ['pending', 'new', 'pending_payment'].includes(p.status)).length,
+            pedidosConfirmados: liveOrders.filter(p => p.status === 'confirmed').length,
+            pedidosEnRuta: liveOrders.filter(p => p.status === 'in_transit' || p.deliveryStatus === 'in_transit').length
+        };
+
+        // 5. Ventas y Reportes
+        const paidStatuses = ['pending', 'pending_payment', 'confirmed', 'preparing', 'making', 'ready', 'in_transit', 'delivered', 'pagado', 'confirmado', 'entregado'];
+        const filteredForRevenue = filteredHistorical.filter(p => {
+            const s = (p.status || '').toLowerCase().trim();
+            const ds = (p.deliveryStatus || '').toLowerCase().trim();
+            return paidStatuses.includes(s) || ds === 'delivered' || ds === 'entregado';
         });
 
-        const topProductsList = Object.entries(planCounts)
-            .map(([name, sales]) => ({ name, sales, revenue: sales * 25000 })) // Estimado
-            .sort((a, b) => b.sales - a.sales)
-            .slice(0, 4);
+        const totalVentas = filteredForRevenue.reduce((acc, p) => {
+            let precio = 0;
+            if (typeof p.total === 'number') precio = p.total;
+            else if (typeof p.total === 'string') precio = parseInt(p.total.split(',')[0].replace(/\D/g, '')) || 0;
+            else if (p.totalValue) precio = p.totalValue;
+            else if (p.subtotal) precio = Number(p.subtotal) || 0;
+            return acc + precio;
+        }, 0);
 
-        const topSourcesList = Object.entries(sourceCounts)
-            .map(([name, count]) => ({
-                name,
-                count,
-                percentage: totalPedidos > 0 ? Math.round((count / totalPedidos) * 100) : 0
-            }))
-            .sort((a, b) => b.count - a.count);
+        // Top Productos y Fuentes
+        const planCounts = {};
+        const sourceCounts = {};
+        filteredHistorical.forEach(p => {
+            const plan = p.plan || 'Sin Plan';
+            planCounts[plan] = (planCounts[plan] || 0) + 1;
+            let src = (p.fuente || p.source || 'Directo').toLowerCase();
+            if (src.includes('instagram')) src = 'Instagram';
+            else if (src.includes('facebook')) src = 'Facebook';
+            else if (src.includes('google')) src = 'Google';
+            else if (src.includes('tiktok')) src = 'TikTok';
+            else if (src.includes('admin')) src = 'Admin / Manual';
+            else src = 'Directo';
+            sourceCounts[src] = (sourceCounts[src] || 0) + 1;
+        });
 
-        setStats(prev => ({
-            ...prev,
-            totalPedidos,
-            pedidosHoy,
-            pedidosPendientes,
-            pedidosConfirmados,
-            pedidosEnRuta,
-            pedidosEntregados, // Histórico
-            totalVentas // Histórico
-        }));
-        setRecentOrders(recent);
-        setTopProducts(topProductsList);
-        setTopSources(topSourcesList);
-    };
+        return {
+            stats: { 
+                ...dashboardStats, 
+                totalPedidos: filteredHistorical.length, 
+                totalVentas,
+                pedidosEntregados: filteredHistorical.filter(p => {
+                    const s = (p.status || '').toLowerCase().trim();
+                    const ds = (p.deliveryStatus || '').toLowerCase().trim();
+                    return s === 'delivered' || ds === 'delivered' || s === 'entregado';
+                }).length
+            },
+            recentOrders: [...filteredBySource].sort((a, b) => {
+                const dateA = parseFirebaseDate(a.createdAt) || parseFirebaseDate(a.fecha_entrega);
+                const dateB = parseFirebaseDate(b.createdAt) || parseFirebaseDate(b.fecha_entrega);
+                return (dateB?.getTime() || 0) - (dateA?.getTime() || 0);
+            }).slice(0, 5),
+            topProducts: Object.entries(planCounts).map(([name, sales]) => ({ name, sales, revenue: sales * 25000 })).sort((a, b) => b.sales - a.sales).slice(0, 4),
+            topSources: Object.entries(sourceCounts).map(([name, count]) => ({
+                name, count, percentage: filteredHistorical.length > 0 ? Math.round((count / filteredHistorical.length) * 100) : 0
+            })).sort((a, b) => b.count - a.count),
+            auditOrders: filteredForRevenue.map(p => ({
+                id: p.id, numero: p.numeroOrden || p.orderNumber || 'S/N', cliente: p.cliente || 'Desconocido',
+                total: p.total, status: p.status, fecha: parseFirebaseDate(p.createdAt) || parseFirebaseDate(p.fecha_entrega),
+                metodo: p.metodo_pago || p.paymentMethod || '?'
+            })).sort((a, b) => (b.fecha?.getTime() || 0) - (a.fecha?.getTime() || 0))
+        };
+    }, [historicalOrders, contextOrders, timeRange, customStartDate, customEndDate, selectedSource]);
 
     const refreshData = () => {
         loadHistoricalData(true);
     };
+
+    // Auditoría de Diagnóstico Silenciosa (Solo se dispara al cambiar filtros)
+    React.useEffect(() => {
+        if (selectedSource === 'all') return;
+        
+        console.group(`[DashboardAudit] Reporte para ${selectedSource} (${timeRange})`);
+        console.log(`Ventas en rango: ₡${dashboardData.stats.totalVentas.toLocaleString('es-CR')}`);
+        console.log(`Total pedidos: ${dashboardData.stats.totalPedidos}`);
+        
+        if (dashboardData.auditOrders.length > 0) {
+            console.table(dashboardData.auditOrders.slice(0, 10));
+        }
+        console.groupEnd();
+    }, [selectedSource, timeRange, dashboardData.stats.totalVentas, dashboardData.stats.totalPedidos]);
 
     const StatCard = ({ icon: Icon, label, value, change, color = 'blue', delay = 0 }) => {
         const gradients = {
@@ -297,9 +342,9 @@ export default function DashboardView() {
                 title="Dashboard"
                 subtitle="Resumen general de operaciones y estadísticas en tiempo real"
                 stats={[
-                    { value: stats.totalPedidos, label: 'Pedidos' },
-                    { value: stats.totalClientes, label: 'Clientes' },
-                    { value: `₡${(stats.totalVentas / 1000).toFixed(0)}K`, label: 'Ventas' }
+                    { value: dashboardData.stats.totalPedidos, label: 'Pedidos' },
+                    { value: totalClientes, label: 'Clientes' },
+                    { value: `₡${(dashboardData.stats.totalVentas / 1000).toFixed(0)}K`, label: 'Ventas' }
                 ]}
                 actions={[
                     <button
@@ -308,38 +353,132 @@ export default function DashboardView() {
                         className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white/20 backdrop-blur-sm text-sm text-white hover:bg-white/30 transition-colors w-full md:w-auto justify-center"
                     >
                         <RefreshCw size={16} />
-                        Actualizar (Histórico)
+                        Actualizar
                     </button>
                 ]}
             />
+
+            {/* Selector de Periodo Dedicado (Visible y No Sticky) */}
+            <div className="py-2">
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white p-4 rounded-3xl border border-gray-100 shadow-sm transition-all hover:shadow-md">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-orange-500 text-white rounded-xl shadow-lg shadow-orange-100">
+                            <Calendar size={20} />
+                        </div>
+                        <div>
+                            <h3 className="text-sm font-bold text-gray-900">Periodo de Análisis</h3>
+                            <p className="text-[10px] text-gray-500 font-medium tracking-tight">Segmentación para reportes de Google Ads</p>
+                        </div>
+                    </div>
+
+                <div className="flex items-center bg-gray-100 p-1 rounded-2xl w-full sm:w-auto">
+                    <button
+                        onClick={() => setTimeRange('week')}
+                        className={`flex-1 sm:flex-none px-6 py-2 rounded-xl text-xs font-black transition-all ${timeRange === 'week' ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'}`}
+                    >
+                        SEMANA
+                    </button>
+                    <button
+                        onClick={() => setTimeRange('month')}
+                        className={`flex-1 sm:flex-none px-6 py-2 rounded-xl text-xs font-black transition-all ${timeRange === 'month' ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'}`}
+                    >
+                        MES
+                    </button>
+                    <button
+                        onClick={() => setTimeRange('all')}
+                        className={`flex-1 sm:flex-none px-6 py-2 rounded-xl text-xs font-black transition-all ${timeRange === 'all' ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'}`}
+                    >
+                        TODO
+                    </button>
+                    <button
+                        onClick={() => setTimeRange('custom')}
+                        className={`flex-1 sm:flex-none px-6 py-2 rounded-xl text-xs font-black transition-all ${timeRange === 'custom' ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'}`}
+                    >
+                        PERSONALIZADO
+                    </button>
+                </div>
+            </div>
+
+            {/* Selector de Fechas y Filtros (Solo si es personalizado) */}
+            {timeRange === 'custom' && (
+                <motion.div 
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-orange-50/50 p-4 rounded-3xl border border-orange-100 mt-2"
+                >
+                    <div>
+                        <label className="block text-[10px] font-black uppercase text-orange-600 mb-1 ml-1 tracking-widest">Desde</label>
+                        <input 
+                            type="date" 
+                            value={customStartDate} 
+                            onChange={(e) => setCustomStartDate(e.target.value)}
+                            className="w-full px-4 py-2 rounded-xl border border-orange-200 bg-white text-sm font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-[10px] font-black uppercase text-orange-600 mb-1 ml-1 tracking-widest">Hasta</label>
+                        <input 
+                            type="date" 
+                            value={customEndDate} 
+                            onChange={(e) => setCustomEndDate(e.target.value)}
+                            className="w-full px-4 py-2 rounded-xl border border-orange-200 bg-white text-sm font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-[10px] font-black uppercase text-orange-600 mb-1 ml-1 tracking-widest">Canal de Venta</label>
+                        <select 
+                            value={selectedSource}
+                            onChange={(e) => setSelectedSource(e.target.value)}
+                            className="w-full px-4 py-2 rounded-xl border border-orange-200 bg-white text-sm font-bold text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+                        >
+                            <option value="all">Todas las Fuentes</option>
+                            <option value="google">Google Ads</option>
+                            <option value="facebook">Facebook / Instagram</option>
+                            <option value="tiktok">TikTok</option>
+                            <option value="directo">Directo / Orgánico</option>
+                        </select>
+                    </div>
+                </motion.div>
+            )}
+        </div>
 
             {/* Stats Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
                 <StatCard
                     icon={DollarSign}
-                    label="Ventas Totales"
-                    value={`₡${stats.totalVentas.toLocaleString('es-CR')}`}
+                    label={
+                        timeRange === 'all' ? "Ventas Totales" : 
+                        timeRange === 'week' ? "Ventas (Semana)" :
+                        timeRange === 'month' ? "Ventas (Mes)" :
+                        "Ventas (Personalizado)"
+                    }
+                    value={`₡${dashboardData.stats.totalVentas.toLocaleString('es-CR')}`}
                     color="green"
                     delay={0.1}
                 />
                 <StatCard
                     icon={ShoppingCart}
-                    label="Total Pedidos"
-                    value={stats.totalPedidos}
+                    label={
+                        timeRange === 'all' ? "Total Pedidos" : 
+                        timeRange === 'week' ? "Pedidos (Semana)" :
+                        timeRange === 'month' ? "Pedidos (Mes)" :
+                        "Pedidos (Custom)"
+                    }
+                    value={dashboardData.stats.totalPedidos}
                     color="blue"
                     delay={0.2}
                 />
                 <StatCard
                     icon={Users}
                     label="Total Clientes"
-                    value={stats.totalClientes}
+                    value={totalClientes}
                     color="purple"
                     delay={0.3}
                 />
                 <StatCard
                     icon={Truck}
                     label="Entregas Hoy"
-                    value={stats.pedidosHoy}
+                    value={dashboardData.stats.pedidosHoy}
                     color="orange"
                     delay={0.4}
                 />
@@ -358,7 +497,7 @@ export default function DashboardView() {
                             <Clock className="text-yellow-600" size={20} />
                         </div>
                         <div>
-                            <div className="text-xl md:text-2xl font-bold text-yellow-700">{stats.pedidosPendientes}</div>
+                            <div className="text-xl md:text-2xl font-bold text-yellow-700">{dashboardData.stats.pedidosPendientes}</div>
                             <div className="text-xs text-yellow-600 font-medium">Pendientes</div>
                         </div>
                     </div>
@@ -367,7 +506,7 @@ export default function DashboardView() {
                             <Package className="text-blue-600" size={20} />
                         </div>
                         <div>
-                            <div className="text-xl md:text-2xl font-bold text-blue-700">{stats.pedidosConfirmados}</div>
+                            <div className="text-xl md:text-2xl font-bold text-blue-700">{dashboardData.stats.pedidosConfirmados}</div>
                             <div className="text-xs text-blue-600 font-medium">Confirmados</div>
                         </div>
                     </div>
@@ -376,7 +515,7 @@ export default function DashboardView() {
                             <Truck className="text-purple-600" size={20} />
                         </div>
                         <div>
-                            <div className="text-xl md:text-2xl font-bold text-purple-700">{stats.pedidosEnRuta}</div>
+                            <div className="text-xl md:text-2xl font-bold text-purple-700">{dashboardData.stats.pedidosEnRuta}</div>
                             <div className="text-xs text-purple-600 font-medium">En Ruta</div>
                         </div>
                     </div>
@@ -385,7 +524,7 @@ export default function DashboardView() {
                             <ArrowUp className="text-green-600" size={20} />
                         </div>
                         <div>
-                            <div className="text-xl md:text-2xl font-bold text-green-700">{stats.pedidosEntregados}</div>
+                            <div className="text-xl md:text-2xl font-bold text-green-700">{dashboardData.stats.pedidosEntregados}</div>
                             <div className="text-xs text-green-600 font-medium">Entregados</div>
                         </div>
                     </div>
@@ -401,14 +540,14 @@ export default function DashboardView() {
                     icon={TrendingUp}
                     delay={0.6}
                 >
-                    {topProducts.length === 0 ? (
+                    {dashboardData.topProducts.length === 0 ? (
                         <div className="text-center py-8 text-gray-400">
                             <TrendingUp size={32} className="mx-auto mb-2 opacity-50" />
                             <p className="text-sm">Sin datos de ventas aún</p>
                         </div>
                     ) : (
                         <div className="space-y-3 md:space-y-4">
-                            {topProducts.map((product, idx) => (
+                            {dashboardData.topProducts.map((product, idx) => (
                                 <div key={idx} className="flex items-center justify-between p-3 md:p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
                                     <div className="flex items-center gap-3 md:gap-4 flex-1">
                                         <div className="w-8 h-8 md:w-10 md:h-10 bg-orange-500 text-white rounded-lg flex items-center justify-center font-bold text-sm md:text-base">
@@ -434,14 +573,14 @@ export default function DashboardView() {
                     icon={Users}
                     delay={0.65}
                 >
-                    {topSources.length === 0 ? (
+                    {dashboardData.topSources.length === 0 ? (
                         <div className="text-center py-8 text-gray-400">
                             <Users size={32} className="mx-auto mb-2 opacity-50" />
                             <p className="text-sm">Sin datos de origen aún</p>
                         </div>
                     ) : (
                         <div className="space-y-6">
-                            {topSources.map((source, idx) => {
+                            {dashboardData.topSources.map((source, idx) => {
                                 const Icon = {
                                     'Instagram': Instagram,
                                     'Facebook': Facebook,
@@ -469,8 +608,21 @@ export default function DashboardView() {
                                     'Admin / Manual': 'bg-slate-100 text-slate-600'
                                 }[source.name] || 'bg-gray-100 text-gray-600';
 
+                                const sourceParamMap = {
+                                    'Instagram': 'meta',
+                                    'Facebook': 'meta',
+                                    'Google': 'google',
+                                    'TikTok': 'tiktok',
+                                    'Admin / Manual': 'manual',
+                                    'Directo': 'directo'
+                                };
+
                                 return (
-                                    <div key={idx} className="group">
+                                    <Link 
+                                        key={idx} 
+                                        to={`/admin/orders?source=${sourceParamMap[source.name] || 'all'}&range=${timeRange}`}
+                                        className="group block hover:bg-gray-50 p-2 -m-2 rounded-xl transition-all"
+                                    >
                                         <div className="flex items-center justify-between mb-2">
                                             <div className="flex items-center gap-3">
                                                 <div className={`p-2 rounded-lg ${iconBg} group-hover:scale-110 transition-transform duration-300`}>
@@ -491,7 +643,7 @@ export default function DashboardView() {
                                                 className={`h-full rounded-full bg-gradient-to-r ${brandColor} shadow-sm shadow-black/10`}
                                             />
                                         </div>
-                                    </div>
+                                    </Link>
                                 );
                             })}
                         </div>
@@ -559,7 +711,7 @@ export default function DashboardView() {
                         Ver todos →
                     </Link>
                 </div>
-                {recentOrders.length === 0 ? (
+                {dashboardData.recentOrders.length === 0 ? (
                     <div className="text-center py-8 text-gray-400">
                         <ShoppingCart size={32} className="mx-auto mb-2 opacity-50" />
                         <p className="text-sm">No hay pedidos recientes</p>
@@ -578,7 +730,7 @@ export default function DashboardView() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {recentOrders.map((order) => {
+                                    {dashboardData.recentOrders.map((order) => {
                                         const status = order.status || 'pending';
                                         const statusConfig = {
                                             pending_payment: { label: 'Pendiente Pago', color: 'bg-orange-100 text-orange-700' },
@@ -611,7 +763,7 @@ export default function DashboardView() {
 
                         {/* Mobile Card View */}
                         <div className="md:hidden space-y-3">
-                            {recentOrders.map((order) => {
+                            {dashboardData.recentOrders.map((order) => {
                                 const status = order.status || 'pending';
                                 const statusConfig = {
                                     pending_payment: { label: 'Pago Pendiente', color: 'bg-orange-100 text-orange-700' },
@@ -645,6 +797,60 @@ export default function DashboardView() {
                             })}
                         </div>
                     </>
+                )}
+            </AdminCard>
+
+            {/* Audit Breakdown (Auditoría Solicitada por Usuario) */}
+            <AdminCard
+                title={`Desglose de Auditoría (${dashboardData.auditOrders.length} pedidos)`}
+                icon={TrendingUp}
+                delay={0.9}
+            >
+                <div className="mb-4 flex items-center justify-between">
+                    <p className="text-xs text-gray-500 font-medium">
+                        Estos son los pedidos que suman el total de <span className="font-bold text-gray-900 border-b-2 border-green-500">₡{dashboardData.stats.totalVentas.toLocaleString('es-CR')}</span>
+                    </p>
+                    <button 
+                        onClick={() => setShowAudit(!showAudit)}
+                        className="text-xs font-black text-orange-600 hover:text-orange-700 bg-orange-50 px-3 py-1.5 rounded-xl transition-all"
+                    >
+                        {showAudit ? 'OCULTAR DETALLE' : 'VER DESGLOSE COMPLETO'}
+                    </button>
+                </div>
+
+                {showAudit && (
+                    <motion.div 
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="overflow-x-auto"
+                    >
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="border-b border-gray-100">
+                                    <th className="py-3 px-2 text-[10px] font-black uppercase text-gray-400">Fecha</th>
+                                    <th className="py-3 px-2 text-[10px] font-black uppercase text-gray-400">Orden</th>
+                                    <th className="py-3 px-2 text-[10px] font-black uppercase text-gray-400">Cliente</th>
+                                    <th className="py-3 px-2 text-[10px] font-black uppercase text-gray-400">Monto</th>
+                                    <th className="py-3 px-2 text-[10px] font-black uppercase text-gray-400">Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {dashboardData.auditOrders.map((order, idx) => (
+                                    <tr key={idx} className="border-b border-gray-50 hover:bg-orange-50 transition-colors">
+                                        <td className="py-3 px-2 text-xs text-gray-600">{order.fecha?.toLocaleDateString('es-CR')}</td>
+                                        <td className="py-3 px-2 text-xs font-bold text-gray-900">{order.numero}</td>
+                                        <td className="py-3 px-2 text-xs text-gray-700">{order.cliente}</td>
+                                        <td className="py-3 px-2 text-xs font-black text-green-700">₡{(typeof order.total === 'number' ? order.total : parseInt(order.total?.replace(/\D/g, '') || 0)).toLocaleString('es-CR')}</td>
+                                        <td className="py-3 px-2">
+                                            <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md bg-gray-200 text-gray-600">
+                                                {order.status}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </motion.div>
                 )}
             </AdminCard>
         </div>

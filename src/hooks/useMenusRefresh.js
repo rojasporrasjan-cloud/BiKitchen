@@ -16,9 +16,10 @@ export function useMenusRefresh() {
     const lastLoadRef = useRef(0);
 
     // Función para cargar menús
-    const loadMenus = useCallback(async () => {
+    const loadMenus = useCallback(async (force = false) => {
         const now = Date.now();
-        if (now - lastLoadRef.current < 120000) {
+        // Throttle de 30 segundos para evitar lecturas excesivas, a menos que se fuerce
+        if (!force && now - lastLoadRef.current < 30000) {
             return;
         }
         lastLoadRef.current = now;
@@ -26,8 +27,8 @@ export function useMenusRefresh() {
             setLoading(true);
             setError(null);
             
-            // getOfficialMenus ya usa getDocFromServer para obtener datos frescos
-            const data = await getOfficialMenus();
+            // Pasar el parámetro force a getOfficialMenus
+            const data = await getOfficialMenus(force);
             
             setMenus(data);
             setDataVersion(prev => prev + 1); // Incrementar versión para forzar re-render

@@ -45,7 +45,7 @@ const PACKS_COMPARISON = [
     },
     {
         id: 'pack-10',
-        name: 'Pack 10 Comidas',
+        name: 'Almuerzo y Cena',
         subtitle: 'Quincenal',
         icon: '🍱',
         color: 'orange',

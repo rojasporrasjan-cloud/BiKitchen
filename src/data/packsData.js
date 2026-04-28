@@ -26,7 +26,7 @@ export const PACKS_DATA = {
     // ORDEN: Two Pack primero (25% OFF mensual), luego Familiar, después por número de comidas
     'two_pack': {
         title: 'Two Pack',
-        subtitle: 'Dos personas - 5 comidas cada una • 25% OFF Pack Mensual',
+        subtitle: 'Plan Parejas: 10 Comidas Totales (5 para cada uno) • 25% OFF Pack Mensual',
         icon: '👥',
         monthlyDiscount: 25,
         shipping: {
@@ -78,7 +78,7 @@ export const PACKS_DATA = {
         ]
     },
     '10_comidas': {
-        title: '10 Comidas a la Semana',
+        title: 'Almuerzo y Cena',
         subtitle: 'Lunes a Viernes - Almuerzo y Cena',
         icon: '🍗',
         shipping: {

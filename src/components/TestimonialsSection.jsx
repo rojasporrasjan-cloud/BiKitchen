@@ -14,7 +14,7 @@ const TESTIMONIALS = [
         text: 'BiKitchen cambió mi vida. Ya no tengo que preocuparme por cocinar después de un largo día de trabajo. La comida es deliciosa y siempre llega fresca.',
         date: '2024-11-15',
         verified: true,
-        pack: 'Pack 10 Comidas'
+        pack: 'Almuerzo y Cena'
     },
     {
         id: 2,
@@ -47,7 +47,7 @@ const TESTIMONIALS = [
         text: 'Me encanta poder personalizar las proteínas. Como atleta, necesito comidas con buen aporte nutricional y BiKitchen cumple perfectamente.',
         date: '2024-11-05',
         verified: true,
-        pack: 'Pack 10 Comidas'
+        pack: 'Almuerzo y Cena'
     },
     {
         id: 5,
@@ -69,7 +69,7 @@ const TESTIMONIALS = [
         text: 'Trabajando desde casa es fácil descuidar la alimentación. Con BiKitchen tengo comidas saludables listas en minutos. 100% recomendado.',
         date: '2024-10-25',
         verified: true,
-        pack: 'Pack 10 Comidas'
+        pack: 'Almuerzo y Cena'
     }
 ];
 

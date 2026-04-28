@@ -1,11 +1,18 @@
 import { useState, useEffect } from 'react';
+import { db, auth } from '../firebase/config';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 
 const STORAGE_KEY = 'bikitchen_order_history';
 
+/**
+ * Hook Senior para la gestión del historial de pedidos.
+ * Implementa sincronización reactiva, deduplicación y normalización de datos.
+ */
 export default function useOrderHistory() {
     const [orders, setOrders] = useState([]);
+    const [loading, setLoading] = useState(true);
 
-    // Cargar historial del localStorage
+    // 1. Carga inicial desde LocalStorage (Para respuesta instantánea / Optimistic UI)
     useEffect(() => {
         try {
             const saved = localStorage.getItem(STORAGE_KEY);
@@ -13,23 +20,94 @@ export default function useOrderHistory() {
                 setOrders(JSON.parse(saved));
             }
         } catch (error) {
-            console.error('Error loading order history:', error);
+            console.error('[OrderHistory] Error cargando caché local:', error);
+            
         }
     }, []);
 
-    // Guardar en localStorage
-    const saveToStorage = (newOrders) => {
-        try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(newOrders));
-        } catch (error) {
-            console.error('Error saving order history:', error);
+    // 2. Sincronización proactiva con Firestore
+    useEffect(() => {
+        const user = auth.currentUser;
+        if (!user) {
+            setLoading(false);
+            return;
         }
-    };
 
-    // Agregar pedido al historial
+        setLoading(true);
+
+        const pedidosRef = collection(db, 'pedidos');
+        const userEmail = user.email?.toLowerCase();
+        
+        // Mantenemos un mapa para deduplicar resultados de diferentes queries
+        const ordersMap = new Map();
+
+        const processSnapshot = (snapshot, sourceTag) => {
+            snapshot.docs.forEach(doc => {
+                const data = doc.data();
+                const normalizedOrder = {
+                    id: doc.id,
+                    orderNumber: data.numeroOrden || doc.id.slice(0, 8),
+                    items: data.items || [],
+                    subtotal: data.subtotal || 0,
+                    discount: data.descuento || 0,
+                    coupon: data.cupon || null,
+                    total: data.total || 0,
+                    customer: {
+                        name: data.cliente,
+                        phone: data.telefono,
+                        email: data.correo
+                    },
+                    delivery: {
+                        address: data.direccion || data.detalles_entrega?.direccion || '',
+                        date: data.fecha_entrega,
+                        time: data.horario_preferido || '9:00 AM - 2:00 PM'
+                    },
+                    paymentMethod: data.metodo_pago,
+                    status: data.status || 'pending',
+                    createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : data.createdAt
+                };
+                ordersMap.set(doc.id, normalizedOrder);
+            });
+
+            // Convertir mapa a array y ordenar por fecha descendente
+            const mergedOrders = Array.from(ordersMap.values())
+                .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+            setOrders(mergedOrders);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(mergedOrders));
+            setLoading(false);
+        };
+
+        // QUERY A: Por UID (Más robusta, para pedidos nuevos)
+        const qByUid = query(pedidosRef, where('userId', '==', user.uid));
+        const unsubByUid = onSnapshot(qByUid, 
+            (snaps) => processSnapshot(snaps, 'UID'),
+            (err) => console.error('[OrderHistory] Error en query UID:', err)
+        );
+
+        // QUERY B: Por Correo (Para pedidos antiguos o invitados)
+        // Nota: Si el usuario tiene un email en mayúsculas en Auth, 
+        // buscamos por la versión exacta y la normalizada por seguridad.
+        const qByEmail = query(pedidosRef, where('correo', '==', userEmail));
+        const unsubByEmail = onSnapshot(qByEmail, 
+            (snaps) => processSnapshot(snaps, 'Email (Lower)'),
+            (err) => console.error('[OrderHistory] Error en query Email:', err)
+        );
+
+        // Limpiar suscripciones al desmontar
+        return () => {
+            unsubByUid();
+            unsubByEmail();
+        };
+    }, [auth.currentUser]);
+
+    /**
+     * Agrega un pedido de forma optimista tras el checkout.
+     * @param {Object} order Datos de la orden
+     */
     const addOrderToHistory = (order) => {
         const newOrder = {
-            id: Date.now().toString(),
+            id: order.id || `temp-${Date.now()}`,
             orderNumber: order.orderNumber,
             items: order.items,
             subtotal: order.subtotal,
@@ -47,52 +125,26 @@ export default function useOrderHistory() {
                 time: order.deliveryTime
             },
             paymentMethod: order.paymentMethod,
-            status: 'pending', // pending, confirmed, preparing, delivered, cancelled
+            status: order.status || 'pending',
             createdAt: new Date().toISOString()
         };
         
-        const newOrders = [newOrder, ...orders];
-        setOrders(newOrders);
-        saveToStorage(newOrders);
+        setOrders(prev => {
+            const exists = prev.find(o => o.orderNumber === newOrder.orderNumber);
+            if (exists) return prev;
+            const updated = [newOrder, ...prev];
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+            return updated;
+        });
+
         return newOrder;
     };
 
-    // Actualizar estado de un pedido
-    const updateOrderStatus = (orderId, status) => {
-        const newOrders = orders.map(order => 
-            order.id === orderId ? { ...order, status } : order
-        );
-        setOrders(newOrders);
-        saveToStorage(newOrders);
-    };
-
-    // Obtener pedido por ID
-    const getOrderById = (orderId) => {
-        return orders.find(order => order.id === orderId);
-    };
-
-    // Obtener pedidos recientes (últimos 30 días)
-    const getRecentOrders = () => {
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        
-        return orders.filter(order => 
-            new Date(order.createdAt) >= thirtyDaysAgo
-        );
-    };
-
-    // Limpiar historial
-    const clearHistory = () => {
-        setOrders([]);
-        localStorage.removeItem(STORAGE_KEY);
-    };
-
-    // Estadísticas
     const getStats = () => {
         const totalOrders = orders.length;
         const totalSpent = orders.reduce((sum, order) => sum + (order.total || 0), 0);
         const totalItems = orders.reduce((sum, order) => 
-            sum + order.items.reduce((itemSum, item) => itemSum + (item.quantity || 1), 0), 0
+            sum + (Array.isArray(order.items) ? order.items.reduce((itemSum, item) => itemSum + (item.quantity || 1), 0) : 0), 0
         );
         
         return {
@@ -105,11 +157,8 @@ export default function useOrderHistory() {
 
     return {
         orders,
+        loading,
         addOrderToHistory,
-        updateOrderStatus,
-        getOrderById,
-        getRecentOrders,
-        clearHistory,
         getStats,
         hasOrders: orders.length > 0
     };

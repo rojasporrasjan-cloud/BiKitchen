@@ -76,7 +76,7 @@ export function DialogContent({ children, className = '', onClose, showCloseButt
   return (
     <div
       onClick={handleClick}
-      className={`relative bg-white rounded-2xl shadow-2xl w-full overflow-hidden flex flex-col ${className}`}
+      className={`relative rounded-2xl shadow-2xl w-full overflow-hidden flex flex-col ${className}`}
       style={{
         maxHeight: '90vh',
         animation: 'dialogEnter 0.25s ease-out'

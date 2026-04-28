@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, useScroll, useTransform, useInView, AnimatePresence } from 'framer-motion';
 import { ArrowRight, Sparkles, Play, Volume2, VolumeX } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import MagneticButton from './MagneticButton';
@@ -8,6 +8,26 @@ import useIsMobile from '../hooks/useIsMobile';
 const VideoHero = ({ videoSrc, title, subtitle, primaryCTA, secondaryCTA }) => {
     const videoRef = useRef(null);
     const isMobile = useIsMobile();
+    const [isScrolled, setIsScrolled] = React.useState(false);
+    
+    // Listener de scroll ultra-seguro (Evento + Intervalo)
+    useEffect(() => {
+        const checkScroll = () => {
+            const currentY = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
+            setIsScrolled(currentY > 15);
+        };
+        window.addEventListener('scroll', checkScroll, { passive: true });
+        const interval = setInterval(checkScroll, 100);
+        checkScroll();
+        return () => {
+            window.removeEventListener('scroll', checkScroll);
+            clearInterval(interval);
+        };
+    }, []);
+    
+    // Usar scrollYProgress (0 a 1) para mayor robustez en cualquier dispositivo
+    const { scrollYProgress } = useScroll();
+    const opacityScroll = useTransform(scrollYProgress, [0, 0.02], [1, 0]);
 
     // Forced Playback for iOS Low Power Mode
     useEffect(() => {
@@ -84,8 +104,8 @@ const VideoHero = ({ videoSrc, title, subtitle, primaryCTA, secondaryCTA }) => {
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.2)_100%)] z-[2]" />
             </div>
 
-            {/* Content */}
-            <div className={`container relative z-10 mx-auto ${isMobile ? 'px-4 -mt-48 pt-8 pb-16' : 'px-6 md:px-8 -mt-20 pt-20 md:pt-24 pb-20'}`}>
+            {/* Content Container - Ajustado para evitar cortes en iPhone pequeños */}
+            <div className={`container relative z-10 mx-auto ${isMobile ? 'px-4 -mt-32 pt-20 pb-16' : 'px-6 md:px-8 -mt-20 pt-20 md:pt-24 pb-20'}`}>
                 <div className={isMobile ? 'max-w-full text-center mx-auto' : 'max-w-5xl'}>
                     {/* Subtitle */}
                     <motion.span
@@ -164,57 +184,56 @@ const VideoHero = ({ videoSrc, title, subtitle, primaryCTA, secondaryCTA }) => {
                 </div>
             </div>
 
-            {/* Bottom Scroll Indicator */}
-            {isMobile ? (
-                <motion.div
-                    initial={{ opacity: 1, y: 0 }}
-                    animate={{ y: [0, 10, 0] }}
-                    transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
-                    style={{ bottom: '80px' }}
-                    className="fixed left-1/2 -translate-x-1/2 z-[9999] pointer-events-none"
-                >
-                    <div className="flex items-center justify-center">
-                        <svg
-                            width="24"
-                            height="24"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="white"
-                            strokeWidth="2.5"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            className="drop-shadow-lg"
-                        >
-                            <polyline points="12 5 12 19"></polyline>
-                            <polyline points="19 12 12 19 5 12"></polyline>
-                        </svg>
-                    </div>
-                </motion.div>
-            ) : (
-            <motion.div
-                initial={{ opacity: 1, y: 0 }}
-                animate={{ y: [0, 10, 0] }}
-                transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
-                className="fixed bottom-16 left-1/2 -translate-x-1/2 z-[9999] pointer-events-none"
-            >
-                <div className="flex items-center justify-center">
-                    <svg
-                        width="24"
-                        height="24"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="white"
-                        strokeWidth="2.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        className="drop-shadow-lg"
+            {/* Bottom Scroll Indicator - v1.7 - Diseño Minimalista y Premium */}
+            <AnimatePresence>
+                {!isScrolled && (
+                    <motion.div
+                        key="scroll-indicator"
+                        initial={{ opacity: 0, y: -20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.8 }}
+                        className="pointer-events-none fixed left-0 right-0 z-[100] flex flex-col items-center"
+                        style={{ bottom: isMobile ? '115px' : '40px' }}
                     >
-                        <polyline points="12 5 12 19"></polyline>
-                        <polyline points="19 12 12 19 5 12"></polyline>
-                    </svg>
-                </div>
-            </motion.div>
-            )}
+                        <motion.div
+                            animate={{ y: [0, 15, 0] }}
+                            transition={{ repeat: Infinity, duration: 2.5, ease: "easeInOut" }}
+                            className="flex flex-col items-center"
+                        >
+                            <span className="text-white/40 text-[10px] font-bold uppercase tracking-[0.3em] mb-4">Descubrir</span>
+                            <div className="flex flex-col items-center -space-y-3">
+                                <svg
+                                    width="32"
+                                    height="32"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="white"
+                                    strokeWidth="1.5"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    className="opacity-40"
+                                >
+                                    <path d="M7 13l5 5 5-5M7 6l5 5 5-5" />
+                                </svg>
+                                <svg
+                                    width="32"
+                                    height="32"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="white"
+                                    strokeWidth="2"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    className="drop-shadow-[0_0_8px_rgba(255,255,255,0.8)]"
+                                >
+                                    <path d="M7 13l5 5 5-5M7 6l5 5 5-5" />
+                                </svg>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </section>
     );
 };

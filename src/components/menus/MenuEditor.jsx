@@ -176,30 +176,8 @@ export default function MenuEditor({ platos, onChange, menuType = 'regular' }) {
                       />
                       <p className="text-xs text-gray-500 mt-1.5">💡 Incluye el nombre completo del platillo y las porciones</p>
                     </div>
-                  ) : isDesayuno ? (
-                    /* Formato especial para desayunos: un solo campo combinado */
-                    <div>
-                      <label className="flex items-center gap-1.5 text-xs font-medium text-gray-500 mb-1">
-                        <span className="text-base">🍳</span>
-                        Desayuno completo
-                      </label>
-                      <textarea
-                        value={plato.proteina || ''}
-                        onChange={(e) => {
-                          handleFieldChange(index, 'proteina', e.target.value);
-                        }}
-                        rows={3}
-                        className={`w-full px-3 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 transition-all resize-none ${
-                          plato.proteina?.trim() 
-                            ? 'border-green-200 bg-green-50/30 focus:ring-green-100 focus:border-green-400' 
-                            : 'border-gray-200 focus:ring-orange-100 focus:border-orange-400'
-                        }`}
-                        placeholder="Ej: Gallo pinto con huevos revueltos, queso fresco y tortilla"
-                      />
-                      <p className="text-xs text-gray-500 mt-1.5">💡 Escribe el desayuno completo en un solo texto</p>
-                    </div>
                   ) : (
-                    /* Formato normal para otros menús: 3 campos */
+                    /* Formato normal para otros menús (incluyendo desayunos ahora): 3 campos */
                     <>
                       <div>
                         <label className="flex items-center gap-1.5 text-xs font-medium text-gray-500 mb-1">

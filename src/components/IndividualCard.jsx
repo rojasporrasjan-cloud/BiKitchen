@@ -9,74 +9,68 @@ export default function IndividualCard({ producto, onClick, canEditImage, onUplo
 
   return (
     <motion.div
-      whileHover={{ y: -8, scale: 1.02 }}
-      transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-      className="group rounded-[2rem] h-full shadow-lg hover:shadow-2xl bg-white border-2 border-gray-50 hover:border-orange-200 overflow-hidden flex flex-col cursor-pointer transition-all duration-300"
+      whileHover={{ y: -8, scale: 1.01 }}
+      whileTap={{ scale: 0.98 }}
+      transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+      className="group rounded-[2.5rem] h-80 sm:h-96 w-full shadow-xl hover:shadow-2xl bg-gray-900 overflow-hidden relative cursor-pointer transition-all duration-500"
       onClick={onClick}
     >
-      {/* Imagen con Overlay */}
-      <div className="h-44 sm:h-40 w-full overflow-hidden relative">
-        <img
-          src={producto.imagen}
-          alt={producto.nombre}
-          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-        />
-        
-        {/* Gradient Overlay */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-60 group-hover:opacity-80 transition-opacity" />
+      {/* Imagen Full Background */}
+      <img
+        src={producto.imagen}
+        alt={producto.nombre}
+        className="absolute inset-0 w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110 opacity-70 group-hover:opacity-100"
+      />
 
-        {/* Price Badge over Image */}
-        {startingPrice && (
-          <div className="absolute bottom-3 left-3 bg-white/95 backdrop-blur-md px-3 py-1.5 rounded-xl shadow-lg border border-white/20">
-            <span className="text-xs font-black text-gray-900">
-              {formatPrice(startingPrice)}
-            </span>
-          </div>
-        )}
-        
-        {canEditImage && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onUploadImage();
-            }}
-            className="absolute top-3 right-3 p-2.5 bg-white/90 rounded-full shadow-lg text-[#FF671D] hover:bg-white transition-all transform hover:scale-110 flex items-center justify-center opacity-0 group-hover:opacity-100 z-10"
-            title="Cambiar imagen"
-          >
-            <Camera size={18} />
-          </button>
-        )}
-      </div>
+      {/* Gradient Overlay Inmersivo (Más fuerte para legibilidad del blanco) */}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
 
-      <div className="p-3.5 sm:p-5 flex flex-col gap-2 flex-1">
-        <div>
-          <h3 className="text-lg font-black text-gray-900 group-hover:text-bikitchen-orange transition-colors line-clamp-1">
-            {producto.nombre}
-          </h3>
-          <p className="text-xs text-gray-500 line-clamp-2 mt-1 font-medium leading-relaxed">
-            {producto.descripcion}
-          </p>
+      {/* Content Overlay */}
+      <div className="absolute inset-0 p-6 flex flex-col justify-between z-10">
+        <div className="flex justify-between items-start">
+          {/* Price Badge with Glassmorphism */}
+          {startingPrice && (
+            <div className="bg-white/20 backdrop-blur-xl px-4 py-2 rounded-2xl border border-white/20 shadow-xl">
+              <span className="text-[10px] sm:text-xs font-black text-white tracking-tight">
+                Desde {formatPrice(startingPrice)}
+              </span>
+            </div>
+          )}
+
+          {canEditImage && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onUploadImage();
+              }}
+              className="p-3 bg-white/10 backdrop-blur-md rounded-2xl shadow-xl text-white hover:bg-orange-600 transition-all transform hover:scale-110 flex items-center justify-center opacity-0 group-hover:opacity-100 border border-white/10"
+              title="Cambiar imagen"
+            >
+              <Camera size={20} />
+            </button>
+          )}
         </div>
 
-        {/* Stats / Categories / Badges */}
-        <div className="flex flex-wrap gap-2 items-center mt-auto pt-3">
-          <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-orange-50 text-[10px] font-black text-orange-600 border border-orange-100 uppercase tracking-wider">
+        <div className="space-y-3">
+          {/* Category Badge */}
+          <span className="inline-block bg-orange-600 text-[8px] sm:text-[9px] font-black text-white px-2.5 py-1.5 rounded-xl uppercase tracking-widest shadow-lg border border-orange-400/30">
             {producto.categoria}
           </span>
-        </div>
 
-        {/* Bottom Action Area */}
-        <div className="mt-auto pt-2 flex items-center justify-between border-t border-gray-50 group-hover:border-orange-50 transition-colors">
-          <div className="flex items-center gap-1.5 text-xs font-black text-orange-600 uppercase tracking-tight">
-            <Plus size={14} strokeWidth={3} />
-            Seleccionar
+          <div>
+            <h3 className="text-xl sm:text-2xl font-black text-white leading-tight drop-shadow-lg">
+              {producto.nombre}
+            </h3>
+            <p className="text-xs sm:text-sm text-slate-200 line-clamp-2 mt-2 font-medium leading-relaxed drop-shadow-md">
+              {producto.descripcion}
+            </p>
           </div>
-          <motion.div 
-            className="w-8 h-8 rounded-full bg-gray-50 text-gray-400 flex items-center justify-center group-hover:bg-orange-500 group-hover:text-white transition-all shadow-sm"
-            whileHover={{ scale: 1.1 }}
-          >
-            <Eye size={16} />
-          </motion.div>
+
+          {/* Action Indicator */}
+          <div className="pt-2 flex items-center gap-2 text-[10px] font-black text-white/60 group-hover:text-orange-400 uppercase tracking-widest transition-colors">
+            <Plus size={14} strokeWidth={4} className="group-hover:rotate-90 transition-transform duration-300" />
+            <span>Personalizar</span>
+          </div>
         </div>
       </div>
     </motion.div>

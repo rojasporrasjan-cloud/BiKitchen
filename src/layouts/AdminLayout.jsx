@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, Outlet, Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Menu as MenuIcon, LogOut, X, LayoutDashboard, ShoppingBag, Package, Users, ClipboardList, Truck, UtensilsCrossed, Gift, Tag, Search, Bell, Monitor, Smartphone, Image, Upload, MessageCircle, FileText } from 'lucide-react';
+import { Menu as MenuIcon, LogOut, X, LayoutDashboard, ShoppingBag, Package, Users, ClipboardList, Truck, UtensilsCrossed, Gift, Tag, Search, Bell, Monitor, Smartphone, Image, Upload, MessageCircle, FileText, Target } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useOrders } from '../context/OrdersContext';
 import { getAllCoupons } from '../utils/firestoreCoupons';
@@ -116,11 +116,13 @@ export default function AdminLayout() {
         { to: '/admin/promotions', label: 'Promociones', icon: Gift },
         { to: '/admin/coupons', label: 'Cupones', icon: Tag },
         { to: '/admin/gift-cards', label: 'Tarjeta de Regalo', icon: Gift, badge: pendingGiftCardsCount },
+        { to: '/admin/reports', label: 'Admin', icon: Target, highlight: true },
         { to: '/admin/notifications', label: 'Notificaciones', icon: Bell },
         { to: '/admin/imagenes', label: 'Subir Imágenes', icon: Upload },
 
         // ⚙️ Configuración
         { to: '/admin/whatsapp-config', label: 'WhatsApp', icon: MessageCircle },
+        { to: '/admin/shipping', label: 'Costos de Envío', icon: Truck },
         { to: '/admin/shipping-discount', label: 'Descuento Envío', icon: Truck },
     ];
 

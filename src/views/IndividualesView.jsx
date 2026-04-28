@@ -16,10 +16,42 @@ import { uploadOptimizedImage } from '../services/cloudinaryService';
 import { cleanFirebaseUrl } from '../utils/firebaseUrl';
 import { cachedFetch, invalidateCache } from '../utils/firestoreCache';
 
+import { useQuery } from '../hooks/useQuery';
+import { trackViewContent, trackViewCategory, trackViewMenu } from '../services/facebookPixel';
+
 export default function IndividualesView() {
+  const query = useQuery();
   const { addToCart } = useCart();
   const { isAdmin } = useAuth();
-  const [categoriaActiva, setCategoriaActiva] = useState(INDIVIDUALES_CATEGORIES[0]);
+
+  // Soporte para abrir un producto específico directamente (Vía Meta Ads)
+  useEffect(() => {
+    const productId = query.get('id') || query.get('producto');
+    if (productId) {
+      const product = individualesData.find(p => p.id === productId);
+      if (product) {
+        setCategoriaActiva(product.categoria);
+        // Pequeño delay para asegurar que el sistema está listo
+        setTimeout(() => {
+          setProductoSeleccionado(product);
+          // Configurar precios por defecto
+          if (product.precio500) setTamano('500');
+          else if (product.precio1kg) setTamano('1000');
+        }, 100);
+      }
+    }
+  }, []); // Solo al montar la página
+
+  /**
+   * Determine the initial category based on the URL parameter 'categoria' or 'cat'.
+   * Fallback to the first available category if not found or invalid.
+   */
+  const urlCat = query.get('categoria') || query.get('cat');
+  const initialCat = INDIVIDUALES_CATEGORIES.find(
+    c => c.toLowerCase() === urlCat?.toLowerCase()
+  ) || INDIVIDUALES_CATEGORIES[0];
+
+  const [categoriaActiva, setCategoriaActiva] = useState(initialCat);
   const [busqueda, setBusqueda] = useState('');
   const [productoSeleccionado, setProductoSeleccionado] = useState(null);
   const [tamano, setTamano] = useState('500'); // '500' o '1000'
@@ -93,7 +125,7 @@ export default function IndividualesView() {
         const url = result.url;
 
         const confRef = doc(db, 'config', 'individual_images');
-        await setDoc(confRef, { 
+        await setDoc(confRef, {
           updatedAt: new Date().toISOString(),
           images: {
             [producto.id]: url
@@ -102,7 +134,7 @@ export default function IndividualesView() {
             [producto.id]: result.publicId
           }
         }, { merge: true });
-        
+
         await setDoc(doc(db, 'individuales_imagenes', producto.id), { imagenUrl: url, cloudinaryPublicId: result.publicId }, { merge: true });
         invalidateCache('individuales_images_map');
         setImagenesCustom((prev) => ({ ...prev, [producto.id]: url }));
@@ -195,10 +227,15 @@ export default function IndividualesView() {
       categoria,
       productos: productosFiltrados
         .filter((p) => p.categoria === categoria)
-        .map((p) => ({
-          ...p,
-          imagen: imagenesCustom[p.id] || p.imagen
-        }))
+        .map((p) => {
+          // Si es Picadillos o Vegetales, priorizamos la imagen del código (Cloudinary)
+          // para evitar que los placeholders viejos de la base de datos bloqueen el overhaul visual.
+          const isTargetOverhaul = p.categoria === 'Picadillos' || p.categoria === 'Vegetales' || p.categoria === 'Sopas';
+          return {
+            ...p,
+            imagen: isTargetOverhaul ? p.imagen : (imagenesCustom[p.id] || p.imagen)
+          };
+        })
     }));
   }, [categoriaActiva, productosFiltrados, imagenesCustom, loadingImages]);
 
@@ -236,7 +273,8 @@ export default function IndividualesView() {
     }
     const units = getProductUnits(productoSeleccionado.categoria);
     const labelUnidad = tamano === '500' ? units.labelPequeno : units.labelGrande;
-    const imagenProducto = imagenesCustom[productoSeleccionado.id] || productoSeleccionado.imagen;
+    const isTargetOverhaul = productoSeleccionado.categoria === 'Picadillos' || productoSeleccionado.categoria === 'Vegetales' || productoSeleccionado.categoria === 'Sopas';
+    const imagenProducto = isTargetOverhaul ? productoSeleccionado.imagen : (imagenesCustom[productoSeleccionado.id] || productoSeleccionado.imagen);
     addToCart({
       id: `${productoSeleccionado.id}-${tamano}`,
       name: productoSeleccionado.nombre,
@@ -264,25 +302,45 @@ export default function IndividualesView() {
           <div className="lg:hidden bg-white/95 backdrop-blur-md py-2 border-b border-gray-100 z-30 shadow-sm transition-all duration-300">
             <div className="w-full px-4">
               <div className="flex gap-2 overflow-x-auto pb-2 hide-scrollbar">
-                {categoryGroups.map((group) => (
-                  <button
-                    key={group.id}
-                    onClick={() => {
-                      setActiveGroup(group.id);
-                      const firstCat = group.id === 'Todos' ? INDIVIDUALES_CATEGORIES[0] : group.categories[0];
-                      if (firstCat && !group.categories?.includes(categoriaActiva) && group.id !== 'Todos') {
-                        setCategoriaActiva(firstCat);
-                      }
-                    }}
-                    className={`flex-shrink-0 px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 border-2 ${activeGroup === group.id
-                      ? 'bg-gray-900 text-white border-gray-900 shadow-md'
-                      : 'bg-white text-gray-500 border-gray-100 hover:border-gray-200'
-                      }`}
-                  >
-                    <span className="text-sm">{group.icon}</span>
-                    <span>{group.label}</span>
-                  </button>
-                ))}
+                {/* Botón "Todos" */}
+                <button
+                  onClick={() => {
+                    setActiveGroup('Todos');
+                    setCategoriaActiva(INDIVIDUALES_CATEGORIES[0]);
+                  }}
+                  className={`flex-shrink-0 px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 border-2 ${activeGroup === 'Todos'
+                    ? 'bg-gray-900 text-white border-gray-900 shadow-md'
+                    : 'bg-white text-gray-500 border-gray-100 hover:border-gray-200'
+                    }`}
+                >
+                  <span className="text-sm">✨</span>
+                  <span>Todos</span>
+                </button>
+
+                {/* Todas las categorías individuales */}
+                {INDIVIDUALES_CATEGORIES.map((cat) => {
+                  const isActive = categoriaActiva === cat;
+                  return (
+                    <button
+                      key={cat}
+                      onClick={() => {
+                        setCategoriaActiva(cat);
+                        // Detectar a qué grupo pertenece esta categoría
+                        const group = categoryGroups.find(g => g.categories?.includes(cat));
+                        if (group) {
+                          setActiveGroup(group.id);
+                        }
+                      }}
+                      className={`flex-shrink-0 px-3 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 border-2 ${isActive
+                        ? 'bg-gray-900 text-white border-gray-900 shadow-md'
+                        : 'bg-white text-gray-500 border-gray-100 hover:border-gray-200'
+                        }`}
+                    >
+                      <span className="text-sm">{CATEGORY_ICONS[cat] || '📦'}</span>
+                      <span>{cat}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -308,7 +366,7 @@ export default function IndividualesView() {
                       className="w-full pl-9 pr-3 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all"
                     />
                     {busqueda && (
-                      <button 
+                      <button
                         onClick={() => setBusqueda('')}
                         className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-orange-600"
                       >
@@ -456,7 +514,7 @@ export default function IndividualesView() {
         </main>
         <Footer />
 
-        {/* Modal de detalle */}
+        {/* Modal Dual: Zero-Scroll Mobile / Premium Split Desktop */}
         {productoSeleccionado && ReactDOM.createPortal(
           <AnimatePresence>
             <motion.div
@@ -464,154 +522,247 @@ export default function IndividualesView() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={cerrarModal}
-              className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4"
+              className="fixed inset-0 bg-black/95 backdrop-blur-md flex items-end sm:items-center justify-center z-[9999] p-0 sm:p-4"
             >
               <motion.div
-                initial={{ scale: 0.9, opacity: 0, y: 40 }}
-                animate={{ scale: 1, opacity: 1, y: 0 }}
-                exit={{ scale: 0.9, opacity: 0, y: 40 }}
+                initial={{ y: "100%", opacity: 1 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: "100%", opacity: 0 }}
+                transition={{ type: 'spring', damping: 25, stiffness: 300 }}
                 onClick={(e) => e.stopPropagation()}
-                className="bg-white rounded-[2.5rem] max-w-lg w-full max-h-[90vh] shadow-2xl overflow-hidden flex flex-col border-2 border-white/50"
+                className="bg-white rounded-t-0 sm:rounded-[3rem] max-w-4xl w-full h-[100dvh] sm:h-auto sm:max-h-[90vh] shadow-2xl overflow-hidden flex flex-col sm:border-2 border-white/20"
               >
-                {/* Header Modal */}
-                <div className="bg-gradient-to-r from-orange-500 to-amber-500 text-white px-8 py-6 flex-shrink-0 relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
-                  <div className="flex items-center justify-between relative z-10">
-                    <div className="flex items-center gap-4">
-                      <div className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center text-3xl shadow-xl border border-white/30">
-                        {CATEGORY_ICONS[productoSeleccionado.categoria] || '🍽️'}
-                      </div>
-                      <div>
-                        <h3 className="text-2xl font-black leading-tight">
-                          {productoSeleccionado.nombre}
-                        </h3>
-                        <p className="text-white/80 text-xs font-black uppercase tracking-widest mt-1">
-                          {productoSeleccionado.categoria}
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={cerrarModal}
-                      className="w-10 h-10 bg-white/20 backdrop-blur-md hover:bg-white text-white hover:text-orange-600 rounded-xl flex items-center justify-center transition-all"
-                    >
-                      <X size={20} />
-                    </button>
-                  </div>
-                </div>
+                {/* Hero Image Header - Mobile Adaptive / Desktop Enhanced */}
+                <div className="relative h-[40vh] sm:h-[480px] w-full flex-shrink-0 group/hero">
+                  <img
+                    src={(() => {
+                      const isTarget = productoSeleccionado.categoria === 'Picadillos' || productoSeleccionado.categoria === 'Vegetales' || productoSeleccionado.categoria === 'Sopas';
+                      return isTarget ? productoSeleccionado.imagen : (imagenesCustom[productoSeleccionado.id] || productoSeleccionado.imagen);
+                    })()}
+                    alt={productoSeleccionado.nombre}
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent opacity-90" />
 
-                <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar">
-                  {productoSeleccionado.descripcion && (
-                    <div className="bg-orange-50/50 p-5 rounded-3xl border border-orange-100/50">
-                      <p className="text-sm text-gray-700 font-medium leading-relaxed italic">
-                        "{productoSeleccionado.descripcion}"
-                      </p>
-                    </div>
-                  )}
-
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Selecciona Tamaño</p>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      {['500', '1000'].map((size) => {
-                        const units = getProductUnits(productoSeleccionado.categoria);
-                        const label = size === '500' ? units.unidadPequena : units.unidadGrande;
-                        const price = size === '500' ? productoSeleccionado.precio500 : productoSeleccionado.precio1kg;
-                        if (!price) return null;
-                        const isActive = tamano === size;
-
-                        return (
-                          <button
-                            key={size}
-                            onClick={() => setTamano(size)}
-                            className={`p-5 rounded-3xl border-2 transition-all flex flex-col items-center text-center gap-2 ${isActive
-                              ? 'bg-orange-50 border-orange-500 ring-4 ring-orange-500/10 shadow-lg'
-                              : 'bg-white border-gray-100 hover:border-orange-200'
-                              }`}
-                          >
-                            <span className="text-2xl">{size === '500' ? '🥡' : '🍱'}</span>
-                            <span className={`text-base font-black ${isActive ? 'text-orange-600' : 'text-gray-900'}`}>{label}</span>
-                            <span className="text-sm font-bold text-gray-500">₡{price.toLocaleString()}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Cantidad</p>
-                    <div className="flex items-center gap-6 bg-gray-50 p-3 rounded-[1.5rem] w-fit border border-gray-100">
-                      <button
-                        onClick={() => setCantidad(Math.max(1, cantidad - 1))}
-                        className="w-12 h-12 bg-white text-gray-900 rounded-xl shadow-sm border border-gray-100 flex items-center justify-center hover:bg-orange-500 hover:text-white transition-all disabled:opacity-50"
-                        disabled={cantidad <= 1}
-                      >
-                        <Minus size={20} />
-                      </button>
-                      <span className="text-2xl font-black w-10 text-center">{cantidad}</span>
-                      <button
-                        onClick={() => setCantidad(cantidad + 1)}
-                        className="w-12 h-12 bg-white text-gray-900 rounded-xl shadow-sm border border-gray-100 flex items-center justify-center hover:bg-orange-500 hover:text-white transition-all"
-                      >
-                        <Plus size={20} />
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <button
-                      onClick={() => setShowNotes(!showNotes)}
-                      className="w-full flex items-center justify-between p-4 bg-gray-50 rounded-2xl text-gray-600 hover:bg-gray-100 transition-all border border-gray-100"
-                    >
-                      <div className="flex items-center gap-3">
-                        <MessageSquare size={18} className="text-orange-500" />
-                        <span className="text-sm font-bold">¿Alguna nota especial?</span>
-                      </div>
-                      <ChevronDown size={18} className={`transition-transform duration-300 ${showNotes ? 'rotate-180' : ''}`} />
-                    </button>
-                    <AnimatePresence>
-                      {showNotes && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: 'auto', opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                        >
-                          <textarea
-                            value={nota}
-                            onChange={(e) => setNota(e.target.value)}
-                            placeholder="Ej: Sin cebolla, por favor..."
-                            className="w-full p-4 rounded-2xl border-2 border-gray-100 focus:border-orange-500 transition-all text-sm outline-none resize-none font-medium text-gray-700 bg-white shadow-inner"
-                            rows={3}
-                          />
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                </div>
-
-                <div className="p-8 bg-gray-50/80 backdrop-blur-md border-t border-gray-100">
-                  <div className="flex items-center justify-between mb-6">
-                    <div>
-                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Total a pagar</p>
-                      <p className="text-3xl font-black text-gray-900">₡{(getPrecioSeleccionado() * cantidad).toLocaleString()}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[10px] font-black text-orange-500 uppercase tracking-widest">Entrega inmediata</p>
-                      <div className="flex items-center gap-1 text-gray-400 overflow-hidden text-ellipsis">
-                         <Check size={14} className="text-green-500" />
-                         <span className="text-xs font-bold">Stock disponible</span>
-                      </div>
-                    </div>
-                  </div>
+                  {/* Close Button High Visibility */}
                   <button
-                    onClick={handleAgregarCarrito}
-                    className="w-full bg-gray-900 hover:bg-orange-600 text-white font-black py-5 rounded-[1.5rem] transition-all flex items-center justify-center gap-3 shadow-xl shadow-gray-900/20 active:scale-95 group"
+                    onClick={cerrarModal}
+                    className="absolute top-6 right-6 w-11 h-11 sm:w-12 sm:h-12 bg-black/40 backdrop-blur-xl hover:bg-white text-white hover:text-orange-600 rounded-2xl flex items-center justify-center transition-all z-20 border border-white/20 shadow-xl"
                   >
-                    <ShoppingCart size={22} className="group-hover:rotate-12 transition-transform" />
-                    <span>Agregar al Carrito</span>
+                    <X size={22} strokeWidth={2.5} />
                   </button>
+
+                  {/* Header Title Overlay */}
+                  <div className="absolute bottom-6 sm:bottom-8 left-8 right-8 z-10">
+                    <div className="flex items-center gap-2 mb-2 sm:mb-3">
+                      <span className="bg-orange-600 text-[9px] sm:text-[10px] font-black uppercase tracking-widest px-2.5 py-1.5 rounded-xl shadow-lg border border-orange-400/30 text-white">
+                        {productoSeleccionado.categoria}
+                      </span>
+                    </div>
+                    <h3 className="text-2xl sm:text-4xl font-black leading-tight text-white drop-shadow-[0_4px_20px_rgba(0,0,0,1)]">
+                      {productoSeleccionado.nombre}
+                    </h3>
+                  </div>
+                </div>
+
+                {/* Content Area - Optimized for Zero-Scroll Mobile */}
+                <div className="flex-1 overflow-hidden p-5 sm:p-10 sm:pt-6 pt-2 space-y-3 sm:space-y-10 custom-scrollbar pb-32 sm:pb-10 bg-white flex flex-col justify-start">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-12 items-center sm:items-start pt-4 sm:pt-0">
+
+                    {/* Columna Izquierda: Información */}
+                    <div className="space-y-6">
+                      {productoSeleccionado.descripcion &&
+                        productoSeleccionado.descripcion !== '4 tazas / 6 tazas' &&
+                        productoSeleccionado.descripcion !== '500 gramos / 1 kg' &&
+                        productoSeleccionado.descripcion !== '4 porc. / 8 porc.' && (
+                          <div className="border-l-4 border-orange-500/20 pl-4 py-1">
+                            <p className="text-sm sm:text-lg text-gray-500 font-medium leading-relaxed italic">
+                              "{productoSeleccionado.descripcion}"
+                            </p>
+                          </div>
+                        )}
+
+                      <div className="space-y-3">
+                        <button
+                          onClick={() => setShowNotes(true)}
+                          className={`w-full flex items-center justify-between p-4 sm:p-5 rounded-[1.2rem] sm:rounded-[1.5rem] transition-all border-2 ${nota ? 'bg-orange-50 border-orange-500' : 'bg-gray-50/50 border-gray-100 hover:border-orange-200'}`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <MessageSquare size={16} className={nota ? 'text-orange-600' : 'text-gray-400'} />
+                            <span className={`text-[11px] sm:text-sm font-black ${nota ? 'text-orange-600' : 'text-gray-600'}`}>
+                              {nota ? 'Ver/Editar Instrucciones' : '¿Añadir alguna instrucción?'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {nota && <span className="w-2 h-2 bg-orange-500 rounded-full animate-pulse" />}
+                            <Plus size={16} className={`transition-transform duration-300 ${nota ? 'rotate-45 text-orange-600' : 'text-gray-400'}`} />
+                          </div>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Columna Derecha: Selectores - Con un poco más de aire arriba en móvil */}
+                    <div className="space-y-6 sm:space-y-8 mt-2 sm:mt-0">
+                      <div className="grid grid-cols-2 gap-4">
+                        {['500', '1000'].map((size) => {
+                          const units = getProductUnits(productoSeleccionado.categoria);
+                          const label = size === '500' ? units.unidadPequena : units.unidadGrande;
+                          const price = size === '500' ? productoSeleccionado.precio500 : productoSeleccionado.precio1kg;
+                          if (!price) return null;
+                          const isActive = tamano === size;
+
+                          return (
+                            <button
+                              key={size}
+                              onClick={() => setTamano(size)}
+                              className={`p-4 sm:p-5 rounded-[1.5rem] sm:rounded-[2rem] border-2 transition-all flex flex-col items-center text-center gap-1.5 sm:gap-2 relative overflow-hidden ${isActive
+                                ? 'bg-orange-50 border-orange-500 ring-4 ring-orange-500/10 shadow-lg'
+                                : 'bg-white border-gray-100 hover:border-orange-200'
+                                }`}
+                            >
+                              <span className="text-2xl sm:text-3xl filter drop-shadow-sm">{size === '500' ? '🥡' : '🍱'}</span>
+                              <div className="flex flex-col">
+                                <span className={`text-[11px] sm:text-base font-black ${isActive ? 'text-orange-600' : 'text-gray-900'}`}>{label}</span>
+                                <span className="text-[10px] sm:text-xs font-bold text-gray-400 font-mono">₡{price.toLocaleString()}</span>
+                              </div>
+                              {isActive && (
+                                <div className="absolute top-0 right-0 p-1.5 sm:p-2 bg-orange-500 rounded-bl-lg sm:rounded-bl-xl">
+                                  <Check size={10} className="text-white" strokeWidth={5} />
+                                </div>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <div className="flex sm:hidden items-center justify-between bg-gray-50/80 p-2 sm:p-3 rounded-[1.5rem] sm:rounded-[1.8rem] border border-gray-100">
+                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest px-4 sm:px-6">Cantidad</p>
+                        <div className="flex items-center gap-4 sm:gap-6">
+                          <button
+                            onClick={() => setCantidad(Math.max(1, cantidad - 1))}
+                            className="w-10 h-10 sm:w-12 sm:h-12 bg-white text-gray-900 rounded-xl sm:rounded-2xl shadow-sm border border-gray-100 flex items-center justify-center hover:bg-orange-600 hover:text-white transition-all disabled:opacity-50"
+                            disabled={cantidad <= 1}
+                          >
+                            <Minus size={18} />
+                          </button>
+                          <span className="text-xl sm:text-2xl font-black w-6 text-center">{cantidad}</span>
+                          <button
+                            onClick={() => setCantidad(cantidad + 1)}
+                            className="w-10 h-10 sm:w-12 sm:h-12 bg-white text-gray-900 rounded-xl sm:rounded-2xl shadow-sm border border-gray-100 flex items-center justify-center hover:bg-orange-600 hover:text-white transition-all"
+                          >
+                            <Plus size={18} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer Dual */}
+                <div className="shrink-0 p-6 sm:p-8 bg-white border-t border-gray-100 z-30 shadow-[0_-10px_30px_rgba(0,0,0,0.05)]">
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-6 max-w-4xl mx-auto">
+                    <div className="flex items-center justify-between w-full sm:w-auto gap-8 lg:gap-12">
+                      <div className="flex items-center gap-10">
+                        <div>
+                          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Total a pagar</p>
+                          <p className="text-3xl sm:text-4xl font-black text-gray-900 tracking-tighter">
+                            ₡{(getPrecioSeleccionado() * cantidad).toLocaleString()}
+                          </p>
+                        </div>
+
+                        {/* Quantity Selector - Visible only on Desktop Footer */}
+                        <div className="hidden sm:flex items-center gap-4 bg-gray-50/80 p-2 rounded-[1.2rem] border border-gray-100 shadow-sm">
+                          <button
+                            onClick={() => setCantidad(Math.max(1, cantidad - 1))}
+                            className="w-8 h-8 bg-white text-gray-900 rounded-lg shadow-sm border border-gray-100 flex items-center justify-center hover:bg-orange-600 hover:text-white transition-all disabled:opacity-50"
+                            disabled={cantidad <= 1}
+                          >
+                            <Minus size={14} />
+                          </button>
+                          <span className="text-lg font-black w-4 text-center text-gray-900">{cantidad}</span>
+                          <button
+                            onClick={() => setCantidad(cantidad + 1)}
+                            className="w-8 h-8 bg-white text-gray-900 rounded-lg shadow-sm border border-gray-100 flex items-center justify-center hover:bg-orange-600 hover:text-white transition-all"
+                          >
+                            <Plus size={14} />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="hidden sm:flex flex-col items-end opacity-60">
+                        <span className="bg-orange-50 text-orange-600 text-[10px] font-black px-3 py-1.5 rounded-lg uppercase border border-orange-100">
+                          Premium Ready
+                        </span>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={handleAgregarCarrito}
+                      className="w-full sm:w-auto bg-gray-900 hover:bg-orange-600 text-white font-black py-4 sm:py-5 px-10 sm:px-14 rounded-[1.5rem] sm:rounded-[2rem] transition-all flex items-center justify-center gap-4 shadow-xl active:scale-95 group text-sm sm:text-lg"
+                    >
+                      <ShoppingCart size={22} className="group-hover:rotate-12 transition-transform" />
+                      <span>Agregar al Carrito</span>
+                    </button>
+                  </div>
                 </div>
               </motion.div>
+
+              {/* Sub-Modal: Ventanita Extra de Instrucciones */}
+              <AnimatePresence>
+                {showNotes && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    onClick={() => setShowNotes(false)}
+                    className="absolute inset-0 bg-black/60 backdrop-blur-md z-[100] flex items-center justify-center p-6"
+                  >
+                    <motion.div
+                      initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                      animate={{ scale: 1, opacity: 1, y: 0 }}
+                      exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="bg-white rounded-[2.5rem] w-full max-w-lg shadow-2xl overflow-hidden"
+                    >
+                      <div className="p-8 space-y-6">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center text-orange-600">
+                              <MessageSquare size={20} />
+                            </div>
+                            <h4 className="text-xl font-black text-gray-900">Instrucciones Especiales</h4>
+                          </div>
+                          <button
+                            onClick={() => setShowNotes(false)}
+                            className="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center text-gray-400 hover:text-gray-900 transition-colors"
+                          >
+                            <X size={20} />
+                          </button>
+                        </div>
+
+                        <p className="text-sm text-gray-500 font-medium">
+                          Indícanos si deseas algún cambio en tu pedido (ej: sin cebolla, extra salsa, etc.)
+                        </p>
+
+                        <textarea
+                          value={nota}
+                          onChange={(e) => setNota(e.target.value)}
+                          placeholder="Escribe aquí tus instrucciones..."
+                          className="w-full p-6 h-40 rounded-[1.5rem] border-2 border-slate-100 focus:border-orange-500 transition-all text-base outline-none resize-none font-medium text-gray-700 bg-slate-50 shadow-inner"
+                          autoFocus
+                        />
+
+                        <button
+                          onClick={() => setShowNotes(false)}
+                          className="w-full bg-gray-900 hover:bg-orange-600 text-white font-black py-4 rounded-[1.5rem] transition-all shadow-xl active:scale-95"
+                        >
+                          Guardar Instrucción
+                        </button>
+                      </div>
+                    </motion.div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </motion.div>
           </AnimatePresence>,
           document.body

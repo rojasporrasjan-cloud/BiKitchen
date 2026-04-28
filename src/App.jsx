@@ -55,7 +55,9 @@ const DispatchSheetView = lazy(() => import('./pages/admin/DispatchSheetView'));
 const WhatsAppConfigView = lazy(() => import('./pages/admin/WhatsAppConfigView'));
 const ShippingDiscountView = lazy(() => import('./views/ShippingDiscountView'));
 const GiftCardsView = lazy(() => import('./pages/admin/GiftCardsView'));
+const ShippingView = lazy(() => import('./pages/admin/ShippingView'));
 const Login = lazy(() => import('./pages/admin/Login'));
+const ReportsView = lazy(() => import('./pages/admin/ReportsView'));
 
 import SmoothScroll from './components/SmoothScroll';
 import ScrollToTop from './components/ScrollToTop';
@@ -70,6 +72,7 @@ import ToastNotification from './components/ToastNotification';
 import PWAPrompt from './components/PWAPrompt';
 // Christmas effects deshabilitados
 import PromoBanner from './components/PromoBanner';
+import NotificationPopupManager from './components/NotificationPopupManager';
 
 import { useCart } from './context/CartContext';
 import { useAuth } from './context/AuthContext';
@@ -241,6 +244,8 @@ function AnimatedRoutes() {
               <Route path="imagenes" element={<ImageUploadPage />} />
               <Route path="whatsapp-config" element={<WhatsAppConfigView />} />
               <Route path="shipping-discount" element={<ShippingDiscountView />} />
+               <Route path="shipping" element={<ShippingView />} />
+              <Route path="reports" element={<ReportsView />} />
             </Route>
 
             {/* 404 - Catch all */}
@@ -284,6 +289,7 @@ function AppContent() {
 
       <div className={`relative z-10 ${!isAdminRoute ? 'pb-20 md:pb-0' : ''}`}>
         <ToastNotification />
+        <NotificationPopupManager />
         <AnimatedRoutes />
       </div>
     </div>

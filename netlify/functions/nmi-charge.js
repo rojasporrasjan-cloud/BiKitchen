@@ -10,9 +10,26 @@
  */
 
 const NMI_API_URL = 'https://secure.networkmerchants.com/api/transact.php';
-const NMI_PRIVATE_KEY = process.env.VITE_NMI_PRIVATE_KEY;
-const NMI_PROCESSOR_ID = process.env.VITE_NMI_PROCESSOR_ID;
-const FN_VERSION = 'v4-with3ds-20260328'; // Ensure version matches deployed state
+// SECURITY: These use non-VITE_ prefix so they are NEVER bundled into client code.
+// The VITE_ prefix would expose them in the browser bundle.
+// Make sure Netlify dashboard env vars match: NMI_PRIVATE_KEY, NMI_PROCESSOR_ID
+const NMI_PRIVATE_KEY = process.env.NMI_PRIVATE_KEY || process.env.VITE_NMI_PRIVATE_KEY;
+const NMI_PROCESSOR_ID = process.env.NMI_PROCESSOR_ID || process.env.VITE_NMI_PROCESSOR_ID;
+const FN_VERSION = 'v5-sanitized-20260427';
+
+/**
+ * Server-side EMVCo 3DS2 sanitization (second line of defense).
+ * Strips accents, removes illegal chars, truncates to max length.
+ */
+function sanitize3DS(value, maxLen = 50, defaultVal = 'N/A') {
+    if (!value || typeof value !== 'string') return defaultVal;
+    let clean = value.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    clean = clean.replace(/ñ/g, 'n').replace(/Ñ/g, 'N');
+    clean = clean.replace(/[^a-zA-Z0-9 .,\-\/]/g, '');
+    clean = clean.replace(/\s+/g, ' ').trim();
+    clean = clean.slice(0, maxLen);
+    return clean || defaultVal;
+}
 
 // Netlify's default timeout is 10s, but we extended it to 26s in netlify.toml.
 // We set an internal timeout of 24s to ensure we return a controlled JSON response.
@@ -93,14 +110,14 @@ exports.handler = async (event) => {
         three_ds_version: threeDsVersion || '2.2.0',
         directory_server_id: resolvedDirectoryServerId,
 
-        // Billing
-        billing_firstname: firstName || 'Cliente',
-        billing_lastname: lastName || 'BiKitchen',
+        // Billing — sanitized for EMVCo 3DS2 (server-side defense)
+        billing_firstname: sanitize3DS(firstName, 50, 'Cliente'),
+        billing_lastname: sanitize3DS(lastName, 50, 'BiKitchen'),
         billing_email: email || '',
-        billing_address1: address1 || 'San Jose',
-        billing_city: city || 'San Jose',
-        billing_state: state || 'SJ',
-        billing_zip: zip || '10101',
+        billing_address1: sanitize3DS(address1, 50, 'San Jose'),
+        billing_city: sanitize3DS(city, 50, 'San Jose'),
+        billing_state: sanitize3DS(state, 3, 'SJ'),
+        billing_zip: sanitize3DS(zip, 16, '10101'),
         billing_country: 'CR',
 
         // Order

@@ -141,11 +141,12 @@ export const OrdersProvider = ({ children }) => {
             const finalTotal = Math.max(0, totalAmount - discountValue + shippingCost);
 
             // Estructura compatible con 'pedidos' (igual que CheckoutSteps)
+            const normalizedEmail = customerData.email?.toLowerCase().trim() || '';
             const newOrder = {
                 numeroOrden: numeroOrden,
                 cliente: customerData.name || "Cliente Manual",
                 telefono: customerData.phone || '',
-                correo: customerData.email || '',
+                correo: normalizedEmail,
                 // direccion: customerData.address || '', // This field is now part of detalles_entrega
                 plan: cartItems[0]?.name || "Personalizado",
                 // Si no hay fecha, es "envío por confirmar" -> null
@@ -214,12 +215,30 @@ export const OrdersProvider = ({ children }) => {
 
     const updateOrderStatus = async (orderId, newStatus, additionalUpdates = {}) => {
         try {
-            const orderRef = doc(db, "pedidos", orderId);
-            const orderSnap = await getDoc(orderRef);
+            let orderRef = doc(db, "pedidos", orderId);
+            let orderSnap;
+            
+            try {
+                // Try fetching by doc ID first
+                orderSnap = await getDoc(orderRef);
+            } catch (err) {
+                // If it's a malformed ID error, we skip to fallback
+                console.log("[OrdersContext] orderId is not a valid doc ID, will try fallback search.");
+            }
 
-            if (!orderSnap.exists()) {
-                console.error("Order not found:", orderId);
-                return;
+            if (!orderSnap?.exists?.()) {
+                console.log("[OrdersContext] Order not found by ID, searching by numeroOrden:", orderId);
+                const q = query(collection(db, "pedidos"), where("numeroOrden", "==", orderId));
+                const querySnap = await getDocs(q);
+                
+                if (!querySnap.empty) {
+                    orderRef = doc(db, "pedidos", querySnap.docs[0].id);
+                    orderSnap = await getDoc(orderRef);
+                    console.log("[OrdersContext] Order found by numeroOrden fallback ✅");
+                } else {
+                    console.error("Order not found by ID or numeroOrden:", orderId);
+                    return;
+                }
             }
 
             const orderData = orderSnap.data();
@@ -404,8 +423,12 @@ export const OrdersProvider = ({ children }) => {
         }
     };
 
+    const contextValue = React.useMemo(() => ({
+        orders, addOrder, updateOrderStatus, confirmPayment, getStats, formatTotal, deleteAllOrders, deleteOrder, loading
+    }), [orders, loading]);
+
     return (
-        <OrdersContext.Provider value={{ orders, addOrder, updateOrderStatus, confirmPayment, getStats, formatTotal, deleteAllOrders, deleteOrder, loading }}>
+        <OrdersContext.Provider value={contextValue}>
             {children}
         </OrdersContext.Provider>
     );

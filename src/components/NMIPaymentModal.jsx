@@ -133,7 +133,7 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
                 cardExpYear: '20' + expYear,
                 firstName,
                 lastName,
-                email: customerInfo?.correo || 'cliente@test.com',
+                email: customerInfo?.correo || 'pedido@bikitchencr.com',
                 address1: cardData.address || customerInfo?.direccion || 'San Jose',
                 city: cardData.city || customerInfo?.city || 'San Jose',
                 state: customerInfo?.state || 'SJ',

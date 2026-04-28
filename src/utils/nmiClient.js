@@ -7,6 +7,39 @@
 // La llave privada y el Processor ID viven únicamente en la Netlify Function (servidor).
 const NMI_PUBLIC_KEY = import.meta.env.VITE_NMI_PUBLIC_KEY;
 
+/**
+ * Sanitizes a string for EMVCo 3DS2 compliance.
+ * The 3DS spec only allows: a-z A-Z 0-9 space . , - /
+ * Costa Rican addresses/names often contain tildes (á,é,ñ) and
+ * descriptive text (parentheses, #, etc.) that WILL cause:
+ *   "Format of one or more elements is invalid according to the specification"
+ *
+ * @param {string} value - Raw input
+ * @param {number} maxLen - Max allowed length per EMVCo spec (default 50)
+ * @param {string} defaultVal - Fallback if result is empty
+ * @returns {string} Sanitized, spec-compliant string
+ */
+function sanitize3DS(value, maxLen = 50, defaultVal = 'N/A') {
+    if (!value || typeof value !== 'string') return defaultVal;
+
+    // 1. Normalize accents: NFD decomposes, then strip combining diacritical marks
+    let clean = value.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+    // 2. Handle ñ/Ñ explicitly (some environments don't decompose ñ via NFD)
+    clean = clean.replace(/ñ/g, 'n').replace(/Ñ/g, 'N');
+
+    // 3. Keep ONLY allowed chars: alphanumeric, space, period, comma, dash, slash
+    clean = clean.replace(/[^a-zA-Z0-9 .,\-\/]/g, '');
+
+    // 4. Collapse multiple spaces and trim
+    clean = clean.replace(/\s+/g, ' ').trim();
+
+    // 5. Truncate to max allowed length
+    clean = clean.slice(0, maxLen);
+
+    return clean || defaultVal;
+}
+
 // Module-level ref to the active ThreeDSecureUI instance.
 // CRITICAL: Must be unmounted before starting a new one (Gateway.js requirement).
 let _activeThreeDSInterface = null;
@@ -115,20 +148,23 @@ export function authenticate3DS(gateway, paymentInfo) {
 
                 // Use ONLY the fields documented by NMI for createUI
                 // Extra fields (device data, size) may cause createUI to return null
+                // Sanitize ALL string fields for EMVCo 3DS2 compliance
+                // This prevents "billAddrLine1 format invalid" errors from
+                // Costa Rican addresses with tildes, ñ, or >50 chars
                 const options = {
                     amount: paymentInfo.amount,
                     currency: paymentInfo.currency,
                     cardNumber: paymentInfo.cardNumber,
                     cardExpMonth: paymentInfo.cardExpMonth,
                     cardExpYear: paymentInfo.cardExpYear,
-                    firstName: paymentInfo.firstName,
-                    lastName: paymentInfo.lastName,
+                    firstName: sanitize3DS(paymentInfo.firstName, 50, 'Cliente'),
+                    lastName: sanitize3DS(paymentInfo.lastName, 50, 'BiKitchen'),
                     email: paymentInfo.email,
-                    address1: paymentInfo.address1,
-                    city: paymentInfo.city,
-                    state: paymentInfo.state,
+                    address1: sanitize3DS(paymentInfo.address1, 50, 'San Jose'),
+                    city: sanitize3DS(paymentInfo.city, 50, 'San Jose'),
+                    state: sanitize3DS(paymentInfo.state, 3, 'SJ'),
                     country: paymentInfo.country,
-                    postalCode: paymentInfo.postalCode
+                    postalCode: sanitize3DS(paymentInfo.postalCode, 16, '10101')
                 };
                 
                 console.log('[NMI] createUI options (minimal):', { ...options, cardNumber: 'XXXX' });
@@ -252,14 +288,14 @@ export async function processTransaction(transactionData) {
         cardHolderAuth: transactionData.cardHolderAuth || '',
         directory_server_id: transactionData.directoryServerId || transactionData.directory_server_id || transactionData.dsTransactionId || transactionData.ds_transaction_id || '',
 
-        // Billing
-        firstName: transactionData.first_name || transactionData.firstName || 'Cliente',
-        lastName: transactionData.last_name || transactionData.lastName || 'BiKitchen',
+        // Billing — sanitized for EMVCo 3DS2 compliance
+        firstName: sanitize3DS(transactionData.first_name || transactionData.firstName, 50, 'Cliente'),
+        lastName: sanitize3DS(transactionData.last_name || transactionData.lastName, 50, 'BiKitchen'),
         email: transactionData.email || '',
-        address1: transactionData.address1 || 'San Jose',
-        city: transactionData.city || 'San Jose',
-        state: transactionData.state || 'SJ',
-        zip: transactionData.zip || '10101',
+        address1: sanitize3DS(transactionData.address1, 50, 'San Jose'),
+        city: sanitize3DS(transactionData.city, 50, 'San Jose'),
+        state: sanitize3DS(transactionData.state, 3, 'SJ'),
+        zip: sanitize3DS(transactionData.zip, 16, '10101'),
 
         // Order
         orderid: transactionData.orderid || '',

@@ -53,7 +53,7 @@ export default function CartDrawer() {
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         onClick={() => setIsCartOpen(false)}
-                        className="fixed inset-0 bg-black/50 z-[60]"
+                        className="fixed inset-0 bg-black/40 z-[60] backdrop-blur-[2px]"
                     />
 
                     {/* Drawer */}
@@ -62,7 +62,7 @@ export default function CartDrawer() {
                         animate={{ x: 0 }}
                         exit={{ x: '100%' }}
                         transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                        className="fixed right-0 top-0 h-full w-full sm:w-96 bg-white z-[60] flex flex-col border-l border-gray-100"
+                        className="fixed right-0 top-0 h-full w-full sm:w-96 bg-white z-[60] flex flex-col border-l border-gray-100 rounded-l-[30px] shadow-2xl shadow-black/10"
                     >
                         {/* Header */}
                         <div className="flex items-center justify-between p-5 border-b border-gray-100">
@@ -81,7 +81,7 @@ export default function CartDrawer() {
                         </div>
 
                         {/* Cart Items */}
-                        <div className="flex-1 overflow-y-auto p-4">
+                        <div className="flex-1 overflow-y-auto p-4 hide-scrollbar">
                             {cart.length === 0 ? (
                                 <div className="text-center py-16 text-gray-400 flex flex-col items-center">
                                     <div className="p-4 bg-gray-100/50 rounded-2xl mb-4">
@@ -103,19 +103,17 @@ export default function CartDrawer() {
                                         >
                                             <div className="w-20 h-20 rounded-lg overflow-hidden bg-gray-200 flex-shrink-0">
                                                 {item.image ? (
-                                                    <img
+                                                    <motion.img
+                                                        layoutId={`cart-img-${item.id}`}
                                                         src={item.image}
                                                         alt={item.name}
                                                         className="w-full h-full object-cover"
-                                                        onError={(e) => {
-                                                            e.target.style.display = 'none';
-                                                            e.target.nextSibling.style.display = 'flex';
-                                                        }}
                                                     />
-                                                ) : null}
-                                                <div className={`w-full h-full items-center justify-center bg-gradient-to-br from-bikitchen-orange/20 to-bikitchen-gold/20 ${item.image ? 'hidden' : 'flex'}`}>
-                                                    <span className="text-2xl">🍽️</span>
-                                                </div>
+                                                ) : (
+                                                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-bikitchen-orange/20 to-bikitchen-gold/20">
+                                                        <span className="text-2xl">🍽️</span>
+                                                    </div>
+                                                )}
                                             </div>
                                             <div className="flex-1 min-w-0">
                                                 <h3 className="font-semibold text-gray-900 truncate">{item.name}</h3>
@@ -124,17 +122,12 @@ export default function CartDrawer() {
                                                         {item.planLabel}
                                                     </p>
                                                 )}
-                                                {item.desc && (
-                                                    <p className="mt-1 text-xs text-gray-500 line-clamp-2">
-                                                        {item.desc}
-                                                    </p>
-                                                )}
                                                 <div className="mt-2 flex items-center justify-between">
                                                     <span className="text-xs text-gray-500">
-                                                        Precio unitario: <span className="font-semibold">₡{(Number(item.price) || 0).toLocaleString('es-CR')}</span>
+                                                        Precio: <span className="font-semibold text-gray-900">₡{(Number(item.price) || 0).toLocaleString('es-CR')}</span>
                                                     </span>
                                                     <span className="text-xs font-bold text-orange-500">
-                                                        Subtotal: ₡{((Number(item.price) || 0) * (Number(item.quantity) || 0)).toLocaleString('es-CR')}
+                                                        ₡{((Number(item.price) || 0) * (Number(item.quantity) || 0)).toLocaleString('es-CR')}
                                                     </span>
                                                 </div>
                                                 <div className="flex items-center gap-2 mt-2 bg-gray-50 w-fit px-2 py-1.5 rounded-lg">
@@ -174,12 +167,12 @@ export default function CartDrawer() {
                                     {/* Cupón Section */}
                                     <div>
                                         {appliedCoupon ? (
-                                            <div className="flex items-center justify-between bg-orange-50 border border-orange-100 rounded-lg px-3 py-2">
+                                            <div className="flex items-center justify-between bg-orange-50 border border-orange-100 rounded-lg px-3 py-2 shadow-sm">
                                                 <div className="flex items-center gap-2">
                                                     <Tag size={16} className="text-orange-500" />
-                                                    <div className="min-w-0">
-                                                        <p className="text-sm font-bold text-gray-900 truncate">{appliedCoupon.code}</p>
-                                                        <p className="text-[10px] text-orange-600 font-medium uppercase tracking-wider">{appliedCoupon.discountText}</p>
+                                                    <div className="min-w-0 text-[11px]">
+                                                        <p className="font-bold text-gray-900 truncate">{appliedCoupon.code}</p>
+                                                        <p className="text-orange-600 font-medium uppercase tracking-wider">{appliedCoupon.discountText}</p>
                                                     </div>
                                                 </div>
                                                 <button onClick={removeCoupon} className="text-gray-400 hover:text-gray-600 p-1">
@@ -222,12 +215,12 @@ export default function CartDrawer() {
                                     {/* Referral Section */}
                                     <div>
                                         {appliedReferral ? (
-                                            <div className="flex items-center justify-between bg-purple-50 border border-purple-100 rounded-lg px-3 py-2">
+                                            <div className="flex items-center justify-between bg-purple-50 border border-purple-100 rounded-lg px-3 py-2 shadow-sm">
                                                 <div className="flex items-center gap-2">
                                                     <Users size={16} className="text-purple-600" />
-                                                    <div className="min-w-0">
-                                                        <p className="text-sm font-bold text-gray-900 truncate">Invitado por {appliedReferral.referrerName || 'Amigo'}</p>
-                                                        <p className="text-[10px] text-purple-600 font-medium uppercase tracking-wider">₡2,000 de regalo aplicado</p>
+                                                    <div className="min-w-0 text-[11px]">
+                                                        <p className="font-bold text-gray-900 truncate">Referido Aplicado</p>
+                                                        <p className="text-purple-600 font-medium uppercase tracking-wider">₡2,000 de regalo</p>
                                                     </div>
                                                 </div>
                                                 <button onClick={removeReferral} className="text-gray-400 hover:text-gray-600 p-1">
@@ -241,13 +234,8 @@ export default function CartDrawer() {
                                                         type="text"
                                                         value={referralCode}
                                                         onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
-                                                        placeholder="CÓDIGO DE INVITACIÓN"
+                                                        placeholder="CÓDIGO AMIGO"
                                                         className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/20"
-                                                        onKeyDown={(e) => {
-                                                            if (e.key === 'Enter' && referralCode.trim()) {
-                                                                applyReferralCode(referralCode).then(res => res.success && setReferralCode(''));
-                                                            }
-                                                        }}
                                                     />
                                                     <button
                                                         onClick={async () => {
@@ -260,7 +248,6 @@ export default function CartDrawer() {
                                                         {referralLoading ? <Loader2 size={16} className="animate-spin" /> : 'Validar'}
                                                     </button>
                                                 </div>
-                                                {referralError && <p className="text-xs text-red-500 font-medium">{referralError}</p>}
                                                 <button onClick={() => { setShowReferralInput(false); setReferralCode(''); }} className="text-[10px] text-gray-400 hover:text-gray-600 uppercase tracking-widest font-bold">Cancelar</button>
                                             </div>
                                         ) : (
@@ -269,14 +256,14 @@ export default function CartDrawer() {
                                                 className="text-sm text-purple-600 hover:text-purple-700 font-medium flex items-center gap-1.5 transition-colors"
                                             >
                                                 <Users size={14} />
-                                                ¿Un amigo te recomendó?
+                                                ¿Te invitó un amigo?
                                             </button>
                                         )}
                                     </div>
                                 </div>
 
                                 {/* Resumen de precios */}
-                                <div className="space-y-2 pt-3 border-t border-gray-200 bg-white rounded-xl p-4 -mx-5 mb-4 mx-4 border">
+                                <div className="space-y-2 pt-3 border-t border-gray-200 bg-white rounded-xl p-4 border mt-2">
                                     <div className="flex justify-between text-xs text-gray-600">
                                         <span className="font-medium">Subtotal</span>
                                         <span>₡{getSubtotal().toLocaleString('es-CR')}</span>
@@ -294,35 +281,35 @@ export default function CartDrawer() {
 
                                     {shippingDiscount > 0 && (
                                         <div className="flex justify-between text-xs text-blue-600 font-semibold">
-                                            <span className="flex items-center gap-1">
+                                            <span className="flex items-center gap-1 text-blue-600">
                                                 <Truck size={13} />
-                                                Envío {shippingDiscount}%
+                                                Envío Bonificado
                                             </span>
+                                            <span>Free</span>
                                         </div>
                                     )}
 
                                     <div className="flex justify-between items-center text-lg font-bold text-gray-900 border-t border-gray-100 pt-2 mt-1">
                                         <span>Total</span>
-                                        <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-orange-600">₡{getTotalPrice().toLocaleString('es-CR')}</span>
+                                        <span className="text-orange-500">₡{getTotalPrice().toLocaleString('es-CR')}</span>
                                     </div>
-                                    <p className="text-[9px] text-gray-400 text-center uppercase tracking-wider font-medium">IVA incluido</p>
                                 </div>
 
                                 {/* Botones de checkout */}
-                                <div className="pt-0 -mx-5 px-5">
+                                <div className="pt-2">
                                     <button
                                         onClick={() => setShowStepsCheckout(true)}
-                                        className="w-full py-3.5 bg-gradient-to-r from-bikitchen-orange to-orange-600 text-white rounded-xl font-bold hover:shadow-lg hover:shadow-orange-300/30 transition-all duration-300 flex items-center justify-center gap-2 active:scale-[0.98] text-sm tracking-wide"
+                                        className="w-full py-3.5 bg-gradient-to-r from-bikitchen-orange to-orange-600 text-white rounded-xl font-bold hover:shadow-lg hover:shadow-orange-300/30 transition-all duration-300 flex items-center justify-center gap-2 active:scale-[0.98] text-sm tracking-wide shadow-md shadow-orange-200/40"
                                     >
                                         Finalizar Pedido
                                         <ArrowRight size={18} />
                                     </button>
                                 </div>
 
-                                {/* Métodos de pago aceptados */}
-                                <div className="mt-2 pt-3 border-t border-gray-200 -mx-5 px-5 pb-2">
-                                    <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest text-center mb-2.5">Pagos Seguros</p>
-                                    <div className="flex items-center justify-center gap-4 opacity-70 hover:opacity-100 transition-opacity">
+                                {/* Métodos de pago */}
+                                <div className="mt-3 pt-3 border-t border-gray-100">
+                                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest text-center mb-3">Pagos Seguros</p>
+                                    <div className="flex items-center justify-center gap-5 opacity-70">
                                         <img src="https://cdn.jsdelivr.net/gh/aaronfagan/svg-credit-card-payment-icons@master/flat/visa.svg" alt="Visa" className="h-[12px] w-auto" />
                                         <img src="https://cdn.jsdelivr.net/gh/aaronfagan/svg-credit-card-payment-icons@master/flat/mastercard.svg" alt="Mastercard" className="h-[15px] w-auto" />
                                         <img src="https://cdn.jsdelivr.net/gh/aaronfagan/svg-credit-card-payment-icons@master/flat/amex.svg" alt="Amex" className="h-[14px] w-auto" />

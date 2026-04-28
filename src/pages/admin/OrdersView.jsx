@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { parseDateStr, getScheduleFromOrder } from '../../utils/orderDates';
 import {
     Search,
     Package,
@@ -35,14 +36,16 @@ import { individualesData, INDIVIDUALES_CATEGORIES } from '../../data/individual
 import { PACKS_DATA } from '../../data/packsData';
 import { getPackPrices } from '../../utils/firestoreMenus';
 import AdminPageHeader from '../../components/admin/AdminPageHeader';
+import { useSearchParams } from 'react-router-dom';
 import { db } from '../../firebase/config';
 import { collection, query, where, getDocs, addDoc, updateDoc, doc, increment, getDoc, limit } from 'firebase/firestore';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useMenus } from '../../context/MenusContext';
-import { SHIPPING_ZONES } from '../../data/shippingZones';
 import { useAuth } from '../../context/AuthContext';
+import { useShipping } from '../../context/ShippingContext';
 import ClientProfileModal from '../../components/admin/ClientProfileModal';
+import { parseFirebaseDate } from '../../utils/dateUtils';
 
 // Generar próximas fechas de entrega disponibles (lógica mirror de Checkout)
 const getNextDeliveryDatesForZone = (zoneId) => {
@@ -192,15 +195,14 @@ const DATE_FILTERS = [
 ];
 
 export default function OrdersView() {
+    const { SHIPPING_ZONES } = useShipping();
     const { orders, updateOrderStatus, addOrder, getStats, formatTotal, deleteAllOrders, deleteOrder, loading } = useOrders();
     const { currentUser } = useAuth();
     // Use menus for individual products
     const { menus } = useMenus();
+    const [searchParams] = useSearchParams();
 
-    const [searchTerm, setSearchTerm] = useState("");
-    const [activeFilter, setActiveFilter] = useState('all');
     const [selectedOrder, setSelectedOrder] = useState(null);
-    const [dateFilter, setDateFilter] = useState('all');
     const [showDateDropdown, setShowDateDropdown] = useState(false);
     const [showManualOrderModal, setShowManualOrderModal] = useState(false);
     const [manualOrderData, setManualOrderData] = useState({
@@ -220,9 +222,6 @@ export default function OrdersView() {
     const [selectedPackCategory, setSelectedPackCategory] = useState('5_comidas');
     const [selectedPlan, setSelectedPlan] = useState('weekly'); // 'weekly', 'biweekly', 'monthly'
     const [packsData, setPacksData] = useState(DEFAULT_PACKS_DATA);
-    const [zoneFilter, setZoneFilter] = useState('all'); // Filtro por zona
-    const [sourceFilter, setSourceFilter] = useState('all'); // Filtro por fuente marketing
-    const [deliveryDateFilter, setDeliveryDateFilter] = useState('all'); // Filtro por fecha de entrega (Cierre)
     const [customerHistory, setCustomerHistory] = useState(null); // Historial del cliente
     const [loadingHistory, setLoadingHistory] = useState(false);
     const [showClientProfile, setShowClientProfile] = useState(false);
@@ -230,6 +229,7 @@ export default function OrdersView() {
     const [clientPoints, setClientPoints] = useState(null);
     const [clientRelatedOrders, setClientRelatedOrders] = useState([]);
     const [isRepairing, setIsRepairing] = useState(false);
+
     const stats = getStats();
     // Normalizador de nombres (remueve acentos y palabras Pack/Menú)
     const normalizeName = (s) => {
@@ -692,7 +692,99 @@ export default function OrdersView() {
     };
 
     const [activeTab, setActiveTab] = useState('pending'); // 'pending' | 'processing' | 'history'
-    const [paymentMethodFilter, setPaymentMethodFilter] = useState('all'); // 'all', 'sinpe', 'card', 'cash'
+
+    // --- SISTEMA DE FILTROS ---
+    // Estados Reales (Criterios activos de filtrado)
+    const [activeFilter, setActiveFilter] = useState('all');
+    const [dateFilter, setDateFilter] = useState('all');
+    const [paymentMethodFilter, setPaymentMethodFilter] = useState('all');
+    const [zoneFilter, setZoneFilter] = useState('all');
+    const [sourceFilter, setSourceFilter] = useState('all');
+    const [deliveryDateFilter, setDeliveryDateFilter] = useState('all');
+    const [stagedSearchTerm, setStagedSearchTerm] = useState("");
+    const [appliedSearchTerm, setAppliedSearchTerm] = useState("");
+
+    // Detect URL params on mount
+    useEffect(() => {
+        const sourceParam = searchParams.get('source');
+        const rangeParam = searchParams.get('range');
+        
+        if (sourceParam || rangeParam) {
+            if (sourceParam && sourceParam !== 'all') {
+                setSourceFilter(sourceParam);
+                setStagedFilters(prev => ({ ...prev, sourceFilter: sourceParam }));
+                // When coming from Dashboard, we usually want to search in all history
+                setActiveTab('history');
+            }
+            if (rangeParam && rangeParam !== 'all') {
+                setDateFilter(rangeParam);
+                setStagedFilters(prev => ({ ...prev, dateFilter: rangeParam }));
+            }
+        }
+    }, [searchParams]);
+
+    // Estados Temporales (Lo que el usuario está eligiendo antes de dar "Aplicar")
+    const [stagedFilters, setStagedFilters] = useState({
+        activeFilter: 'all',
+        dateFilter: 'all',
+        paymentMethodFilter: 'all',
+        zoneFilter: 'all',
+        sourceFilter: 'all',
+        deliveryDateFilter: 'all'
+    });
+
+    // Detectar si hay cambios pendientes de aplicar
+    const hasPendingFilters = useMemo(() => {
+        return stagedFilters.activeFilter !== activeFilter ||
+            stagedFilters.dateFilter !== dateFilter ||
+            stagedFilters.paymentMethodFilter !== paymentMethodFilter ||
+            stagedFilters.zoneFilter !== zoneFilter ||
+            stagedFilters.sourceFilter !== sourceFilter ||
+            stagedFilters.deliveryDateFilter !== deliveryDateFilter ||
+            stagedSearchTerm !== appliedSearchTerm;
+    }, [stagedFilters, activeFilter, dateFilter, paymentMethodFilter, zoneFilter, sourceFilter, deliveryDateFilter, stagedSearchTerm, appliedSearchTerm]);
+
+    const handleApplyFilters = () => {
+        setActiveFilter(stagedFilters.activeFilter);
+        setDateFilter(stagedFilters.dateFilter);
+        setPaymentMethodFilter(stagedFilters.paymentMethodFilter);
+        setZoneFilter(stagedFilters.zoneFilter);
+        setSourceFilter(stagedFilters.sourceFilter);
+        setDeliveryDateFilter(stagedFilters.deliveryDateFilter);
+        setAppliedSearchTerm(stagedSearchTerm);
+    };
+
+    // Conteos para los Tabs (Sincronizado con la lógica de filtrado de abajo)
+    const tabCounts = useMemo(() => {
+        const counts = { pending: 0, processing: 0, history: 0 };
+        orders.forEach(o => {
+            const status = o.status || '';
+            if (['pending', 'pending_payment', 'new'].includes(status)) counts.pending++;
+            else if (['confirmed', 'in_transit', 'making', 'ready'].includes(status)) counts.processing++;
+            else counts.history++;
+        });
+        return counts;
+    }, [orders]);
+
+    const handleClearFilters = () => {
+        const reset = {
+            activeFilter: 'all',
+            dateFilter: 'all',
+            paymentMethodFilter: 'all',
+            zoneFilter: 'all',
+            sourceFilter: 'all',
+            deliveryDateFilter: 'all'
+        };
+        setStagedFilters(reset);
+        setActiveFilter('all');
+        setDateFilter('all');
+        setPaymentMethodFilter('all');
+        setZoneFilter('all');
+        setSourceFilter('all');
+        setDeliveryDateFilter('all');
+        setStagedSearchTerm("");
+        setAppliedSearchTerm("");
+    };
 
     // Filtrado de pedidos
     const filteredOrders = useMemo(() => {
@@ -702,26 +794,27 @@ export default function OrdersView() {
 
         // 1. Filtrar por Tab (Pendientes vs Proceso vs Historial)
         if (activeTab === 'pending') {
-            result = result.filter(o =>
-                ['pending', 'pending_payment'].includes(o.status)
+            result = result.filter(o => 
+                ['pending', 'pending_payment', 'new'].includes(o.status)
             );
         } else if (activeTab === 'processing') {
-            result = result.filter(o =>
-                ['confirmed', 'in_transit'].includes(o.status)
+            result = result.filter(o => 
+                ['confirmed', 'in_transit', 'making', 'ready'].includes(o.status)
             );
         } else {
-            result = result.filter(o =>
-                ['delivered', 'cancelled'].includes(o.status)
+            // Historial (Entregados, Cancelados y cualquier otro estado finalizado)
+            result = result.filter(o => 
+                ['delivered', 'cancelled'].includes(o.status) || !o.status
             );
         }
 
         // 2. Filtro de Búsqueda
-        if (searchTerm) {
-            const lowerTerm = searchTerm.toLowerCase();
+        if (appliedSearchTerm) {
+            const lowerTerm = appliedSearchTerm.toLowerCase();
             result = result.filter(order =>
                 order.client?.toLowerCase().includes(lowerTerm) ||
                 order.displayId?.toLowerCase().includes(lowerTerm) ||
-                order.details?.phone?.includes(searchTerm)
+                order.details?.phone?.includes(appliedSearchTerm)
             );
         }
 
@@ -782,18 +875,7 @@ export default function OrdersView() {
             const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
             result = result.filter(order => {
-                let orderDate = null;
-                try {
-                    if (order.createdAt) {
-                        // Handle Firestore Timestamp or ISO String
-                        const d = order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt);
-                        if (!isNaN(d.getTime())) {
-                            orderDate = d;
-                        }
-                    }
-                } catch (e) {
-                    console.warn('Invalid date in order:', order.id);
-                }
+                const orderDate = parseFirebaseDate(order.createdAt);
 
                 // Si no hay fecha, mostramos el pedido por defecto para evitar que desaparezca
                 if (!orderDate) return true;
@@ -866,63 +948,12 @@ export default function OrdersView() {
             return dateB - dateA;
         });
 
-    }, [orders, searchTerm, activeFilter, dateFilter, zoneFilter, activeTab, sourceFilter, paymentMethodFilter]);
+    }, [orders, appliedSearchTerm, activeFilter, dateFilter, zoneFilter, activeTab, sourceFilter, paymentMethodFilter, deliveryDateFilter]);
 
     // =====================
     // Envíos pendientes
     // =====================
-    const parseDateStr = (s) => {
-        if (!s) return null;
-        try {
-            const d = new Date(`${s}T00:00:00`);
-            return isNaN(d.getTime()) ? null : d;
-        } catch {
-            return null;
-        }
-    };
-
-    const getScheduleFromOrder = (order) => {
-        const sched = Array.isArray(order.fechas_entrega)
-            ? order.fechas_entrega
-            : (Array.isArray(order.details?.fechasEntrega) ? order.details.fechasEntrega : []);
-        if (Array.isArray(sched) && sched.filter(Boolean).length > 0) return sched.filter(Boolean);
-
-        // Fallback: calcular a partir de la fecha base y el plan
-        const baseStr = order.fecha_entrega || order.details?.fechaEntrega;
-        if (!baseStr) return [];
-        let count = 1;
-        const items = Array.isArray(order.items) && order.items.length > 0
-            ? order.items
-            : (Array.isArray(order.details?.cart) && order.details.cart.length > 0 ? order.details.cart : (order.menu || []));
-        const textJoin = (s) => (s || '').toString().toLowerCase();
-        if (items.length > 0) {
-            // Determinar máximo número de envíos por item
-            items.forEach(i => {
-                const plan = textJoin(i.plan);
-                const planLabel = textJoin(i.planLabel);
-                if (plan === 'monthly' || /mensual/.test(planLabel)) count = Math.max(count, 4);
-                else if (plan === 'biweekly' || /quincenal/.test(planLabel)) count = Math.max(count, 2);
-            });
-        } else if (textJoin(order.plan).includes('mensual')) {
-            count = 4;
-        }
-
-        try {
-            const base = new Date(`${baseStr}T00:00:00`);
-            if (isNaN(base.getTime())) return [];
-            const step = 7; // Changed from (count === 2) ? 14 : 7 to 7
-            const out = [];
-            for (let i = 0; i < count; i++) {
-                const d = new Date(base);
-                d.setDate(base.getDate() + i * step);
-                const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-                out.push(iso);
-            }
-            return out;
-        } catch {
-            return [baseStr];
-        }
-    };
+    // Las utilidades parseDateStr y getScheduleFromOrder ahora se importan desde ../../utils/orderDates
 
     const getPendingShipmentInfo = (order) => {
         const schedule = getScheduleFromOrder(order);
@@ -1543,9 +1574,12 @@ export default function OrdersView() {
                             : 'text-gray-500 hover:text-gray-700'
                             }`}
                     >
-                        <AlertCircle size={16} />
                         Pendientes
-                        {/* Badge Conteo opcional aquí */}
+                        {tabCounts.pending > 0 && (
+                            <span className="ml-2 px-1.5 py-0.5 bg-orange-100 text-orange-600 rounded-md text-[10px] font-black">
+                                {tabCounts.pending}
+                            </span>
+                        )}
                     </button>
                     <button
                         onClick={() => setActiveTab('processing')}
@@ -1556,6 +1590,11 @@ export default function OrdersView() {
                     >
                         <Package size={16} />
                         En Proceso
+                        {tabCounts.processing > 0 && (
+                            <span className="ml-2 px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded-md text-[10px] font-black">
+                                {tabCounts.processing}
+                            </span>
+                        )}
                     </button>
                     <button
                         onClick={() => setActiveTab('history')}
@@ -1566,6 +1605,11 @@ export default function OrdersView() {
                     >
                         <History size={16} />
                         Historial
+                        {tabCounts.history > 0 && (
+                            <span className="ml-2 px-1.5 py-0.5 bg-gray-200 text-gray-700 rounded-md text-[10px] font-black">
+                                {tabCounts.history}
+                            </span>
+                        )}
                     </button>
                 </div>
 
@@ -1577,28 +1621,32 @@ export default function OrdersView() {
                             type="text"
                             placeholder="Buscar por nombre, ID o teléfono..."
                             className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
+                            value={stagedSearchTerm}
+                            onChange={(e) => setStagedSearchTerm(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleApplyFilters()}
                         />
                     </div>
 
                     {/* Quick Filter: HOY */}
                     <button
-                        onClick={() => setDateFilter(dateFilter === 'today' ? 'all' : 'today')}
-                        className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold transition-all shadow-sm ${dateFilter === 'today'
+                        onClick={() => {
+                            const val = stagedFilters.dateFilter === 'today' ? 'all' : 'today';
+                            setStagedFilters(prev => ({ ...prev, dateFilter: val }));
+                        }}
+                        className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold transition-all shadow-sm ${stagedFilters.dateFilter === 'today'
                             ? 'bg-orange-100 text-orange-700 border border-orange-200 ring-2 ring-orange-500/20'
                             : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-orange-600'
                             }`}
                     >
-                        <Calendar size={16} className={dateFilter === 'today' ? 'text-orange-600' : 'text-gray-400'} />
+                        <Calendar size={16} className={stagedFilters.dateFilter === 'today' ? 'text-orange-600' : 'text-gray-400'} />
                         HOY
                     </button>
 
                     {/* Payment Method Filter */}
                     <div className="relative">
                         <select
-                            value={paymentMethodFilter}
-                            onChange={(e) => setPaymentMethodFilter(e.target.value)}
+                            value={stagedFilters.paymentMethodFilter}
+                            onChange={(e) => setStagedFilters(prev => ({ ...prev, paymentMethodFilter: e.target.value }))}
                             className="px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 appearance-none pr-8 cursor-pointer"
                         >
                             <option value="all">💳 Todos los pagos</option>
@@ -1616,23 +1664,23 @@ export default function OrdersView() {
                             className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50"
                         >
                             <CalendarDays size={16} />
-                            {DATE_FILTERS.find(f => f.id === dateFilter)?.label}
+                            {DATE_FILTERS.find(f => f.id === stagedFilters.dateFilter)?.label}
                             <ChevronDown size={16} />
                         </button>
 
                         {showDateDropdown && (
                             <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 min-w-[160px]">
-                                {DATE_FILTERS.map(filter => (
+                                {DATE_FILTERS.map(f => (
                                     <button
-                                        key={filter.id}
+                                        key={f.id}
                                         onClick={() => {
-                                            setDateFilter(filter.id);
+                                            setStagedFilters(prev => ({ ...prev, dateFilter: f.id }));
                                             setShowDateDropdown(false);
                                         }}
-                                        className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg ${dateFilter === filter.id ? 'bg-orange-50 text-orange-600' : 'text-gray-600'
+                                        className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg ${stagedFilters.dateFilter === f.id ? 'bg-orange-50 text-orange-600' : 'text-gray-600'
                                             }`}
                                     >
-                                        {filter.label}
+                                        {f.label}
                                     </button>
                                 ))}
                             </div>
@@ -1642,8 +1690,8 @@ export default function OrdersView() {
                     {/* Zone Filter Dropdown */}
                     {uniqueZones.length > 1 && (
                         <select
-                            value={zoneFilter}
-                            onChange={(e) => setZoneFilter(e.target.value)}
+                            value={stagedFilters.zoneFilter}
+                            onChange={(e) => setStagedFilters(prev => ({ ...prev, zoneFilter: e.target.value }))}
                             className="px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
                         >
                             <option value="all">🚚 Todas las zonas</option>
@@ -1657,8 +1705,8 @@ export default function OrdersView() {
                         <TrendingUp size={16} className="text-gray-400 mr-2" />
                         <select
                             className="bg-transparent border-none focus:ring-0 text-sm font-bold text-gray-800 cursor-pointer p-0"
-                            value={sourceFilter}
-                            onChange={(e) => setSourceFilter(e.target.value)}
+                            value={stagedFilters.sourceFilter}
+                            onChange={(e) => setStagedFilters(prev => ({ ...prev, sourceFilter: e.target.value }))}
                         >
                             <option value="all">Todas las Fuentes</option>
                             <option value="only_clients">✨ Solo Clientes (Real)</option>
@@ -1676,8 +1724,8 @@ export default function OrdersView() {
                         <Calendar size={16} className="text-orange-500 mr-2" />
                         <select
                             className="bg-transparent border-none focus:ring-0 text-sm font-bold text-gray-800 cursor-pointer p-0"
-                            value={deliveryDateFilter}
-                            onChange={(e) => setDeliveryDateFilter(e.target.value)}
+                            value={stagedFilters.deliveryDateFilter}
+                            onChange={(e) => setStagedFilters(prev => ({ ...prev, deliveryDateFilter: e.target.value }))}
                         >
                             <option value="all">📅 Todos los Cierres</option>
                             {uniqueDeliveryDates.filter(d => d !== 'all').map(date => (
@@ -1686,17 +1734,40 @@ export default function OrdersView() {
                         </select>
                     </div>
 
+                    {/* Botones de Acción de Filtros */}
+                    <div className="flex items-center gap-2 ml-auto">
+                        <button
+                            onClick={handleClearFilters}
+                            className="px-4 py-2.5 text-sm font-bold text-gray-500 hover:text-gray-700 transition-colors"
+                        >
+                            Limpiar
+                        </button>
+                        <button
+                            onClick={handleApplyFilters}
+                            className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all shadow-md flex items-center gap-2 ${hasPendingFilters
+                                ? 'bg-orange-500 text-white hover:bg-orange-600 scale-105 shadow-orange-200'
+                                : 'bg-gray-100 text-gray-400 cursor-default'
+                                }`}
+                        >
+                            <Filter size={16} />
+                            Aplicar Filtros
+                            {hasPendingFilters && (
+                                <span className="flex h-2 w-2 rounded-full bg-white animate-pulse" />
+                            )}
+                        </button>
+                    </div>
+
                     {/* Status Filters - Only show helpful sub-filters based on Tab */}
                     <div className="flex gap-2 flex-wrap">
                         {activeTab === 'pending' && [
-                            { id: 'pending', label: '⏳ Por Confirmar', color: 'bg-yellow-100 text-yellow-700' },
-                            { id: 'pending_payment', label: '💳 Falta Pago', color: 'bg-red-100 text-red-700' }
+                            { id: 'pending', label: '⏳ Por Confirmar' },
+                            { id: 'pending_payment', label: '💳 Falta Pago' }
                         ].map(filter => (
                             <button
                                 key={filter.id}
-                                onClick={() => setActiveFilter(activeFilter === filter.id ? 'all' : filter.id)}
-                                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeFilter === filter.id
-                                    ? 'bg-orange-500 text-white'
+                                onClick={() => setStagedFilters(prev => ({ ...prev, activeFilter: prev.activeFilter === filter.id ? 'all' : filter.id }))}
+                                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${stagedFilters.activeFilter === filter.id
+                                    ? 'bg-orange-500 text-white shadow-md'
                                     : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
                                     }`}
                             >
@@ -1705,14 +1776,16 @@ export default function OrdersView() {
                         ))}
 
                         {activeTab === 'processing' && [
-                            { id: 'confirmed', label: '✅ Confirmados', color: 'bg-blue-100 text-blue-700' },
-                            { id: 'in_transit', label: '🚚 En Ruta', color: 'bg-purple-100 text-purple-700' }
+                            { id: 'confirmed', label: '✅ Confirmados' },
+                            { id: 'making', label: '👨‍🍳 En Cocina' },
+                            { id: 'ready', label: '🥡 Listo/Empacado' },
+                            { id: 'in_transit', label: '🚚 En Ruta' }
                         ].map(filter => (
                             <button
                                 key={filter.id}
-                                onClick={() => setActiveFilter(activeFilter === filter.id ? 'all' : filter.id)}
-                                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeFilter === filter.id
-                                    ? 'bg-orange-500 text-white'
+                                onClick={() => setStagedFilters(prev => ({ ...prev, activeFilter: prev.activeFilter === filter.id ? 'all' : filter.id }))}
+                                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${stagedFilters.activeFilter === filter.id
+                                    ? 'bg-blue-500 text-white shadow-md'
                                     : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
                                     }`}
                             >

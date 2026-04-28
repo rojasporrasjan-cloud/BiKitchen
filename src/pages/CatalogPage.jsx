@@ -8,7 +8,7 @@ import { useCart } from '../context/CartContext';
 import { useMenusRefresh } from '../hooks/useMenusRefresh';
 import { usePromoBanner } from '../hooks/usePromoBanner';
 import { Link } from 'react-router-dom';
-import { trackViewContent } from '../services/facebookPixel';
+import { trackViewContent, trackViewCategory, trackViewMenu } from '../services/facebookPixel';
 
 // Categorías de menú disponibles
 const MENU_CATEGORIES = {
@@ -21,25 +21,41 @@ const MENU_CATEGORIES = {
     fullPack: { name: 'Full Pack', icon: '🍽️', desc: 'Máxima variedad' }
 };
 
+import { useQuery } from '../hooks/useQuery';
+
 export default function CatalogPage() {
-    const [activeCategory, setActiveCategory] = useState('regular');
+    const query = useQuery();
+    
+    /** 
+     * Default category is 'regular'. 
+     * We attempt to sanitize the 'cat' parameter from the URL.
+     */
+    const urlCategory = query.get('cat') || query.get('category');
+    const initialCategory = MENU_CATEGORIES[urlCategory] ? urlCategory : 'regular';
+
+    const [activeCategory, setActiveCategory] = useState(initialCategory);
     const showPromoBanner = usePromoBanner();
 
     // Usar el nuevo hook que recarga automáticamente cuando la página vuelve a estar visible
     const { menus, loading } = useMenusRefresh();
 
-    // Track ViewContent cuando se carga la página de menú
+    const currentMenu = menus?.[activeCategory] || [];
+    const categoryInfo = MENU_CATEGORIES[activeCategory];
+
+    // Track ViewContent y Category cuando se carga la página de menú
     useEffect(() => {
+        trackViewMenu(); // Evento general de menú
+        if (urlCategory && MENU_CATEGORIES[urlCategory]) {
+            trackViewCategory(MENU_CATEGORIES[urlCategory].name); // Evento específico de la categoría del anuncio
+        }
+        
         trackViewContent({
             id: 'menu-page',
             name: 'Menú Semanal',
-            category: 'Menu',
+            category: urlCategory ? MENU_CATEGORIES[urlCategory].name : 'Menu',
             price: 0
         });
-    }, []);
-
-    const currentMenu = menus?.[activeCategory] || [];
-    const categoryInfo = MENU_CATEGORIES[activeCategory];
+    }, [urlCategory]);
 
     return (
         <PageTransition>

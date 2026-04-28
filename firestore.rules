@@ -36,6 +36,11 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isAdmin();
     }
+
+    match /shipping_zones/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
     
     match /promociones/{doc} {
       allow read: if true;
@@ -74,16 +79,7 @@ service cloud.firestore {
 
     match /coupons/{id} {
       allow read: if true;
-      allow create: if isAdmin() || 
-        (request.resource.data.isGiftCard == true && request.resource.data.active == false);
-      allow update, delete: if isAdmin();
-    }
-
-    match /referral_codes/{code} {
-      allow read: if true;
-      allow create: if isAuthenticated();
-      allow update: if isAdmin() || (isAuthenticated() && resource.data.uid == request.auth.uid);
-      allow delete: if isAdmin();
+      allow write: if isAdmin();
     }
     
     // ==========================================
@@ -112,13 +108,8 @@ service cloud.firestore {
       allow read: if isAdmin() || 
         (isAuthenticated() && resource.data.userId == request.auth.uid) ||
         (isAuthenticated() && resource.data.correo.lower() == request.auth.token.email.lower());
-      allow create: if true;
-      allow update: if isAdmin() || (
-        (isAuthenticated() && (resource.data.userId == request.auth.uid || resource.data.correo.lower() == request.auth.token.email.lower())) &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'paymentConfirmed', 'paymentStatus', 'pointsToAward', 'pointsAwarded', 'pointsAwardedAt', 'payment_id', 'transaction_id']) &&
-        request.resource.data.status == 'confirmed'
-      );
-      allow delete: if isAdmin();
+      allow create: if true; // Permitir checkout a invitados
+      allow update, delete: if isAdmin();
     }
 
     match /orders/{orderId} {
@@ -143,7 +134,7 @@ service cloud.firestore {
     // ==========================================
     
     match /loyalty/{userId} {
-      allow read, write: if isOwner(userId) || isEmailOwner(userId) || isAdmin();
+      allow read, write: if isOwner(userId) || isAdmin();
     }
     
     match /loyalty_points/{id} {
