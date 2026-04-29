@@ -25,6 +25,8 @@ import { getScheduleFromOrder } from '../utils/orderDates';
 // TILOPAY: Desactivado temporalmente - pendiente aprobación
 // import { processTilopayPayment } from '../utils/tilopayClient';
 import { upsertClient } from '../services/clientService';
+import { awardPointsByEmail } from '../services/loyaltySync';
+import { isValidEmail } from '../services/emailNotifications';
 
 const STEPS = [
     { id: 1, name: 'Datos', icon: User },
@@ -97,7 +99,7 @@ const PAYMENT_METHODS = [
     { id: 'whatsapp', name: 'WhatsApp', icon: MessageSquare, description: 'Coordinar pago por WhatsApp', color: 'green', recommended: true },
     { id: 'sinpe', name: 'SINPE Móvil', icon: Phone, description: 'Transferencia inmediata', color: 'blue' },
     { id: 'transfer', name: 'Transferencia', icon: CreditCard, description: 'Transferencia bancaria', color: 'purple' },
-    { id: 'nmi', name: 'Tarjeta de Débito / Crédito', icon: CreditCard, description: 'Pago seguro con tarjeta', color: 'blue', recommended: true }
+    { id: 'nmi', name: 'Tarjeta de Débito / Crédito', icon: CreditCard, description: 'Temporalmente no disponible', color: 'blue', recommended: true, disabled: true, comingSoon: true }
     // PayPal desactivado como se solicitó
     // { id: 'paypal', name: 'PayPal', icon: CreditCard, description: 'Próximamente', color: 'gray', disabled: true, comingSoon: true }
     // TILOPAY: Desactivado temporalmente - reemplazado por BAC (NMI)
@@ -419,19 +421,13 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                 await createOrderWithPayment(newOrderNumber, paypalDetails);
             }
 
-            // Agregar puntos de fidelidad
-            if (currentUser) {
-                const total = isZoneOutOfCoverage() ? getTotalPrice() : getTotalWithShipping();
-                const earned = await addPoints(total, newOrderNumber);
-                setPointsEarned(earned);
-            }
-
             // Marcar cupón como usado
             if (appliedCoupon) {
                 await markCouponAsUsed(currentUser?.uid || formData.correo);
             }
 
-            // Limpiar datos del formulario y finalizar orden
+            // Finalizar orden - Esto agregará los puntos centralizadamente
+            // (NO agregar puntos aquí para evitar duplicación con handleOrderCompletion)
             await handleOrderCompletion({
                 ...paypalDetails,
                 orderNumber: newOrderNumber,
@@ -683,6 +679,16 @@ export default function CheckoutSteps({ isOpen, onClose }) {
     const handleOrderCompletion = async (orderDetails) => {
         try {
             const currentOrderNumber = orderDetails.orderNumber || orderNumber;
+
+            // Prevenir ejecución duplicada (idempotencia)
+            if (orderComplete) {
+                console.log(`[Checkout] Orden ${currentOrderNumber} ya fue procesada, omitiendo`);
+                return;
+            }
+
+            // Marcar como en proceso para evitar múltiples ejecuciones
+            setOrderComplete(true);
+
             const subtotal = getSubtotal();
             const discount = getDiscount();
             const shippingCost = isZoneOutOfCoverage() ? null : getShippingCostFinal();
@@ -769,24 +775,45 @@ export default function CheckoutSteps({ isOpen, onClose }) {
             try {
                 const { sendOrderNotification, sendCustomerOrderConfirmation } = await import('../services/emailNotifications');
 
-                // Admin (Gina)
-                await sendOrderNotification(fullOrderData);
-                console.log('✅ Email de notificación enviado al admin');
+                // Admin (Gina) - Con logging detallado
+                const adminResult = await sendOrderNotification(fullOrderData);
+                if (!adminResult?.success) {
+                    console.warn(`⚠️ Fallo al enviar email a admin: ${adminResult?.error || 'Unknown error'}`);
+                } else {
+                    console.log(`✅ Email admin enviado exitosamente (${adminResult.sent} destinatario/s)`);
+                }
 
-                // Cliente
-                await sendCustomerOrderConfirmation(fullOrderData);
-                console.log('✅ Email de confirmación enviado al cliente');
+                // Cliente - Con logging detallado
+                const customerResult = await sendCustomerOrderConfirmation(fullOrderData);
+                if (!customerResult?.success) {
+                    console.warn(`⚠️ Fallo al enviar email a cliente: ${customerResult?.error || 'Unknown error'}`);
+                } else {
+                    console.log(`✅ Email cliente enviado exitosamente`);
+                }
             } catch (emailErr) {
-                console.error('⚠️ Error en notificaciones email:', emailErr);
+                console.error('⚠️ Error crítico en notificaciones email:', emailErr);
             }
 
-            // 3. Agregar puntos de fidelidad si aplica
-            if (currentUser) {
-                try {
+            // 3. Agregar puntos de fidelidad (para usuarios logueados y guests)
+            try {
+                if (currentUser) {
+                    // Usuario logueado: usar el hook useLoyaltyPoints
                     await addPoints(total, currentOrderNumber);
-                } catch (pointsErr) {
-                    console.error('⚠️ Error al agregar puntos:', pointsErr);
+                    console.log(`✅ Puntos agregados para usuario logueado: ${currentUser.email}`);
+                } else if (formData.correo && isValidEmail(formData.correo)) {
+                    // Usuario guest: validar email antes de usar awardPointsByEmail
+                    const pointsResult = await awardPointsByEmail(formData.correo, total, currentOrderNumber);
+                    if (pointsResult.success) {
+                        console.log(`✅ Puntos agregados para guest ${formData.correo}: ${pointsResult.points} pts`);
+                    } else {
+                        console.warn(`⚠️ Fallo al agregar puntos para guest ${formData.correo}: ${pointsResult.error}`);
+                    }
+                } else if (formData.correo) {
+                    console.warn(`⚠️ Email inválido para guest, no se pueden agregar puntos: ${formData.correo}`);
                 }
+            } catch (pointsErr) {
+                console.error('⚠️ Error al agregar puntos:', pointsErr);
+                // No fallar el pedido si hay error en puntos
             }
 
             // 4. Marcar cupón como usado
