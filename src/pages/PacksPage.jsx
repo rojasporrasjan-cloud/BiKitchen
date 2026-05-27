@@ -5,7 +5,7 @@ import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import PageTransition from '../components/PageTransition';
 import SmoothImage from '../components/SmoothImage';
-import { ShoppingCart, Truck, Check, Info, Eye, X, Gift, Tag, Filter, Flame, Leaf, Users, Zap, Package, Edit, Plus, ChevronDown } from 'lucide-react';
+import { ShoppingCart, Truck, Check, Info, Eye, X, Gift, Tag, Filter, Flame, Leaf, Users, Zap, Package, Edit, Plus, ChevronDown, ArrowLeft } from 'lucide-react';
 import SubstitutionPicker from '../components/SubstitutionPicker';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -657,60 +657,62 @@ const PackCard = memo(({ pack, shipping, category, categoryLabel: customCategory
             {/* Modal para packs especiales (Proteínas / Familiar) - Premium Zero-Scroll */}
             {showSpecialModal && packEspecialData && ReactDOM.createPortal(
                 <AnimatePresence>
-                    <motion.div
-                        variants={modalVariants}
-                        initial="hidden"
-                        animate="visible"
-                        exit="exit"
-                        className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[10000] p-4 sm:p-6"
-                        onClick={handleCloseModal}
-                    >
+                    <div className="fixed inset-0 z-[10000] flex justify-end">
                         <motion.div
-                            variants={modalContentVariants}
-                            className="bg-white rounded-3xl w-full max-w-5xl h-[92vh] sm:h-[90vh] lg:h-[80vh] shadow-2xl overflow-hidden flex flex-col relative sm:border border-slate-100"
+                            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                            transition={{ duration: 0.25 }}
+                            className="absolute inset-0 bg-black/70 backdrop-blur-[2px]"
+                            onClick={handleCloseModal}
+                        />
+                        <motion.div
+                            initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+                            transition={{ type: 'spring', damping: 30, stiffness: 280 }}
+                            className="relative w-full md:w-[60%] lg:w-[55%] h-full bg-white shadow-2xl overflow-hidden flex flex-col"
                             onClick={(e) => e.stopPropagation()}
                         >
                             {/* Hero Header Section */}
-                            <div className="relative h-[20vh] sm:h-[25vh] lg:h-[30vh] flex-shrink-0">
+                            <div className="relative h-[175px] sm:h-[250px] flex-shrink-0 overflow-hidden">
                                 <SmoothImage
                                     src={packImage}
                                     alt={pack.name}
                                     className="w-full h-full object-cover"
                                 />
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-black/10" />
+                                <div className="absolute inset-0 bg-gradient-to-r from-black/20 to-transparent" />
 
+                                <button
+                                    onClick={handleCloseModal}
+                                    className="absolute top-4 left-4 w-10 h-10 bg-white/15 hover:bg-white/30 backdrop-blur-md rounded-2xl flex items-center justify-center text-white transition-all hover:scale-110 active:scale-95 border border-white/20 z-10"
+                                >
+                                    <ArrowLeft size={20} />
+                                </button>
 
-                                <div className="absolute top-6 left-6 right-6 flex justify-between items-start">
-                                    <div className="bg-slate-900/10 backdrop-blur-md px-4 py-2 rounded-2xl border border-slate-900/10">
-                                        <span className="text-slate-900 text-xs font-black uppercase tracking-widest">{isFamiliarPack ? 'Pack Familiar' : 'Pack Proteínas'}</span>
-                                    </div>
-                                    <button
-                                        onClick={handleCloseModal}
-                                        className="w-12 h-12 bg-white/90 backdrop-blur-md hover:bg-white rounded-full flex items-center justify-center text-slate-900 shadow-xl transition-all active:scale-90 border border-slate-100 z-50"
-                                    >
-                                        <X size={24} />
-                                    </button>
+                                <div className="absolute top-4 right-4 z-10">
+                                    <span className="bg-white/15 backdrop-blur-md text-white text-[9px] font-black px-3 py-1.5 rounded-xl border border-white/20 uppercase tracking-widest">
+                                        {isFamiliarPack ? 'Pack Familiar' : 'Pack Proteínas'}
+                                    </span>
                                 </div>
 
-                                <div className="absolute bottom-6 left-6 right-6">
-                                    <h2 className="text-2xl sm:text-4xl lg:text-5xl font-black text-slate-900 leading-tight mb-2 tracking-tighter">
+                                <div className="absolute bottom-4 left-4 right-4 z-10">
+                                    <p className="text-white/70 text-[10px] font-black uppercase tracking-widest mb-1">
+                                        {isFamiliarPack ? '4 porciones por plato · Lunes a Viernes' : 'Personaliza tu pedido · Elige tus favoritas'}
+                                    </p>
+                                    <h2 className="text-2xl sm:text-3xl font-black text-white leading-tight drop-shadow-lg">
                                         {isFamiliarPack ? packEspecialData.nombre : `Arma tu ${packEspecialData.nombre}`}
                                     </h2>
-                                    <div className="flex items-center gap-3">
-                                        <div className="flex items-center gap-2 px-3 py-1 bg-orange-500 rounded-lg shadow-lg shadow-orange-500/20">
-                                            <Package size={14} className="text-white" />
-                                            <span className="text-white text-[10px] font-black uppercase tracking-wider">
-                                                {isFamiliarPack ? `${packEspecialData.items.length} Platos` : `${packEspecialData.cantidad} Porciones`}
-                                            </span>
-                                        </div>
+                                    <div className="flex items-center gap-2 mt-1.5">
+                                        <span className="bg-orange-500 text-white text-[9px] font-black px-2.5 py-1 rounded-xl uppercase tracking-widest shadow-lg">
+                                            {isFamiliarPack ? `${packEspecialData.items?.length || 0} Platos` : `${packEspecialData.cantidad} Porciones`}
+                                        </span>
                                     </div>
                                 </div>
                             </div>
 
-                            {/* Content Section - Unified Scroll on Mobile, Split on Desktop */}
-                            <div className="flex-1 overflow-y-auto bg-slate-50 custom-scrollbar">
-                                <div className="flex flex-col lg:flex-row min-h-full">
-                                    {/* Left Side: Selections/Items */}
-                                    <div className="flex-1 p-5 sm:p-10 lg:border-r border-slate-100 bg-white">
+                            {/* Content Section */}
+                            <div className="flex-1 overflow-y-auto side-panel-scrollbar bg-white">
+                                <div className="flex flex-col">
+                                    {/* Selections/Items */}
+                                    <div className="flex-1 p-5 sm:p-6 border-b border-slate-100 bg-white">
                                         <div className="max-w-xl mx-auto">
                                             <div className="flex items-center justify-between mb-6">
                                                 <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">
@@ -771,8 +773,8 @@ const PackCard = memo(({ pack, shipping, category, categoryLabel: customCategory
                                         </div>
                                     </div>
 
-                                    {/* Right Side: Summary & Action */}
-                                    <div className="w-full lg:w-[380px] bg-slate-50/50 p-5 sm:p-10 flex flex-col justify-between border-t lg:border-t-0 lg:border-l border-slate-100 flex-shrink-0 lg:flex-shrink">
+                                    {/* Summary & Action */}
+                                    <div className="w-full bg-slate-50/50 p-5 sm:p-6 flex flex-col border-t border-slate-100">
                                         <div className="space-y-4 sm:space-y-6">
                                             {/* Portions/Size Info */}
                                             <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-100 space-y-4 sm:space-y-5 shadow-sm">
@@ -969,7 +971,7 @@ const PackCard = memo(({ pack, shipping, category, categoryLabel: customCategory
                             </div>
 
                         </motion.div>
-                    </motion.div>
+                    </div>
                 </AnimatePresence>,
                 document.body
             )}
@@ -1822,107 +1824,130 @@ export default function PacksPage() {
                 <Footer />
             </div>
 
-            {/* Modal de Ver Desayunos */}
+            {/* Panel lateral de Ver Desayunos */}
             {desayunosModalOpen && ReactDOM.createPortal(
                 <AnimatePresence>
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        onClick={() => setDesayunosModalOpen(false)}
-                        className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[9999] p-4"
-                        style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
-                    >
+                    <div className="fixed inset-0 z-[9999] flex justify-end">
                         <motion.div
-                            initial={{ scale: 0.9, opacity: 0, y: 20 }}
-                            animate={{ scale: 1, opacity: 1, y: 0 }}
-                            exit={{ scale: 0.9, opacity: 0, y: 20 }}
-                            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                            transition={{ duration: 0.25 }}
+                            className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"
+                            onClick={() => setDesayunosModalOpen(false)}
+                        />
+                        <motion.div
+                            initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+                            transition={{ type: 'spring', damping: 30, stiffness: 280 }}
                             onClick={(e) => e.stopPropagation()}
-                            className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] shadow-2xl overflow-hidden flex flex-col"
+                            className="relative w-full md:w-[52%] lg:w-[46%] xl:w-[40%] h-full bg-white shadow-2xl flex flex-col overflow-hidden"
                         >
-                            <div className="bg-gradient-to-r from-amber-400 to-yellow-500 p-6 text-white text-center relative">
+                            {/* Hero */}
+                            <div className="relative h-[160px] sm:h-[220px] shrink-0 overflow-hidden bg-gradient-to-br from-amber-400 to-yellow-500">
+                                <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
+                                    <span className="text-6xl mb-2">🍳</span>
+                                    <h3 className="text-2xl font-black drop-shadow">Menú de Desayunos</h3>
+                                    <p className="text-white/85 font-medium text-sm mt-1">5 desayunos · Lunes a Viernes</p>
+                                </div>
                                 <button
                                     type="button"
                                     onClick={() => setDesayunosModalOpen(false)}
-                                    className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30 transition-colors"
+                                    className="absolute top-4 left-4 w-10 h-10 bg-white/15 hover:bg-white/30 backdrop-blur-md rounded-2xl flex items-center justify-center text-white transition-all hover:scale-110 active:scale-95 border border-white/20"
                                 >
-                                    <X size={20} />
+                                    <ArrowLeft size={20} />
                                 </button>
-                                <div className="text-5xl mb-3">🍳</div>
-                                <h3 className="text-2xl font-black">Menú de Desayunos</h3>
-                                <p className="text-white/90 font-medium">Frescura y salud para comenzar tu día</p>
-                            </div>
-
-                            <div className="flex-1 overflow-y-auto p-6">
-                                <div className="space-y-6">
-                                    <div className="flex bg-gray-100 p-1.5 rounded-2xl gap-2">
-                                        <button
-                                            type="button"
-                                            onClick={() => setActiveDesayunoTab('regular')}
-                                            className={`flex-1 py-3.5 px-4 rounded-xl text-sm font-black transition-all ${activeDesayunoTab === 'regular'
-                                                ? 'bg-white text-gray-900 shadow-xl scale-[1.02]'
-                                                : 'text-gray-500 hover:text-gray-700'
-                                                }`}
-                                        >
-                                            Regulares
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => setActiveDesayunoTab('vegetariano')}
-                                            className={`flex-1 py-3.5 px-4 rounded-xl text-sm font-black transition-all ${activeDesayunoTab === 'vegetariano'
-                                                ? 'bg-white text-gray-900 shadow-xl scale-[1.02]'
-                                                : 'text-gray-500 hover:text-gray-700'
-                                                }`}
-                                        >
-                                            Vegetarianos
-                                        </button>
-                                    </div>
-
-                                    <div className="space-y-4">
-                                        {(activeDesayunoTab === 'regular' ? desayunosMenu : desayunosVegetarianos).map((item, idx) => (
-                                            <motion.div
-                                                initial={{ opacity: 0, x: -10 }}
-                                                animate={{ opacity: 1, x: 0 }}
-                                                key={idx}
-                                                className="flex items-center gap-4 p-5 bg-gradient-to-r from-gray-50 to-white rounded-2xl border-2 border-gray-100 shadow-sm hover:shadow-md transition-all group"
-                                            >
-                                                <div className="w-10 h-10 bg-amber-100 text-amber-600 rounded-xl flex items-center justify-center font-black flex-shrink-0 group-hover:scale-110 transition-transform">
-                                                    {idx + 1}
-                                                </div>
-                                                <div className="flex-1">
-                                                    <p className="font-bold text-gray-800 text-base leading-tight">
-                                                        {item}
-                                                    </p>
-                                                    {/* Sub-label removido por redundancia */}
-                                                </div>
-                                            </motion.div>
-                                        ))}
-                                    </div>
+                                <div className="absolute top-4 right-4">
+                                    <span className="bg-white/20 text-white text-[9px] font-black px-2.5 py-1 rounded-xl border border-white/25 uppercase tracking-widest">
+                                        Pack Desayunos
+                                    </span>
                                 </div>
                             </div>
 
-                            <div className="p-6 bg-gray-50 border-t border-gray-200">
-                                <div className="flex items-center justify-between mb-6 bg-white p-4 rounded-2xl border-2 border-amber-100">
-                                    <div className="flex flex-col">
-                                        <span className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-1">Precio Semanal</span>
-                                        <span className="text-2xl font-black text-amber-500">₡{DESAYUNOS_PRECIO.toLocaleString('es-CR')}</span>
+                            {/* Pack details */}
+                            <div className="mx-5 mt-4 bg-slate-50 border border-slate-100 rounded-2xl p-4 space-y-3 shrink-0">
+                                <p className="text-xs font-black text-slate-800">5 desayunos · 1 persona</p>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {[
+                                        { icon: '👤', text: '1 persona' },
+                                        { icon: '☕', text: '5 desayunos por semana' },
+                                        { icon: '📅', text: 'Lunes a Viernes' },
+                                        { icon: '🌿', text: 'Regular o Vegetariano' },
+                                    ].map((b, i) => (
+                                        <div key={i} className="flex items-center gap-2 bg-white border border-slate-100 rounded-xl px-3 py-2.5 shadow-sm">
+                                            <span className="text-base leading-none shrink-0">{b.icon}</span>
+                                            <span className="text-[10px] font-bold text-slate-700 leading-tight">{b.text}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Tabs */}
+                            <div className="mx-5 mt-4 flex bg-slate-100 p-1 rounded-2xl gap-1.5 shrink-0">
+                                <button
+                                    type="button"
+                                    onClick={() => setActiveDesayunoTab('regular')}
+                                    className={`flex-1 min-h-[44px] rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${activeDesayunoTab === 'regular' ? 'bg-white text-slate-900 shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}
+                                >
+                                    ☀️ Regulares
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setActiveDesayunoTab('vegetariano')}
+                                    className={`flex-1 min-h-[44px] rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${activeDesayunoTab === 'vegetariano' ? 'bg-white text-slate-900 shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}
+                                >
+                                    🌿 Vegetarianos
+                                </button>
+                            </div>
+
+                            {/* Dish list — scrollable */}
+                            <div className="flex-1 overflow-y-auto side-panel-scrollbar px-5 py-4 space-y-2">
+                                {(activeDesayunoTab === 'regular' ? desayunosMenu : desayunosVegetarianos).map((item, idx) => (
+                                    <motion.div
+                                        initial={{ opacity: 0, x: 20 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        key={idx}
+                                        transition={{ delay: idx * 0.04 }}
+                                        className="flex items-center gap-3 bg-slate-50 hover:bg-amber-50 border border-slate-100 hover:border-amber-200 p-3 rounded-2xl transition-colors group"
+                                    >
+                                        <div className="w-10 h-10 bg-amber-100 text-amber-600 rounded-xl flex items-center justify-center font-black text-sm shrink-0 group-hover:scale-105 transition-transform">
+                                            {idx + 1}
+                                        </div>
+                                        <p className="font-bold text-slate-800 text-sm leading-snug">{item}</p>
+                                    </motion.div>
+                                ))}
+                                {(activeDesayunoTab === 'regular' ? desayunosMenu : desayunosVegetarianos).length === 0 && (
+                                    <p className="text-[11px] text-slate-300 italic py-6 text-center">Menú pendiente de actualizar...</p>
+                                )}
+                                <div className="h-4" />
+                            </div>
+
+                            {/* Sticky footer */}
+                            <div className="shrink-0 bg-white border-t border-slate-100 px-5 pt-4 pb-6 shadow-[0_-12px_32px_rgba(0,0,0,0.08)]"
+                                 style={{ paddingBottom: 'max(24px, env(safe-area-inset-bottom, 24px))' }}>
+                                <div className="flex items-center justify-between mb-3">
+                                    <div>
+                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Precio semanal</p>
+                                        <p className="text-2xl font-black text-amber-500">₡{DESAYUNOS_PRECIO.toLocaleString('es-CR')}</p>
                                     </div>
-                                    <span className="px-4 py-2 bg-amber-50 text-amber-600 rounded-xl text-xs font-black uppercase tracking-widest border border-amber-100 shadow-sm">
+                                    <span className="px-3 py-1.5 bg-amber-50 text-amber-600 rounded-xl text-[9px] font-black uppercase tracking-widest border border-amber-100">
                                         5 Porciones
                                     </span>
                                 </div>
                                 <button
                                     type="button"
                                     onClick={handleAgregarDesayunos}
-                                    className="w-full bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-500 hover:to-yellow-600 text-white font-black py-4.5 px-4 rounded-2xl transition-all flex items-center justify-center gap-3 shadow-xl shadow-amber-500/30 hover:shadow-amber-500/50 hover:scale-[1.02]"
+                                    className="w-full bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-500 hover:to-yellow-600 text-white font-black py-4 rounded-2xl transition-all flex items-center justify-center gap-3 shadow-xl shadow-amber-400/30 active:scale-[0.98]"
                                 >
-                                    <ShoppingCart size={22} className="text-white" />
+                                    <ShoppingCart size={20} />
                                     Agregar al Carrito
                                 </button>
                             </div>
+
+                            <style>{`
+                                .side-panel-scrollbar::-webkit-scrollbar { width: 3px; }
+                                .side-panel-scrollbar::-webkit-scrollbar-track { background: transparent; }
+                                .side-panel-scrollbar::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 10px; }
+                            `}</style>
                         </motion.div>
-                    </motion.div>
+                    </div>
                 </AnimatePresence>,
                 document.body
             )}
