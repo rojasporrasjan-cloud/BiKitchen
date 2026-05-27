@@ -21,11 +21,87 @@ const PACK_PORTIONS = {
 };
 
 const METHOD_LABELS = { whatsapp: 'WhatsApp', sinpe: 'SINPE', transfer: 'Transferencia', nmi: 'Tarjeta' };
-const PLANS = [
-  { id: 'weekly',   label: 'Semanal',    sublabel: '5 almuerzos',    savings: null },
-  { id: 'biweekly', label: 'Quincenal',  sublabel: '10 almuerzos',   savings: null },
-  { id: 'monthly',  label: 'Mensual',    sublabel: '20 almuerzos',   savings: '🔥 Mejor precio' },
+
+// Plan base labels — sublabel is computed dynamically inside the component
+const PLAN_LABELS = [
+  { id: 'weekly',   label: 'Semanal',   savings: null },
+  { id: 'biweekly', label: 'Quincenal', savings: null },
+  { id: 'monthly',  label: 'Mensual',   savings: '🔥 Mejor precio' },
 ];
+
+// Per-category detail cards shown at the top of the panel
+const PACK_DETAILS = {
+  'Two Pack': {
+    headline: '10 comidas semanales · 2 personas',
+    bullets: [
+      { icon: '👥', text: '2 personas incluidas' },
+      { icon: '🍽️', text: '5 almuerzos por persona' },
+      { icon: '📅', text: 'Lunes a Viernes' },
+      { icon: '💰', text: '25 % OFF en plan mensual' },
+    ],
+    mealsPerWeek: 10,
+  },
+  'Pack Familiar': {
+    headline: '5 comidas · 4 porciones c/u',
+    bullets: [
+      { icon: '👨‍👩‍👧‍👦', text: 'Para toda la familia' },
+      { icon: '🍽️', text: '4 porciones por plato' },
+      { icon: '📅', text: 'Lunes a Viernes' },
+      { icon: '🥘', text: 'Porciones generosas' },
+    ],
+    mealsPerWeek: 5,
+  },
+  '5 Comidas a la Semana': {
+    headline: '5 almuerzos · 1 persona',
+    bullets: [
+      { icon: '👤', text: '1 persona' },
+      { icon: '🍽️', text: '5 almuerzos por semana' },
+      { icon: '📅', text: 'Lunes a Viernes' },
+      { icon: '🥗', text: 'Menú varía cada semana' },
+    ],
+    mealsPerWeek: 5,
+  },
+  'Almuerzo y Cena': {
+    headline: '10 comidas semanales · 1 persona',
+    bullets: [
+      { icon: '👤', text: '1 persona' },
+      { icon: '🌅', text: '5 almuerzos + 5 cenas' },
+      { icon: '📅', text: 'Lunes a Viernes' },
+      { icon: '🔥', text: '20 % OFF en plan mensual' },
+    ],
+    mealsPerWeek: 10,
+  },
+  'Desayuno, Almuerzo y Cena': {
+    headline: '15 comidas semanales · plan completo',
+    bullets: [
+      { icon: '👤', text: '1 persona' },
+      { icon: '🌟', text: 'Desayuno + Almuerzo + Cena' },
+      { icon: '📅', text: 'Lunes a Viernes' },
+      { icon: '🚚', text: 'Envío GRATIS plan mensual' },
+    ],
+    mealsPerWeek: 15,
+  },
+  'Pack de Proteínas': {
+    headline: 'Proteínas a tu elección',
+    bullets: [
+      { icon: '🥩', text: '3 ó 5 proteínas a elegir' },
+      { icon: '⚖️', text: '250 g ó 500 g por proteína' },
+      { icon: '🧊', text: 'Entrega congelada' },
+      { icon: '✅', text: 'Selecciona tus favoritas' },
+    ],
+    mealsPerWeek: null,
+  },
+  'Pack de Desayunos': {
+    headline: '5 desayunos · 1 persona',
+    bullets: [
+      { icon: '👤', text: '1 persona' },
+      { icon: '☕', text: '5 desayunos variados' },
+      { icon: '📅', text: 'Lunes a Viernes' },
+      { icon: '🌿', text: 'Regular o Vegetariano' },
+    ],
+    mealsPerWeek: 5,
+  },
+};
 
 const FOOD_ICONS = ['🍗', '🥩', '🍤', '🐟', '🍖'];
 
@@ -158,6 +234,17 @@ export default function MenuDetailsModal({ menuKey, isOpen, onClose, packInfo })
     ? Math.round((1 - (monthlyPrice / (weeklyPrice * 4))) * 100)
     : null;
 
+  // ── Pack details + dynamic plan sublabels ──────────────────────────────────
+  const packDetails = PACK_DETAILS[packInfo?.categoryLabel] || null;
+  // mealCount: null → don't show a number (e.g. proteínas), number → show "N comidas"
+  const mealCount = packDetails ? packDetails.mealsPerWeek : 5;
+  const PLANS = PLAN_LABELS.map(p => ({
+    ...p,
+    sublabel: mealCount == null
+      ? (p.id === 'weekly' ? 'Por semana' : p.id === 'biweekly' ? 'Quincenal' : 'Mensual')
+      : `${mealCount * (p.id === 'weekly' ? 1 : p.id === 'biweekly' ? 2 : 4)} comidas`,
+  }));
+
   if (!isOpen) return null;
 
   return ReactDOM.createPortal(
@@ -181,11 +268,11 @@ export default function MenuDetailsModal({ menuKey, isOpen, onClose, packInfo })
           exit={{ x: '100%' }}
           transition={{ type: 'spring', damping: 30, stiffness: 280 }}
           onClick={(e) => e.stopPropagation()}
-          className="relative w-full md:w-[52%] lg:w-[45%] xl:w-[40%] h-full bg-white shadow-2xl flex flex-col overflow-hidden"
+          className="relative w-full md:w-[52%] lg:w-[46%] xl:w-[40%] h-full bg-white shadow-2xl flex flex-col overflow-hidden"
         >
 
           {/* ── HERO IMAGE ───────────────────────────────────────── */}
-          <div className="relative h-[220px] sm:h-[280px] shrink-0 overflow-hidden">
+          <div className="relative h-[175px] sm:h-[260px] shrink-0 overflow-hidden">
             <img
               src={packInfo?.image}
               alt={packInfo?.name}
@@ -282,6 +369,21 @@ export default function MenuDetailsModal({ menuKey, isOpen, onClose, packInfo })
                       Mensual te ahorra hasta {savingsVsWeekly}% vs semanal
                     </p>
                   )}
+                </div>
+              )}
+
+              {/* ── Pack details card ────────────────────────────── */}
+              {packDetails && (
+                <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 space-y-3">
+                  <p className="text-xs font-black text-slate-800">{packDetails.headline}</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {packDetails.bullets.map((b, i) => (
+                      <div key={i} className="flex items-center gap-2 bg-white border border-slate-100 rounded-xl px-3 py-2.5 shadow-sm">
+                        <span className="text-base leading-none shrink-0">{b.icon}</span>
+                        <span className="text-[10px] font-bold text-slate-700 leading-tight">{b.text}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
@@ -414,7 +516,8 @@ export default function MenuDetailsModal({ menuKey, isOpen, onClose, packInfo })
           </div>
 
           {/* ── STICKY FOOTER ─────────────────────────────────────── */}
-          <div className="shrink-0 bg-white border-t border-slate-100 px-5 py-4 shadow-[0_-12px_32px_rgba(0,0,0,0.08)]">
+          <div className="shrink-0 bg-white border-t border-slate-100 px-5 pt-4 pb-6 shadow-[0_-12px_32px_rgba(0,0,0,0.08)]"
+               style={{ paddingBottom: 'max(24px, env(safe-area-inset-bottom, 24px))' }}>
 
             {/* Precio + cantidad */}
             <div className="flex items-center justify-between mb-3">
