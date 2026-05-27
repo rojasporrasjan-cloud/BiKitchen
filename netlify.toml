@@ -1,0 +1,126 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[functions]
+  # Extended timeout for payment functions (NMI can be slow from Costa Rica)
+  # Our internal AbortController fires at 24s to give a clean JSON response.
+  # This 26s limit is the outer safety net.
+  node_bundler = "esbuild"
+
+# Explicit timeout for the payment function (default is 10s which is too short for BAC)
+# NOTE: Netlify Free plan maxes at 10s. Netlify Pro allows up to 26s.
+[functions."nmi-charge"]
+  timeout = 26
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# ─────────────────────────────────────────────
+#  CACHE-CONTROL HEADERS
+#  Reduce Netlify bandwidth: returning visitors
+#  serve assets from browser cache (0 bytes).
+# ─────────────────────────────────────────────
+
+# Vite-built JS/CSS/font chunks have content hashes in their filenames
+# (e.g. vendor-react-Abc123.js) → safe to cache for 1 year with immutable.
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# Icons (hashed SVGs generated at build time)
+[[headers]]
+  for = "/icons/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# Static images in /public/assets (logo, og-image, etc.) — 30-day cache
+[[headers]]
+  for = "/assets/*.png"
+  [headers.values]
+    Cache-Control = "public, max-age=2592000"
+
+[[headers]]
+  for = "/assets/*.jpg"
+  [headers.values]
+    Cache-Control = "public, max-age=2592000"
+
+[[headers]]
+  for = "/assets/*.webp"
+  [headers.values]
+    Cache-Control = "public, max-age=2592000"
+
+[[headers]]
+  for = "/assets/*.svg"
+  [headers.values]
+    Cache-Control = "public, max-age=2592000"
+
+# Root-level images
+[[headers]]
+  for = "/*.png"
+  [headers.values]
+    Cache-Control = "public, max-age=2592000"
+
+[[headers]]
+  for = "/*.jpg"
+  [headers.values]
+    Cache-Control = "public, max-age=2592000"
+
+[[headers]]
+  for = "/*.svg"
+  [headers.values]
+    Cache-Control = "public, max-age=2592000"
+
+# index.html → NEVER cache: browser must always fetch the latest deploy
+# so users get new JS chunks immediately after a deploy.
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+    Pragma = "no-cache"
+
+# Service Worker → NEVER cache (SW controls its own update cycle)
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+    Pragma = "no-cache"
+
+# Offline fallback page
+[[headers]]
+  for = "/offline.html"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+
+# Web App Manifest — short TTL so icon changes propagate
+[[headers]]
+  for = "/manifest.json"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"
+
+# Sitemap and robots — re-check daily
+[[headers]]
+  for = "/sitemap.xml"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"
+    Content-Type = "application/xml; charset=utf-8"
+
+[[headers]]
+  for = "/robots.txt"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"
+
+# ─────────────────────────────────────────────
+#  SECURITY HEADERS (applied to all routes)
+# ─────────────────────────────────────────────
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    X-XSS-Protection = "1; mode=block"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(self)"

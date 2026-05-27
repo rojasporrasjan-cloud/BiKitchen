@@ -1,0 +1,189 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ==========================================
+    // FUNCIONES DE SEGURIDAD
+    // ==========================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && 
+        request.auth.token.email.lower() in [
+          'bikitchenfood@gmail.com',
+          'ginamaroli@gmail.com',
+          'rojasporrasjan@gmail.com',
+          'mfcorrales15@gmail.com'
+        ];
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isEmailOwner(email) {
+      return isAuthenticated() && request.auth.token.email.lower() == email.lower();
+    }
+    
+    // ==========================================
+    // COLECCIONES PÚBLICAS (Solo lectura pública)
+    // ==========================================
+    
+    match /menus_oficial/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /shipping_zones/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    match /promociones/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    match /promociones_imagenes/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    match /individuales_imagenes/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /imagenes/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /packs_imagenes/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /temporada_imagenes/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    match /config/{doc} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /coupons/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    // ==========================================
+    // NOTIFICACIONES Y SUSCRIPCIONES
+    // ==========================================
+
+    match /push_subscriptions/{userId} {
+      allow read: if isAdmin() || isOwner(userId);
+      allow create: if true; // Permitir que cualquiera se suscriba
+      allow update: if isAdmin() || isOwner(userId);
+      allow delete: if isAdmin() || isOwner(userId);
+    }
+
+    match /notifications/{notifId} {
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow create: if true; // Permitir que se generen alertas (ej: al hacer pedido)
+      allow update: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'readAt']));
+      allow delete: if isAdmin();
+    }
+
+    // ==========================================
+    // PEDIDOS (Propietario o Admin)
+    // ==========================================
+    
+    match /pedidos/{pedidoId} {
+      allow read: if isAdmin() ||
+        (isAuthenticated() && resource.data.userId == request.auth.uid) ||
+        (isAuthenticated() && resource.data.correo.lower() == request.auth.token.email.lower());
+      // FIX 5: Validar campos mínimos en creación de pedidos
+      allow create: if
+        request.resource.data.keys().hasAll(['cliente', 'correo', 'telefono', 'items', 'total'])
+        && request.resource.data.total is number
+        && request.resource.data.total > 0
+        && request.resource.data.items is list
+        && request.resource.data.items.size() > 0
+        && request.resource.data.correo is string
+        && request.resource.data.correo.size() > 4;
+      allow update, delete: if isAdmin();
+    }
+
+    match /orders/{orderId} {
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      // FIX 5: Validar campos mínimos en creación de órdenes
+      allow create: if
+        request.resource.data.keys().hasAll(['cliente', 'correo', 'telefono', 'items', 'total'])
+        && request.resource.data.total is number
+        && request.resource.data.total > 0
+        && request.resource.data.items is list
+        && request.resource.data.items.size() > 0
+        && request.resource.data.correo is string
+        && request.resource.data.correo.size() > 4;
+      allow update, delete: if isAdmin();
+    }
+    
+    // ==========================================
+    // USUARIOS (Propietario o Admin)
+    // ==========================================
+    
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && request.resource.data.role != 'admin';
+      allow update: if (isOwner(userId) && request.resource.data.role == resource.data.role) || isAdmin();
+      allow delete: if isAdmin();
+    }
+    
+    // ==========================================
+    // PUNTOS DE FIDELIDAD
+    // ==========================================
+
+    match /loyalty/{userId} {
+      allow read, write: if isEmailOwner(userId) || isAdmin();
+    }
+    
+    match /loyalty_points/{id} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+    
+    // ==========================================
+    // RESEÑAS
+    // ==========================================
+    
+    match /reviews/{id} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update: if isAdmin() || (isAuthenticated() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['helpful']));
+      allow delete: if isAdmin();
+    }
+
+    // ==========================================
+    // GESTIÓN INTERNA (Solo Admin)
+    // ==========================================
+    
+    match /inventario/{doc} { allow read, write: if isAdmin(); }
+    match /clientes/{doc} { allow read, write: if isAdmin(); }
+    match /stats/{doc} { allow read, write: if isAdmin(); }
+    match /admin_config/{doc} { allow read, write: if isAdmin(); }
+    
+    // ==========================================
+    // REGLA POR DEFECTO - DENEGAR TODO
+    // ==========================================
+    
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

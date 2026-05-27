@@ -1,0 +1,40 @@
+{
+    "appId": "com.bikitchen.food",
+    "appName": "BiKitchen Food",
+    "webDir": "dist",
+    "server": {
+        "androidScheme": "https"
+    },
+    "plugins": {
+        "SplashScreen": {
+            "launchShowDuration": 2000,
+            "launchAutoHide": true,
+            "backgroundColor": "#FF671D",
+            "androidSplashResourceName": "splash",
+            "androidScaleType": "CENTER_CROP",
+            "showSpinner": false,
+            "splashFullScreen": true,
+            "splashImmersive": true
+        },
+        "PushNotifications": {
+            "presentationOptions": ["badge", "sound", "alert"]
+        },
+        "StatusBar": {
+            "style": "light",
+            "backgroundColor": "#FF671D"
+        },
+        "Keyboard": {
+            "resize": "body",
+            "resizeOnFullScreen": true
+        }
+    },
+    "ios": {
+        "contentInset": "automatic",
+        "preferredContentMode": "mobile"
+    },
+    "android": {
+        "allowMixedContent": true,
+        "captureInput": true,
+        "webContentsDebuggingEnabled": false
+    }
+}

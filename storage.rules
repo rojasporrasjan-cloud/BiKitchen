@@ -1,0 +1,57 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Helper function: verificar si usuario es admin
+    function isAdmin() {
+      return request.auth != null && 
+        request.auth.token.email.lower() in [
+          'bikitchenfood@gmail.com',
+          'ginamaroli@gmail.com',
+          'rojasporrasjan@gmail.com',
+          'mfcorrales15@gmail.com'
+        ];
+    }
+    
+    // Imágenes de packs - lectura pública, escritura admin
+    match /packs/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    // Imágenes de platos individuales - lectura pública, escritura admin
+    match /individuales/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    // Imágenes de menú de temporada - lectura pública, escritura admin
+    match /temporada/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    // Imágenes de menús - lectura pública, escritura admin
+    match /menus/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    // Imágenes de promociones - lectura pública, escritura admin
+    match /promociones/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    // Carpeta general de imágenes - lectura pública, escritura admin
+    match /imagenes/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    // Denegar todo lo demás por defecto
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

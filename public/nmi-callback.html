@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Procesando Pago...</title>
+</head>
+<body>
+    <script>
+        // Esta página recibe la respuesta de NMI Direct Post vía redirección
+        // y la envía a la ventana principal usando postMessage.
+        (function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const result = {};
+            for (const [key, value] of urlParams.entries()) {
+                result[key] = value;
+            }
+
+            console.log('[NMI Callback] %cRedirección detectada', 'color: green; font-weight: bold');
+            console.log('[NMI Callback] URL completa:', window.location.href);
+            console.log('[NMI Callback] Resultado extraído:', result);
+
+            // Guardar en localStorage como backup de diagnóstico
+            try {
+                const logs = JSON.parse(localStorage.getItem('nmi_debug_logs') || '[]');
+                logs.push({
+                    timestamp: new Date().toISOString(),
+                    url: window.location.href,
+                    result: result
+                });
+                localStorage.setItem('nmi_debug_logs', JSON.stringify(logs.slice(-10))); // Guardar últimos 10
+                localStorage.setItem('nmi_last_result', JSON.stringify(result));
+            } catch(e) {
+                console.error('[NMI Callback] Error guardando en localStorage:', e);
+            }
+
+            // Enviar el resultado al padre (el sitio de BiKitchen)
+            if (window.parent && window.parent !== window) {
+                console.log('[NMI Callback] Enviando postMessage al padre...');
+                window.parent.postMessage({
+                    type: 'NMI_PAYMENT_RESULT',
+                    payload: result
+                }, window.location.origin);
+            } else {
+                console.error('[NMI Callback] No se encontró ventana padre.');
+            }
+        })();
+    </script>
+    <div style="font-family: sans-serif; text-align: center; margin-top: 50px; color: #666;">
+        <p>Procesando respuesta segura...</p>
+    </div>
+</body>
+</html>

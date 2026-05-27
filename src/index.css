@@ -1,0 +1,662 @@
+/* BiKitchen Food - Línea Gráfica Oficial */
+@import url('https://fonts.googleapis.com/css2?family=Raleway:wght@400;500;600;700;800&family=Nunito+Sans:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Animación shimmer para skeleton loaders */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+/* Optimización CRÍTICA de imágenes para eliminar flasheo en móviles */
+img {
+  /* Forzar aceleración por GPU - CRÍTICO para evitar flasheo */
+  transform: translate3d(0, 0, 0);
+  -webkit-transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  /* Forzar rendering continuo */
+  image-rendering: auto;
+  -webkit-image-rendering: auto;
+}
+
+/* Logo transparente */
+img[src*="logo"] {
+  opacity: 0.9;
+}
+
+/* NO aplicar transiciones automáticas a imágenes */
+img:not([style*="transition"]) {
+  transition: none !important;
+}
+
+/* Prevenir layout shift */
+img[loading="lazy"],
+img[loading="eager"] {
+  contain-intrinsic-size: auto 500px;
+}
+
+/* Forzar que las imágenes mantengan su espacio */
+img:not([src]) {
+  visibility: hidden;
+}
+
+/* Optimización específica para motion.img de framer-motion */
+.motion-img,
+[class*="motion"] img {
+  transform: translate3d(0, 0, 0);
+  -webkit-transform: translate3d(0, 0, 0);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ========================================
+   BiKitchen Brand Variables - Modo Claro
+   ======================================== */
+:root {
+  /* Colores Primarios */
+  --color-primary: #FF671D;
+  --color-primary-light: #FF8A4D;
+  --color-primary-dark: #E85A15;
+  
+  /* Colores Secundarios */
+  --color-secondary: #B18978;
+  --color-secondary-light: #C4A08E;
+  --color-secondary-dark: #9A7262;
+  
+  /* Fondos */
+  --color-bg: #FDFBF9;
+  --color-bg-secondary: #F5F3F1;
+  --color-surface: #FFFFFF;
+  
+  /* Texto */
+  --color-text: #2A2A2A;
+  --color-text-muted: #9A9590;
+  
+  /* Bordes */
+  --color-border: #E8E4E0;
+  
+  /* Acentos */
+  --color-accent: #FF671D;
+  --color-accent-soft: rgba(255, 103, 29, 0.1);
+  
+  /* Colores de identidad (mapeados a paleta original) */
+  --color-turquoise: #FF671D;
+  --color-turquoise-dark: #E85A15;
+  --color-lime-green: #E9A84A;
+  --color-lime-green-dark: #C4A08E;
+  --color-beige: #f9f5eb;
+  
+  /* Sombras */
+  --shadow-sm: 0 1px 2px rgba(42, 42, 42, 0.05);
+  --shadow-md: 0 4px 16px rgba(42, 42, 42, 0.1);
+  --shadow-lg: 0 8px 24px rgba(42, 42, 42, 0.12);
+  --shadow-glow: 0 0 20px rgba(255, 103, 29, 0.3);
+  --shadow-soft: 0 4px 20px rgba(0, 0, 0, 0.08);
+  
+  /* Tipografía */
+  --font-sans: 'Raleway', 'Nunito Sans', sans-serif;
+  --font-display: 'Raleway', 'Nunito Sans', sans-serif;
+  
+  /* Radios */
+  --radius: 12px;
+  --radius-lg: 20px;
+}
+
+
+/* ========================================
+   BiKitchen Brand Variables - Modo Oscuro
+   ======================================== */
+html.dark,
+:root.dark,
+.dark {
+  --color-bg: #1f1f1f;
+  --color-bg-secondary: #2A2A2A;
+  --color-surface: #2d2d2d;
+  
+  --color-text: #f9f5eb;
+  --color-text-muted: #a0a0a0;
+  
+  --color-border: #3d3d3d;
+  
+  /* Colores de acento para modo oscuro */
+  --color-primary: #FF671D;
+  --color-accent: #E9A84A;
+  --color-accent-soft: rgba(255, 103, 29, 0.15);
+  --color-turquoise: #FF671D;
+  --color-lime-green: #E9A84A;
+  
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 30px rgba(255, 103, 29, 0.3);
+  --shadow-soft: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+/* Compatibilidad con tema anterior */
+html.theme-night,
+:root.theme-night {
+  --color-bg: #1F1E1E;
+  --color-bg-secondary: #2A2A2A;
+  --color-surface: #3B3A39;
+  --color-text: #F5F3F1;
+  --color-text-muted: #9A9590;
+  --color-border: #4A4847;
+  --color-primary: #FF671D;
+  --color-accent: #FF671D;
+}
+
+
+
+/* ========================================
+   Base Styles
+   ======================================== */
+html, body {
+  height: 100%;
+  overflow-x: hidden;
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "kern" 1, "liga" 1;
+  position: relative;
+  transition: background-color 0.3s ease, color 0.3s ease;
+  /* Asegurar scroll nativo */
+  overflow-y: auto !important;
+}
+
+/* Evitar blur de texto en elementos con transform (Framer Motion) */
+h1, h2, h3, h4, h5, h6, p, span, a, button, label {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* Fondo base que cambia con el tema */
+html {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+}
+
+html.dark {
+  background-color: #1f1f1f;
+  color: #f9f5eb;
+}
+
+/* Smooth theme transitions */
+* {
+  transition-property: background-color, border-color, color, fill, stroke;
+  transition-duration: 0.2s;
+  transition-timing-function: ease;
+}
+
+/* Preserve specific animation transitions */
+*[class*="animate-"],
+*[class*="transition-"] {
+  transition-property: all;
+}
+
+/* Tipografía */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+/* ========================================
+   BiKitchen Button Styles
+   ======================================== */
+.btn {
+  @apply inline-flex items-center justify-center px-6 py-3 font-semibold transition-all duration-300;
+  border-radius: var(--radius);
+}
+
+/* Botón Primario - Naranja BiKitchen */
+.btn-primary {
+  background: linear-gradient(135deg, #FF671D 0%, #E85A15 100%);
+  color: white;
+  box-shadow: 0 4px 14px rgba(255, 103, 29, 0.3);
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, #E85A15 0%, #B18978 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(255, 103, 29, 0.4);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+/* Botón Secundario - Outline Naranja */
+.btn-secondary {
+  background: transparent;
+  color: #FF671D;
+  border: 2px solid #FF671D;
+}
+
+.btn-secondary:hover {
+  background: rgba(255, 103, 29, 0.1);
+  transform: translateY(-1px);
+}
+
+/* Botón Accent - Marrón */
+.btn-accent {
+  background: linear-gradient(135deg, #B18978 0%, #9A7262 100%);
+  color: white;
+  box-shadow: 0 4px 14px rgba(177, 137, 120, 0.3);
+}
+
+.btn-accent:hover {
+  background: linear-gradient(135deg, #9A7262 0%, #7D5C4F 100%);
+  transform: translateY(-2px);
+}
+
+/* ========================================
+   Card Styles
+   ======================================== */
+.card-hover {
+  @apply transition-all duration-300;
+  border-radius: var(--radius-lg);
+}
+
+.card-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+}
+
+.card-bikitchen {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+  transition: all 0.3s ease;
+}
+
+.card-bikitchen:hover {
+  box-shadow: var(--shadow-md);
+  border-color: var(--color-primary);
+}
+
+/* ========================================
+   Glass Panel (para overlays)
+   ======================================== */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+.dark .glass-panel {
+  background: rgba(31, 30, 30, 0.85);
+  border: 1px solid rgba(74, 72, 71, 0.5);
+}
+
+/* ========================================
+   Gradient Backgrounds
+   ======================================== */
+.bg-bikitchen-gradient {
+  background: linear-gradient(135deg, #FF671D 0%, #B18978 100%);
+}
+
+.bg-bikitchen-warm {
+  background: linear-gradient(180deg, #FDFBF9 0%, #F5F3F1 100%);
+}
+
+.dark .bg-bikitchen-warm {
+  background: linear-gradient(180deg, #1F1E1E 0%, #2A2A2A 100%);
+}
+
+/* ========================================
+   Text Utilities
+   ======================================== */
+.text-bikitchen-orange {
+  color: #FF671D;
+}
+
+.text-bikitchen-brown {
+  color: #B18978;
+}
+
+/* ========================================
+   Scrollbar Styling
+   ======================================== */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 103, 29, 0.3);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 103, 29, 0.6);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 103, 29, 0.3) transparent;
+}
+
+/* Animations for components */
+@keyframes shine {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes grain {
+
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+
+  10% {
+    transform: translate(-5%, -10%);
+  }
+
+  20% {
+    transform: translate(-15%, 5%);
+  }
+
+  30% {
+    transform: translate(7%, -25%);
+  }
+
+  40% {
+    transform: translate(-5%, 25%);
+  }
+
+  50% {
+    transform: translate(-15%, 10%);
+  }
+
+  60% {
+    transform: translate(15%, 0%);
+  }
+
+  70% {
+    transform: translate(0%, 15%);
+  }
+
+  80% {
+    transform: translate(3%, 35%);
+  }
+
+  90% {
+    transform: translate(-10%, 10%);
+  }
+}
+
+@keyframes float {
+
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes pulse-glow {
+
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+.animate-shine {
+  animation: shine 1.5s ease-in-out infinite;
+}
+
+.animate-grain {
+  animation: grain 8s steps(10) infinite;
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+@keyframes marquee {
+  0% {
+    transform: translateX(0);
+  }
+
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee {
+  animation: marquee 30s linear infinite;
+}
+
+@keyframes scan {
+  0% {
+    top: 0%;
+    opacity: 0;
+  }
+
+  10% {
+    opacity: 1;
+  }
+
+  90% {
+    opacity: 1;
+  }
+
+  100% {
+    top: 100%;
+    opacity: 0;
+  }
+}
+
+.animate-scan {
+  animation: scan 2s linear infinite;
+}
+
+/* Navbar slide down animation */
+@keyframes slideDown {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-slideDown {
+  animation: slideDown 0.5s ease-out forwards;
+}
+
+/* ========================================
+   Sidebar Scroll Fix
+   ======================================== */
+/* Allow mouse wheel scrolling without click focus */
+nav[class*="overflow-y-auto"],
+aside[class*="overflow-y-auto"],
+.sidebar-scroll {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
+
+/* Ensure scroll works on hover */
+nav[class*="overflow-y-auto"]:hover,
+aside[class*="overflow-y-auto"]:hover {
+  overflow-y: auto;
+}
+
+/* ========================================
+   Line Clamp Utility
+   ======================================== */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+@layer utilities {
+  .hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Scrollbar sutil e interactiva para escritorio */
+  .scrollbar-premium {
+    scrollbar-width: thin !important;
+    scrollbar-color: rgba(255, 103, 29, 0.4) rgba(0, 0, 0, 0.05) !important;
+  }
+
+  .scrollbar-premium::-webkit-scrollbar {
+    display: block !important;
+    height: 8px !important; /* Aumentado de 4px para mejor visibilidad */
+    width: 8px !important;
+  }
+
+  .scrollbar-premium::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.03) !important;
+    border-radius: 10px !important;
+  }
+
+  .scrollbar-premium::-webkit-scrollbar-thumb {
+    background: rgba(255, 103, 29, 0.3) !important;
+    border-radius: 10px !important;
+    border: 2px solid transparent !important;
+    background-clip: content-box !important;
+  }
+
+  .scrollbar-premium:hover::-webkit-scrollbar-thumb {
+    background: rgba(255, 103, 29, 0.6) !important;
+  }
+}
+
+/* ========================================
+   Promo Banner Animations
+   ======================================== */
+@keyframes marquee {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-marquee {
+  animation: marquee 20s linear infinite;
+}
+
+.animate-shimmer {
+  animation: shimmer 3s ease-in-out infinite;
+}
+
+/* Pausar animación en hover */
+.animate-marquee:hover {
+  animation-play-state: paused;
+}
+
+/* Pulse para el banner */
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(255, 103, 29, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(255, 103, 29, 0.8);
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Gradiente animado horizontal */
+@keyframes gradient-x {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+.animate-gradient-x {
+  background-size: 200% 200%;
+  animation: gradient-x 3s ease infinite;
+}
+
+/* Delays para animaciones */
+.delay-300 {
+  animation-delay: 300ms;
+}
+
+.delay-500 {
+  animation-delay: 500ms;
+}
+
+.delay-700 {
+  animation-delay: 700ms;
+}
