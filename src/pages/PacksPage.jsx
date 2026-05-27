@@ -667,7 +667,7 @@ const PackCard = memo(({ pack, shipping, category, categoryLabel: customCategory
                         <motion.div
                             initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
                             transition={{ type: 'spring', damping: 30, stiffness: 280 }}
-                            className="relative w-full md:w-[60%] lg:w-[55%] h-full bg-white shadow-2xl overflow-hidden flex flex-col"
+                            className="relative w-full md:w-[52%] lg:w-[46%] xl:w-[40%] h-full bg-white shadow-2xl overflow-hidden flex flex-col"
                             onClick={(e) => e.stopPropagation()}
                         >
                             {/* Hero Header Section */}
