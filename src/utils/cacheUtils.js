@@ -20,7 +20,6 @@ export function clearAppCache() {
     // 3. Invalidar caché de menús específicamente
     invalidateCacheByType('menus');
 
-    console.log('✅ Caché de la aplicación limpiado completamente');
     return true;
   } catch (error) {
     console.error('❌ Error limpiando caché:', error);
@@ -35,7 +34,6 @@ export function forceMenusReload() {
   try {
     invalidateCacheByType('menus_official');
     invalidateCacheByType('menus');
-    console.log('✅ Caché de menús invalidado - próxima carga será fresca');
     return true;
   } catch (error) {
     console.error('❌ Error invalidando caché de menús:', error);
@@ -53,7 +51,6 @@ export async function updateServiceWorker() {
       const registration = await navigator.serviceWorker.getRegistration();
       if (registration) {
         await registration.update();
-        console.log('✅ Service Worker actualizado');
         return true;
       }
     } catch (error) {

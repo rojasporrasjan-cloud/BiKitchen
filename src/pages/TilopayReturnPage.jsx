@@ -25,7 +25,6 @@ export default function TilopayReturnPage() {
                 const tilopayMessage = searchParams.get('message') || searchParams.get('description') || '';
                 const tilopayTransactionId = searchParams.get('transactionId') || searchParams.get('transaction_id') || searchParams.get('id');
                 
-                console.log('[TilopayReturn] Params:', { tilopayStatus, tilopayOrderId, tilopayMessage, tilopayTransactionId });
                 
                 // También intentar recuperar de localStorage
                 const savedOrder = localStorage.getItem('bikitchen-tilopay-order');
@@ -78,7 +77,6 @@ export default function TilopayReturnPage() {
                                         paidAt: new Date().toISOString(),
                                         updatedAt: new Date().toISOString()
                                     });
-                                    console.log('[TilopayReturn] Pedido actualizado como pagado. Iniciando notificaciones...');
 
                                     // Preparar datos para los emails
                                     try {
@@ -123,7 +121,6 @@ export default function TilopayReturnPage() {
                                                 correo: orderData.correo,
                                                 direccion: orderData.direccion
                                             });
-                                            console.log('[CRM] Cliente registrado desde Tilopay');
                                         } catch (crmErr) {
                                             console.error('[CRM] Error registrando cliente desde Tilopay:', crmErr);
                                         }
@@ -136,7 +133,6 @@ export default function TilopayReturnPage() {
                                         console.error('[TilopayReturn] Error al cargar o enviar notificaciones:', notifErr);
                                     }
                                 } else {
-                                    console.log('[TilopayReturn] El pedido ya estaba marcado como pagado, saltando notificaciones.');
                                 }
                             }
                         } catch (updateError) {
@@ -178,9 +174,9 @@ export default function TilopayReturnPage() {
                         <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
                             <Loader2 className="w-10 h-10 text-blue-500 animate-spin" />
                         </div>
-                        <h1 className="text-2xl font-bold text-gray-800 mb-2">
+                        <h2 className="text-2xl font-bold text-gray-800 mb-2">
                             Procesando pago...
-                        </h1>
+                        </h2>
                         <p className="text-gray-600">
                             Por favor espera mientras verificamos tu pago.
                         </p>
@@ -193,7 +189,7 @@ export default function TilopayReturnPage() {
                             <CheckCircle className="w-10 h-10 text-green-500" />
                         </div>
                         <h1 className="text-2xl font-bold text-gray-800 mb-2">
-                            ¡Pago exitoso!
+                            ¡Pago exitoso! — BiKitchen
                         </h1>
                         <p className="text-gray-600 mb-4">
                             {message}
@@ -215,9 +211,9 @@ export default function TilopayReturnPage() {
                         <div className="w-20 h-20 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-6">
                             <XCircle className="w-10 h-10 text-yellow-500" />
                         </div>
-                        <h1 className="text-2xl font-bold text-gray-800 mb-2">
+                        <h2 className="text-2xl font-bold text-gray-800 mb-2">
                             Pago cancelado
-                        </h1>
+                        </h2>
                         <p className="text-gray-600 mb-6">
                             {message}
                         </p>
@@ -229,9 +225,9 @@ export default function TilopayReturnPage() {
                         <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
                             <XCircle className="w-10 h-10 text-red-500" />
                         </div>
-                        <h1 className="text-2xl font-bold text-gray-800 mb-2">
+                        <h2 className="text-2xl font-bold text-gray-800 mb-2">
                             Error en el pago
-                        </h1>
+                        </h2>
                         <p className="text-gray-600 mb-6">
                             {message}
                         </p>

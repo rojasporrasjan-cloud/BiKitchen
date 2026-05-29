@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-    Gift, 
-    ChevronLeft, 
-    Star, 
-    Zap, 
-    Clock, 
-    CheckCircle2, 
-    Info, 
+import {
+    Gift,
+    ChevronLeft,
+    Star,
+    Zap,
+    Clock,
+    CheckCircle2,
+    Info,
     ShoppingBag,
     Ticket,
     Truck,
@@ -15,13 +15,18 @@ import {
     Loader2,
     Crown,
     Sparkles,
-    Target
+    Target,
+    MessageSquare
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import useLoyaltyPoints from '../hooks/useLoyaltyPoints';
 import { useAuth } from '../context/AuthContext';
+import { useWhatsApp } from '../hooks/useWhatsApp';
+import { db } from '../firebase/config';
+import { addDoc, collection } from 'firebase/firestore';
 import { createCoupon } from '../utils/firestoreCoupons';
 import BackButton from '../components/BackButton';
+import SEOHead from '../components/SEOHead';
 import toast from 'react-hot-toast';
 
 const REWARDS = [
@@ -29,7 +34,7 @@ const REWARDS = [
         id: 'coupon_2000',
         title: 'Cupón ₡2,000',
         description: 'Descuento aplicable en cualquier pedido',
-        points: 500,
+        points: 1000,
         type: 'discount',
         value: 2000,
         icon: <Ticket className="text-orange-500" />,
@@ -40,7 +45,7 @@ const REWARDS = [
         id: 'free_shipping',
         title: 'Envío Gratis',
         description: 'Válido para GAM o zona de cobertura',
-        points: 800,
+        points: 1500,
         type: 'shipping',
         value: 0,
         icon: <Truck className="text-blue-500" />,
@@ -51,7 +56,7 @@ const REWARDS = [
         id: 'coupon_5000',
         title: 'Cupón ₡5,000',
         description: '¡Nuestra mejor oferta en puntos!',
-        points: 1200,
+        points: 2500,
         type: 'discount',
         value: 5000,
         icon: <Gift className="text-purple-500" />,
@@ -62,8 +67,8 @@ const REWARDS = [
     {
         id: 'free_pack_week',
         title: 'Pack Semanal Gratis',
-        description: 'Canjeable por un pack de 5 comidas',
-        points: 4000,
+        description: 'Te contactamos para coordinar tu pack de 5 comidas',
+        points: 10000,
         type: 'product',
         value: 'weekly_pack',
         icon: <ShoppingBag className="text-green-500" />,
@@ -76,9 +81,11 @@ export default function RewardStore() {
     const navigate = useNavigate();
     const { currentUser } = useAuth();
     const { points, currentLevel, redeemItem, loading: pointsLoading } = useLoyaltyPoints();
+    const { getWhatsAppUrl } = useWhatsApp();
     const [redeeming, setRedeeming] = useState(null);
     const [successReward, setSuccessReward] = useState(null);
     const [generatedCode, setGeneratedCode] = useState('');
+    const [productSuccessInfo, setProductSuccessInfo] = useState(null);
 
     const handleRedeem = async (reward) => {
         if (!currentUser) {
@@ -90,49 +97,75 @@ export default function RewardStore() {
             toast.error('No tienes suficientes BiPuntos.');
             return;
         }
-        
+
         setRedeeming(reward.id);
         setGeneratedCode('');
 
         try {
-            // 1. Generar código de cupón único
+            // 1. Generar código de referencia único
             const randomStr = Math.random().toString(36).substring(2, 6).toUpperCase();
-            const couponCode = `VIP-${reward.title.replace(/\s+/g, '').slice(0, 5).toUpperCase()}-${randomStr}`;
-            
-            // 2. Debitar puntos y guardar en el historial con el código
-            const result = await redeemItem(reward.points, `Minitienda: ${reward.title}`, { code: couponCode });
-            
-            if (result.success) {
-                // 3. Crear el cupón en Firestore
-                // Expiración en 30 días
-                const expirationDate = new Date();
-                expirationDate.setDate(expirationDate.getDate() + 30);
-                
-                // Configuración según el tipo de recompensa
-                const couponData = {
-                    code: couponCode,
-                    type: reward.type === 'shipping' ? 'free_shipping' : 'fixed',
-                    value: reward.value,
-                    description: `Recompensa Minitienda: ${reward.title}`,
-                    active: true,
-                    minPurchase: reward.type === 'product' ? 5000 : 0,
-                    maxUses: 1,
-                    singleUsePerUser: true,
-                    startDate: new Date(),
-                    expirationDate: expirationDate,
-                    generatedBy: currentUser.uid // Vincular al usuario
-                };
+            const refCode = `VIP-${reward.title.replace(/\s+/g, '').slice(0, 5).toUpperCase()}-${randomStr}`;
 
-                await createCoupon(couponData);
-                
-                setGeneratedCode(couponCode);
-                setSuccessReward(reward);
-                toast.success('¡Recompensa canjeada con éxito!');
+            // 2. Debitar puntos y registrar en historial de lealtad
+            const result = await redeemItem(reward.points, reward.title, { code: refCode });
+
+            if (result.success) {
+                if (reward.type === 'product') {
+                    // ─── Recompensas de producto (Pack Semanal Gratis) ───
+                    // NO se crea cupón. Se coordina por WhatsApp y se guarda registro.
+                    try {
+                        await addDoc(collection(db, 'redemptions'), {
+                            userId: currentUser.uid,
+                            userEmail: currentUser.email,
+                            rewardId: reward.id,
+                            rewardTitle: reward.title,
+                            referenceCode: refCode,
+                            pointsUsed: reward.points,
+                            status: 'pending',
+                            createdAt: new Date().toISOString()
+                        });
+                    } catch (err) {
+                        // No crítico: los puntos ya fueron descontados
+                        console.error('[RewardStore] Error guardando registro de canje de producto:', err);
+                    }
+
+                    const waMsg = `¡Hola BiKitchen! 🎉\n\nAcabo de canjear mi *Pack Semanal Gratis* usando mis BiPuntos.\n\n📋 *Referencia:* ${refCode}\n📧 *Mi correo:* ${currentUser.email}\n\n¡Espero coordinar la entrega de mi pack! 🍱`;
+                    setProductSuccessInfo({
+                        reward,
+                        referenceCode: refCode,
+                        whatsappUrl: getWhatsAppUrl(waMsg)
+                    });
+                    toast.success('¡Pack Semanal Gratis reservado!');
+                } else {
+                    // ─── Recompensas de descuento o envío ───
+                    // Se crea un cupón en Firestore que el cliente aplica al pagar
+                    const expirationDate = new Date();
+                    expirationDate.setDate(expirationDate.getDate() + 30);
+
+                    const couponData = {
+                        code: refCode,
+                        type: reward.type === 'shipping' ? 'free_shipping' : 'fixed',
+                        value: reward.value,
+                        description: `Recompensa BiPuntos: ${reward.title}`,
+                        active: true,
+                        minPurchase: 0,
+                        maxUses: 1,
+                        singleUsePerUser: true,
+                        startDate: new Date(),
+                        expirationDate: expirationDate,
+                        generatedBy: currentUser.uid
+                    };
+
+                    await createCoupon(couponData);
+                    setGeneratedCode(refCode);
+                    setSuccessReward(reward);
+                    toast.success('¡Recompensa canjeada con éxito!');
+                }
             } else {
                 toast.error(result.error || 'Error al canjear puntos.');
             }
         } catch (error) {
-            console.error('Redeem error:', error);
+            console.error('[RewardStore] Error en canje:', error);
             toast.error('Error al procesar el canje.');
         } finally {
             setRedeeming(null);
@@ -141,6 +174,11 @@ export default function RewardStore() {
 
     return (
         <div className="min-h-screen bg-neutral-50 pb-20 selection:bg-orange-100 selection:text-orange-900">
+            <SEOHead
+                title="Tienda de Premios — BiKitchen"
+                description="Canjea tus BiPuntos por premios, descuentos y beneficios exclusivos."
+                noindex={true}
+            />
             {/* Header / Sidebar alternative - Brand Gradient */}
             <div className="bg-gradient-to-br from-orange-500 to-amber-500 pt-16 pb-20 px-6 rounded-b-[4rem] shadow-2xl relative overflow-hidden">
                 {/* Animated Background Mesh - Brand Versions */}
@@ -162,7 +200,7 @@ export default function RewardStore() {
                         <motion.div 
                             initial={{ opacity: 0, scale: 0.8 }}
                             animate={{ opacity: 1, scale: 1 }}
-                            className="bg-white/5 backdrop-blur-md px-5 py-2 rounded-full flex items-center gap-3 border border-white/10"
+                            className="bg-white/15 px-5 py-2 rounded-full flex items-center gap-3 border border-white/10"
                         >
                             <Crown size={16} className="text-amber-400" />
                             <span className="text-white/90 font-black text-[10px] uppercase tracking-[0.2em]">Nivel {currentLevel?.name || 'Bronce'}</span>
@@ -188,7 +226,7 @@ export default function RewardStore() {
                         className="relative group perspective"
                     >
                         <div className="absolute -inset-1 bg-gradient-to-r from-white to-amber-100 rounded-3xl blur opacity-25 group-hover:opacity-40 transition duration-1000"></div>
-                        <div className="relative bg-white/20 backdrop-blur-2xl border border-white/30 rounded-3xl p-8 md:p-10 flex flex-col md:flex-row items-center justify-between gap-8 shadow-2xl">
+                        <div className="relative bg-white/25 border border-white/30 rounded-3xl p-8 md:p-10 flex flex-col md:flex-row items-center justify-between gap-8 shadow-2xl" aria-hidden="true">
                             <div className="text-center md:text-left">
                                 <p className="text-white/60 text-[10px] font-black uppercase tracking-[0.3em] mb-2 text-center md:text-left">Tu Saldo Actual</p>
                                 <div className="flex items-baseline justify-center md:justify-start gap-3">
@@ -203,7 +241,7 @@ export default function RewardStore() {
                                     <span className="text-amber-100 font-black text-sm uppercase tracking-widest pb-1.5">BiPuntos</span>
                                 </div>
                             </div>
-                            <div className="w-20 h-20 rounded-2xl bg-white/30 flex items-center justify-center shadow-xl backdrop-blur-md group-hover:scale-110 group-hover:rotate-6 transition-all duration-500">
+                            <div className="w-20 h-20 rounded-2xl bg-white/30 flex items-center justify-center shadow-xl group-hover:scale-110 group-hover:rotate-6 transition-all duration-500">
                                 <Zap size={36} className="text-white fill-white/50" />
                             </div>
                         </div>
@@ -219,8 +257,7 @@ export default function RewardStore() {
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: 0.1 * index }}
-                            whileHover={{ y: -5 }}
-                            className={`group relative bg-white border border-gray-100 rounded-[2rem] p-6 pr-8 shadow-xl shadow-gray-200/40 overflow-hidden flex flex-col md:flex-row items-center gap-6 transition-all duration-300 ${points < reward.points ? 'grayscale-[0.8] opacity-70' : ''}`}
+                            className={`group relative bg-white border border-gray-100 rounded-[2rem] p-6 pr-8 shadow-xl shadow-gray-200/40 overflow-hidden flex flex-col md:flex-row items-center gap-6 transition-all duration-300 hover:-translate-y-1.5 ${points < reward.points ? 'grayscale-[0.8] opacity-70' : ''}`}
                         >
                             {/* Featured Badge */}
                             {reward.featured && (
@@ -290,14 +327,75 @@ export default function RewardStore() {
                 </div>
             </div>
 
-            {/* Success Modal - Premium Overhaul */}
+            {/* Modal de éxito — Pack Semanal Gratis (coordinación WhatsApp) */}
             <AnimatePresence>
-                {successReward && (
-                    <motion.div 
+                {productSuccessInfo && (
+                    <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-6"
+                        className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-6"
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, y: 30 }}
+                            animate={{ scale: 1, y: 0 }}
+                            exit={{ scale: 0.93, y: 20 }}
+                            className="bg-white rounded-[3rem] w-full max-w-md p-10 text-center shadow-2xl relative overflow-hidden"
+                        >
+                            {/* Success Icon */}
+                            <div className="w-24 h-24 bg-gradient-to-br from-green-400 to-emerald-600 rounded-full flex items-center justify-center mx-auto mb-8 shadow-2xl shadow-green-500/30">
+                                <CheckCircle2 size={48} className="text-white" />
+                            </div>
+
+                            <h2 className="text-3xl font-black text-gray-900 mb-3 tracking-tighter">¡Pack reservado! 🎉</h2>
+                            <p className="text-gray-500 font-medium mb-6 leading-relaxed px-2">
+                                Tus <strong className="text-orange-600">{productSuccessInfo.reward.points.toLocaleString()} BiPuntos</strong> fueron descontados.
+                                Contactá a BiKitchen para coordinar la entrega de tu pack gratis.
+                            </p>
+
+                            {/* Código de referencia */}
+                            <div className="bg-orange-50 border-2 border-orange-100 rounded-2xl p-6 mb-6">
+                                <p className="text-[10px] text-orange-500 font-black uppercase tracking-[0.3em] mb-2">Tu código de referencia</p>
+                                <p className="text-2xl font-black text-orange-600 font-mono tracking-widest select-all">
+                                    {productSuccessInfo.referenceCode}
+                                </p>
+                                <p className="text-xs text-gray-400 mt-2">Comparte este código con BiKitchen al contactarte</p>
+                            </div>
+
+                            <div className="space-y-3">
+                                <a
+                                    href={productSuccessInfo.whatsappUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center justify-center gap-3 w-full py-4 bg-[#25D366] text-white rounded-2xl font-black text-lg shadow-lg hover:bg-[#128C7E] transition-all active:scale-[0.98]"
+                                    onClick={() => setProductSuccessInfo(null)}
+                                >
+                                    <MessageSquare size={22} aria-hidden="true" />
+                                    Coordinar por WhatsApp
+                                </a>
+                                <button
+                                    onClick={() => setProductSuccessInfo(null)}
+                                    className="w-full py-3 text-gray-400 hover:text-gray-600 font-semibold text-sm transition-colors"
+                                >
+                                    Cerrar (BiKitchen me contactará)
+                                </button>
+                            </div>
+
+                            <Sparkles className="absolute top-8 left-8 text-amber-300 opacity-30" size={20} aria-hidden="true" />
+                            <Sparkles className="absolute top-8 right-8 text-green-300 opacity-30" size={20} aria-hidden="true" />
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Success Modal — Recompensas de descuento/envío */}
+            <AnimatePresence>
+                {successReward && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-6"
                     >
                         <motion.div 
                             initial={{ scale: 0.9, y: 30 }}
@@ -310,7 +408,7 @@ export default function RewardStore() {
                             
                             {/* Success Icon with Glow */}
                             <div className="relative mb-10">
-                                <div className="absolute inset-0 bg-green-500 blur-2xl opacity-20 animate-pulse scale-150"></div>
+                                <div className="absolute inset-0 bg-green-500 blur-2xl opacity-20 animate-pulse scale-150" aria-hidden="true"></div>
                                 <div className="relative w-28 h-28 bg-gradient-to-br from-green-400 to-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-2xl shadow-green-500/30">
                                     <CheckCircle2 size={56} className="text-white drop-shadow-lg" />
                                 </div>
@@ -334,14 +432,12 @@ export default function RewardStore() {
                             </div>
 
                             <div className="space-y-4">
-                                <motion.button
-                                    whileHover={{ scale: 1.02 }}
-                                    whileTap={{ scale: 0.98 }}
+                                <button
                                     onClick={() => setSuccessReward(null)}
-                                    className="w-full py-5 bg-orange-600 text-white rounded-2xl font-black text-lg shadow-2xl shadow-orange-500/20 hover:bg-orange-700 transition-all"
+                                    className="w-full py-5 bg-orange-600 text-white rounded-2xl font-black text-lg shadow-2xl shadow-orange-500/20 hover:bg-orange-700 transition-all hover:scale-[1.02] active:scale-[0.98]"
                                 >
                                     ¡Listo, Copiado!
-                                </motion.button>
+                                </button>
                                 <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-2 flex items-center justify-center gap-2">
                                     Nuevo Saldo: <span className="text-orange-600 font-black">{(points).toLocaleString()} BiPuntos</span>
                                 </p>

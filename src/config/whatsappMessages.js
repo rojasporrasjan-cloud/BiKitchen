@@ -138,6 +138,12 @@ export const WHATSAPP_MESSAGES = {
     // ============================================
     QUIERO_PEDIR: 'Quiero hacer un pedido 🛒',
 
+    // Pack específico — activa flujo de pedido con pack pre-seleccionado
+    PACK_ORDER: (packName, fromPrice) => `Quiero hacer un pedido 🛒\n\n📦 Pack: ${packName}\n💰 Precio desde: ${fromPrice}\n\n¿Me podés ayudar a completarlo? 😊`,
+
+    // Plato individual — activa flujo de pedido con plato pre-seleccionado
+    INDIVIDUAL_ORDER: (productName, price) => `Quiero hacer un pedido 🛒\n\n🍽️ Plato: ${productName}\n💰 Precio: ${price}\n\n¿Me podés ayudar a completarlo? 😊`,
+
     // ============================================
     // SOPORTE / AYUDA (estos van a humanos, usan Hola)
     // ============================================

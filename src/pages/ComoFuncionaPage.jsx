@@ -7,7 +7,7 @@ import { motion } from 'framer-motion';
 import { ShoppingCart, ChefHat, Truck, Flame, MessageCircle, Clock, MapPin, Calendar } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useWhatsApp } from '../hooks/useWhatsApp';
-import SEOHead, { SEO_CONFIG } from '../components/SEOHead';
+import SEOHead, { SEO_CONFIG, getBreadcrumbSchema } from '../components/SEOHead';
 
 const fadeUpVariants = {
     hidden: { opacity: 0, y: 40 },
@@ -113,7 +113,10 @@ export default function ComoFuncionaPage() {
 
     return (
         <PageTransition>
-            <SEOHead {...SEO_CONFIG.comoFunciona} />
+            <SEOHead
+                {...SEO_CONFIG.comoFunciona}
+                structuredData={getBreadcrumbSchema([{ name: 'Cómo Funciona', url: 'https://bikitchencr.com/como-funciona' }])}
+            />
             <div className="min-h-screen bg-gradient-to-b from-bikitchen-beige to-white">
                 <Navbar />
 
@@ -127,9 +130,9 @@ export default function ComoFuncionaPage() {
                     }}
                 >
                     {/* Decorative orbs */}
-                    <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-gradient-to-br from-white/20 to-transparent rounded-full blur-3xl"></div>
-                    <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-gradient-to-tr from-yellow-400/30 to-transparent rounded-full blur-3xl"></div>
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-br from-orange-400/10 via-white/10 to-transparent rounded-full blur-3xl"></div>
+                    <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-gradient-to-br from-white/20 to-transparent rounded-full blur-3xl" aria-hidden="true"></div>
+                    <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-gradient-to-tr from-yellow-400/30 to-transparent rounded-full blur-3xl" aria-hidden="true"></div>
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-br from-orange-400/10 via-white/10 to-transparent rounded-full blur-3xl" aria-hidden="true"></div>
                     {/* Pattern overlay */}
                     <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_70%,rgba(255,255,255,0.15)_1px,transparent_1px)] bg-[length:40px_40px] opacity-40"></div>
 
@@ -140,7 +143,7 @@ export default function ComoFuncionaPage() {
                             transition={{ duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] }}
                         >
                             <motion.span
-                                className="inline-block mb-6 px-6 py-3 bg-white/20 backdrop-blur-md rounded-full text-base font-bold text-white border border-white/30 shadow-xl"
+                                className="inline-block mb-6 px-6 py-3 bg-white/20 rounded-full text-base font-bold text-white border border-white/30 shadow-xl"
                                 initial={{ scale: 0.9 }}
                                 animate={{ scale: 1 }}
                                 transition={{ delay: 0.2, duration: 0.4 }}
@@ -221,6 +224,102 @@ export default function ComoFuncionaPage() {
                         </div>
                     </section>
 
+                    {/* Video Section */}
+                    <section className="py-16 md:py-20 bg-gray-50">
+                        <div className="container">
+                            <motion.div
+                                className="text-center mb-10"
+                                initial="hidden"
+                                whileInView="visible"
+                                viewport={{ once: true }}
+                                variants={fadeUpVariants}
+                            >
+                                <span className="inline-block mb-3 px-4 py-1.5 bg-orange-100 text-bikitchen-orange rounded-full text-sm font-bold">
+                                    🎥 Míralo en acción
+                                </span>
+                                <h2 className="text-3xl md:text-4xl font-black text-gray-900 mb-4">
+                                    Así funciona BiKitchen
+                                </h2>
+                                <p className="text-gray-500 max-w-xl mx-auto">
+                                    En menos de 2 minutos entendés todo el proceso, desde el pedido hasta tu mesa.
+                                </p>
+                            </motion.div>
+
+                            <motion.div
+                                className="max-w-3xl mx-auto"
+                                initial={{ opacity: 0, y: 30 }}
+                                whileInView={{ opacity: 1, y: 0 }}
+                                viewport={{ once: true }}
+                                transition={{ duration: 0.6 }}
+                            >
+                                {/* ── Video de YouTube ──
+                                     Para activarlo: cambiá YOUTUBE_VIDEO_ID por el ID real de tu video.
+                                     Ejemplo: si tu video es https://youtu.be/dQw4w9WgXcQ
+                                     el ID es: dQw4w9WgXcQ
+                                ── */}
+                                {(() => {
+                                    const YOUTUBE_VIDEO_ID = 'VIDEO_ID_AQUI'; // ← Pegá tu ID aquí
+                                    const hasVideo = YOUTUBE_VIDEO_ID !== 'VIDEO_ID_AQUI' && YOUTUBE_VIDEO_ID.trim() !== '';
+                                    return hasVideo ? (
+                                        <div className="relative rounded-3xl overflow-hidden shadow-2xl bg-gray-900 aspect-video">
+                                            <iframe
+                                                className="absolute inset-0 w-full h-full"
+                                                src={`https://www.youtube.com/embed/${YOUTUBE_VIDEO_ID}?rel=0&modestbranding=1&color=white`}
+                                                title="Cómo funciona BiKitchen — Comida saludable a domicilio en Costa Rica"
+                                                frameBorder="0"
+                                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                                allowFullScreen
+                                                loading="lazy"
+                                            />
+                                        </div>
+                                    ) : (
+                                        /* Placeholder elegante — visible hasta que se agregue el video */
+                                        <div className="relative rounded-3xl overflow-hidden shadow-2xl bg-gradient-to-br from-gray-800 via-orange-950 to-gray-900 aspect-video flex flex-col items-center justify-center gap-4">
+                                            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,103,29,0.15)_0%,transparent_70%)]" />
+                                            <div className="relative flex flex-col items-center gap-4 text-center px-6">
+                                                <div className="w-20 h-20 bg-gradient-to-br from-bikitchen-orange to-bikitchen-gold rounded-full flex items-center justify-center shadow-2xl shadow-orange-500/40">
+                                                    <svg className="w-9 h-9 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
+                                                        <path d="M8 5v14l11-7z"/>
+                                                    </svg>
+                                                </div>
+                                                <div>
+                                                    <p className="text-white font-black text-xl mb-1">Video explicativo</p>
+                                                    <p className="text-white/60 text-sm">Próximamente — te mostramos todo el proceso en 90 segundos</p>
+                                                </div>
+                                                <div className="flex flex-wrap gap-3 justify-center mt-2">
+                                                    {['📦 Elegís tu pack', '👨‍🍳 Cocinamos fresco', '🚚 Lo entregamos', '🔥 Solo calentás'].map((step) => (
+                                                        <span key={step} className="px-3 py-1.5 bg-white/10 text-white text-xs font-semibold rounded-full border border-white/20">
+                                                            {step}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+
+                                {/* CTA debajo del video */}
+                                <div className="flex flex-col sm:flex-row gap-3 justify-center mt-8">
+                                    <Link
+                                        to="/packs"
+                                        className="inline-flex items-center justify-center gap-2 bg-bikitchen-orange hover:bg-bikitchen-orange-dark text-white font-bold py-4 px-8 rounded-xl shadow-lg transition-all duration-300"
+                                    >
+                                        Ver Planes y Precios
+                                    </Link>
+                                    <a
+                                        href={WHATSAPP_LINK}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center justify-center gap-2 bg-white hover:bg-gray-50 text-gray-900 font-bold py-4 px-8 rounded-xl shadow-lg border border-gray-200 transition-all duration-300"
+                                    >
+                                        <MessageCircle size={18} />
+                                        Tengo una pregunta
+                                    </a>
+                                </div>
+                            </motion.div>
+                        </div>
+                    </section>
+
                     {/* Delivery Days Section */}
                     <section className="py-16 md:py-24 bg-gradient-to-br from-bikitchen-orange via-orange-500 to-bikitchen-gold text-white relative overflow-hidden">
                         <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_70%,rgba(255,255,255,0.1)_1px,transparent_1px)] bg-[length:32px_32px] opacity-30"></div>
@@ -233,7 +332,7 @@ export default function ComoFuncionaPage() {
                                 viewport={{ once: true }}
                                 variants={fadeUpVariants}
                             >
-                                <span className="inline-block mb-4 px-4 py-2 bg-white/10 backdrop-blur-sm rounded-full text-sm font-medium">
+                                <span className="inline-block mb-4 px-4 py-2 bg-white/15 rounded-full text-sm font-medium">
                                     <Calendar className="inline w-4 h-4 mr-2" />
                                     Días de Entrega
                                 </span>
@@ -256,7 +355,7 @@ export default function ComoFuncionaPage() {
                                     <motion.div
                                         key={idx}
                                         variants={fadeUpVariants}
-                                        className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20 hover:bg-white/20 transition-all duration-300"
+                                        className="bg-white/15 rounded-2xl p-6 border border-white/20 hover:bg-white/25 transition-all duration-300"
                                     >
                                         <div className="text-4xl mb-4">{item.icon}</div>
                                         <h3 className="text-xl font-bold mb-2">{item.day}</h3>

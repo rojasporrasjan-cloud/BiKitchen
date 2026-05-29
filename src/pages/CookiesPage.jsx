@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import SEOHead from '../components/SEOHead';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import PageTransition from '../components/PageTransition';
@@ -135,6 +136,11 @@ Estos terceros tienen sus propias políticas de privacidad y cookies.`
 
     return (
         <PageTransition>
+            <SEOHead
+                title="Política de Cookies | BiKitchen"
+                description="Información sobre los cookies que usa BiKitchen y cómo gestionarlos."
+                noindex={true}
+            />
             <div className="min-h-screen bg-gradient-to-b from-bikitchen-beige to-white">
                 <Navbar />
                 

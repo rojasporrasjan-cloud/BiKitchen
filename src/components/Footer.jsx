@@ -15,8 +15,8 @@ export default function Footer() {
             {/* Main Footer Section */}
             <div className="relative bg-gradient-to-br from-gray-900 via-gray-800 to-black">
                 {/* Decorative Elements */}
-                <div className="absolute top-0 left-0 w-[500px] h-[500px] bg-gradient-to-br from-orange-500/20 to-amber-500/20 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2"></div>
-                <div className="absolute bottom-0 right-0 w-[400px] h-[400px] bg-gradient-to-tl from-orange-400/15 to-yellow-400/15 rounded-full blur-3xl translate-x-1/3 translate-y-1/3"></div>
+                <div className="absolute top-0 left-0 w-[500px] h-[500px] bg-gradient-to-br from-orange-500/20 to-amber-500/20 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2" aria-hidden="true"></div>
+                <div className="absolute bottom-0 right-0 w-[400px] h-[400px] bg-gradient-to-tl from-orange-400/15 to-yellow-400/15 rounded-full blur-3xl translate-x-1/3 translate-y-1/3" aria-hidden="true"></div>
                 <div className="absolute top-1/2 left-1/2 w-[400px] h-[400px] bg-gradient-to-r from-orange-500/5 to-amber-500/5 rounded-full blur-[120px] -translate-x-1/2 -translate-y-1/2"></div>
 
                 {/* Pattern overlay */}
@@ -59,17 +59,19 @@ export default function Footer() {
                                     href="https://www.instagram.com/bikitchenfood?igsh=bnowMmp3bjZvZ2sz&utm_source=qr"
                                     target="_blank"
                                     rel="noopener noreferrer"
+                                    aria-label="BiKitchen en Instagram"
                                     className="w-12 h-12 rounded-xl bg-gradient-to-br from-white/10 to-white/5 border border-white/20 flex items-center justify-center text-gray-300 hover:bg-gradient-to-br hover:from-orange-500 hover:to-amber-500 hover:border-orange-400 hover:text-white transition-all duration-300 group shadow-lg hover:shadow-orange-500/50 hover:scale-110"
                                 >
-                                    <Instagram size={22} className="group-hover:scale-110 transition-transform" />
+                                    <Instagram size={22} className="group-hover:scale-110 transition-transform" aria-hidden="true" />
                                 </a>
                                 <a
                                     href="https://www.facebook.com/share/1AFw6FcKHd/?mibextid=wwXIfr"
                                     target="_blank"
                                     rel="noopener noreferrer"
+                                    aria-label="BiKitchen en Facebook"
                                     className="w-12 h-12 rounded-xl bg-gradient-to-br from-white/10 to-white/5 border border-white/20 flex items-center justify-center text-gray-300 hover:bg-gradient-to-br hover:from-blue-500 hover:to-blue-600 hover:border-blue-400 hover:text-white transition-all duration-300 group shadow-lg hover:shadow-blue-500/50 hover:scale-110"
                                 >
-                                    <Facebook size={22} className="group-hover:scale-110 transition-transform" />
+                                    <Facebook size={22} className="group-hover:scale-110 transition-transform" aria-hidden="true" />
                                 </a>
                             </div>
                         </div>
@@ -82,10 +84,11 @@ export default function Footer() {
                             </h4>
                             <ul className="space-y-3">
                                 {[
-                                    { name: 'Menú Semanal', path: '/menu' },
+                                                    { name: 'Menú Semanal', path: '/menu' },
                                     { name: 'Nuestros Packs', path: '/packs' },
                                     { name: 'Cómo Funciona', path: '/como-funciona' },
-                                    { name: 'Preguntas Frecuentes', path: '/faq' }
+                                    { name: 'Preguntas Frecuentes', path: '/faq' },
+                                    { name: '💰 Calculá tu ahorro', path: '/calculadora' }
                                 ].map((item) => (
                                     <li key={item.name}>
                                         <Link
@@ -150,9 +153,9 @@ export default function Footer() {
 
                 {/* Large Brand Text Watermark */}
                 <div className="absolute inset-x-0 bottom-40 overflow-hidden pointer-events-none opacity-[0.03] z-0">
-                    <h1 className="text-[18vw] font-black text-white text-center tracking-tighter whitespace-nowrap leading-none select-none">
+                    <p className="text-[18vw] font-black text-white text-center tracking-tighter whitespace-nowrap leading-none select-none" aria-hidden="true">
                         BIKITCHEN
-                    </h1>
+                    </p>
                 </div>
 
                 <div className="border-t border-white/5 relative z-20 bg-black/40 pb-32 md:pb-16">

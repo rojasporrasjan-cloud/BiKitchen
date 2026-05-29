@@ -182,17 +182,10 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
             
             // If 3DS was not available (fallback), log it
             if (authData._fallback) {
-                console.log('[NMI] 3DS no disponible en esta cuenta — procesando pago directo.');
             }
             
             // Finalize Transaction
             setStep('processing');
-            // Log 3DS auth status (redacted — don't log sensitive CAVV/ECI data)
-            console.log('[NMI] 3DS auth recibido:', {
-                _fallback: authData._fallback,
-                cardHolderAuth: authData.cardHolderAuth ? '[PRESENT]' : '[EMPTY]',
-                threeDsVersion: authData.threeDsVersion
-            });
             
             const result = await processTransaction({
                 ...paymentInfo,
@@ -206,12 +199,6 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
                 directory_server_id: authData.directoryServerId || authData.directory_server_id || authData.dsTransactionId || '',
             });
 
-            // Log NMI result status (redacted — don't log transaction IDs / authcodes)
-            console.log('[NMI] Resultado:', {
-                response: result.response,
-                responsetext: result.responsetext,
-                authcode: result.authcode ? '[PRESENT]' : '[EMPTY]'
-            });
 
             // --- Ground truth: authcode ---
             // BAC/NMI can return response=2 "Authentication Failed" on the 3DS post-validation
@@ -228,15 +215,12 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
 
             if (isApproved || isDuplicate || isAuthFailedButCharged) {
                 if (isDuplicate) {
-                    console.log('[NMI] Transacción duplicada — el pago ya fue procesado previamente.');
                 }
                 if (isAuthFailedButCharged) {
-                    console.log('[NMI] ⚠️ NMI reportó error pero authcode presente:', result.authcode, '— el banco SÃ cobró. Tratando como ÉXITO.');
                 }
 
                 setStep('success');
                 if (saveCard) {
-                    console.log('[NMI] User wants to save card preference');
                 }
 
                 const finalResult = {

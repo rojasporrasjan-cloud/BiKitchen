@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import PageTransition from '../components/PageTransition';
+import SEOHead, { SEO_CONFIG, getBreadcrumbSchema } from '../components/SEOHead';
 import { 
     Gift, Heart, Send, CreditCard, Check, Copy, 
     ArrowRight, Sparkles, MessageSquare, Mail, Calendar, AlertCircle, RefreshCw,
@@ -106,14 +107,18 @@ export default function GiftCardsPage() {
 
     return (
         <PageTransition>
+            <SEOHead
+                {...SEO_CONFIG.giftCards}
+                structuredData={getBreadcrumbSchema([{ name: 'Gift Cards', url: 'https://bikitchencr.com/gift-cards' }])}
+            />
             <div className="min-h-screen bg-gradient-to-b from-bikitchen-beige to-white">
                 <Navbar />
 
                 {/* Hero */}
                 <section className="relative pt-32 pb-12 overflow-hidden">
                     <div className="absolute inset-0 bg-gradient-to-br from-pink-500/10 to-purple-500/10"></div>
-                    <div className="absolute top-20 right-10 w-72 h-72 bg-pink-500/20 rounded-full blur-3xl animate-pulse"></div>
-                    <div className="absolute bottom-0 left-10 w-64 h-64 bg-purple-500/20 rounded-full blur-3xl animate-pulse delay-1000"></div>
+                    <div className="absolute top-20 right-10 w-72 h-72 bg-pink-500/20 rounded-full blur-3xl" aria-hidden="true"></div>
+                    <div className="absolute bottom-0 left-10 w-64 h-64 bg-purple-500/20 rounded-full blur-3xl" aria-hidden="true"></div>
                     
                     <div className="container relative z-10">
                         <div className="max-w-3xl mx-auto text-center">
@@ -549,8 +554,8 @@ export default function GiftCardsPage() {
                                 >
                                     {/* Decorative elements */}
                                     <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500"></div>
-                                    <div className="absolute -top-10 -right-10 w-40 h-40 bg-pink-100 rounded-full blur-3xl opacity-50"></div>
-                                    <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-purple-100 rounded-full blur-3xl opacity-50"></div>
+                                    <div className="absolute -top-10 -right-10 w-40 h-40 bg-pink-100 rounded-full blur-3xl opacity-50" aria-hidden="true"></div>
+                                    <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-purple-100 rounded-full blur-3xl opacity-50" aria-hidden="true"></div>
 
                                     <div className="relative z-10 font-sans">
                                         <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-8 shadow-inner relative">

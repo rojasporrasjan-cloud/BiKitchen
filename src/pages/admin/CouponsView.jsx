@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
     Tag, Plus, Search, Edit2, Trash2, ToggleLeft, ToggleRight,
     Calendar, Percent, DollarSign, Truck, Copy, Check, X, Loader2,
-    AlertCircle, Users, Sparkles, UserPlus, RefreshCw, Gift, Ticket
+    AlertCircle, Users, Sparkles, UserPlus, RefreshCw, Gift, Ticket, Star
 } from 'lucide-react';
 import {
     getAllCoupons,
@@ -10,6 +10,8 @@ import {
     updateCoupon,
     deleteCoupon
 } from '../../utils/firestoreCoupons';
+import { db } from '../../firebase/config';
+import { getDocs, collection, query, orderBy } from 'firebase/firestore';
 import toast from 'react-hot-toast';
 import { motion } from 'framer-motion';
 import AdminPageHeader from '../../components/admin/AdminPageHeader';
@@ -22,6 +24,10 @@ export default function CouponsView() {
     const [editingCoupon, setEditingCoupon] = useState(null);
     const [saving, setSaving] = useState(false);
     const [copiedCode, setCopiedCode] = useState(null);
+    const [togglingId, setTogglingId] = useState(null);
+    const [activeTab, setActiveTab] = useState('coupons'); // 'coupons' | 'redemptions'
+    const [redemptions, setRedemptions] = useState([]);
+    const [loadingRedemptions, setLoadingRedemptions] = useState(false);
 
     // Form state
     const [formData, setFormData] = useState({
@@ -72,6 +78,19 @@ export default function CouponsView() {
             toast.error('Error al cargar cupones');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const loadRedemptions = async () => {
+        setLoadingRedemptions(true);
+        try {
+            const q = query(collection(db, 'redemptions'), orderBy('createdAt', 'desc'));
+            const snap = await getDocs(q);
+            setRedemptions(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        } catch (error) {
+            toast.error('Error al cargar canjes de producto');
+        } finally {
+            setLoadingRedemptions(false);
         }
     };
 
@@ -174,22 +193,18 @@ export default function CouponsView() {
     };
 
     const handleToggleActive = async (coupon) => {
-        // Optimistic update
+        if (togglingId === coupon.id) return; // prevenir doble click
+        setTogglingId(coupon.id);
         const previousCoupons = [...coupons];
-        const updatedCoupons = coupons.map(c =>
-            c.id === coupon.id ? { ...c, active: !c.active } : c
-        );
-        setCoupons(updatedCoupons);
-
+        setCoupons(coupons.map(c => c.id === coupon.id ? { ...c, active: !c.active } : c));
         try {
             await updateCoupon(coupon.id, { active: !coupon.active });
             toast.success(coupon.active ? 'Cupón desactivado' : 'Cupón activado');
-            // No recargamos todo para mantener la fluidez, ya tenemos el estado nuevo
         } catch (error) {
-            // Revert on error
             setCoupons(previousCoupons);
-            console.error('Error toggling coupon:', error);
             toast.error('Error al actualizar: ' + (error.message || 'Desconocido'));
+        } finally {
+            setTogglingId(null);
         }
     };
 
@@ -271,6 +286,106 @@ export default function CouponsView() {
                     </button>
                 ]}
             />
+
+            {/* Tabs */}
+            <div className="flex gap-2 mb-6">
+                <button
+                    onClick={() => setActiveTab('coupons')}
+                    className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm transition-all ${activeTab === 'coupons' ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/30' : 'bg-white text-gray-600 border border-gray-200 hover:border-purple-300'}`}
+                >
+                    <Ticket size={16} />
+                    Cupones
+                    <span className={`text-xs px-1.5 py-0.5 rounded-full ${activeTab === 'coupons' ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'}`}>
+                        {coupons.length}
+                    </span>
+                </button>
+                <button
+                    onClick={() => { setActiveTab('redemptions'); if (redemptions.length === 0) loadRedemptions(); }}
+                    className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm transition-all ${activeTab === 'redemptions' ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/30' : 'bg-white text-gray-600 border border-gray-200 hover:border-amber-300'}`}
+                >
+                    <Star size={16} />
+                    Canjes de Producto
+                    {redemptions.filter(r => r.status === 'pending').length > 0 && (
+                        <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${activeTab === 'redemptions' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-700'}`}>
+                            {redemptions.filter(r => r.status === 'pending').length} pendientes
+                        </span>
+                    )}
+                </button>
+            </div>
+
+            {/* ── REDEMPTIONS TAB ── */}
+            {activeTab === 'redemptions' && (
+                <div>
+                    <div className="flex items-center justify-between mb-4">
+                        <p className="text-sm text-gray-500">Solicitudes de Pack Semanal Gratis canjeadas con BiPuntos</p>
+                        <button onClick={loadRedemptions} className="text-xs text-amber-600 hover:underline flex items-center gap-1">
+                            <RefreshCw size={12} /> Actualizar
+                        </button>
+                    </div>
+                    {loadingRedemptions ? (
+                        <div className="flex items-center justify-center py-12">
+                            <Loader2 size={32} className="animate-spin text-amber-500" />
+                        </div>
+                    ) : redemptions.length === 0 ? (
+                        <div className="text-center py-12 bg-white rounded-xl border border-gray-100">
+                            <Star size={48} className="mx-auto text-gray-300 mb-4" />
+                            <p className="text-gray-500">No hay canjes de producto todavía</p>
+                        </div>
+                    ) : (
+                        <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                            <table className="w-full">
+                                <thead className="bg-amber-50 border-b border-amber-100">
+                                    <tr>
+                                        <th className="text-left px-4 py-3 text-sm font-semibold text-amber-800">Cliente</th>
+                                        <th className="text-left px-4 py-3 text-sm font-semibold text-amber-800">Recompensa</th>
+                                        <th className="text-left px-4 py-3 text-sm font-semibold text-amber-800">Referencia</th>
+                                        <th className="text-left px-4 py-3 text-sm font-semibold text-amber-800">Puntos</th>
+                                        <th className="text-left px-4 py-3 text-sm font-semibold text-amber-800">Fecha</th>
+                                        <th className="text-left px-4 py-3 text-sm font-semibold text-amber-800">Estado</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                    {redemptions.map((r) => (
+                                        <tr key={r.id} className="hover:bg-amber-50/30">
+                                            <td className="px-4 py-3">
+                                                <p className="text-sm font-medium text-gray-900">{r.userEmail}</p>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <span className="flex items-center gap-1.5 text-sm text-gray-700">
+                                                    <Gift size={14} className="text-amber-500" />
+                                                    {r.rewardTitle}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <code className="bg-amber-50 border border-amber-100 px-2 py-0.5 rounded text-xs font-mono font-bold text-amber-700">
+                                                    {r.referenceCode}
+                                                </code>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <span className="flex items-center gap-1 text-sm text-gray-600">
+                                                    <Star size={12} className="text-amber-400 fill-amber-400" />
+                                                    {r.pointsUsed?.toLocaleString()}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3 text-sm text-gray-500">
+                                                {r.createdAt ? new Date(r.createdAt).toLocaleDateString('es-CR') : '—'}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${r.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>
+                                                    {r.status === 'pending' ? '⏳ Pendiente' : '✅ Completado'}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* ── COUPONS TAB ── */}
+            {activeTab === 'coupons' && <>
 
             {/* Search */}
             <motion.div
@@ -441,6 +556,12 @@ export default function CouponsView() {
                                                         Banner
                                                     </span>
                                                 )}
+                                                {coupon.generatedBy && (
+                                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded text-[10px] font-medium">
+                                                        <Star size={10} />
+                                                        BiPuntos
+                                                    </span>
+                                                )}
                                             </div>
                                         </td>
                                         <td className="px-4 py-3">
@@ -507,8 +628,8 @@ export default function CouponsView() {
                                                         e.stopPropagation();
                                                         handleToggleActive(coupon);
                                                     }}
-                                                    disabled={loading}
-                                                    className={`p-2 rounded-lg transition-colors ${loading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-100'}`}
+                                                    disabled={togglingId === coupon.id}
+                                                    className={`p-2 rounded-lg transition-colors ${togglingId === coupon.id ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-100'}`}
                                                     title={coupon.active ? 'Desactivar' : 'Activar'}
                                                 >
                                                     {coupon.active ? (
@@ -931,6 +1052,7 @@ export default function CouponsView() {
                     </div>
                 </div>
             )}
+            </>}
         </div>
     );
 }

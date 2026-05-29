@@ -51,13 +51,9 @@ export default function SmoothImage({
         decoding="auto"
         onLoad={handleLoad}
         onError={handleError}
-        className={`absolute inset-0 w-full h-full ${objectFit} ${isLoaded ? 'opacity-100' : 'opacity-0'
+        className={`absolute inset-0 w-full h-full ${objectFit} transition-opacity duration-500 ${isLoaded ? 'opacity-100' : 'opacity-0'
           }`}
-        style={{
-          transition: 'opacity 0.5s ease-out',
-          willChange: 'opacity',
-          transform: 'translate3d(0, 0, 0)',
-        }}
+        style={{}}
         {...props}
       />
     </div>

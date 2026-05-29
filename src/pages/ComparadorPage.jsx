@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useWhatsApp } from '../hooks/useWhatsApp';
 import { motion } from 'framer-motion';
+import SEOHead, { SEO_CONFIG, getBreadcrumbSchema } from '../components/SEOHead';
+import { formatPrice } from '../utils/formatters';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import PageTransition from '../components/PageTransition';
@@ -129,7 +131,7 @@ const FEATURES_INFO = [
     { key: 'cambiosMenu', label: 'Cambios en el menú', icon: Check, boolean: true }
 ];
 
-const formatPrice = (price) => `₡${price.toLocaleString('es-CR')}`;
+
 
 const getColorClasses = (color) => {
     const colors = {
@@ -196,14 +198,18 @@ export default function ComparadorPage() {
 
     return (
         <PageTransition>
+            <SEOHead
+                {...SEO_CONFIG.comparador}
+                structuredData={getBreadcrumbSchema([{ name: 'Comparador de Planes', url: 'https://bikitchencr.com/comparador' }])}
+            />
             <div className="min-h-screen bg-gradient-to-b from-bikitchen-beige to-white">
                 <Navbar />
 
                 {/* Hero Section */}
                 <section className="relative pt-32 pb-12 overflow-hidden">
                     <div className="absolute inset-0 bg-gradient-to-br from-bikitchen-orange/5 to-purple-500/5"></div>
-                    <div className="absolute top-20 right-10 w-72 h-72 bg-bikitchen-orange/10 rounded-full blur-3xl"></div>
-                    <div className="absolute bottom-0 left-10 w-64 h-64 bg-purple-500/10 rounded-full blur-3xl"></div>
+                    <div className="absolute top-20 right-10 w-72 h-72 bg-bikitchen-orange/10 rounded-full blur-3xl" aria-hidden="true"></div>
+                    <div className="absolute bottom-0 left-10 w-64 h-64 bg-purple-500/10 rounded-full blur-3xl" aria-hidden="true"></div>
 
                     <div className="container relative z-10">
                         <div className="max-w-3xl mx-auto text-center">

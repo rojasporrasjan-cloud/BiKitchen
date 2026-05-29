@@ -13,6 +13,7 @@ import {
     Sparkles, ArrowRight
 } from 'lucide-react';
 import { FAQ_DATA } from '../data/faqData';
+import SEOHead, { SEO_CONFIG, getFAQSchema, getBreadcrumbSchema } from '../components/SEOHead';
 
 // FAQ_DATA ahora se importa desde ../data/faqData
 
@@ -109,6 +110,13 @@ export default function FAQPage() {
 
     return (
         <PageTransition>
+            <SEOHead
+                {...SEO_CONFIG.faq}
+                structuredData={[
+                    getFAQSchema(),
+                    getBreadcrumbSchema([{ name: 'Preguntas Frecuentes', url: 'https://bikitchencr.com/faq' }])
+                ]}
+            />
             <div className="min-h-screen bg-gradient-to-b from-bikitchen-beige to-white">
                 <Navbar />
 
@@ -122,9 +130,9 @@ export default function FAQPage() {
                     }}
                 >
                     {/* Decorative orbs */}
-                    <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-gradient-to-br from-white/20 to-transparent rounded-full blur-3xl"></div>
-                    <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-gradient-to-tr from-yellow-400/30 to-transparent rounded-full blur-3xl"></div>
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-br from-orange-400/10 via-white/10 to-transparent rounded-full blur-3xl"></div>
+                    <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-gradient-to-br from-white/20 to-transparent rounded-full blur-3xl" aria-hidden="true"></div>
+                    <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-gradient-to-tr from-yellow-400/30 to-transparent rounded-full blur-3xl" aria-hidden="true"></div>
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-br from-orange-400/10 via-white/10 to-transparent rounded-full blur-3xl" aria-hidden="true"></div>
                     {/* Pattern overlay */}
                     <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_70%,rgba(255,255,255,0.15)_1px,transparent_1px)] bg-[length:40px_40px] opacity-40"></div>
 
@@ -163,7 +171,7 @@ export default function FAQPage() {
                                 transition={{ delay: 0.2 }}
                                 className="text-xl md:text-2xl text-white/95 mb-10 font-medium leading-relaxed"
                             >
-                                Encuentra respuestas a las preguntas más comunes sobre BiKitchen
+                                Todo lo que necesitás saber sobre BiKitchen: pedidos, delivery, packs, pagos y zonas de entrega en Costa Rica
                             </motion.p>
 
                             {/* Search Bar */}

@@ -1,13 +1,26 @@
-# BiKitchen Food - robots.txt
+# BiKitchen Food — robots.txt
+# https://bikitchencr.com
+
 User-agent: *
 Allow: /
 
 # Sitemap
 Sitemap: https://bikitchencr.com/sitemap.xml
 
-# Disallow admin routes
+# Admin — nunca indexar
+Disallow: /admin
 Disallow: /admin/
-Disallow: /admin/*
 
-# Disallow API routes if any
+# Páginas privadas de usuario — no indexar
+Disallow: /mi-cuenta
+Disallow: /checkout
+Disallow: /mis-pedidos
+Disallow: /mis-cupones
+Disallow: /mi-impacto
+
+# APIs y funciones
 Disallow: /api/
+Disallow: /.netlify/
+
+# Archivos de configuración
+Disallow: /nmi-callback.html

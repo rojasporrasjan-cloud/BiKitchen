@@ -1,102 +1,128 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
-        xmlns:xhtml="http://www.w3.org/1999/xhtml">
+        xmlns:xhtml="http://www.w3.org/1999/xhtml"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
 
-  <!-- Página principal -->
+  <!-- Página principal — máxima prioridad -->
   <url>
     <loc>https://bikitchencr.com/</loc>
-    <lastmod>2025-05-26</lastmod>
+    <lastmod>2026-05-27</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
     <xhtml:link rel="alternate" hreflang="es-CR" href="https://bikitchencr.com/" />
+    <xhtml:link rel="alternate" hreflang="es" href="https://bikitchencr.com/" />
+    <image:image>
+      <image:loc>https://bikitchencr.com/assets/logo.png</image:loc>
+      <image:title>BiKitchen Food - Comida saludable a domicilio en Costa Rica</image:title>
+    </image:image>
   </url>
 
-  <!-- Planes Semanales - página de conversión principal -->
+  <!-- Planes Semanales — página de conversión principal -->
   <url>
     <loc>https://bikitchencr.com/packs</loc>
-    <lastmod>2025-05-26</lastmod>
+    <lastmod>2026-05-27</lastmod>
     <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
+    <priority>0.95</priority>
+    <xhtml:link rel="alternate" hreflang="es-CR" href="https://bikitchencr.com/packs" />
   </url>
 
   <!-- Platos Individuales -->
   <url>
     <loc>https://bikitchencr.com/individuales</loc>
-    <lastmod>2025-05-26</lastmod>
+    <lastmod>2026-05-27</lastmod>
     <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
+    <priority>0.90</priority>
+    <xhtml:link rel="alternate" hreflang="es-CR" href="https://bikitchencr.com/individuales" />
   </url>
 
-  <!-- Catálogo / Menú -->
+  <!-- Catálogo / Menú semanal -->
   <url>
     <loc>https://bikitchencr.com/menu</loc>
-    <lastmod>2025-05-26</lastmod>
+    <lastmod>2026-05-27</lastmod>
     <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
+    <priority>0.85</priority>
+    <xhtml:link rel="alternate" hreflang="es-CR" href="https://bikitchencr.com/menu" />
   </url>
 
-  <!-- Promociones -->
+  <!-- Promociones — contenido dinámico frecuente -->
   <url>
     <loc>https://bikitchencr.com/promociones</loc>
-    <lastmod>2025-05-26</lastmod>
+    <lastmod>2026-05-27</lastmod>
     <changefreq>daily</changefreq>
-    <priority>0.8</priority>
+    <priority>0.85</priority>
+    <xhtml:link rel="alternate" hreflang="es-CR" href="https://bikitchencr.com/promociones" />
   </url>
 
   <!-- Cómo Funciona -->
   <url>
     <loc>https://bikitchencr.com/como-funciona</loc>
-    <lastmod>2025-05-26</lastmod>
+    <lastmod>2026-05-27</lastmod>
     <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
+    <priority>0.75</priority>
+    <xhtml:link rel="alternate" hreflang="es-CR" href="https://bikitchencr.com/como-funciona" />
   </url>
 
-  <!-- Nosotros -->
-  <url>
-    <loc>https://bikitchencr.com/nosotros</loc>
-    <lastmod>2025-05-26</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-
-  <!-- Preguntas Frecuentes -->
+  <!-- FAQ — oportunidad para rich results de Google -->
   <url>
     <loc>https://bikitchencr.com/faq</loc>
-    <lastmod>2025-05-26</lastmod>
+    <lastmod>2026-05-27</lastmod>
     <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
+    <priority>0.75</priority>
+    <xhtml:link rel="alternate" hreflang="es-CR" href="https://bikitchencr.com/faq" />
   </url>
 
-  <!-- Gift Cards -->
+  <!-- Quiénes Somos -->
   <url>
-    <loc>https://bikitchencr.com/gift-cards</loc>
-    <lastmod>2025-05-26</lastmod>
+    <loc>https://bikitchencr.com/nosotros</loc>
+    <lastmod>2026-05-27</lastmod>
     <changefreq>monthly</changefreq>
-    <priority>0.5</priority>
+    <priority>0.65</priority>
+    <xhtml:link rel="alternate" hreflang="es-CR" href="https://bikitchencr.com/nosotros" />
   </url>
 
   <!-- Comparador de Packs -->
   <url>
     <loc>https://bikitchencr.com/comparador</loc>
-    <lastmod>2025-05-26</lastmod>
+    <lastmod>2026-05-27</lastmod>
     <changefreq>monthly</changefreq>
-    <priority>0.5</priority>
+    <priority>0.60</priority>
+    <xhtml:link rel="alternate" hreflang="es-CR" href="https://bikitchencr.com/comparador" />
   </url>
 
   <!-- Calculadora de Ahorro -->
   <url>
     <loc>https://bikitchencr.com/calculadora</loc>
-    <lastmod>2025-05-26</lastmod>
+    <lastmod>2026-05-27</lastmod>
     <changefreq>monthly</changefreq>
-    <priority>0.4</priority>
+    <priority>0.55</priority>
+    <xhtml:link rel="alternate" hreflang="es-CR" href="https://bikitchencr.com/calculadora" />
+  </url>
+
+  <!-- Gift Cards -->
+  <url>
+    <loc>https://bikitchencr.com/gift-cards</loc>
+    <lastmod>2026-05-27</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.55</priority>
+    <xhtml:link rel="alternate" hreflang="es-CR" href="https://bikitchencr.com/gift-cards" />
   </url>
 
   <!-- Programa de Fidelidad -->
   <url>
     <loc>https://bikitchencr.com/fidelidad</loc>
-    <lastmod>2025-05-26</lastmod>
+    <lastmod>2026-05-27</lastmod>
     <changefreq>monthly</changefreq>
-    <priority>0.4</priority>
+    <priority>0.50</priority>
+    <xhtml:link rel="alternate" hreflang="es-CR" href="https://bikitchencr.com/fidelidad" />
+  </url>
+
+  <!-- Referidos -->
+  <url>
+    <loc>https://bikitchencr.com/referidos</loc>
+    <lastmod>2026-05-27</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.45</priority>
+    <xhtml:link rel="alternate" hreflang="es-CR" href="https://bikitchencr.com/referidos" />
   </url>
 
 </urlset>

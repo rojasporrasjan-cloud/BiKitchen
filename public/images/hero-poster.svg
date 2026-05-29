@@ -1,0 +1,295 @@
+<svg viewBox="0 0 600 900" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Dark cinematic background -->
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#1A0F06"/>
+      <stop offset="35%"  stop-color="#241408"/>
+      <stop offset="70%"  stop-color="#1C1008"/>
+      <stop offset="100%" stop-color="#0D0804"/>
+    </linearGradient>
+    <!-- Warm spotlight centered on food -->
+    <radialGradient id="glow" cx="50%" cy="52%" r="42%">
+      <stop offset="0%"   stop-color="#FF8C3A" stop-opacity="0.22"/>
+      <stop offset="45%"  stop-color="#E9A84A" stop-opacity="0.10"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+    <!-- Secondary warm glow upper -->
+    <radialGradient id="glowTop" cx="50%" cy="22%" r="38%">
+      <stop offset="0%"   stop-color="#FF671D" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+    <!-- Plate surface -->
+    <radialGradient id="plateFill" cx="48%" cy="44%" r="54%">
+      <stop offset="0%"   stop-color="#F7EDD8"/>
+      <stop offset="60%"  stop-color="#EEE0C4"/>
+      <stop offset="100%" stop-color="#DFD1B0"/>
+    </radialGradient>
+    <!-- Plate rim -->
+    <radialGradient id="plateRim" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#F0E2C5"/>
+      <stop offset="100%" stop-color="#C8B48A"/>
+    </radialGradient>
+    <!-- Avocado flesh -->
+    <radialGradient id="avoFlesh" cx="40%" cy="35%" r="60%">
+      <stop offset="0%"   stop-color="#D8F09C"/>
+      <stop offset="100%" stop-color="#B0D468"/>
+    </radialGradient>
+    <!-- Drop shadows -->
+    <filter id="fs" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="5" stdDeviation="10" flood-color="#000" flood-opacity="0.50"/>
+    </filter>
+    <filter id="fs2" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="3" stdDeviation="6" flood-color="#000" flood-opacity="0.35"/>
+    </filter>
+    <filter id="glow2">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <!-- Noise texture -->
+    <filter id="noise">
+      <feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch"/>
+      <feColorMatrix type="saturate" values="0"/>
+      <feBlend in="SourceGraphic" mode="overlay" result="blend"/>
+      <feComposite in="blend" in2="SourceGraphic" operator="in"/>
+    </filter>
+    <!-- Leaf gradient -->
+    <linearGradient id="leafG" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"  stop-color="#6DB84A"/>
+      <stop offset="100%" stop-color="#4A8C28"/>
+    </linearGradient>
+    <linearGradient id="leafG2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"  stop-color="#88C85A"/>
+      <stop offset="100%" stop-color="#5A9E35"/>
+    </linearGradient>
+    <!-- Orange gradient -->
+    <linearGradient id="carrotG" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"  stop-color="#FF8C30"/>
+      <stop offset="100%" stop-color="#E06010"/>
+    </linearGradient>
+    <!-- Tomato -->
+    <radialGradient id="tomatoG" cx="35%" cy="30%" r="65%">
+      <stop offset="0%"  stop-color="#FF5A54"/>
+      <stop offset="100%" stop-color="#C82828"/>
+    </radialGradient>
+    <!-- Salmon -->
+    <linearGradient id="salmonG" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"  stop-color="#FFAA78"/>
+      <stop offset="100%" stop-color="#E07850"/>
+    </linearGradient>
+    <!-- Rice -->
+    <radialGradient id="riceG" cx="50%" cy="40%" r="55%">
+      <stop offset="0%"  stop-color="#F8EDD4"/>
+      <stop offset="100%" stop-color="#E4D0A8"/>
+    </radialGradient>
+    <!-- Gold text glow -->
+    <filter id="textGlow">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- ═══════════ BACKGROUND ═══════════ -->
+  <rect width="600" height="900" fill="url(#bg)"/>
+  <rect width="600" height="900" fill="url(#glow)"/>
+  <rect width="600" height="900" fill="url(#glowTop)"/>
+
+  <!-- Subtle radial grain overlay -->
+  <rect width="600" height="900" fill="#FF9040" opacity="0.03" filter="url(#noise)"/>
+
+  <!-- Horizontal light streak (cinema feel) -->
+  <rect x="0" y="410" width="600" height="120" fill="#E9A84A" opacity="0.03" rx="0"/>
+
+  <!-- ═══════════ BRANDING — TOP ═══════════ -->
+
+  <!-- Category label -->
+  <text x="300" y="108" text-anchor="middle"
+    font-family="'Helvetica Neue','Arial',sans-serif"
+    font-size="11" font-weight="400" letter-spacing="5"
+    fill="#E9A84A" opacity="0.75">COMIDA SALUDABLE · COSTA RICA</text>
+
+  <!-- Ornament lines -->
+  <line x1="180" y1="122" x2="270" y2="122" stroke="#FF671D" stroke-width="0.8" opacity="0.55"/>
+  <circle cx="300" cy="122" r="2.5" fill="#FF671D" opacity="0.7"/>
+  <line x1="330" y1="122" x2="420" y2="122" stroke="#FF671D" stroke-width="0.8" opacity="0.55"/>
+
+  <!-- Main title shadow layer -->
+  <text x="302" y="196" text-anchor="middle"
+    font-family="'Arial Black','Impact','Helvetica Neue',sans-serif"
+    font-size="76" font-weight="900" letter-spacing="-2"
+    fill="#FF671D" opacity="0.18">BiKitchen</text>
+
+  <!-- Main title -->
+  <text x="300" y="193" text-anchor="middle"
+    font-family="'Arial Black','Impact','Helvetica Neue',sans-serif"
+    font-size="76" font-weight="900" letter-spacing="-2"
+    fill="#FFFFFF">BiKitchen</text>
+
+  <!-- Accent bar under title -->
+  <rect x="250" y="206" width="100" height="3.5" rx="2" fill="#FF671D" opacity="0.85"/>
+
+  <!-- Tagline -->
+  <text x="300" y="237" text-anchor="middle"
+    font-family="'Helvetica Neue','Arial',sans-serif"
+    font-size="15.5" font-weight="300" letter-spacing="1.5"
+    fill="#E9A84A" opacity="0.88">Tu comida. Tu bienestar.</text>
+
+  <!-- ═══════════ PLATE SHADOW ═══════════ -->
+  <ellipse cx="303" cy="715" rx="210" ry="28" fill="#000000" opacity="0.45"/>
+
+  <!-- ═══════════ PLATE ═══════════ -->
+  <!-- Outer rim -->
+  <ellipse cx="300" cy="500" rx="232" ry="222" fill="url(#plateRim)" filter="url(#fs)"/>
+  <!-- Plate face -->
+  <ellipse cx="300" cy="495" rx="220" ry="210" fill="url(#plateFill)"/>
+  <!-- Inner well -->
+  <ellipse cx="300" cy="496" rx="204" ry="194" fill="#F4E6C8"/>
+
+  <!-- ═══════════ FOOD — RICE BASE ═══════════ -->
+  <ellipse cx="300" cy="535" rx="165" ry="78" fill="url(#riceG)"/>
+  <ellipse cx="300" cy="520" rx="158" ry="70" fill="#F6EDD6"/>
+  <!-- Rice grain texture (dots) -->
+  <g opacity="0.55" fill="#D4C090">
+    <ellipse cx="255" cy="515" rx="5" ry="3" transform="rotate(-20,255,515)"/>
+    <ellipse cx="278" cy="508" rx="5" ry="3" transform="rotate(10,278,508)"/>
+    <ellipse cx="305" cy="506" rx="5" ry="3" transform="rotate(-5,305,506)"/>
+    <ellipse cx="330" cy="510" rx="5" ry="3" transform="rotate(15,330,510)"/>
+    <ellipse cx="350" cy="518" rx="5" ry="3" transform="rotate(-10,350,518)"/>
+    <ellipse cx="240" cy="528" rx="4" ry="2.5" transform="rotate(8,240,528)"/>
+    <ellipse cx="265" cy="535" rx="4" ry="2.5" transform="rotate(-18,265,535)"/>
+    <ellipse cx="315" cy="535" rx="4" ry="2.5" transform="rotate(12,315,535)"/>
+    <ellipse cx="340" cy="530" rx="4" ry="2.5" transform="rotate(-8,340,530)"/>
+  </g>
+
+  <!-- ═══════════ FOOD — LETTUCE WRAPS (sides) ═══════════ -->
+  <path d="M 148 505 Q 126 468 160 445 Q 195 425 210 458 Q 188 450 178 472 Q 165 488 148 505 Z"
+    fill="url(#leafG)" filter="url(#fs2)" opacity="0.92"/>
+  <path d="M 148 505 Q 134 478 162 455 Q 188 438 204 462 Q 182 456 172 476 Z"
+    fill="url(#leafG2)" opacity="0.55"/>
+
+  <path d="M 452 505 Q 474 468 440 445 Q 405 425 390 458 Q 412 450 422 472 Q 435 488 452 505 Z"
+    fill="url(#leafG)" filter="url(#fs2)" opacity="0.92"/>
+  <path d="M 452 505 Q 466 478 438 455 Q 412 438 396 462 Q 418 456 428 476 Z"
+    fill="url(#leafG2)" opacity="0.55"/>
+
+  <!-- Extra herb sprigs -->
+  <path d="M 175 445 Q 165 430 170 420 Q 180 432 178 445" fill="#78C050" opacity="0.8"/>
+  <path d="M 190 440 Q 186 424 192 415 Q 198 427 196 440" fill="#6AB848" opacity="0.75"/>
+  <path d="M 425 445 Q 435 430 430 420 Q 420 432 422 445" fill="#78C050" opacity="0.8"/>
+  <path d="M 410 440 Q 414 424 408 415 Q 402 427 404 440" fill="#6AB848" opacity="0.75"/>
+
+  <!-- ═══════════ FOOD — SALMON / PROTEIN (center-back) ═══════════ -->
+  <ellipse cx="300" cy="420" rx="88" ry="48" fill="url(#salmonG)" filter="url(#fs2)" transform="rotate(-5,300,420)"/>
+  <ellipse cx="300" cy="416" rx="82" ry="43" fill="#FFBA8C" transform="rotate(-5,300,416)"/>
+  <!-- Salmon texture stripes -->
+  <path d="M 230 408 Q 252 402 275 410 Q 298 418 322 412 Q 345 406 365 414" stroke="#E89060" stroke-width="2.5" fill="none" opacity="0.5" stroke-linecap="round"/>
+  <path d="M 235 418 Q 258 412 282 420 Q 305 428 328 422 Q 348 416 366 424" stroke="#E89060" stroke-width="2" fill="none" opacity="0.4" stroke-linecap="round"/>
+  <!-- Herb on salmon -->
+  <path d="M 295 400 Q 285 388 290 380 Q 300 390 298 400" fill="#78C050" opacity="0.9"/>
+  <path d="M 308 397 Q 320 386 316 378 Q 306 388 308 397" fill="#6AB848" opacity="0.85"/>
+
+  <!-- ═══════════ FOOD — AVOCADO HALF (left) ═══════════ -->
+  <g filter="url(#fs2)" transform="translate(232,448)">
+    <!-- Avocado shell -->
+    <ellipse cx="0" cy="0" rx="46" ry="58" fill="#3A7020" transform="rotate(-8)"/>
+    <ellipse cx="-2" cy="2" rx="40" ry="51" fill="#4E8C2C" transform="rotate(-8)"/>
+    <!-- Avocado flesh -->
+    <ellipse cx="-2" cy="2" rx="33" ry="43" fill="url(#avoFlesh)" transform="rotate(-8)"/>
+    <!-- Avocado pit -->
+    <ellipse cx="-2" cy="8" rx="14" ry="16" fill="#8B5E2A" transform="rotate(-8)"/>
+    <ellipse cx="-4" cy="6" rx="10" ry="12" fill="#A06A30" transform="rotate(-8)"/>
+    <circle cx="-5" cy="4" r="3.5" fill="#B87838" opacity="0.7"/>
+  </g>
+
+  <!-- ═══════════ FOOD — CHERRY TOMATOES (right cluster) ═══════════ -->
+  <!-- Tomato 1 (main) -->
+  <circle cx="372" cy="468" r="28" fill="url(#tomatoG)" filter="url(#fs2)"/>
+  <circle cx="368" cy="464" r="9" fill="#FF7A74" opacity="0.55"/>
+  <path d="M 372 440 Q 378 430 374 422" stroke="#4A7C20" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <path d="M 372 440 Q 364 432 366 424" stroke="#5A8C2C" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <!-- Tomato 2 (smaller) -->
+  <circle cx="400" cy="490" r="20" fill="#D42828" filter="url(#fs2)"/>
+  <circle cx="396" cy="486" r="6.5" fill="#FF5A54" opacity="0.5"/>
+  <path d="M 400 470 Q 405 462 402 455" stroke="#4A7C20" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <!-- Tomato 3 (smallest, back) -->
+  <circle cx="388" cy="444" r="16" fill="#C82424" filter="url(#fs2)"/>
+  <circle cx="385" cy="441" r="5" fill="#E04040" opacity="0.5"/>
+
+  <!-- ═══════════ FOOD — BROCCOLI FLORET (left-front) ═══════════ -->
+  <g transform="translate(215,490)" filter="url(#fs2)">
+    <rect x="-5" y="18" width="10" height="32" rx="5" fill="#2E6018"/>
+    <!-- Florets -->
+    <circle cx="0"   cy="8"   r="19" fill="#3C7822"/>
+    <circle cx="-16" cy="4"   r="15" fill="#458C28"/>
+    <circle cx="16"  cy="4"   r="15" fill="#3A7820"/>
+    <circle cx="-8"  cy="-8"  r="13" fill="#4A9030"/>
+    <circle cx="8"   cy="-8"  r="13" fill="#418825"/>
+    <circle cx="0"   cy="-15" r="11" fill="#508C30"/>
+    <!-- Highlight dots on florets -->
+    <circle cx="-4"  cy="-2"  r="4"  fill="#6AAC48" opacity="0.6"/>
+    <circle cx="10"  cy="-4"  r="3.5" fill="#6AAC48" opacity="0.5"/>
+    <circle cx="-13" cy="0"   r="3"  fill="#6AAC48" opacity="0.5"/>
+  </g>
+
+  <!-- ═══════════ FOOD — GOLDEN SAUCE DRIZZLE ═══════════ -->
+  <path d="M 248 390 Q 274 372 308 382 Q 336 390 360 375"
+    stroke="#E9A84A" stroke-width="4.5" fill="none" stroke-linecap="round" opacity="0.9"/>
+  <path d="M 240 405 Q 262 394 285 400"
+    stroke="#FF8C30" stroke-width="3" fill="none" stroke-linecap="round" opacity="0.75"/>
+  <path d="M 330 388 Q 348 378 366 384"
+    stroke="#E9A84A" stroke-width="2.5" fill="none" stroke-linecap="round" opacity="0.65"/>
+
+  <!-- Sesame / micro seeds -->
+  <g fill="#F5E08A" opacity="0.85">
+    <ellipse cx="296" cy="374" rx="3" ry="1.8" transform="rotate(30,296,374)"/>
+    <ellipse cx="318" cy="368" rx="3" ry="1.8" transform="rotate(-15,318,368)"/>
+    <ellipse cx="280" cy="371" rx="2.5" ry="1.5" transform="rotate(50,280,371)"/>
+    <ellipse cx="340" cy="372" rx="2.5" ry="1.5" transform="rotate(-30,340,372)"/>
+    <ellipse cx="308" cy="365" rx="2.5" ry="1.5" transform="rotate(10,308,365)"/>
+  </g>
+
+  <!-- ═══════════ PLATE RIM HIGHLIGHT ═══════════ -->
+  <ellipse cx="300" cy="495" rx="222" ry="212" fill="none" stroke="#FFFFFF" stroke-width="0.8" opacity="0.18"/>
+
+  <!-- ═══════════ BOTTOM CTA / INFO ═══════════ -->
+
+  <!-- Divider line -->
+  <line x1="200" y1="780" x2="400" y2="780" stroke="#E9A84A" stroke-width="0.8" opacity="0.35"/>
+
+  <!-- Website URL -->
+  <text x="300" y="810" text-anchor="middle"
+    font-family="'Helvetica Neue','Arial',sans-serif"
+    font-size="12" font-weight="400" letter-spacing="4"
+    fill="#FFFFFF" opacity="0.45">BIKITCHENCR.COM</text>
+
+  <!-- Badge chips bottom -->
+  <rect x="155" y="826" width="88" height="26" rx="13" fill="#FF671D" opacity="0.18"/>
+  <text x="199" y="843" text-anchor="middle"
+    font-family="'Helvetica Neue','Arial',sans-serif"
+    font-size="11" font-weight="600" letter-spacing="1"
+    fill="#FF9A6A" opacity="0.85">🥑 Keto</text>
+
+  <rect x="256" y="826" width="88" height="26" rx="13" fill="#E9A84A" opacity="0.15"/>
+  <text x="300" y="843" text-anchor="middle"
+    font-family="'Helvetica Neue','Arial',sans-serif"
+    font-size="11" font-weight="600" letter-spacing="1"
+    fill="#E9A84A" opacity="0.85">🥗 Fit</text>
+
+  <rect x="357" y="826" width="88" height="26" rx="13" fill="#4A8C28" opacity="0.20"/>
+  <text x="401" y="843" text-anchor="middle"
+    font-family="'Helvetica Neue','Arial',sans-serif"
+    font-size="11" font-weight="600" letter-spacing="1"
+    fill="#88C858" opacity="0.85">🌿 Natural</text>
+
+  <!-- ═══════════ VIGNETTE EDGES ═══════════ -->
+  <!-- Left edge dark -->
+  <rect x="0" y="0" width="80" height="900" fill="url(#bg)" opacity="0.55"/>
+  <!-- Right edge dark -->
+  <rect x="520" y="0" width="80" height="900" fill="url(#bg)" opacity="0.55"/>
+  <!-- Top edge dark -->
+  <rect x="0" y="0" width="600" height="70" fill="url(#bg)" opacity="0.75"/>
+  <!-- Bottom edge dark -->
+  <rect x="0" y="830" width="600" height="70" fill="url(#bg)" opacity="0.75"/>
+</svg>

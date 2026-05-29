@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import SEOHead from '../components/SEOHead';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import PageTransition from '../components/PageTransition';
@@ -146,9 +147,14 @@ La fecha de "última actualización" al inicio de esta política indica cuándo 
 
     return (
         <PageTransition>
+            <SEOHead
+                title="Política de Privacidad | BiKitchen"
+                description="Política de privacidad y protección de datos personales de BiKitchen en Costa Rica."
+                noindex={true}
+            />
             <div className="min-h-screen bg-gradient-to-b from-bikitchen-beige to-white">
                 <Navbar />
-                
+
                 {/* Hero Section */}
                 <section className="relative pt-32 pb-16 overflow-hidden">
                     <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-purple-500/5"></div>

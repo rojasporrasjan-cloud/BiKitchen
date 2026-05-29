@@ -172,7 +172,6 @@ export async function getOfficialMenus(forceRefresh = false) {
       }
 
       const data = snap.data();
-      console.log('[getOfficialMenus] ✅ Datos frescos obtenidos:', Object.keys(data));
       // Actualizar caché local
       setCache('menus_official_current', data, 'menus_official');
       return data;
@@ -220,12 +219,9 @@ export async function saveOfficialMenus(data, meta = {}) {
     }
   };
 
-  console.log('[saveOfficialMenus] Guardando payload.cena:', payload.cena);
-  console.log('[saveOfficialMenus] Guardando payload.desayuno:', payload.desayuno?.length, 'platos');
   
   if (Array.isArray(payload.desayuno)) {
       payload.desayuno.forEach((d, i) => {
-          console.log(`  [Desayuno ${i+1}]:`, d.proteina);
       });
   }
 
@@ -248,7 +244,6 @@ export async function saveOfficialMenus(data, meta = {}) {
   invalidateCacheByType('menus_official');
   invalidateCache('menus_official');
 
-  console.log('[saveOfficialMenus] ✅ Menús guardados y caché invalidado');
 }
 
 /**
@@ -283,7 +278,6 @@ export async function ensureDesayunosExist() {
         }
       });
       invalidateCache('menus_official');
-      console.log('✅ Menús inicializados con desayunos');
       return true;
     }
 
@@ -291,7 +285,6 @@ export async function ensureDesayunosExist() {
     // Mejorar validación: Solo inicializar si el campo falta por COMPLETO o es nulo
     // Si ya tiene un array (aunque sea corto o con campos vacíos), respetarlo para no borrar cambios de Gina
     if (data.desayuno === undefined || data.desayuno === null) {
-      console.log('⚠️ Desayunos no encontrados en current. Inicializando...');
       // Si existe el documento pero no tiene la propiedad desayuno, agregarla
       await setDoc(ref, {
         desayuno: DEFAULT_MENUS.desayuno,
@@ -302,11 +295,9 @@ export async function ensureDesayunosExist() {
         }
       }, { merge: true });
       invalidateCache('menus_official');
-      console.log('✅ Desayunos agregados al menú oficial');
       return true;
     }
 
-    console.log('✅ Desayunos ya existen en Firebase');
     return false;
   } catch (error) {
     console.error('❌ Error asegurando desayunos:', error);
@@ -453,7 +444,6 @@ export async function fixTwoPackPrices() {
 
     await setDoc(ref, updatedPrices, { merge: true });
 
-    console.log('✅ Precios del Two Pack actualizados con 25% de descuento');
     return true;
   } catch (error) {
     // Silenciar error de permisos - es normal para usuarios sin login

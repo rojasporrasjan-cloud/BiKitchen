@@ -424,7 +424,6 @@ export const grantWelcomeCoupon = async (userId) => {
     try {
         const welcomeTemplate = await getWelcomeCoupon();
         if (!welcomeTemplate) {
-            console.log('No welcome coupon template found to grant');
             return null;
         }
 
@@ -450,7 +449,6 @@ export const grantWelcomeCoupon = async (userId) => {
         };
 
         const docRef = await addDoc(collection(db, COUPONS_COLLECTION), personalCoupon);
-        console.log('Welcome coupon granted to user:', userId, 'Doc ID:', docRef.id);
         
         // Invalidar caché
         invalidateCacheByType('coupons');

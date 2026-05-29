@@ -4,8 +4,10 @@ import { motion } from 'framer-motion';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import PageTransition from '../components/PageTransition';
-import { 
-    Calculator, Clock, DollarSign, ShoppingCart, ChefHat, 
+import SEOHead, { SEO_CONFIG, getBreadcrumbSchema } from '../components/SEOHead';
+import { formatPrice } from '../utils/formatters';
+import {
+    Calculator, Clock, DollarSign, ShoppingCart, ChefHat,
     TrendingDown, Sparkles, ArrowRight, Check, Zap, Heart,
     Users, Minus, Plus
 } from 'lucide-react';
@@ -107,7 +109,6 @@ export default function CalculadoraAhorroPage() {
         };
     }, [mealsPerWeek, hourlyRate]);
 
-    const formatPrice = (price) => `₡${Math.round(price).toLocaleString('es-CR')}`;
     const formatTime = (minutes) => {
         const hours = Math.floor(minutes / 60);
         const mins = Math.round(minutes % 60);
@@ -118,14 +119,18 @@ export default function CalculadoraAhorroPage() {
 
     return (
         <PageTransition>
+            <SEOHead
+                {...SEO_CONFIG.calculadora}
+                structuredData={getBreadcrumbSchema([{ name: 'Calculadora de Ahorro', url: 'https://bikitchencr.com/calculadora' }])}
+            />
             <div className="min-h-screen bg-gradient-to-b from-bikitchen-beige to-white">
                 <Navbar />
 
                 {/* Hero Section */}
                 <section className="relative pt-32 pb-12 overflow-hidden">
                     <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 to-bikitchen-orange/5"></div>
-                    <div className="absolute top-20 right-10 w-72 h-72 bg-green-500/10 rounded-full blur-3xl"></div>
-                    <div className="absolute bottom-0 left-10 w-64 h-64 bg-bikitchen-orange/10 rounded-full blur-3xl"></div>
+                    <div className="absolute top-20 right-10 w-72 h-72 bg-green-500/10 rounded-full blur-3xl" aria-hidden="true"></div>
+                    <div className="absolute bottom-0 left-10 w-64 h-64 bg-bikitchen-orange/10 rounded-full blur-3xl" aria-hidden="true"></div>
                     
                     <div className="container relative z-10">
                         <div className="max-w-3xl mx-auto text-center">

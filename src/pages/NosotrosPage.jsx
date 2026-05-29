@@ -1,5 +1,6 @@
 import React from 'react';
 import { usePromoBanner } from '../hooks/usePromoBanner';
+import SEOHead, { SEO_CONFIG, getBreadcrumbSchema } from '../components/SEOHead';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import PageTransition from '../components/PageTransition';
@@ -28,6 +29,10 @@ export default function NosotrosPage() {
     const showPromoBanner = usePromoBanner();
     return (
         <PageTransition>
+            <SEOHead
+                {...SEO_CONFIG.nosotros}
+                structuredData={getBreadcrumbSchema([{ name: 'Quiénes Somos', url: 'https://bikitchencr.com/nosotros' }])}
+            />
             <div className="min-h-screen bg-bikitchen-beige">
                 <Navbar />
 
@@ -41,9 +46,9 @@ export default function NosotrosPage() {
                     }}
                 >
                     {/* Decorative orbs */}
-                    <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-gradient-to-br from-white/20 to-transparent rounded-full blur-3xl"></div>
-                    <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-gradient-to-tr from-yellow-400/30 to-transparent rounded-full blur-3xl"></div>
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-br from-orange-400/10 via-white/10 to-transparent rounded-full blur-3xl"></div>
+                    <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-gradient-to-br from-white/20 to-transparent rounded-full blur-3xl" aria-hidden="true"></div>
+                    <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-gradient-to-tr from-yellow-400/30 to-transparent rounded-full blur-3xl" aria-hidden="true"></div>
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-br from-orange-400/10 via-white/10 to-transparent rounded-full blur-3xl" aria-hidden="true"></div>
                     {/* Pattern overlay */}
                     <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_70%,rgba(255,255,255,0.15)_1px,transparent_1px)] bg-[length:40px_40px] opacity-40"></div>
 

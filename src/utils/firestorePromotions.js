@@ -58,45 +58,19 @@ export const getActivePromotions = async () => {
         return await cachedFetch('promotions_active', async () => {
             const allPromos = await getAllPromotions();
             const now = new Date();
-            console.log('[getActivePromotions] Total promociones:', allPromos.length);
-            console.log('[getActivePromotions] Fecha actual:', now.toISOString());
             const activePromos = allPromos.filter(promo => {
                 if (!promo.activa) {
-                    console.log(`[getActivePromotions] Promoción "${promo.titulo}" NO activa`);
                     return false;
                 }
                 const inicio = promo.fechaInicio ? new Date(promo.fechaInicio) : null;
                 const fin = promo.fechaFin ? new Date(promo.fechaFin) : null;
-                console.log(`[getActivePromotions] Promoción "${promo.titulo}":`, {
-                    activa: promo.activa,
-                    inicio: inicio?.toISOString(),
-                    fin: fin?.toISOString(),
-                    inicioValido: !inicio || inicio <= now,
-                    finValido: !fin || fin >= now
-                });
                 if (inicio && inicio > now) {
-                    console.log(`[getActivePromotions] Promoción "${promo.titulo}" aún no inicia`);
                     return false;
                 }
                 if (fin && fin < now) {
-                    console.log(`[getActivePromotions] Promoción "${promo.titulo}" ya expiró`);
                     return false;
                 }
                 return true;
-            });
-            console.log('[getActivePromotions] Promociones activas:', activePromos.length);
-            activePromos.forEach(promo => {
-                console.log(`[getActivePromotions] 📋 Promoción "${promo.titulo}" - Campos completos:`, {
-                    id: promo.id,
-                    titulo: promo.titulo,
-                    descripcion: promo.descripcion,
-                    composicionPlato: promo.composicionPlato,
-                    packsRelacionados: promo.packsRelacionados,
-                    descuentoEnvio: promo.descuentoEnvio,
-                    tipoPlan: promo.tipoPlan,
-                    beneficios: promo.beneficios,
-                    detalles: promo.detalles
-                });
             });
             return activePromos;
         }, 'promotions');
@@ -165,11 +139,6 @@ export const getPromotionById = async (id) => {
  */
 export const createPromotion = async (promotionData) => {
     try {
-        console.log('🔍 DEBUG - Datos recibidos para crear promoción:', promotionData);
-        console.log('🔍 DEBUG - composicionPlato:', promotionData.composicionPlato);
-        console.log('🔍 DEBUG - packsRelacionados:', promotionData.packsRelacionados);
-        console.log('🔍 DEBUG - descuentoEnvio:', promotionData.descuentoEnvio);
-        console.log('🔍 DEBUG - tipoPlan:', promotionData.tipoPlan);
 
         const docRef = await addDoc(collection(db, COLLECTION_NAME), {
             ...promotionData,
@@ -181,7 +150,6 @@ export const createPromotion = async (promotionData) => {
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp()
         });
-        console.log('✅ Promoción creada exitosamente con ID:', docRef.id);
         // Invalidar todo el caché relacionado con promociones
         invalidateCacheByType('promotions');
         return { id: docRef.id, success: true };
@@ -196,12 +164,6 @@ export const createPromotion = async (promotionData) => {
  */
 export const updatePromotion = async (id, promotionData) => {
     try {
-        console.log('🔍 DEBUG - Datos recibidos para actualizar promoción ID:', id);
-        console.log('🔍 DEBUG - Datos completos:', promotionData);
-        console.log('🔍 DEBUG - composicionPlato:', promotionData.composicionPlato);
-        console.log('🔍 DEBUG - packsRelacionados:', promotionData.packsRelacionados);
-        console.log('🔍 DEBUG - descuentoEnvio:', promotionData.descuentoEnvio);
-        console.log('🔍 DEBUG - tipoPlan:', promotionData.tipoPlan);
 
         const docRef = doc(db, COLLECTION_NAME, id);
         await updateDoc(docRef, {
@@ -210,7 +172,6 @@ export const updatePromotion = async (id, promotionData) => {
             fechaFin: promotionData.fechaFin ? Timestamp.fromDate(new Date(promotionData.fechaFin)) : null,
             updatedAt: serverTimestamp()
         });
-        console.log('✅ Promoción actualizada exitosamente');
         // Invalidar todo el caché relacionado con promociones
         invalidateCacheByType('promotions');
         return { success: true };
@@ -267,7 +228,6 @@ export const checkExpiredPromotions = async () => {
                 const fechaFin = new Date(promo.fechaFin);
                 if (fechaFin < now) {
                     await updatePromotion(promo.id, { activa: false });
-                    console.log(`Promoción "${promo.titulo}" desactivada por expiración`);
                 }
             }
         }
@@ -283,7 +243,6 @@ export const initializeDefaultPromotions = async () => {
     try {
         const existing = await getAllPromotions();
         if (existing.length > 0) {
-            console.log('Ya existen promociones en Firestore');
             return { success: true, message: 'Promociones ya existen' };
         }
 
@@ -395,7 +354,6 @@ export const initializeDefaultPromotions = async () => {
             await createPromotion(promo);
         }
 
-        console.log('Promociones por defecto creadas exitosamente');
         return { success: true, message: 'Promociones creadas' };
     } catch (error) {
         console.error('Error initializing promotions:', error);

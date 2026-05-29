@@ -217,6 +217,7 @@ function AnimatedRoutes() {
             <Route path="/" element={<LandingPage />} />
             <Route path="/menu" element={<CatalogPage />} />
             <Route path="/individuales" element={<IndividualesView />} />
+            <Route path="/individuales/:slug" element={<IndividualesView />} />
             <Route path="/packs" element={<PacksPage />} />
             <Route path="/promociones" element={<PromocionesPage />} />
             <Route path="/como-funciona" element={<ComoFuncionaPage />} />

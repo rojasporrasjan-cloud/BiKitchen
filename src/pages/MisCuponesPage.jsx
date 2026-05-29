@@ -19,6 +19,7 @@ import { getUserCoupons, linkCouponToUser } from '../utils/firestoreCoupons';
 import useLoyaltyPoints from '../hooks/useLoyaltyPoints';
 import Navbar from '../components/Navbar';
 import PageTransition from '../components/PageTransition';
+import SEOHead from '../components/SEOHead';
 
 export default function MisCuponesPage() {
     const { currentUser } = useAuth() || {};
@@ -42,10 +43,6 @@ export default function MisCuponesPage() {
                         if (entry.couponCode) {
                             // Intentar vincular este código si está huérfano
                             await linkCouponToUser(entry.couponCode, currentUser.uid);
-                        } else if (entry.points === -500) {
-                            // Caso especial: Código huérfano conocido para canje de 500 puntos (VIP-CUPÓN-D7UX)
-                            // Esto ayuda a usuarios que canjearon exactamente durante la migración
-                            await linkCouponToUser('VIP-CUPÓN-D7UX', currentUser.uid);
                         }
                     }
                 }
@@ -80,7 +77,7 @@ export default function MisCuponesPage() {
         return (
             <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6 text-center">
                 <Ticket className="text-gray-300 w-24 h-24 mb-4" />
-                <h1 className="text-2xl font-bold text-gray-900 mb-2">Mis Cupones</h1>
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">Mis Cupones</h2>
                 <p className="text-gray-600 mb-6 max-w-md">Inicia sesión para ver tus recompensas y cupones de descuento.</p>
                 <button 
                     onClick={() => navigate('/login')}
@@ -94,6 +91,11 @@ export default function MisCuponesPage() {
 
     return (
         <PageTransition>
+            <SEOHead
+                title="Mis Cupones — BiKitchen"
+                description="Tus cupones y recompensas de BiPuntos."
+                noindex={true}
+            />
             <div className="min-h-screen bg-neutral-50 pb-20">
                 <Navbar />
 

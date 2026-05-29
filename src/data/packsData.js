@@ -162,3 +162,44 @@ export const PACKS_DATA = {
         ]
     }
 };
+
+// Datos base de packs especiales (familiares y proteínas).
+// Los menús familiares se cargan dinámicamente desde Firebase.
+// Exportado aquí para compartir entre PackCard y PacksPage.
+export const PACKS_ESPECIALES_BASE = {
+    'Pack Familiar Premium': {
+        nombre: 'Pack Familiar',
+        precio: 41500,
+        emoji: '👨‍👩‍👧‍👦',
+        color: 'green',
+        items: []
+    },
+    'Pack Familiar Deluxe': {
+        nombre: 'Paquete Deluxe',
+        precio: 47500,
+        emoji: '👑',
+        color: 'purple',
+        items: []
+    },
+    'Pack 3 Proteínas': {
+        nombre: 'Pack 3 Proteínas',
+        emoji: '🥩',
+        color: 'orange',
+        cantidad: 3,
+        proteinas: ['Pollo en salsa de curry', 'Pollo en salsa caribeña', 'Fajitas de lomo en salsa vino', 'Pollo mechado en salsa', 'Carne mechada en salsa', 'Cerdo en salsa de piña', 'Pollo a la toscana', 'Trocitos de cerdo en salsa criolla', 'Pollo en salsa demiglase', 'Fajitas de cerdo con chimichurri']
+    },
+    'Pack 5 Proteínas': {
+        nombre: 'Pack 5 Proteínas',
+        emoji: '🍖',
+        color: 'orange',
+        cantidad: 5,
+        proteinas: ['Pollo en salsa de curry', 'Pollo en salsa caribeña', 'Fajitas de lomo en salsa vino', 'Pollo mechado en salsa', 'Carne mechada en salsa', 'Cerdo en salsa de piña', 'Pollo a la toscana', 'Trocitos de cerdo en salsa criolla', 'Pollo en salsa demiglase', 'Fajitas de cerdo con chimichurri']
+    },
+    'Pack de Desayunos': {
+        nombre: 'Pack de Desayunos',
+        emoji: '🍳',
+        color: 'yellow',
+        items: [],
+        itemsVeg: []
+    }
+};

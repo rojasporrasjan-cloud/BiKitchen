@@ -62,7 +62,6 @@ export const ContactConfigProvider = ({ children }) => {
                 loading: false
             });
 
-            console.log('✅ Configuración de contacto inicializada en Firebase');
         } catch (error) {
             console.error('Error al inicializar configuración:', error);
             setConfig(prev => ({ ...prev, loading: false }));
@@ -77,7 +76,6 @@ export const ContactConfigProvider = ({ children }) => {
                 whatsappPhoneAlt: config.whatsappPhoneAlt,
                 updatedAt: new Date().toISOString()
             });
-            console.log('✅ Número de WhatsApp actualizado:', newPhone);
             return true;
         } catch (error) {
             console.error('Error al actualizar número de WhatsApp:', error);

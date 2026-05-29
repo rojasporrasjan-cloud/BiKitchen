@@ -242,18 +242,15 @@ export const OrdersProvider = ({ children }) => {
                 orderSnap = await getDoc(orderRef);
             } catch (err) {
                 // If it's a malformed ID error, we skip to fallback
-                console.log("[OrdersContext] orderId is not a valid doc ID, will try fallback search.");
             }
 
             if (!orderSnap?.exists?.()) {
-                console.log("[OrdersContext] Order not found by ID, searching by numeroOrden:", orderId);
                 const q = query(collection(db, "pedidos"), where("numeroOrden", "==", orderId));
                 const querySnap = await getDocs(q);
                 
                 if (!querySnap.empty) {
                     orderRef = doc(db, "pedidos", querySnap.docs[0].id);
                     orderSnap = await getDoc(orderRef);
-                    console.log("[OrdersContext] Order found by numeroOrden fallback ✅");
                 } else {
                     console.error("Order not found by ID or numeroOrden:", orderId);
                     return;
@@ -297,7 +294,6 @@ export const OrdersProvider = ({ children }) => {
                 // Calcular puntos a dar (2 puntos por cada ₡100)
                 const pointsToAward = orderData.pointsToAward || Math.floor((orderData.total || 0) * 0.02);
 
-                console.log(`[OrdersContext] 🎁 OTORGANDO PUNTOS: Orden ${orderId} → ${pointsToAward} pts a ${orderData.correo}`);
 
                 // Si el pedido tiene correo, guardar los puntos en Firestore
                 if (orderData.correo && pointsToAward > 0) {
@@ -313,7 +309,6 @@ export const OrdersProvider = ({ children }) => {
                                 totalEarned: increment(pointsToAward),
                                 lastUpdated: new Date().toISOString()
                             });
-                            console.log(`✅ ${pointsToAward} puntos AGREGADOS a ${orderData.correo} (ya tenía cuenta)`);
                         } else {
                             // Crear nuevo documento de puntos
                             await setDoc(pointsRef, {
@@ -324,7 +319,6 @@ export const OrdersProvider = ({ children }) => {
                                 createdAt: new Date().toISOString(),
                                 lastUpdated: new Date().toISOString()
                             });
-                            console.log(`✅ ${pointsToAward} puntos CREADOS para ${orderData.correo} (primera compra)`);
                         }
                     } catch (pointsError) {
                         console.error("❌ Error awarding points:", pointsError);
@@ -373,7 +367,6 @@ export const OrdersProvider = ({ children }) => {
                                     });
                                 }
                                 secondaryUpdates.referralPointsAwarded = true;
-                                console.log(`🎁 ${rrPoints} puntos de referido otorgados al usuario ${orderData.referral_uid}`);
                             }
                         }
                     } catch (refError) {
@@ -447,7 +440,6 @@ export const OrdersProvider = ({ children }) => {
                 deleted += Math.min(batchSize, ordersSnapshot.docs.length - i);
             }
 
-            console.log(`✅ ${deleted} pedidos eliminados`);
             return deleted;
         } catch (error) {
             console.error("Error deleting all orders:", error);

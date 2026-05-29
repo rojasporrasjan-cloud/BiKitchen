@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
+import SEOHead, { SEO_CONFIG, getBreadcrumbSchema } from '../components/SEOHead';
 import PageTransition from '../components/PageTransition';
 import BackButton from '../components/BackButton';
 import useLoyaltyPoints from '../hooks/useLoyaltyPoints';
@@ -276,7 +277,7 @@ export default function FidelidadPage() {
                     <Navbar />
                     <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
                         <Star className="text-gray-300 w-24 h-24 mb-4" />
-                        <h1 className="text-2xl font-bold text-gray-900 mb-2">Programa de Fidelidad</h1>
+                        <h2 className="text-2xl font-bold text-gray-900 mb-2">Programa de Fidelidad</h2>
                         <p className="text-gray-600 mb-6 max-w-md">Inicia sesión para ganar puntos, subir de nivel y canjear premios en nuestra tienda de recompensas.</p>
                         <button 
                             onClick={() => navigate('/login')}
@@ -292,6 +293,10 @@ export default function FidelidadPage() {
 
     return (
         <PageTransition>
+            <SEOHead
+                {...SEO_CONFIG.fidelidad}
+                structuredData={getBreadcrumbSchema([{ name: 'BiPuntos — Programa de Fidelidad', url: 'https://bikitchencr.com/fidelidad' }])}
+            />
             <div className="min-h-screen bg-neutral-50 pb-20 selection:bg-orange-100 selection:text-orange-900">
                 <Navbar />
 
@@ -415,8 +420,7 @@ export default function FidelidadPage() {
                             transition={{ delay: 0.3 }}
                             className="lg:col-span-12 xl:col-span-5 perspective"
                         >
-                            <motion.div 
-                                whileHover={{ rotateY: 5, rotateX: -2, z: 20 }}
+                            <div
                                 className={`relative aspect-[1.586/1] rounded-[2.5rem] p-10 text-white shadow-2xl overflow-hidden group bg-gradient-to-br from-orange-500 to-amber-500 border border-white/30`}
                             >
                                 {/* Premium Shine Effect */}
@@ -461,7 +465,7 @@ export default function FidelidadPage() {
                                         </div>
                                     </div>
                                 </div>
-                            </motion.div>
+                            </div>
                         </motion.div>
 
                         {/* Progress Tracker - Premium Card */}
@@ -492,12 +496,9 @@ export default function FidelidadPage() {
                                             <h3 className="text-3xl font-black text-gray-900 mb-1 tracking-tight">Nivel {nextLevel.name}</h3>
                                             <p className="text-gray-500 font-medium">Estás a pocos pasos de desbloquear nuevas recompensas.</p>
                                         </div>
-                                        <motion.div 
-                                            whileHover={{ scale: 1.1, rotate: 5 }}
-                                            className="text-5xl bg-gray-50 w-20 h-20 rounded-3xl flex items-center justify-center shadow-inner border border-gray-100"
-                                        >
+                                        <div className="text-5xl bg-gray-50 w-20 h-20 rounded-3xl flex items-center justify-center shadow-inner border border-gray-100 hover:scale-110 transition-transform duration-200">
                                             {nextLevel.icon}
-                                        </motion.div>
+                                        </div>
                                     </div>
 
                                     <div className="relative z-10 space-y-4 mb-8">
@@ -658,7 +659,7 @@ export default function FidelidadPage() {
                                 </div>
                                 
                                 <div className="relative group/btn-cont">
-                                    <div className="absolute -inset-4 bg-orange-500/20 rounded-[2rem] blur-2xl group-hover/btn-cont:bg-orange-500/40 transition-all duration-500"></div>
+                                    <div className="absolute -inset-4 bg-orange-500/20 rounded-[2rem] blur-2xl group-hover/btn-cont:bg-orange-500/40 transition-all duration-500" aria-hidden="true"></div>
                                     <Link 
                                         to="/canje"
                                         className="relative group bg-white text-orange-600 px-12 py-6 rounded-[2rem] font-black text-xl transition-all shadow-2xl hover:scale-105 active:scale-95 flex items-center gap-4 overflow-hidden border border-orange-100"

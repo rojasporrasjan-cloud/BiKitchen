@@ -380,18 +380,16 @@ export default function AIAssistant() {
                             )}
                         </AnimatePresence>
 
-                        <motion.button
+                        <button
                             onClick={() => { setIsOpen(true); setShowLabel(false); }}
-                            whileHover={{ scale: 1.1 }}
-                            whileTap={{ scale: 0.92 }}
-                            onHoverStart={() => setShowLabel(true)}
-                            onHoverEnd={() => setShowLabel(false)}
-                            className="w-12 h-12 bg-gradient-to-br from-orange-500 to-amber-500 rounded-2xl flex items-center justify-center text-white shadow-xl relative"
+                            onMouseEnter={() => setShowLabel(true)}
+                            onMouseLeave={() => setShowLabel(false)}
+                            className="w-12 h-12 bg-gradient-to-br from-orange-500 to-amber-500 rounded-2xl flex items-center justify-center text-white shadow-xl relative hover:scale-110 active:scale-[0.92] transition-transform duration-150"
                         >
                             <div className="absolute inset-0 bg-orange-400 blur-lg opacity-20 animate-pulse rounded-2xl" />
                             <MessageCircle size={22} className="relative z-10" />
                             <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 border-2 border-white rounded-full z-20" />
-                        </motion.button>
+                        </button>
                     </div>
                 )}
             </AnimatePresence>

@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useWhatsApp } from '../hooks/useWhatsApp';
+import SEOHead from '../components/SEOHead';
+import { formatPrice } from '../utils/formatters';
 import { motion, AnimatePresence } from 'framer-motion';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
@@ -57,7 +59,6 @@ const formatDate = (dateString) => {
     });
 };
 
-const formatPrice = (price) => `₡${(price || 0).toLocaleString('es-CR')}`;
 
 // Componente de detalle del pedido
 function OrderDetail({ order, onClose }) {
@@ -281,14 +282,19 @@ export default function MisPedidosPage() {
 
     return (
         <PageTransition>
+            <SEOHead
+                title="Mis Pedidos — BiKitchen"
+                description="Revisá el historial y estado de tus pedidos en BiKitchen."
+                noindex={true}
+            />
             <div className="min-h-screen bg-gradient-to-b from-bikitchen-beige to-white">
                 <Navbar />
 
                 {/* Hero */}
                 <section className="relative pt-32 pb-12 overflow-hidden bg-gradient-to-br from-orange-500 via-amber-500 to-yellow-500">
                     {/* Decorative orbs */}
-                    <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-gradient-to-br from-white/20 to-transparent rounded-full blur-3xl"></div>
-                    <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-gradient-to-tr from-yellow-400/30 to-transparent rounded-full blur-3xl"></div>
+                    <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-gradient-to-br from-white/20 to-transparent rounded-full blur-3xl" aria-hidden="true"></div>
+                    <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-gradient-to-tr from-yellow-400/30 to-transparent rounded-full blur-3xl" aria-hidden="true"></div>
                     {/* Pattern overlay */}
                     <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_70%,rgba(255,255,255,0.15)_1px,transparent_1px)] bg-[length:40px_40px] opacity-40"></div>
                     

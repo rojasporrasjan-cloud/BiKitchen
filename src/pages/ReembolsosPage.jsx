@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import SEOHead from '../components/SEOHead';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import PageTransition from '../components/PageTransition';
@@ -85,6 +86,11 @@ export default function ReembolsosPage() {
 
   return (
     <PageTransition>
+      <SEOHead
+        title="Política de Reembolsos | BiKitchen"
+        description="Política de reembolsos y devoluciones de BiKitchen. Conocé cómo procesamos tus solicitudes."
+        noindex={true}
+      />
       <div className="min-h-screen bg-gradient-to-b from-bikitchen-beige to-white">
         <Navbar />
 

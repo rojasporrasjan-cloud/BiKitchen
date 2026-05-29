@@ -73,8 +73,8 @@ export default function LoginPage() {
     return (
         <div className="min-h-screen bg-gradient-to-br from-bikitchen-beige via-white to-orange-50 flex items-center justify-center p-4">
             {/* Background decorations */}
-            <div className="absolute top-0 right-0 w-96 h-96 bg-bikitchen-orange/10 rounded-full blur-3xl"></div>
-            <div className="absolute bottom-0 left-0 w-80 h-80 bg-bikitchen-gold/10 rounded-full blur-3xl"></div>
+            <div className="absolute top-0 right-0 w-96 h-96 bg-bikitchen-orange/10 rounded-full blur-3xl" aria-hidden="true"></div>
+            <div className="absolute bottom-0 left-0 w-80 h-80 bg-bikitchen-gold/10 rounded-full blur-3xl" aria-hidden="true"></div>
 
             <motion.div
                 initial={{ opacity: 0, y: 20 }}

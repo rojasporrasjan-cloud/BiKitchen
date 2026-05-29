@@ -51,6 +51,7 @@ export default function PageTransition({ children }) {
 
     return (
         <motion.div
+            id="main-content"
             variants={pageVariants}
             initial="initial"
             animate="animate"

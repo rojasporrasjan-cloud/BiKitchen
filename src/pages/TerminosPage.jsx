@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useWhatsApp } from '../hooks/useWhatsApp';
+import SEOHead from '../components/SEOHead';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import PageTransition from '../components/PageTransition';
@@ -109,9 +110,14 @@ Los menús se actualizan semanalmente según la disponibilidad de ingredientes f
 
     return (
         <PageTransition>
+            <SEOHead
+                title="Términos y Condiciones | BiKitchen"
+                description="Términos y condiciones de uso del servicio de BiKitchen en Costa Rica."
+                noindex={true}
+            />
             <div className="min-h-screen bg-gradient-to-b from-bikitchen-beige to-white">
                 <Navbar />
-                
+
                 {/* Hero Section */}
                 <section className="relative pt-32 pb-16 overflow-hidden">
                     <div className="absolute inset-0 bg-gradient-to-br from-bikitchen-orange/5 to-bikitchen-gold/5"></div>

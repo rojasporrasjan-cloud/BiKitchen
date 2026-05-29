@@ -2,8 +2,18 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [react()],
+
+  // Eliminar console.log/warn/debug del build de producción.
+  // console.error se mantiene (errores reales que hay que ver).
+  // En dev (command === 'serve') se mantienen todos para depuración.
+  esbuild: {
+    pure: command === 'build'
+      ? ['console.log', 'console.debug', 'console.info', 'console.warn']
+      : [],
+  },
+
   server: {
     host: true,
     port: 5173,
@@ -62,4 +72,4 @@ export default defineConfig({
   optimizeDeps: {
     include: ['react', 'react-dom', 'react-router-dom', 'framer-motion']
   }
-})
+}))

@@ -31,7 +31,6 @@ export const syncLoyaltyPointsOnRegistration = async (email, uid) => {
     const cleanEmail = email.toLowerCase().trim();
 
     try {
-        console.log(`[LoyaltySync] Iniciando sincronización de puntos para: ${cleanEmail}`);
 
         // 1. Buscar todos los pedidos previos (confirmados o pagados)
         const ordersQuery = query(
@@ -42,7 +41,6 @@ export const syncLoyaltyPointsOnRegistration = async (email, uid) => {
         const orderSnap = await getDocs(ordersQuery);
 
         if (orderSnap.empty) {
-            console.log(`[LoyaltySync] No se encontraron pedidos previos para ${cleanEmail}`);
 
             // Crear documento de loyalty vacío con bono de bienvenida
             const loyaltyRef = doc(db, 'loyalty', cleanEmail);
@@ -69,7 +67,6 @@ export const syncLoyaltyPointsOnRegistration = async (email, uid) => {
             };
 
             await setDoc(loyaltyRef, initialData);
-            console.log(`[LoyaltySync] ✅ Documento de loyalty creado con bono de bienvenida`);
 
             return {
                 pointsEarned: 0,
@@ -128,7 +125,6 @@ export const syncLoyaltyPointsOnRegistration = async (email, uid) => {
         // Chequear si el documento ya existe (evitar duplicados en race condition)
         const existingDoc = await getDoc(loyaltyRef);
         if (existingDoc.exists()) {
-            console.log(`[LoyaltySync] Documento ya existe para ${cleanEmail}, omitiendo sincronización`);
             return {
                 success: false,
                 error: 'Documento ya existe',
@@ -152,11 +148,6 @@ export const syncLoyaltyPointsOnRegistration = async (email, uid) => {
 
         await setDoc(loyaltyRef, loyaltyData);
 
-        console.log(`[LoyaltySync] ✅ Sincronización completada:`);
-        console.log(`   - Pedidos procesados: ${ordersProcessed.length}`);
-        console.log(`   - Puntos ganados: ${totalPointsEarned}`);
-        console.log(`   - Bono bienvenida: ${welcomeBonus}`);
-        console.log(`   - Total de puntos: ${totalPoints}`);
 
         return {
             success: true,
@@ -200,7 +191,6 @@ export const awardPointsByEmail = async (email, amount, orderNumber) => {
     const pointsToAdd = Math.floor(amount * POINTS_CONFIG.pointsPerColon);
 
     try {
-        console.log(`[LoyaltySync] Agregando ${pointsToAdd} puntos para ${cleanEmail} (orden: ${orderNumber})`);
 
         const loyaltyRef = doc(db, 'loyalty', cleanEmail);
         let finalPoints = 0;
@@ -213,7 +203,6 @@ export const awardPointsByEmail = async (email, amount, orderNumber) => {
 
             if (loyaltySnap.exists()) {
                 loyaltyData = loyaltySnap.data();
-                console.log(`[LoyaltySync] Documento existente encontrado`);
 
                 // FIX 7: Idempotencia — verificar si ya procesamos esta orden
                 if (loyaltyData.processedOrders?.includes(orderNumber)) {
@@ -221,7 +210,6 @@ export const awardPointsByEmail = async (email, amount, orderNumber) => {
                     throw new Error('_duplicate');
                 }
             } else {
-                console.log(`[LoyaltySync] Creando nuevo documento de loyalty`);
                 loyaltyData = {
                     currentPoints: 0,
                     totalEarned: 0,
@@ -266,7 +254,6 @@ export const awardPointsByEmail = async (email, amount, orderNumber) => {
             finalPoints = currentPoints;
         });
 
-        console.log(`[LoyaltySync] ✅ ${pointsToAdd} puntos agregados para ${cleanEmail}`);
 
         return {
             success: true,
@@ -331,7 +318,6 @@ export const awardPointsForOrder = async (email, orderId, orderData) => {
 
         // Actualizar puntos (evitar duplicados)
         if (loyaltyData.syncedOrders?.includes(orderNum)) {
-            console.log(`[LoyaltySync] Pedido ${orderNum} ya sincronizado, omitiendo`);
             return null;
         }
 
@@ -358,7 +344,6 @@ export const awardPointsForOrder = async (email, orderId, orderData) => {
         };
 
         await setDoc(loyaltyRef, updatedData, { merge: true });
-        console.log(`[LoyaltySync] ✅ Puntos otorgados para pedido ${orderNum}: ${points} pts`);
 
         return { success: true, points };
 

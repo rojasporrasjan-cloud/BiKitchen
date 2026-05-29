@@ -303,7 +303,7 @@ export default function MenuDetailsModalWithTabs({
           exit={{ opacity: 0 }}
           transition={{ duration: 0.25 }}
           onClick={onClose}
-          className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"
+          className="absolute inset-0 bg-black/60"
         />
 
         {/* Side Panel */}
@@ -329,7 +329,7 @@ export default function MenuDetailsModalWithTabs({
             {/* Close button */}
             <button
               onClick={onClose}
-              className="absolute top-4 left-4 w-10 h-10 bg-white/15 hover:bg-white/30 backdrop-blur-md rounded-2xl flex items-center justify-center text-white transition-all hover:scale-110 active:scale-95 border border-white/20"
+              className="absolute top-4 left-4 w-10 h-10 bg-white/25 hover:bg-white/40 rounded-2xl flex items-center justify-center text-white transition-all hover:scale-110 active:scale-95 border border-white/30"
             >
               <ArrowLeft size={20} />
             </button>
@@ -460,24 +460,24 @@ export default function MenuDetailsModalWithTabs({
                     : 'Qué incluye cada almuerzo'}
                 </p>
                 <div className="grid grid-cols-3 gap-2">
-                  <div className="bg-white/15 backdrop-blur-sm rounded-xl p-3 text-center">
+                  <div className="bg-white/20 rounded-xl p-3 text-center">
                     <span className="block text-2xl mb-1">{currentMealType === 'desayuno' ? '☕' : '🍗'}</span>
                     <span className="text-white text-[10px] font-black block">{portionInfo.protein}</span>
                     <span className="text-white/60 text-[9px] font-bold">{currentMealType === 'desayuno' ? 'Bebida' : 'Proteína'}</span>
                   </div>
-                  <div className="bg-white/15 backdrop-blur-sm rounded-xl p-3 text-center">
+                  <div className="bg-white/20 rounded-xl p-3 text-center">
                     <span className="block text-2xl mb-1">🥦</span>
                     <span className="text-white text-[10px] font-black block">{portionInfo.veggies} porciones</span>
                     <span className="text-white/60 text-[9px] font-bold">Vegetales</span>
                   </div>
                   {!isNoCarbsMenu && currentMealType !== 'desayuno' ? (
-                    <div className="bg-white/15 backdrop-blur-sm rounded-xl p-3 text-center">
+                    <div className="bg-white/20 rounded-xl p-3 text-center">
                       <span className="block text-2xl mb-1">🍚</span>
                       <span className="text-white text-[10px] font-black block">{portionInfo.carbos} porciones</span>
                       <span className="text-white/60 text-[9px] font-bold">Carbohidratos</span>
                     </div>
                   ) : (
-                    <div className="bg-white/15 backdrop-blur-sm rounded-xl p-3 text-center">
+                    <div className="bg-white/20 rounded-xl p-3 text-center">
                       <span className="block text-2xl mb-1">{isNoCarbsMenu ? '✅' : '🍳'}</span>
                       <span className="text-white text-[10px] font-black block">{isNoCarbsMenu ? 'Sin carbos' : 'Incluido'}</span>
                       <span className="text-white/60 text-[9px] font-bold">{isNoCarbsMenu ? 'Bajo carb' : 'Extra'}</span>
@@ -627,11 +627,10 @@ export default function MenuDetailsModalWithTabs({
             </div>
 
             {/* Add-to-cart button */}
-            <motion.button
+            <button
               onClick={handleAddToCart}
               disabled={isAdding}
-              whileTap={{ scale: 0.98 }}
-              className={`w-full font-black py-4 rounded-2xl shadow-xl transition-all flex items-center justify-center gap-3 text-sm uppercase tracking-widest ${
+              className={`w-full font-black py-4 rounded-2xl shadow-xl transition-all active:scale-[0.98] flex items-center justify-center gap-3 text-sm uppercase tracking-widest ${
                 isAdding
                   ? 'bg-emerald-500 text-white'
                   : 'bg-slate-900 hover:bg-orange-600 text-white'
@@ -648,7 +647,7 @@ export default function MenuDetailsModalWithTabs({
                   Agregar al carrito
                 </>
               )}
-            </motion.button>
+            </button>
           </div>
 
           <style>{`

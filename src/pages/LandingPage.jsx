@@ -2,9 +2,11 @@ import { useMenus } from '../context/MenusContext';
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
+import { formatPrice } from '../utils/formatters';
 import IngredientScanner from '../components/IngredientScanner';
 import VelocityText from '../components/VelocityText';
-import SEOHead, { SEO_CONFIG, BIKITCHEN_SCHEMA } from '../components/SEOHead';
+import SEOHead, { SEO_CONFIG, getHomeSchemas } from '../components/SEOHead';
+import UrgencyBanner from '../components/UrgencyBanner';
 import { ArrowRight, Star, Leaf, Heart, Calendar, Truck, Utensils, Target, Eye, MessageCircle, Check, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { motion, useInView } from 'framer-motion';
@@ -121,7 +123,6 @@ export default function LandingPage() {
         }
     }, [menus]);
 
-    const formatPrice = (price) => `₡${price.toLocaleString('es-CR')}`;
 
     const [currentPromoIndex, setCurrentPromoIndex] = useState(0);
     const promos = homePromo ? [
@@ -144,7 +145,7 @@ export default function LandingPage() {
 
     return (
         <PageTransition>
-            <SEOHead {...SEO_CONFIG.home} structuredData={BIKITCHEN_SCHEMA} />
+            <SEOHead {...SEO_CONFIG.home} structuredData={getHomeSchemas()} />
             <div className="min-h-screen flex flex-col overflow-x-hidden font-sans text-gray-800 bg-bikitchen-beige">
                 <Navbar forceSolid={!isHeroInView} />
 
@@ -202,10 +203,63 @@ export default function LandingPage() {
                             videoSrc="/videos/hero_optimized.mp4"
                             title="Comida saludable lista para comer, toda la semana."
                             subtitle="🍳 Comida casera • Saludable • Lista para calentar"
-                            primaryCTA={{ text: "Ver Planes", link: "/packs" }}
-                            secondaryCTA={{ text: "Promociones", link: "/promociones" }}
+                            primaryCTA={{ text: "Ver Planes y Precios", link: "/packs" }}
+                            secondaryCTA={{ text: "Ver Promociones 🎁", link: "/promociones" }}
                         />
                     </motion.div>
+
+                    {/* ── Sección "Cómo Comprar" — Video tutorial ── */}
+                    {/* Para activar: reemplaza YOUTUBE_VIDEO_ID con el ID del video (ej: "dQw4w9WgXcQ") */}
+                    {(() => {
+                        const YOUTUBE_VIDEO_ID = ''; // ← pega aquí el ID de YouTube cuando esté listo
+                        return (
+                            <section className="py-14 md:py-20 bg-gray-950">
+                                <div className="container px-4 md:px-8 mx-auto">
+                                    <motion.div
+                                        className="text-center mb-8 md:mb-10"
+                                        initial={{ opacity: 0, y: 20 }}
+                                        whileInView={{ opacity: 1, y: 0 }}
+                                        viewport={{ once: true }}
+                                        transition={{ duration: 0.5 }}
+                                    >
+                                        <span className="text-[11px] font-black text-orange-400 uppercase tracking-widest">Paso a paso</span>
+                                        <h2 className="text-2xl md:text-4xl font-black text-white mt-2">¿Cómo Comprar?</h2>
+                                        <p className="text-gray-400 text-sm md:text-base mt-2 max-w-md mx-auto">Te explicamos todo en menos de 2 minutos</p>
+                                    </motion.div>
+
+                                    <motion.div
+                                        className="max-w-3xl mx-auto rounded-2xl overflow-hidden shadow-2xl shadow-black/50"
+                                        initial={{ opacity: 0, y: 30 }}
+                                        whileInView={{ opacity: 1, y: 0 }}
+                                        viewport={{ once: true }}
+                                        transition={{ duration: 0.6, delay: 0.1 }}
+                                    >
+                                        <div className="relative w-full" style={{ paddingTop: '56.25%' }}>
+                                            {YOUTUBE_VIDEO_ID ? (
+                                                <iframe
+                                                    src={`https://www.youtube.com/embed/${YOUTUBE_VIDEO_ID}?rel=0&modestbranding=1`}
+                                                    title="Cómo Comprar en BiKitchen"
+                                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                                    allowFullScreen
+                                                    className="absolute inset-0 w-full h-full border-0"
+                                                />
+                                            ) : (
+                                                <div className="absolute inset-0 bg-gray-800 flex flex-col items-center justify-center gap-4">
+                                                    <div className="w-16 h-16 md:w-20 md:h-20 bg-orange-500 rounded-full flex items-center justify-center shadow-xl shadow-orange-500/30">
+                                                        <svg width="28" height="28" viewBox="0 0 24 24" fill="white" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+                                                    </div>
+                                                    <div className="text-center">
+                                                        <p className="text-white font-black text-lg">Video próximamente</p>
+                                                        <p className="text-gray-400 text-sm mt-1">Estamos preparando el tutorial</p>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </motion.div>
+                                </div>
+                            </section>
+                        );
+                    })()}
 
                     {/* Sección "Ventajas BiKitchen" */}
                     <section className="py-20 bg-white">
@@ -289,7 +343,7 @@ export default function LandingPage() {
                                     viewport={{ once: true }}
                                 >
                                     <div className="relative">
-                                        <div className="absolute -inset-4 bg-orange-100/50 rounded-[3.5rem] blur-2xl -z-10" />
+                                        <div className="absolute -inset-4 bg-orange-100/50 rounded-[3.5rem] blur-2xl -z-10"  aria-hidden="true"/>
                                         <img
                                             src="https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80"
                                             alt="Cocina"
@@ -303,6 +357,25 @@ export default function LandingPage() {
 
                     {/* Packs Preview Section */}
                     <section id="planes" className="py-24 bg-gray-50 relative overflow-hidden">
+                        {/* Urgencia + prueba social */}
+                        <div className="container px-4 md:px-8 mb-6">
+                            <UrgencyBanner className="rounded-2xl overflow-hidden shadow-md" />
+                            <div className="flex items-center justify-center gap-6 mt-4 flex-wrap">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-lg">⭐</span>
+                                    <span className="text-sm font-bold text-gray-700">+300 familias en Costa Rica</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-lg">🚚</span>
+                                    <span className="text-sm font-bold text-gray-700">Lunes, Miércoles y Sábados</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-lg">🔒</span>
+                                    <span className="text-sm font-bold text-gray-700">Sin suscripción obligatoria</span>
+                                </div>
+                            </div>
+                        </div>
+
                         <div className="container relative z-10 px-4 md:px-8">
                             <motion.div
                                 className="text-center mb-16"
@@ -412,10 +485,10 @@ export default function LandingPage() {
                                             to={plan.link}
                                             className={`block w-full py-4 rounded-xl font-bold text-center transition-all duration-300 ${plan.highlight
                                                 ? 'bg-gradient-to-r from-bikitchen-orange to-bikitchen-gold text-gray-900 hover:shadow-lg hover:shadow-bikitchen-gold/25 hover:scale-[1.02]'
-                                                : 'bg-gray-50 text-gray-900 hover:bg-gray-100'
+                                                : 'bg-gray-50 text-gray-900 hover:bg-gray-100 hover:border-bikitchen-orange/30 border border-gray-100'
                                                 }`}
                                         >
-                                            Ver opciones
+                                            {plan.highlight ? '🛒 Quiero este pack' : 'Ver este pack →'}
                                         </Link>
                                     </motion.div>
                                 ))}
@@ -437,6 +510,14 @@ export default function LandingPage() {
                                         <ArrowRight size={20} />
                                     </Link>
                                 </MagneticButton>
+                                <div className="mt-4">
+                                    <Link
+                                        to="/calculadora"
+                                        className="inline-flex items-center gap-2 text-sm font-semibold text-gray-500 hover:text-bikitchen-orange transition-colors duration-200 underline underline-offset-4 decoration-dashed"
+                                    >
+                                        💰 ¿Vale la pena? Calculá cuánto ahorrás
+                                    </Link>
+                                </div>
                             </motion.div>
                         </div>
                     </section>

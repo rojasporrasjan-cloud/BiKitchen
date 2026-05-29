@@ -1597,3 +1597,30 @@ export const individualesData = [
     imagen: '/assets/individuales/huevos_con_cebolla.png'
   }
 ];
+
+// ─── SEO: slug helpers ───────────────────────────────────────────────────────
+
+/** Convert a product name to a URL-safe slug */
+export const getProductSlug = (nombre) =>
+  nombre
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')   // strip accent marks (á→a, é→e …)
+    .replace(/[^a-z0-9\s]/g, '')       // keep only letters, digits, spaces
+    .trim()
+    .replace(/\s+/g, '-');             // spaces → hyphens
+
+/** Lookup map: slug → product object (excludes admin test products) */
+export const productsBySlug = Object.fromEntries(
+  individualesData
+    .filter(p => !p.id?.includes('test'))
+    .map(p => [getProductSlug(p.nombre), p])
+);
+
+// ─── Upsell suggestions (imported in CartDrawer to avoid loading full array) ─
+
+export const UPSELL_INDIVIDUAL_PRODUCTS = [
+  { id: 'ensalada-coleslaw',     nombre: 'Ensalada coleslaw',     categoria: 'Ensaladas', precio500: 6850 },
+  { id: 'desayuno-gallo-pinto',  nombre: 'Gallo pinto',           categoria: 'Desayunos', precio500: 6000 },
+  { id: 'ensalada-mediterranea', nombre: 'Ensalada mediterránea', categoria: 'Ensaladas', precio500: 7450 },
+];

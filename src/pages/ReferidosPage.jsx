@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
+import SEOHead, { SEO_CONFIG, getBreadcrumbSchema } from '../components/SEOHead';
 import PageTransition from '../components/PageTransition';
 import BackButton from '../components/BackButton';
 import { 
@@ -131,14 +132,18 @@ export default function ReferidosPage() {
 
     return (
         <PageTransition>
+            <SEOHead
+                {...SEO_CONFIG.referidos}
+                structuredData={getBreadcrumbSchema([{ name: 'Programa de Referidos', url: 'https://bikitchencr.com/referidos' }])}
+            />
             <div className="min-h-screen bg-gradient-to-b from-bikitchen-beige to-white">
                 <Navbar />
 
                 {/* Hero Section */}
                 <section className="relative pt-32 pb-16 overflow-hidden">
                     <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-pink-500/5"></div>
-                    <div className="absolute top-20 right-10 w-72 h-72 bg-purple-500/15 rounded-full blur-3xl"></div>
-                    <div className="absolute bottom-0 left-10 w-64 h-64 bg-pink-500/15 rounded-full blur-3xl"></div>
+                    <div className="absolute top-20 right-10 w-72 h-72 bg-purple-500/15 rounded-full blur-3xl" aria-hidden="true"></div>
+                    <div className="absolute bottom-0 left-10 w-64 h-64 bg-pink-500/15 rounded-full blur-3xl" aria-hidden="true"></div>
                     
                     <div className="container relative z-10">
                         <BackButton className="mb-6" />

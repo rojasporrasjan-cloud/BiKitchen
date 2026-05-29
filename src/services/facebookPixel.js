@@ -32,21 +32,18 @@ export const initPixel = (pixelId = '825371743662986') => {
         const initializedPixels = window.fbq.getState().pixels;
         const exists = initializedPixels.some(p => p.id === pixelId);
         if (exists) {
-            console.log('[FB Pixel] Already initialized with ID:', pixelId);
             return;
         }
     }
 
     // Fallback simple check using internal flag if getState is not available (older versions)
     if (window._fbq_initialized) {
-        console.log('[FB Pixel] Already initialized (flag check)');
         return;
     }
 
     window.fbq('init', pixelId);
     window.fbq('track', 'PageView');
     window._fbq_initialized = true;
-    console.log('[FB Pixel] Initialized with ID:', pixelId);
 };
 
 /**
@@ -95,13 +92,11 @@ export const trackEvent = (eventName, params = {}, allowDuplicates = false) => {
 
     // Prevenir duplicados a menos que se permita explícitamente
     if (!allowDuplicates && wasRecentlyFired(eventName, params)) {
-        console.log(`[FB Pixel] Event ${eventName} skipped (duplicate prevention)`);
         return;
     }
 
     try {
         window.fbq('track', eventName, params);
-        console.log(`[FB Pixel] ✓ Event tracked: ${eventName}`, params);
     } catch (error) {
         console.error('[FB Pixel] Error tracking event:', error);
     }
@@ -116,7 +111,6 @@ export const trackCustomEvent = (eventName, params = {}) => {
     if (isFbqLoaded()) {
         try {
             window.fbq('trackCustom', eventName, params);
-            console.log(`[FB Pixel] Custom event tracked: ${eventName}`, params);
         } catch (error) {
             console.error('[FB Pixel] Error tracking custom event:', error);
         }

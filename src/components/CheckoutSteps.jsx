@@ -24,6 +24,7 @@ import { getScheduleFromOrder } from '../utils/orderDates';
 // TILOPAY: Desactivado temporalmente - pendiente aprobación
 // import { processTilopayPayment } from '../utils/tilopayClient';
 import { upsertClient } from '../services/clientService';
+import { formatPrice } from '../utils/formatters';
 
 const STEPS = [
     { id: 1, name: 'Datos', icon: User },
@@ -129,7 +130,7 @@ export default function CheckoutSteps({ isOpen, onClose }) {
     const { whatsappPhone, getWhatsAppUrl } = useWhatsApp();
 
     // Función simple de formateo para el mensaje de texto
-    const formatPriceMsg = (p) => `₡${Number(p).toLocaleString('es-CR')}`;
+    const formatPriceMsg = formatPrice;
 
     const generateOrderSummary = () => {
         // Usar detalles guardados si la orden está completa, de lo contrario usar estado actual del carrito
@@ -558,7 +559,6 @@ export default function CheckoutSteps({ isOpen, onClose }) {
 
     // Manejar cancelación de PayPal
     const handlePayPalCancel = () => {
-        console.log('[PayPal] Pago cancelado por el usuario');
         // No hacer nada especial, el usuario puede intentar de nuevo
     };
 
@@ -641,7 +641,6 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                 createdAt: serverTimestamp()
             };
 
-            console.log(`[OrderCreation] Creando documento para orden ${newOrderNumber} (UID: ${currentUser?.uid || 'GUEST'})`);
 
             // Guardar en Firestore (colección unificada 'pedidos')
             // IMPORTANTE: el write debe completarse en el servidor antes de abrir WhatsApp.
@@ -652,7 +651,6 @@ export default function CheckoutSteps({ isOpen, onClose }) {
             let orderRefId = pendingOrderDocId;
             try {
                 if (orderRefId) {
-                    console.log(`[OrderCreation] Reutilizando documento ${orderRefId} para reintento de pago`);
                     await updateDoc(doc(db, 'pedidos', orderRefId), {
                         ...safeOrder,
                         updatedAt: serverTimestamp()
@@ -662,7 +660,6 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                     orderRefId = orderRef.id;
                     sessionStorage.setItem('bk_pending_order_id', orderRefId);
                     setPendingOrderDocId(orderRefId);
-                    console.log(`[OrderCreation] Nuevo documento creado: ${orderRefId}`);
                 }
             } catch (firestoreError) {
                 console.error('[OrderCreation] Error guardando en Firestore:', firestoreError);
@@ -780,7 +777,6 @@ export default function CheckoutSteps({ isOpen, onClose }) {
 
             // Prevenir ejecución duplicada (idempotencia)
             if (isCompletingRef.current || orderComplete) {
-                console.log(`[Checkout] Orden ${currentOrderNumber} ya fue procesada, omitiendo`);
                 return;
             }
             isCompletingRef.current = true;
@@ -863,7 +859,6 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                     correo: formData.correo,
                     direccion: formData.direccion
                 });
-                console.log('✅ Cliente registrado/actualizado en CRM');
             } catch (crmErr) {
                 console.error('⚠️ Error detallado CRM:', crmErr);
             }
@@ -872,7 +867,6 @@ export default function CheckoutSteps({ isOpen, onClose }) {
             // Esto es CRUCIAL para que en el Admin salga como "confirmado" inmediatamente si es pago digital
             const docIdToUpdate = orderDetails.docId || pendingOrderDocId;
             
-            console.log(`[OrderHistory] Intentando actualizar estado para Documento: ${docIdToUpdate || 'NO ENCONTRADO'}`);
 
             if (docIdToUpdate) {
                 try {
@@ -892,14 +886,12 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                         if (orderDetails.paymentResult?.transactionid) {
                             updates.transactionId = orderDetails.paymentResult.transactionid;
                         }
-                        console.log(`[OrderHistory] Sincronizando estado CONFIRMADO (PAGO EXITOSO) para pedido ${currentOrderNumber}`);
                     } else {
                         // Para otros métodos, lo dejamos en pending_payment pero actualizamos el timestamp
                         updates.status = 'pending_payment';
                     }
 
                     await updateDoc(orderRef, updates);
-                    console.log(`✅ Documento ${docIdToUpdate} actualizado en Firestore`);
                 } catch (dbErr) {
                     console.error('⚠️ Error actualizando estado en Firestore:', dbErr);
                 }
@@ -914,7 +906,6 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                 if (!adminResult?.success) {
                     console.warn(`⚠️ Fallo al enviar email a admin: ${adminResult?.error || 'Unknown error'}`);
                 } else {
-                    console.log(`✅ Email admin enviado exitosamente (${adminResult.sent} destinatario/s)`);
                 }
 
                 // Cliente - Con logging detallado
@@ -922,7 +913,6 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                 if (!customerResult?.success) {
                     console.warn(`⚠️ Fallo al enviar email a cliente: ${customerResult?.error || 'Unknown error'}`);
                 } else {
-                    console.log(`✅ Email cliente enviado exitosamente`);
                 }
             } catch (emailErr) {
                 console.error('⚠️ Error crítico en notificaciones email:', emailErr);
@@ -1954,7 +1944,6 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                                     paymentErrorAt: serverTimestamp(),
                                     updatedAt: serverTimestamp()
                                 });
-                                console.log('[Checkout] 💥 Error de pago guardado en Firestore');
                             } catch (error) {
                                 console.error('[Checkout] Error guardando error de pago:', error);
                             }
@@ -1964,12 +1953,6 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                         // 1. Obtener el ID del pedido — nmiDocId está capturado sincrónicamente al abrir el modal
                         const orderIdToUpdate = nmiDocId || pendingOrderDocId;
 
-                        console.log('[Checkout] 💳 ✅ PAGO CON TARJETA EXITOSO');
-                        console.log('[Checkout]    Orden:', orderNumber);
-                        console.log('[Checkout]    Cliente:', formData.nombre);
-                        console.log('[Checkout]    Email:', formData.correo);
-                        console.log('[Checkout]    ID para actualizar:', orderIdToUpdate);
-                        console.log('[Checkout]    Confirmando automáticamente y otorgando puntos...');
 
                         // 2. Actualizar el pedido en Firestore a 'confirmed' y 'paid'
                         // Esto AUTOMÁTICAMENTE otorgará los puntos en OrdersContext
@@ -1986,7 +1969,6 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                                     nmiDetails: stripUndefined(nmiResult)
                                 });
                                 firestoreOk = true;
-                                console.log('[Checkout] ✅ Orden confirmada automáticamente (puntos otorgados en OrdersContext)');
                             }
                         } catch (error) {
                             console.error('[Checkout] ❌ Error actualizando pedido tras pago NMI:', error);
@@ -1999,7 +1981,6 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                                     updatedAt: serverTimestamp()
                                 });
                                 firestoreOk = true;
-                                console.log('[Checkout] ✅ Orden confirmada vía fallback updateDoc');
                             } catch (fallbackErr) {
                                 console.error('[Checkout] ❌ Fallback también falló:', fallbackErr);
                                 // El pago SÍ se realizó — alertar al equipo

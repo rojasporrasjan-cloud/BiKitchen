@@ -18,14 +18,12 @@ export default function FloatingCartButton({ onClick, isCartOpen = false }) {
     return (
         <motion.button
             onClick={onClick}
-            className="fixed bottom-24 right-6 z-50 w-14 h-14 rounded-full shadow-lg flex items-center justify-center bg-bikitchen-orange text-white md:hidden"
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.95 }}
+            aria-label="Ver carrito de compras"
+            className="fixed bottom-24 right-6 z-50 w-14 h-14 rounded-full shadow-lg flex items-center justify-center bg-bikitchen-orange text-white md:hidden hover:scale-110 active:scale-95 transition-transform duration-150"
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            title="Ver carrito"
         >
-            <ShoppingCart size={24} />
+            <ShoppingCart size={24} aria-hidden="true" />
             <AnimatePresence>
                 {totalItems > 0 && (
                     <motion.span

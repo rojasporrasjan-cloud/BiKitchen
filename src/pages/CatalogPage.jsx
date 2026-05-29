@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import PageTransition from '../components/PageTransition';
+import SEOHead, { SEO_CONFIG, getBreadcrumbSchema } from '../components/SEOHead';
 import { X, ShoppingCart, Check, Eye, Info, Utensils } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCart } from '../context/CartContext';
@@ -59,6 +60,10 @@ export default function CatalogPage() {
 
     return (
         <PageTransition>
+            <SEOHead
+                {...SEO_CONFIG.individuales}
+                structuredData={getBreadcrumbSchema([{ name: 'Platos Individuales', url: 'https://bikitchencr.com/individuales' }])}
+            />
             <div className="min-h-screen bg-gradient-to-b from-bikitchen-beige to-white">
                 <Navbar />
 
@@ -72,9 +77,9 @@ export default function CatalogPage() {
                     }}
                 >
                     {/* Decorative orbs */}
-                    <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-gradient-to-br from-white/20 to-transparent rounded-full blur-3xl"></div>
-                    <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-gradient-to-tr from-yellow-400/30 to-transparent rounded-full blur-3xl"></div>
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-br from-pink-500/10 via-purple-500/10 to-transparent rounded-full blur-3xl"></div>
+                    <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-gradient-to-br from-white/20 to-transparent rounded-full blur-3xl" aria-hidden="true"></div>
+                    <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-gradient-to-tr from-yellow-400/30 to-transparent rounded-full blur-3xl" aria-hidden="true"></div>
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-br from-pink-500/10 via-purple-500/10 to-transparent rounded-full blur-3xl" aria-hidden="true"></div>
                     {/* Pattern overlay */}
                     <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_70%,rgba(255,255,255,0.15)_1px,transparent_1px)] bg-[length:40px_40px] opacity-40"></div>
 
@@ -131,19 +136,17 @@ export default function CatalogPage() {
                     {/* Category Filters */}
                     <div className="flex flex-wrap justify-center gap-3 mb-16">
                         {Object.entries(MENU_CATEGORIES).map(([key, cat]) => (
-                            <motion.button
+                            <button
                                 key={key}
                                 onClick={() => setActiveCategory(key)}
-                                className={`px-6 py-3 rounded-2xl text-sm font-bold transition-all flex items-center gap-2 border-2 ${activeCategory === key
+                                className={`px-6 py-3 rounded-2xl text-sm font-bold transition-all flex items-center gap-2 border-2 hover:scale-[1.02] active:scale-[0.98] ${activeCategory === key
                                     ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-xl shadow-orange-500/30 border-orange-500 scale-105'
                                     : 'bg-white text-gray-700 hover:bg-orange-50 border-gray-200 hover:border-orange-300'
                                     }`}
-                                whileHover={{ scale: activeCategory === key ? 1.05 : 1.02 }}
-                                whileTap={{ scale: 0.98 }}
                             >
                                 <span className="text-lg">{cat.icon}</span>
                                 {cat.name}
-                            </motion.button>
+                            </button>
                         ))}
                     </div>
 
@@ -236,18 +239,13 @@ export default function CatalogPage() {
                         <p className="text-gray-600 text-lg mb-8 max-w-xl mx-auto font-medium">
                             Ordena tu pack semanal y recibe estos deliciosos platos directamente en tu puerta
                         </p>
-                        <motion.div
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
+                        <Link
+                            to="/packs"
+                            className="inline-flex items-center gap-3 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-black py-5 px-10 rounded-2xl transition-all duration-300 shadow-2xl hover:shadow-orange-500/50 text-lg hover:scale-105 active:scale-[0.95]"
                         >
-                            <Link
-                                to="/packs"
-                                className="inline-flex items-center gap-3 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-black py-5 px-10 rounded-2xl transition-all duration-300 shadow-2xl hover:shadow-orange-500/50 text-lg"
-                            >
-                                <ShoppingCart size={24} />
-                                Ver Packs Disponibles
-                            </Link>
-                        </motion.div>
+                            <ShoppingCart size={24} />
+                            Ver Packs Disponibles
+                        </Link>
                     </motion.div>
                 </main>
 

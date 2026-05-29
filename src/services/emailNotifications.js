@@ -94,7 +94,6 @@ async function sendWithRetryAndTimeout(serviceId, templateId, params, publicKey,
                     setTimeout(() => reject(new Error('Timeout esperando EmailJS (5s)')), 5000)
                 )
             ]);
-            console.log(`[EmailJS] ✅ Enviado a ${params.to_email} en intento ${attempt}`);
             return { success: true, result, attempt };
         } catch (error) {
             const isLastAttempt = attempt === maxRetries;
@@ -113,7 +112,6 @@ async function sendWithRetryAndTimeout(serviceId, templateId, params, publicKey,
 
             // Esperar antes de reintentar (backoff exponencial)
             const delayMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
-            console.log(`[EmailJS] Reintentando en ${delayMs}ms...`);
             await new Promise(r => setTimeout(r, delayMs));
         }
     }
@@ -253,7 +251,6 @@ const generateStyledSummary = (orderData) => {
 export const sendOrderNotification = async (orderData) => {
     // Si los emails están deshabilitados, retornar success sin enviar
     if (!EMAILS_ENABLED) {
-        console.log('[EmailJS] Emails deshabilitados - saltando notificación para orden:', orderData.orderNumber);
         return { success: true, sent: 0, failed: 0, total: 0, _skipped: true };
     }
 
@@ -422,7 +419,6 @@ export const sendCustomerOrderConfirmation = async (orderData) => {
 
         if (result.success) {
             trackSentEmail(dedupeKey);
-            console.log(`✅ Email de confirmación enviado al cliente: ${customerEmail}`);
             return { success: true };
         } else {
             console.warn(`⚠️ No se pudo enviar confirmación al cliente: ${result.error}`);
@@ -441,7 +437,6 @@ export const sendCustomerOrderConfirmation = async (orderData) => {
 export const sendTestNotification = async (targetEmail) => {
     // Si los emails están deshabilitados, retornar success sin enviar
     if (!EMAILS_ENABLED) {
-        console.log('[EmailJS] Emails deshabilitados - saltando email de prueba para:', targetEmail);
         return { success: true, _skipped: true };
     }
 
@@ -469,9 +464,7 @@ export const sendTestNotification = async (targetEmail) => {
             to_name: "Test Admin"
         };
 
-        console.log('[Email Test] Enviando a:', targetEmail, 'con Service ID:', EMAILJS_CONFIG.serviceId, 'Template ID:', EMAILJS_CONFIG.templateId);
         const result = await emailjs.send(EMAILJS_CONFIG.serviceId, EMAILJS_CONFIG.templateId, templateParams, EMAILJS_CONFIG.publicKey);
-        console.log('[Email Test] Éxito:', result);
         return { success: true, result };
     } catch (error) {
         console.error('[Email Test] Error completo:', {
@@ -514,7 +507,6 @@ export const sendBulkEmail = async (recipients, subject, message) => {
         }));
 
         const successCount = results.filter(r => r.status === 'fulfilled' && r.value !== null).length;
-        console.log(`✅ Bulk Email: ${successCount}/${recipients.length} enviados`);
         return { success: true, count: successCount };
     } catch (error) {
         console.error('❌ Error en envío masivo:', error);

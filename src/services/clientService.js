@@ -40,20 +40,17 @@ const sanitizeClientData = (data) => {
 export const checkSystemAccount = async (email) => {
     if (!email) return null;
     const cleanEmail = email.toLowerCase().trim();
-    console.log('[CRM] Verificando cuenta para:', cleanEmail);
     try {
         const usersQuery = query(collection(db, 'users'), where('email', '==', cleanEmail), limit(1));
         const userSnap = await getDocs(usersQuery);
         if (!userSnap.empty) {
             const userData = userSnap.docs[0].data();
-            console.log('[CRM] ¡Cuenta encontrada!', userSnap.docs[0].id);
             return {
                 uid: userSnap.docs[0].id,
                 role: userData.role || 'user',
                 name: userData.name || userData.nombre
             };
         } else {
-            console.log('[CRM] No se encontró cuenta en users para:', cleanEmail);
         }
     } catch (error) {
         console.error('[CRM] ERROR crítico al verificar cuenta de sistema:', error);
@@ -87,7 +84,6 @@ export const upsertClient = async (clientData, isNewOrder = true, options = {}) 
             if (!snap.empty) {
                 clientId = snap.docs[0].id;
                 clientRef = doc(db, 'clientes', clientId);
-                console.log(`[CRM] Cliente encontrado por correo: ${clientId}`);
             }
         }
 
@@ -104,7 +100,6 @@ export const upsertClient = async (clientData, isNewOrder = true, options = {}) 
             if (!snap.empty) {
                 clientId = snap.docs[0].id;
                 clientRef = doc(db, 'clientes', clientId);
-                console.log(`[CRM] Cliente encontrado por teléfono (variación): ${clientId}`);
             }
         }
 
@@ -112,7 +107,6 @@ export const upsertClient = async (clientData, isNewOrder = true, options = {}) 
         if (!clientRef) {
             clientId = sanitized.correo || `tel_${sanitized.telefono}`;
             clientRef = doc(db, 'clientes', clientId);
-            console.log(`[CRM] Creando nuevo cliente con ID: ${clientId}`);
         }
 
         const dataToSave = {
@@ -195,7 +189,6 @@ export const sendClientNotification = async (clientId, notification) => {
             const clientSnap = await getDoc(doc(db, 'clientes', clientId));
             if (clientSnap.exists() && clientSnap.data().correo) {
                 targetId = clientSnap.data().correo.toLowerCase();
-                console.log(`[CRM] Redirigiendo notificación de ${clientId} a email ${targetId}`);
             }
         }
 
@@ -214,7 +207,6 @@ export const sendClientNotification = async (clientId, notification) => {
             ultimaActividad: serverTimestamp()
         }, { merge: true });
 
-        console.log(`[CRM] Notificación enviada a ${targetId}`);
         return newNotification;
     } catch (error) {
         console.error('[CRM] Error enviando notificación:', error);
@@ -306,10 +298,8 @@ export const updateClientPoints = async (clientId, pointsDelta, reason) => {
                     updatedAt: new Date().toISOString()
                 });
             }
-            console.log(`[CRM] Sincronizados ${pointsDelta} pts en 'loyalty' para ${cleanEmail}`);
         }
 
-        console.log(`[CRM] Puntos actualizados para ${clientId}: ${pointsDelta}`);
         return true;
     } catch (error) {
         console.error('[CRM] Error actualizando puntos:', error);

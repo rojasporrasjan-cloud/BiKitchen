@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import SEOHead from '../components/SEOHead';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     User, ShoppingBag, Gift, Users, Star,
     ChevronRight, LogOut, LogIn, ArrowLeft,
-    Award, Sparkles, Crown, TrendingUp, Bell, Tag, Copy, Check, Loader2, Ticket, Smartphone, MessageSquare, ExternalLink
+    Award, Sparkles, Crown, TrendingUp, Bell, Tag, Copy, Check, Loader2, Ticket, Smartphone, MessageSquare, ExternalLink,
+    HelpCircle, Leaf, Zap
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useWhatsApp } from '../hooks/useWhatsApp';
@@ -22,7 +24,7 @@ import toast from 'react-hot-toast';
 export default function MiCuentaPage() {
     const navigate = useNavigate();
     const { currentUser, logout } = useAuth() || {};
-    const { points, level, getNextLevel, getProgressToNextLevel } = useLoyaltyPoints();
+    const { points, currentLevel, nextLevel, progressToNextLevel } = useLoyaltyPoints();
     const { orders } = useOrderHistory();
     const { applyCoupon, appliedCoupon } = useCart() || {};
     const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -159,10 +161,10 @@ export default function MiCuentaPage() {
             title: 'Tienda de Recompensas',
             description: 'Canjea tus BiPuntos',
             icon: Star,
-            path: '/fidelidad',
+            path: '/canje',
             color: 'from-yellow-500 to-amber-500',
             bgColor: 'bg-yellow-50',
-            badge: 'Nuevo!',
+            badge: null,
             disabled: false
         }
     ];
@@ -190,24 +192,34 @@ export default function MiCuentaPage() {
         {
             title: 'Preguntas',
             description: 'FAQ y ayuda',
-            icon: Award,
+            icon: HelpCircle,
             path: '/faq',
             color: 'from-purple-50 to-violet-50',
             iconColor: 'from-purple-500 to-violet-500'
+        },
+        {
+            title: 'Mi Impacto',
+            description: 'Tu huella verde',
+            icon: Leaf,
+            path: '/mi-impacto',
+            color: 'from-green-50 to-emerald-50',
+            iconColor: 'from-green-500 to-emerald-600'
         }
     ];
 
-    const nextLevel = getNextLevel ? getNextLevel() : null;
-    const progress = getProgressToNextLevel ? getProgressToNextLevel() : 0;
-
-    // Obtener el nombre de usuario del email
-    const userName = currentUser?.email?.split('@')[0] || 'Usuario';
+    // Obtener el nombre de usuario del email o displayName
+    const userName = currentUser?.displayName || currentUser?.email?.split('@')[0] || 'Usuario';
 
     // Detectar si hay banner promocional
     const showPromoBanner = usePromoBanner();
 
     return (
         <PageTransition>
+            <SEOHead
+                title="Mi Cuenta — BiKitchen"
+                description="Gestioná tus pedidos y preferencias en BiKitchen."
+                noindex={true}
+            />
             <div className="min-h-screen bg-gradient-to-br from-bikitchen-beige via-white to-orange-50">
                 <Navbar />
 
@@ -221,9 +233,9 @@ export default function MiCuentaPage() {
                     }}
                 >
                     {/* Decorative orbs */}
-                    <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-gradient-to-br from-white/20 to-transparent rounded-full blur-3xl"></div>
-                    <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-gradient-to-tr from-yellow-400/30 to-transparent rounded-full blur-3xl"></div>
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-br from-orange-400/10 via-white/10 to-transparent rounded-full blur-3xl"></div>
+                    <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-gradient-to-br from-white/20 to-transparent rounded-full blur-3xl" aria-hidden="true"></div>
+                    <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-gradient-to-tr from-yellow-400/30 to-transparent rounded-full blur-3xl" aria-hidden="true"></div>
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-br from-orange-400/10 via-white/10 to-transparent rounded-full blur-3xl" aria-hidden="true"></div>
                     {/* Pattern overlay */}
                     <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_70%,rgba(255,255,255,0.15)_1px,transparent_1px)] bg-[length:40px_40px] opacity-40"></div>
 
@@ -246,7 +258,7 @@ export default function MiCuentaPage() {
                                 animate={{ opacity: 1, scale: 1 }}
                                 className="relative"
                             >
-                                <div className="w-28 h-28 md:w-32 md:h-32 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center border-4 border-white/40 shadow-2xl">
+                                <div className="w-28 h-28 md:w-32 md:h-32 rounded-full bg-white/25 flex items-center justify-center border-4 border-white/40 shadow-2xl">
                                     <User size={56} className="text-white" />
                                 </div>
                                 {currentUser && (
@@ -279,7 +291,7 @@ export default function MiCuentaPage() {
                                     <div className="flex flex-wrap justify-center md:justify-start gap-4 mt-6">
                                         <div className="bg-white/20 backdrop-blur-md rounded-full px-5 py-2.5 flex items-center gap-2 border border-white/30 shadow-lg">
                                             <Crown size={20} className="text-yellow-300" />
-                                            <span className="text-white text-base font-bold">Nivel {level || 'Bronce'}</span>
+                                            <span className="text-white text-base font-bold">{currentLevel?.icon} Nivel {currentLevel?.name || 'Bronce'}</span>
                                         </div>
                                         <div className="bg-white/20 backdrop-blur-md rounded-full px-5 py-2.5 flex items-center gap-2 border border-white/30 shadow-lg">
                                             <Star size={20} className="text-yellow-300" />
@@ -346,10 +358,10 @@ export default function MiCuentaPage() {
                                     </div>
                                     <div>
                                         <h3 className="font-bold text-lg text-gray-900">
-                                            Nivel {level || 'Bronce'}
+                                            {currentLevel?.icon} Nivel {currentLevel?.name || 'Bronce'}
                                         </h3>
                                         <p className="text-sm text-gray-500">
-                                            {points} puntos acumulados
+                                            {points} puntos · {currentLevel?.multiplier > 1 ? `${currentLevel.multiplier}x por compra` : '2 pts por cada ₡100'}
                                         </p>
                                     </div>
                                 </div>
@@ -367,20 +379,43 @@ export default function MiCuentaPage() {
                                     <div className="flex justify-between text-sm text-gray-600 mb-2">
                                         <span className="flex items-center gap-1">
                                             <TrendingUp size={14} />
-                                            Progreso hacia {nextLevel.name}
+                                            Progreso hacia {nextLevel?.name}
                                         </span>
-                                        <span className="font-semibold">{Math.round(progress)}%</span>
+                                        <span className="font-semibold">{Math.round(progressToNextLevel)}%</span>
                                     </div>
                                     <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
                                         <motion.div
                                             initial={{ width: 0 }}
-                                            animate={{ width: `${progress}%` }}
+                                            animate={{ width: `${progressToNextLevel}%` }}
                                             transition={{ duration: 1, delay: 0.5 }}
                                             className="h-full bg-gradient-to-r from-yellow-400 to-amber-500 rounded-full"
                                         />
                                     </div>
                                 </div>
                             )}
+                        </motion.div>
+                    )}
+
+                    {/* CTA rápida: Hacer Pedido */}
+                    {currentUser && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.15 }}
+                            className="mb-6"
+                        >
+                            <Link
+                                to="/packs"
+                                className="flex items-center justify-between bg-gradient-to-r from-bikitchen-orange to-orange-500 rounded-2xl p-5 shadow-lg shadow-orange-500/20 group hover:shadow-xl hover:shadow-orange-500/30 transition-all"
+                            >
+                                <div>
+                                    <p className="text-white/80 text-sm font-medium">¿Listo para pedir?</p>
+                                    <p className="text-white text-xl font-black mt-0.5">Ver Packs Semanales</p>
+                                </div>
+                                <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                                    <Zap size={24} className="text-white" aria-hidden="true" />
+                                </div>
+                            </Link>
                         </motion.div>
                     )}
 
@@ -533,7 +568,6 @@ export default function MiCuentaPage() {
                                             {userCoupons.filter(c => !c.isGiftCard).map((coupon) => (
                                                 <motion.div
                                                     key={coupon.id}
-                                                    layout
                                                     initial={{ opacity: 0, x: -10 }}
                                                     animate={{ opacity: 1, x: 0 }}
                                                     className="p-3 bg-purple-50 rounded-xl border border-purple-100 flex items-center justify-between group"
@@ -583,7 +617,6 @@ export default function MiCuentaPage() {
                                             {userCoupons.filter(c => c.isGiftCard).map((gc) => (
                                                 <motion.div
                                                     key={gc.id}
-                                                    layout
                                                     initial={{ opacity: 0, y: 10 }}
                                                     animate={{ opacity: 1, y: 0 }}
                                                     className="p-4 bg-gradient-to-br from-white to-pink-50/30 rounded-2xl border border-pink-100 shadow-sm overflow-hidden relative"
@@ -758,7 +791,7 @@ export default function MiCuentaPage() {
                                                 Pronto
                                             </div>
                                         )}
-                                        <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${section.color} flex items-center justify-center mb-3 ${!section.disabled && 'group-hover:scale-110'} transition-transform`}>
+                                        <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${section.iconColor || section.color} flex items-center justify-center mb-3 ${!section.disabled && 'group-hover:scale-110'} transition-transform`}>
                                             <Icon size={24} className="text-white" />
                                         </div>
                                         <span className="font-semibold text-sm text-gray-900">
@@ -799,7 +832,7 @@ export default function MiCuentaPage() {
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
-                            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+                            className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
                             onClick={() => setShowLogoutConfirm(false)}
                         >
                             <motion.div

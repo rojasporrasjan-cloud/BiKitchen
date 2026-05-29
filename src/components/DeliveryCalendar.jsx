@@ -129,13 +129,11 @@ export default function DeliveryCalendar({ orders = [], onSelectOrder }) {
                             const hasOrders = dateOrders.length > 0;
                             
                             return (
-                                <motion.button
+                                <button
                                     key={index}
-                                    whileHover={{ scale: 1.05 }}
-                                    whileTap={{ scale: 0.95 }}
                                     onClick={() => setSelectedDate(date)}
                                     className={`
-                                        relative aspect-square p-1 rounded-xl transition-colors
+                                        relative aspect-square p-1 rounded-xl transition-all hover:scale-105 active:scale-95
                                         ${!isCurrentMonth ? 'text-gray-300' : 'text-gray-700'}
                                         ${isToday(date) ? 'bg-bikitchen-orange/10 text-bikitchen-orange font-bold' : ''}
                                         ${isSelected(date) ? 'bg-bikitchen-orange text-white' : 'hover:bg-gray-100'}
@@ -161,7 +159,7 @@ export default function DeliveryCalendar({ orders = [], onSelectOrder }) {
                                             )}
                                         </div>
                                     )}
-                                </motion.button>
+                                </button>
                             );
                         })}
                     </div>
@@ -229,11 +227,9 @@ function DeliveryCard({ order, onClick }) {
     };
 
     return (
-        <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
+        <button
             onClick={onClick}
-            className="w-full bg-white rounded-xl p-3 shadow-sm border text-left hover:shadow-md transition-shadow"
+            className="w-full bg-white rounded-xl p-3 shadow-sm border text-left hover:shadow-md transition-all hover:scale-[1.02] active:scale-[0.98]"
         >
             <div className="flex items-start justify-between mb-2">
                 <span className="font-medium text-sm">#{order.orderNumber || order.id?.slice(-6)}</span>
@@ -261,7 +257,7 @@ function DeliveryCard({ order, onClick }) {
                 <span className="text-xs text-gray-400">{order.items?.length || 0} items</span>
                 <span className="font-semibold text-bikitchen-orange">₡{order.total?.toLocaleString()}</span>
             </div>
-        </motion.button>
+        </button>
     );
 }
 

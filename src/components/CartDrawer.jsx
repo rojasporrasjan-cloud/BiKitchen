@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { X, Trash2, Plus, Minus, ShoppingCart, ArrowRight, Tag, Loader2, CheckCircle, XCircle, Users, Truck } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import CheckoutSteps from './CheckoutSteps';
+import { UPSELL_INDIVIDUAL_PRODUCTS, CATEGORY_ICONS } from '../data/individualesData';
+import useLoyaltyPoints from '../hooks/useLoyaltyPoints';
 
 export default function CartDrawer() {
     const { 
@@ -28,11 +31,24 @@ export default function CartDrawer() {
         referralLoading
     } = useCart();
     const { currentUser } = useAuth();
+    const { currentLevel } = useLoyaltyPoints();
+    const navigate = useNavigate();
     const [couponCode, setCouponCode] = useState('');
     const [referralCode, setReferralCode] = useState('');
     const [showCouponInput, setShowCouponInput] = useState(false);
     const [showReferralInput, setShowReferralInput] = useState(false);
     const [showStepsCheckout, setShowStepsCheckout] = useState(false);
+
+    // Sugerencias para "Completá tu pedido" — se muestran cuando hay un pack/promo en el carrito
+    const upsellSuggestions = useMemo(() => {
+        if (cart.length === 0) return [];
+        const hasPackItem = cart.some(item => item.plan !== 'individual');
+        if (!hasPackItem) return [];
+        const inCartIds = new Set(
+            cart.filter(i => i.plan === 'individual').map(i => i.id.replace(/-500$|-1000$/, ''))
+        );
+        return UPSELL_INDIVIDUAL_PRODUCTS.filter(p => !inCartIds.has(p.id));
+    }, [cart]);
 
     const handleApplyCoupon = async () => {
         if (!couponCode.trim()) return;
@@ -53,7 +69,7 @@ export default function CartDrawer() {
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         onClick={() => setIsCartOpen(false)}
-                        className="fixed inset-0 bg-black/40 z-[60] backdrop-blur-[2px]"
+                        className="fixed inset-0 bg-black/50 z-[60]"
                     />
 
                     {/* Drawer */}
@@ -91,6 +107,7 @@ export default function CartDrawer() {
                                     <p className="text-xs text-gray-400 mt-1">Agrega items para ver el resumen aquí</p>
                                 </div>
                             ) : (
+                                <>
                                 <div className="space-y-3">
                                     {cart.map((item, index) => (
                                         <motion.div
@@ -155,6 +172,37 @@ export default function CartDrawer() {
                                         </motion.div>
                                     ))}
                                 </div>
+
+                                {/* ── Completá tu pedido — sugerencias de platos individuales ── */}
+                                {upsellSuggestions.length > 0 && (
+                                    <div className="mt-4 pt-4 border-t border-gray-100">
+                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                                            <span aria-hidden="true">✨</span> Completá tu pedido
+                                        </p>
+                                        <div className="space-y-2">
+                                            {upsellSuggestions.map(prod => (
+                                                <button
+                                                    key={prod.id}
+                                                    onClick={() => {
+                                                        navigate(`/individuales?id=${prod.id}`);
+                                                        setIsCartOpen(false);
+                                                    }}
+                                                    className="flex items-center gap-3 w-full bg-orange-50 hover:bg-orange-100 border border-orange-100 hover:border-orange-200 p-3 rounded-xl transition-all text-left active:scale-[0.98] group"
+                                                >
+                                                    <span className="text-xl" aria-hidden="true">{CATEGORY_ICONS[prod.categoria] || '🍽️'}</span>
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-xs font-bold text-slate-800 leading-tight">{prod.nombre}</p>
+                                                        <p className="text-[10px] text-orange-500 font-bold mt-0.5">₡{prod.precio500.toLocaleString('es-CR')}</p>
+                                                    </div>
+                                                    <div className="w-7 h-7 bg-orange-500 rounded-full flex items-center justify-center shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <Plus size={13} className="text-white" />
+                                                    </div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                                </>
                             )}
                         </div>
 
@@ -294,6 +342,37 @@ export default function CartDrawer() {
                                         <span className="text-orange-500">₡{getTotalPrice().toLocaleString('es-CR')}</span>
                                     </div>
                                 </div>
+
+                                {/* ── BiPuntos a ganar con este pedido ── */}
+                                {(() => {
+                                    const total = getTotalPrice();
+                                    const basePoints = Math.floor(total * 0.02);
+                                    if (basePoints <= 0) return null;
+                                    const multiplier = currentLevel?.multiplier || 1;
+                                    const totalPoints = Math.floor(basePoints * multiplier);
+                                    const hasBonus = multiplier > 1;
+                                    return (
+                                        <div className="bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-100 rounded-xl px-4 py-3 flex items-center justify-between">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-9 h-9 bg-gradient-to-br from-amber-400 to-yellow-500 rounded-xl flex items-center justify-center shadow-sm shrink-0">
+                                                    <span className="text-base" aria-hidden="true">⭐</span>
+                                                </div>
+                                                <div>
+                                                    <p className="text-xs font-black text-slate-800">Ganás con este pedido</p>
+                                                    {hasBonus ? (
+                                                        <p className="text-[10px] text-amber-600 font-bold">{currentLevel.icon} Nivel {currentLevel.name} · {currentLevel.multiplier}x puntos</p>
+                                                    ) : (
+                                                        <p className="text-[10px] text-amber-600 font-bold">Programa BiPuntos · 2 pts por ₡100</p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div className="text-right shrink-0">
+                                                <p className="text-xl font-black text-amber-700 leading-none">{totalPoints.toLocaleString('es-CR')}</p>
+                                                <p className="text-[10px] text-amber-600 font-black uppercase tracking-wide mt-0.5">BiPuntos</p>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
 
                                 {/* Botones de checkout */}
                                 <div className="pt-2">

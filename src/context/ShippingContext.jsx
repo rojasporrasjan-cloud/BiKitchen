@@ -49,7 +49,6 @@ export const ShippingProvider = ({ children }) => {
     }, []);
 
     const initializeShippingZones = async () => {
-        console.log('📦 Inicializando zonas de envío en Firestore...');
         setLoading(true);
         try {
             const batch = writeBatch(db);
@@ -61,7 +60,6 @@ export const ShippingProvider = ({ children }) => {
                 });
             });
             await batch.commit();
-            console.log('✅ Zonas de envío inicializadas exitosamente');
             return { success: true };
         } catch (error) {
             console.error('Error initializing shipping zones:', error);

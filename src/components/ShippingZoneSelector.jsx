@@ -262,12 +262,10 @@ function ZoneCard({ zone, isSelected, onSelect, provinceColor }) {
     const colors = provinceColor || PROVINCE_COLORS[zone.province] || PROVINCE_COLORS['Otro'];
 
     return (
-        <motion.button
+        <button
             type="button"
             onClick={() => onSelect(zone.id)}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            className={`w-full p-3 rounded-xl text-left transition-all ${
+            className={`w-full p-3 rounded-xl text-left transition-all hover:scale-[1.02] active:scale-[0.98] ${
                 isSelected
                     ? `bg-gradient-to-br ${colors.gradient} text-white shadow-lg`
                     : `bg-white border-2 ${colors.border} hover:shadow-md`
@@ -311,6 +309,6 @@ function ZoneCard({ zone, isSelected, onSelect, provinceColor }) {
                     )}
                 </div>
             </div>
-        </motion.button>
+        </button>
     );
 }

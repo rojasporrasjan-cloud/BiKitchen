@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import PageTransition from '../components/PageTransition';
-import { INDIVIDUALES_CATEGORIES, CATEGORY_ICONS, getProductUnits, individualesData } from '../data/individualesData';
+import { INDIVIDUALES_CATEGORIES, CATEGORY_ICONS, getProductUnits, individualesData, productsBySlug } from '../data/individualesData';
 import { Search, ShoppingCart, X, Minus, Plus, ChevronDown, Check, Package } from 'lucide-react';
 import IndividualCard from '../components/IndividualCard';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -17,28 +17,63 @@ import { cleanFirebaseUrl } from '../utils/firebaseUrl';
 import { cachedFetch, invalidateCache } from '../utils/firestoreCache';
 import { getIndividualPrices } from '../utils/firestoreMenus';
 
+import { useParams } from 'react-router-dom';
 import { useQuery } from '../hooks/useQuery';
 import { trackViewContent, trackViewCategory, trackViewMenu } from '../services/facebookPixel';
 import SEOHead, { SEO_CONFIG } from '../components/SEOHead';
 import { useWhatsApp } from '../hooks/useWhatsApp';
+import { WHATSAPP_MESSAGES } from '../config/whatsappMessages';
+import { formatPrice } from '../utils/formatters';
+import UrgencyBanner from '../components/UrgencyBanner';
+
+const CATEGORY_HIGHLIGHTS = {
+  Pollo:       [{ icon: '🥩', label: 'Alto en proteínas' }],
+  Res:         [{ icon: '💪', label: 'Proteína completa' }],
+  Cerdo:       [{ icon: '🍖', label: 'Sabor intenso' }],
+  Pescado:     [{ icon: '🐟', label: 'Rico en Omega-3' }],
+  Vegetariano: [{ icon: '🌱', label: 'Sin carne' }],
+  Leguminosas: [{ icon: '🫘', label: 'Alto en fibra' }],
+  Arroces:     [{ icon: '🍚', label: 'Guarnición perfecta' }],
+  Pastas:      [{ icon: '🍝', label: 'Energía sostenida' }],
+  Ensaladas:   [{ icon: '🥗', label: 'Bajo en calorías' }],
+  Desayunos:   [{ icon: '🌅', label: 'Para empezar el día' }],
+  Sopas:       [{ icon: '🫕', label: 'Reconfortante' }],
+  Vegetales:   [{ icon: '🥦', label: 'Rico en nutrientes' }],
+  Picadillos:  [{ icon: '🍲', label: 'Receta tradicional' }],
+  Pasteles:    [{ icon: '🥘', label: 'Cocina casera' }],
+  Compuestos:  [{ icon: '🍽️', label: 'Plato completo' }],
+};
 
 export default function IndividualesView() {
   const query = useQuery();
+  const { slug } = useParams() || {};
   const { addToCart } = useCart();
   const { isAdmin } = useAuth();
   const { whatsappPhone } = useWhatsApp();
 
-  // Soporte para abrir un producto específico directamente (Vía Meta Ads)
+  // Soporte para abrir un producto específico directamente (Meta Ads / SEO slug routes)
   useEffect(() => {
+    // 1. Handle ?id= or ?producto= query params (Meta Ads deep-links)
     const productId = query.get('id') || query.get('producto');
     if (productId) {
       const product = individualesData.find(p => p.id === productId);
       if (product) {
         setCategoriaActiva(product.categoria);
-        // Pequeño delay para asegurar que el sistema está listo
         setTimeout(() => {
           setProductoSeleccionado(product);
-          // Configurar precios por defecto
+          if (product.precio500) setTamano('500');
+          else if (product.precio1kg) setTamano('1000');
+        }, 100);
+        return;
+      }
+    }
+    // 2. Handle /individuales/:slug SEO routes
+    if (slug) {
+      const product = productsBySlug[slug];
+      if (product) {
+        setCategoriaActiva(product.categoria);
+        setTimeout(() => {
+          setProductoSeleccionado(product);
           if (product.precio500) setTamano('500');
           else if (product.precio1kg) setTamano('1000');
         }, 100);
@@ -64,7 +99,7 @@ export default function IndividualesView() {
   const [loadingImages, setLoadingImages] = useState(true);
   const [individualDiscounts, setIndividualDiscounts] = useState({});
   const [isSticky, setIsSticky] = useState(false);
-  const [activeGroup, setActiveGroup] = useState('Todos');
+  const [activeGroup, setActiveGroup] = useState('Proteínas');
 
   // Bloquear scroll del body cuando el modal está abierto
   useEffect(() => {
@@ -76,6 +111,15 @@ export default function IndividualesView() {
     return () => {
       document.body.style.overflow = '';
     };
+  }, [productoSeleccionado]);
+
+  // Actualizar título de página cuando se abre/cierra un producto (SEO dinámico)
+  useEffect(() => {
+    if (productoSeleccionado) {
+      document.title = `${productoSeleccionado.nombre} | Platos Individuales BiKitchen`;
+    } else {
+      document.title = 'Platos Individuales | Comida Saludable a Domicilio | BiKitchen';
+    }
   }, [productoSeleccionado]);
 
   // Manejar header sticky
@@ -346,52 +390,50 @@ export default function IndividualesView() {
         <Navbar />
 
         <main className="flex-1 pt-[76px]">
-          {/* Header de Búsqueda */}
-          {/* Barra de búsqueda removida de aquí y movida al Sidebar para mayor limpieza */}
+          {/* Banner cuenta regresiva — encima de los filtros, igual que packs */}
+          <UrgencyBanner className="shadow-sm" />
 
-          {/* ── Filtros MÓVIL (oculto en desktop) ── */}
-          <div className="lg:hidden bg-white/95 backdrop-blur-md pt-4 pb-3 border-b border-gray-100 z-30 shadow-sm transition-all duration-300">
-            <div className="w-full px-4">
-              <div className="flex gap-2 overflow-x-auto pb-2 hide-scrollbar">
-                {/* Botón "Todos" */}
+          {/* ── Filtros MÓVIL — estilo packs ── */}
+          <div className="lg:hidden bg-white px-4 pt-3 pb-4 border-b border-gray-100 shadow-sm">
+            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2">Filtrar por</p>
+            <div className="flex flex-wrap gap-2">
+              {categoryGroups.filter(g => g.id !== 'Todos').map((group) => (
                 <button
+                  key={group.id}
                   onClick={() => {
-                    setActiveGroup('Todos');
-                    setCategoriaActiva(INDIVIDUALES_CATEGORIES[0]);
+                    setActiveGroup(group.id);
+                    const firstCat = group.categories?.[0];
+                    if (firstCat) setCategoriaActiva(firstCat);
                   }}
-                  className={`flex-shrink-0 px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 border-2 ${activeGroup === 'Todos'
-                    ? 'bg-gray-900 text-white border-gray-900 shadow-md'
-                    : 'bg-white text-gray-500 border-gray-100 hover:border-gray-200'
-                    }`}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-full text-[11px] font-bold transition-all active:scale-95 ${
+                    activeGroup === group.id
+                      ? 'bg-orange-500 text-white shadow-md'
+                      : 'bg-gray-100 text-gray-600'
+                  }`}
                 >
-                  <span className="text-sm">✨</span>
-                  <span>Todos</span>
+                  <span>{group.icon}</span>
+                  <span>{group.label}</span>
                 </button>
+              ))}
+            </div>
 
-                {/* Todas las categorías individuales */}
-                {INDIVIDUALES_CATEGORIES.map((cat) => {
-                  const isActive = categoriaActiva === cat;
-                  return (
-                    <button
-                      key={cat}
-                      onClick={() => {
-                        setCategoriaActiva(cat);
-                        // Detectar a qué grupo pertenece esta categoría
-                        const group = categoryGroups.find(g => g.categories?.includes(cat));
-                        if (group) {
-                          setActiveGroup(group.id);
-                        }
-                      }}
-                      className={`flex-shrink-0 px-3 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 border-2 ${isActive
-                        ? 'bg-gray-900 text-white border-gray-900 shadow-md'
-                        : 'bg-white text-gray-500 border-gray-100 hover:border-gray-200'
-                        }`}
-                    >
-                      <span className="text-sm">{CATEGORY_ICONS[cat] || '📦'}</span>
-                      <span>{cat}</span>
-                    </button>
-                  );
-                })}
+            <div className="mt-2 pt-2 border-t border-gray-100">
+              <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2">Categoría</p>
+              <div className="flex flex-wrap gap-2">
+                {categoriasFiltradasPorGrupo.map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => setCategoriaActiva(cat)}
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-full text-[11px] font-bold transition-all active:scale-95 ${
+                      categoriaActiva === cat
+                        ? 'bg-orange-500 text-white shadow-md'
+                        : 'bg-gray-100 text-gray-600'
+                    }`}
+                  >
+                    <span>{CATEGORY_ICONS[cat] || '📦'}</span>
+                    <span>{cat}</span>
+                  </button>
+                ))}
               </div>
             </div>
           </div>
@@ -506,7 +548,7 @@ export default function IndividualesView() {
               <div className="max-w-7xl mx-auto">
                 {/* Skeleton loader */}
                 {loadingImages && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                  <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6">
                     {[1, 2, 3, 4, 5, 6].map((card) => (
                       <div key={card} className="bg-white rounded-3xl h-80 animate-pulse border border-gray-100" />
                     ))}
@@ -525,17 +567,17 @@ export default function IndividualesView() {
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ duration: 0.3 }}
                         >
-                          <div className="flex items-center justify-between border-b-2 border-gray-100 pb-4">
-                            <h2 className="text-2xl font-black text-gray-900 flex items-center gap-3">
-                              <span className="text-3xl">{CATEGORY_ICONS[categoria] || '📦'}</span>
+                          <div className="flex items-center justify-between border-b-2 border-gray-100 pb-3 sm:pb-4">
+                            <h2 className="text-base sm:text-2xl font-black text-gray-900 flex items-center gap-2 sm:gap-3">
+                              <span className="text-xl sm:text-3xl">{CATEGORY_ICONS[categoria] || '📦'}</span>
                               <span className="text-orange-600 capitalize">{categoria}</span>
                             </h2>
-                            <span className="text-xs text-gray-400 font-black uppercase tracking-widest bg-gray-50 px-3 py-1.5 rounded-xl border border-gray-100">
+                            <span className="text-[10px] sm:text-xs text-gray-400 font-black uppercase tracking-widest bg-gray-50 px-2 sm:px-3 py-1 sm:py-1.5 rounded-xl border border-gray-100">
                               {productos.length} Platos
                             </span>
                           </div>
 
-                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6">
                             {productos.map((producto) => {
                               const disc = getActiveDiscount(producto.id);
                               const precioDesde = disc
@@ -556,6 +598,7 @@ export default function IndividualesView() {
                                   onUploadImage={() => handleUploadImage(producto)}
                                   discountLabel={discountLabel}
                                   precioDesde={precioDesde}
+                                  whatsappPhone={whatsappPhone}
                                 />
                               );
                             })}
@@ -595,7 +638,7 @@ export default function IndividualesView() {
                 exit={{ y: '100%' }}
                 transition={{ type: 'spring', damping: 26, stiffness: 320 }}
                 onClick={(e) => e.stopPropagation()}
-                className="bg-white rounded-t-[2rem] sm:rounded-[2.5rem] max-w-lg w-full h-full sm:h-auto sm:max-h-[88vh] shadow-2xl flex flex-col overflow-hidden"
+                className="bg-white rounded-t-[2rem] sm:rounded-[2.5rem] max-w-lg w-full h-[93vh] sm:h-auto sm:max-h-[88vh] shadow-2xl flex flex-col overflow-hidden"
               >
                 {/* ── HERO — compact on mobile ── */}
                 <div className="relative h-[200px] sm:h-[320px] w-full shrink-0">
@@ -641,6 +684,82 @@ export default function IndividualesView() {
                           "{productoSeleccionado.descripcion}"
                         </p>
                       )}
+
+                    {/* Características del plato */}
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Características</p>
+                      <div className="flex flex-wrap gap-2">
+                        {[
+                          { icon: '🌿', label: 'Sin conservantes' },
+                          { icon: '🔥', label: 'Cocido fresco' },
+                          { icon: '📦', label: 'Listo para servir' },
+                          ...(CATEGORY_HIGHLIGHTS[productoSeleccionado.categoria] || [])
+                        ].map((tag) => (
+                          <span key={tag.label} className="flex items-center gap-1.5 bg-orange-50 border border-orange-100 px-3 py-1.5 rounded-full text-[11px] font-bold text-orange-700">
+                            <span aria-hidden="true">{tag.icon}</span>
+                            {tag.label}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* WhatsApp CTA alternativo */}
+                    {whatsappPhone && (
+                      <a
+                        href={`https://wa.me/${whatsappPhone}?text=${encodeURIComponent(WHATSAPP_MESSAGES.INDIVIDUAL_ORDER(productoSeleccionado.nombre, formatPrice(getPrecioSeleccionado())))}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex items-center gap-3 bg-green-50 border border-green-100 rounded-2xl p-4 hover:bg-green-100 active:bg-green-200 transition-colors group"
+                      >
+                        <div className="w-10 h-10 bg-green-500 rounded-xl flex items-center justify-center shrink-0">
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="white" aria-hidden="true">
+                            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                          </svg>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-black text-green-800">Pedir por WhatsApp</p>
+                          <p className="text-[11px] text-green-600 leading-snug">Confirmamos tu pedido al instante</p>
+                        </div>
+                        <ChevronDown size={16} className="text-green-400 -rotate-90 shrink-0 group-hover:translate-x-0.5 transition-transform" aria-hidden="true" />
+                      </a>
+                    )}
+
+                    {/* ── Productos relacionados en la misma categoría ── */}
+                    {(() => {
+                      const relacionados = individualesData
+                        .filter(p =>
+                          p.categoria === productoSeleccionado.categoria &&
+                          p.id !== productoSeleccionado.id &&
+                          p.precio500 &&
+                          !p.id.includes('test')
+                        )
+                        .slice(0, 3);
+                      if (!relacionados.length) return null;
+                      return (
+                        <div className="space-y-2">
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                            También en {productoSeleccionado.categoria}
+                          </p>
+                          <div className="flex flex-col gap-2">
+                            {relacionados.map(prod => (
+                              <button
+                                key={prod.id}
+                                onClick={() => abrirModal(prod)}
+                                className="flex items-center gap-3 w-full bg-slate-50 hover:bg-orange-50 border border-slate-100 hover:border-orange-200 p-3 rounded-2xl transition-colors text-left active:scale-[0.98] group"
+                              >
+                                <span className="text-2xl" aria-hidden="true">{CATEGORY_ICONS[prod.categoria] || '🍽️'}</span>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-bold text-slate-800 leading-tight truncate">{prod.nombre}</p>
+                                  <p className="text-xs text-orange-500 font-bold mt-0.5">desde ₡{prod.precio500.toLocaleString('es-CR')}</p>
+                                </div>
+                                <ChevronDown size={16} className="text-slate-300 -rotate-90 shrink-0 group-hover:text-orange-400 transition-colors" aria-hidden="true" />
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* Size selector */}
                     <div className="space-y-2">

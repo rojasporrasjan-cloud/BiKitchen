@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { usePromoBanner } from '../hooks/usePromoBanner';
+import { formatPrice } from '../utils/formatters';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import PageTransition from '../components/PageTransition';
@@ -144,11 +145,6 @@ const GUARNICIONES_DATA = {
     ]
 };
 
-const formatPrice = (price) => {
-    if (!price && price !== 0) return '₡0';
-    return `₡${price.toLocaleString('es-CR')}`;
-};
-
 const SimpleProductCard = ({ item, type, onAddToCart, onOpenDetails, canEditImage = false, onUploadImage }) => {
     const handleCardClick = () => {
         if (onOpenDetails) {
@@ -164,19 +160,15 @@ const SimpleProductCard = ({ item, type, onAddToCart, onOpenDetails, canEditImag
     return (
         <motion.div
             variants={fadeUpVariants}
-            className="bg-white rounded-3xl overflow-hidden shadow-lg hover:shadow-2xl transition-all border-2 border-gray-100 hover:border-red-200 flex flex-col h-full cursor-pointer"
+            className="bg-white rounded-3xl overflow-hidden shadow-lg hover:shadow-2xl hover:-translate-y-2 hover:scale-[1.02] transition-all duration-300 border-2 border-gray-100 hover:border-red-200 flex flex-col h-full cursor-pointer group"
             onClick={handleCardClick}
-            whileHover={{ y: -8, scale: 1.02 }}
-            transition={{ duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
         >
             {item.imagen && (
                 <div className="relative h-48 overflow-hidden bg-gradient-to-br from-gray-100 to-gray-50">
-                    <motion.img
+                    <img
                         src={item.imagen}
                         alt={item.nombre}
-                        className="w-full h-full object-cover"
-                        whileHover={{ scale: 1.1 }}
-                        transition={{ duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] }}
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                     />
 
                     {/* Badge de porciones para postres */}
@@ -192,11 +184,9 @@ const SimpleProductCard = ({ item, type, onAddToCart, onOpenDetails, canEditImag
                     )}
 
                     {/* Overlay con gradiente */}
-                    <motion.div
-                        className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent"
-                        initial={{ opacity: 0.6 }}
-                        whileHover={{ opacity: 0.8 }}
-                        transition={{ duration: 0.3 }}
+                    <div
+                        className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent opacity-60 group-hover:opacity-80 transition-opacity duration-300"
+                        aria-hidden="true"
                     />
 
                     {/* Botón de cambiar imagen - solo admin */}
@@ -238,22 +228,18 @@ const MenuCard = ({ menu, onClick, canEditImage = false, onUploadImage }) => {
     return (
         <motion.div
             variants={fadeUpVariants}
-            className={`bg-white rounded-3xl overflow-hidden shadow-xl hover:shadow-2xl transition-all duration-300 group cursor-pointer border-2 hover:border-red-300 ${menu.destacado
+            className={`bg-white rounded-3xl overflow-hidden shadow-xl hover:shadow-2xl hover:-translate-y-2 hover:scale-[1.02] transition-all duration-300 group cursor-pointer border-2 hover:border-red-300 ${menu.destacado
                 ? 'border-red-300 ring-2 ring-red-500 ring-offset-4'
                 : 'border-gray-100'
                 }`}
-            whileHover={{ y: -8, scale: 1.02 }}
-            transition={{ duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
             onClick={() => onClick(menu)}
         >
             {/* Imagen */}
             <div className="relative h-64 overflow-hidden bg-gradient-to-br from-gray-100 to-gray-50">
-                <motion.img
+                <img
                     src={menu.imagen}
                     alt={menu.titulo}
-                    className="w-full h-full object-cover"
-                    whileHover={{ scale: 1.15 }}
-                    transition={{ duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] }}
+                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.15]"
                 />
 
                 {/* Badge */}
@@ -292,11 +278,9 @@ const MenuCard = ({ menu, onClick, canEditImage = false, onUploadImage }) => {
                 )}
 
                 {/* Gradient overlay (no bloquea clicks) */}
-                <motion.div
-                    className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent pointer-events-none"
-                    initial={{ opacity: 0.7 }}
-                    whileHover={{ opacity: 1 }}
-                    transition={{ duration: 0.3 }}
+                <div
+                    className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent pointer-events-none opacity-70 group-hover:opacity-100 transition-opacity duration-300"
+                    aria-hidden="true"
                 />
 
                 {/* Personas */}
@@ -890,9 +874,9 @@ export default function TemporadaPage() {
                     }}
                 >
                     {/* Decorative orbs */}
-                    <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-gradient-to-br from-white/20 to-transparent rounded-full blur-3xl"></div>
-                    <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-gradient-to-tr from-green-400/30 to-transparent rounded-full blur-3xl"></div>
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-br from-yellow-400/10 via-white/10 to-transparent rounded-full blur-3xl"></div>
+                    <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-gradient-to-br from-white/20 to-transparent rounded-full blur-3xl" aria-hidden="true"></div>
+                    <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-gradient-to-tr from-green-400/30 to-transparent rounded-full blur-3xl" aria-hidden="true"></div>
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-br from-yellow-400/10 via-white/10 to-transparent rounded-full blur-3xl" aria-hidden="true"></div>
                     {/* Pattern overlay */}
                     <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_70%,rgba(255,255,255,0.15)_1px,transparent_1px)] bg-[length:40px_40px] opacity-40"></div>
 
@@ -931,19 +915,17 @@ export default function TemporadaPage() {
                                 transition={{ delay: 0.3, duration: 0.5 }}
                             >
                                 {tabs.map(tab => (
-                                    <motion.button
+                                    <button
                                         key={tab.id}
                                         onClick={() => setActiveTab(tab.id)}
-                                        className={`flex items-center gap-2 px-6 py-3 rounded-full text-sm font-bold transition-all duration-300 border-2 ${activeTab === tab.id
+                                        className={`flex items-center gap-2 px-6 py-3 rounded-full text-sm font-bold transition-all duration-200 border-2 ${activeTab === tab.id
                                             ? 'bg-white text-red-600 shadow-xl border-white scale-105'
-                                            : 'text-white hover:bg-white/20 border-white/30 hover:border-white/50'
+                                            : 'text-white hover:bg-white/20 border-white/30 hover:border-white/50 hover:scale-[1.02] active:scale-[0.98]'
                                             }`}
-                                        whileHover={{ scale: activeTab === tab.id ? 1.05 : 1.02 }}
-                                        whileTap={{ scale: 0.98 }}
                                     >
                                         <span className="text-lg">{tab.icon}</span>
                                         {tab.label}
-                                    </motion.button>
+                                    </button>
                                 ))}
                             </motion.div>
                         </motion.div>

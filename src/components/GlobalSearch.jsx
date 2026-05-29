@@ -4,6 +4,7 @@ import { Search, X, ArrowRight, Package, Utensils, Tag } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { PACKS_DATA } from '../data/packsData';
 import { individualesData } from '../data/individualesData';
+import { formatPrice } from '../utils/formatters';
 
 export default function GlobalSearch({ isOpen, onClose }) {
     const [query, setQuery] = useState('');
@@ -176,10 +177,6 @@ export default function GlobalSearch({ isOpen, onClose }) {
         setQuery('');
     };
 
-    const formatPrice = (price) => {
-        if (!price) return '';
-        return `₡${price.toLocaleString('es-CR')}`;
-    };
 
     const getTypeLabel = (type) => {
         switch (type) {
@@ -237,16 +234,18 @@ export default function GlobalSearch({ isOpen, onClose }) {
                                     {query && (
                                         <button
                                             onClick={() => setQuery('')}
+                                            aria-label="Limpiar búsqueda"
                                             className="p-2 hover:bg-gray-100 rounded-full transition-colors"
                                         >
-                                            <X className="w-5 h-5 text-gray-400" />
+                                            <X className="w-5 h-5 text-gray-400" aria-hidden="true" />
                                         </button>
                                     )}
                                     <button
                                         onClick={onClose}
+                                        aria-label="Cerrar búsqueda"
                                         className="p-2 hover:bg-gray-100 rounded-full transition-colors sm:hidden"
                                     >
-                                        <X className="w-6 h-6 text-gray-600" />
+                                        <X className="w-6 h-6 text-gray-600" aria-hidden="true" />
                                     </button>
                                     <kbd className="hidden sm:inline-block px-2 py-1 text-xs bg-gray-100 rounded text-gray-500">
                                         ESC

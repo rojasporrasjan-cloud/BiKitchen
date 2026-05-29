@@ -40,15 +40,13 @@ export default function AnimatedButton({
         <motion.button
             onClick={onClick}
             disabled={isDisabled}
-            whileHover={!isDisabled ? { scale: 1.02 } : {}}
-            whileTap={!isDisabled ? { scale: 0.98 } : {}}
             className={`
                 relative inline-flex items-center justify-center font-semibold rounded-xl
-                transition-colors duration-200 overflow-hidden
+                transition-all duration-150 overflow-hidden
                 ${variants[success ? 'success' : variant]}
                 ${sizes[size]}
                 ${fullWidth ? 'w-full' : ''}
-                ${isDisabled ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}
+                ${isDisabled ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:scale-[1.02] active:scale-[0.98]'}
                 ${className}
             `}
             {...props}
@@ -111,14 +109,13 @@ export function CounterButton({
 
     return (
         <div className={`inline-flex items-center bg-gray-100 rounded-xl overflow-hidden ${sizes[size]}`}>
-            <motion.button
-                whileTap={{ scale: 0.9 }}
+            <button
                 onClick={onDecrement}
                 disabled={count <= min}
-                className="px-3 h-full text-gray-600 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="px-3 h-full text-gray-600 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors active:scale-90"
             >
                 −
-            </motion.button>
+            </button>
             
             <motion.span
                 key={count}
@@ -129,14 +126,13 @@ export function CounterButton({
                 {count}
             </motion.span>
             
-            <motion.button
-                whileTap={{ scale: 0.9 }}
+            <button
                 onClick={onIncrement}
                 disabled={count >= max}
-                className="px-3 h-full text-gray-600 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="px-3 h-full text-gray-600 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors active:scale-90"
             >
                 +
-            </motion.button>
+            </button>
         </div>
     );
 }
@@ -146,10 +142,9 @@ export function CounterButton({
  */
 export function LikeButton({ liked = false, onToggle, size = 24 }) {
     return (
-        <motion.button
+        <button
             onClick={onToggle}
-            whileTap={{ scale: 0.8 }}
-            className="relative p-2 rounded-full hover:bg-gray-100 transition-colors"
+            className="relative p-2 rounded-full hover:bg-gray-100 transition-colors active:scale-[0.8]"
         >
             <motion.svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -190,7 +185,7 @@ export function LikeButton({ liked = false, onToggle, size = 24 }) {
                     ))}
                 </motion.div>
             )}
-        </motion.button>
+        </button>
     );
 }
 

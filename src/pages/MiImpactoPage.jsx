@@ -12,6 +12,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase/config';
 import { collection, query, where, getDocs } from 'firebase/firestore';
+import SEOHead from '../components/SEOHead';
 
 // Datos de impacto por comida
 const IMPACT_PER_MEAL = {
@@ -168,14 +169,19 @@ export default function MiImpactoPage() {
 
     return (
         <PageTransition>
+            <SEOHead
+                title="Mi Impacto — BiKitchen"
+                description="Descubrí el impacto positivo de tus pedidos BiKitchen en tu salud, tiempo y el planeta."
+                noindex={true}
+            />
             <div className="min-h-screen bg-gradient-to-b from-bikitchen-beige to-white">
                 <Navbar />
 
                 {/* Hero */}
                 <section className="relative pt-32 pb-12 overflow-hidden">
                     <div className="absolute inset-0 bg-gradient-to-br from-bikitchen-orange/5 to-emerald-500/5"></div>
-                    <div className="absolute top-20 right-10 w-72 h-72 bg-gradient-to-br from-bikitchen-orange/20 to-emerald-500/10 rounded-full blur-3xl"></div>
-                    <div className="absolute bottom-0 left-10 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl"></div>
+                    <div className="absolute top-20 right-10 w-72 h-72 bg-gradient-to-br from-bikitchen-orange/20 to-emerald-500/10 rounded-full blur-3xl" aria-hidden="true"></div>
+                    <div className="absolute bottom-0 left-10 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl" aria-hidden="true"></div>
                     
                     <div className="container relative z-10">
                         <BackButton className="mb-6" />

@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
+import ReactDOM from 'react-dom';
 import { usePromoBanner } from '../hooks/usePromoBanner';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import PageTransition from '../components/PageTransition';
-import { Gift, Calendar, Truck, Check, Clock, Users, Heart, Sparkles, ChevronRight, RefreshCw, ShoppingCart, X, Filter, Camera, Utensils, Star, MessageCircle } from 'lucide-react';
+import { Gift, Calendar, Truck, Check, Clock, Users, Heart, Sparkles, ChevronRight, RefreshCw, ShoppingCart, X, Filter, Camera, Utensils, Star, MessageCircle, ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getActivePromotions } from '../utils/firestorePromotions';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
-import { Dialog, DialogContent } from '../components/ui/dialog';
 import { db, storage } from '../firebase/config';
 import { collection, getDocs, doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
@@ -18,18 +18,10 @@ import { trackViewContent } from '../services/facebookPixel';
 import MenuDetailsModal from '../components/menus/MenuDetailsModal';
 import PromoMenuModal from '../components/menus/PromoMenuModal';
 import { PACK_TO_MENU_KEY } from '../data/packsData';
-import SEOHead, { SEO_CONFIG } from '../components/SEOHead';
+import SEOHead, { SEO_CONFIG, getBreadcrumbSchema } from '../components/SEOHead';
 import useIsMobile from '../hooks/useIsMobile';
-
-// Formateador de moneda local
-const formatPrice = (price) => {
-    return new Intl.NumberFormat('es-CR', {
-        style: 'currency',
-        currency: 'CRC',
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 0
-    }).format(price).replace('CRC', '₡');
-};
+import { formatPrice } from '../utils/formatters';
+import UrgencyBanner from '../components/UrgencyBanner';
 
 // Utilidad para optimización de imágenes (WebP)
 const optimizeToWebp = (file, maxSize = 1200) => new Promise((resolve, reject) => {
@@ -97,20 +89,17 @@ const PromoCard = ({ promo, onClick, onAddToCart, customImage, onUploadImage, is
             initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            whileHover={{ y: -16 }}
             transition={{
                 duration: 0.5,
                 ease: [0.25, 0.46, 0.45, 0.94]
             }}
-            className="relative group cursor-pointer"
+            className="relative group cursor-pointer hover:-translate-y-4 transition-transform duration-300"
             onClick={() => onClick(promo)}
         >
             {/* Animated glow effect */}
-            <motion.div
-                className="absolute -inset-6 bg-gradient-to-br from-orange-400/30 via-amber-400/30 to-orange-500/30 rounded-3xl blur-3xl"
-                initial={{ opacity: 0 }}
-                whileHover={{ opacity: 1 }}
-                transition={{ duration: 0.5 }}
+            <div
+                className="absolute -inset-6 bg-gradient-to-br from-orange-400/30 via-amber-400/30 to-orange-500/30 rounded-3xl blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+                aria-hidden="true"
             />
 
             {/* Card container */}
@@ -119,50 +108,41 @@ const PromoCard = ({ promo, onClick, onAddToCart, customImage, onUploadImage, is
                 <div className="absolute inset-0 rounded-[2.5rem] p-[1.5px] bg-gradient-to-br from-orange-500/10 to-transparent pointer-events-none" />
 
                 {/* Hover animated border luxury */}
-                <motion.div
-                    className="absolute inset-0 rounded-[2.5rem] p-[2px] bg-gradient-to-br from-orange-400 via-amber-200 to-orange-600"
-                    initial={{ opacity: 0 }}
-                    whileHover={{ opacity: 1 }}
-                    transition={{ duration: 0.6 }}
+                <div
+                    className="absolute inset-0 rounded-[2.5rem] p-[2px] bg-gradient-to-br from-orange-400 via-amber-200 to-orange-600 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
+                    aria-hidden="true"
                 >
-                    <div className="absolute inset-[2px] rounded-[2.5rem] bg-white/40 backdrop-blur-xl" />
-                </motion.div>
+                    <div className="absolute inset-[2px] rounded-[2.5rem] bg-white/40" />
+                </div>
 
                 {/* Content */}
                 <div className="relative z-10 flex flex-col h-full">
                     {/* Imagen */}
                     <div className="relative h-56 overflow-hidden">
-                        <motion.img
+                        <img
                             src={displayImage}
                             alt={promo.titulo}
-                            className="w-full h-full object-cover"
-                            whileHover={{ scale: 1.1 }}
-                            transition={{ duration: 0.7, ease: [0.25, 0.46, 0.45, 0.94] }}
+                            className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-110"
                             onError={(e) => {
                                 e.target.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80';
                             }}
                         />
 
                         {/* Shine effect */}
-                        <motion.div
-                            className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent"
-                            initial={{ x: '-100%' }}
-                            whileHover={{ x: '100%' }}
-                            transition={{ duration: 1, ease: "easeInOut" }}
+                        <div
+                            className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out pointer-events-none"
+                            aria-hidden="true"
                         />
 
                         {/* Botón de cámara para admin */}
                         {isAdmin && (
-                            <motion.button
+                            <button
                                 onClick={handleCameraClick}
-                                className="absolute top-4 right-4 z-20 bg-white/95 backdrop-blur-sm p-2.5 rounded-xl shadow-xl border border-gray-200"
-                                whileHover={{ scale: 1.1, backgroundColor: "rgba(255, 255, 255, 1)" }}
-                                whileTap={{ scale: 0.9 }}
-                                transition={{ duration: 0.2 }}
+                                className="absolute top-4 right-4 z-20 bg-white/95 p-2.5 rounded-xl shadow-xl border border-gray-200 hover:scale-110 hover:bg-white active:scale-90 transition-all duration-200"
                                 title="Cambiar imagen"
                             >
                                 <Camera size={18} className="text-gray-700" />
-                            </motion.button>
+                            </button>
                         )}
 
                         {/* Sello de promoción activa */}
@@ -172,7 +152,7 @@ const PromoCard = ({ promo, onClick, onAddToCart, customImage, onUploadImage, is
                                 initial={{ scale: 0, rotate: -180 }}
                                 animate={{ scale: 1, rotate: 0 }}
                                 transition={{ delay: 0.2, duration: 0.5, type: "spring" }}
-                                whileHover={{ scale: 1.05 }}
+
                             >
                                 <Gift size={16} />
                                 {isChristmas ? 'Menú Navideño' : 'Activa'}
@@ -186,7 +166,7 @@ const PromoCard = ({ promo, onClick, onAddToCart, customImage, onUploadImage, is
                                 initial={{ scale: 0, rotate: 180 }}
                                 animate={{ scale: 1, rotate: 0 }}
                                 transition={{ delay: 0.3, duration: 0.5, type: "spring" }}
-                                whileHover={{ scale: 1.05, backgroundColor: "rgb(249, 115, 22)" }}
+
                             >
                                 <motion.div
                                     animate={{ rotate: 360 }}
@@ -199,11 +179,9 @@ const PromoCard = ({ promo, onClick, onAddToCart, customImage, onUploadImage, is
                         )}
 
                         {/* Overlay gradient */}
-                        <motion.div
-                            className="absolute inset-0 bg-gradient-to-t from-white/40 via-transparent to-transparent pointer-events-none"
-                            initial={{ opacity: 0 }}
-                            whileHover={{ opacity: 1 }}
-                            transition={{ duration: 0.4 }}
+                        <div
+                            className="absolute inset-0 bg-gradient-to-t from-white/40 via-transparent to-transparent pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-400"
+                            aria-hidden="true"
                         />
                     </div>
 
@@ -296,9 +274,19 @@ function PromoDetail({ promo, onClose, addToCart, onPackClick }) {
     // Detectar si es promoción con desayunos gratis
     const esDesayunosGratis = promo.titulo && promo.titulo.includes('Desayunos Gratis');
 
+    // Scroll lock + ESC
+    useEffect(() => {
+        document.body.style.overflow = 'hidden';
+        const onEsc = (e) => { if (e.key === 'Escape') onClose(); };
+        window.addEventListener('keydown', onEsc);
+        return () => {
+            document.body.style.overflow = '';
+            window.removeEventListener('keydown', onEsc);
+        };
+    }, [onClose]);
+
     if (!promo) return null;
 
-    // Mensaje personalizado de WhatsApp con el título de la promoción
     const mensajeWhatsApp = `Quiero más información sobre ${promo.titulo}`;
     const whatsappUrl = getWhatsAppUrl(mensajeWhatsApp);
 
@@ -342,77 +330,81 @@ function PromoDetail({ promo, onClose, addToCart, onPackClick }) {
         setQuantity(Math.max(1, Math.min(10, quantity + val)));
     };
 
-    return (
-        <Dialog open={true} onOpenChange={(open) => { if (!open) onClose(); }}>
-            <DialogContent className="max-w-3xl lg:max-w-4xl p-0 max-h-[90vh] !bg-white !border-slate-100 !text-slate-900 overflow-hidden shadow-2xl">
+    return ReactDOM.createPortal(
+        <AnimatePresence>
+            <div className="fixed inset-0 z-[9998] flex justify-end">
+
+                {/* Backdrop */}
                 <motion.div
-                    className="flex flex-col max-h-[90vh] overflow-y-auto bg-white custom-scrollbar"
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.25 }}
+                    onClick={onClose}
+                    className="absolute inset-0 bg-black/65"
+                />
+
+                {/* Side Panel */}
+                <motion.div
+                    initial={{ x: '100%' }}
+                    animate={{ x: 0 }}
+                    exit={{ x: '100%' }}
+                    transition={{ type: 'spring', damping: 30, stiffness: 280 }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="relative w-full md:w-[52%] lg:w-[46%] xl:w-[40%] h-full bg-white shadow-2xl flex flex-col overflow-hidden"
                 >
-                    <div className="flex flex-col">
-                        {/* Header con imagen */}
-                        <motion.div
-                            className="relative h-64 md:h-72 overflow-hidden flex-shrink-0 bg-slate-50"
-                            initial={{ y: -20, opacity: 0 }}
-                            animate={{ y: 0, opacity: 1 }}
-                            transition={{ delay: 0.1, duration: 0.4 }}
+                    {/* Hero image */}
+                    <div className="relative h-[180px] sm:h-[240px] shrink-0 overflow-hidden bg-slate-100">
+                        <img
+                            src={promo.imagen}
+                            alt={promo.titulo}
+                            className="w-full h-full object-cover"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-black/10" />
+
+                        {/* Close button */}
+                        <button
+                            onClick={onClose}
+                            className="absolute top-4 left-4 w-10 h-10 bg-white/25 hover:bg-white/40 rounded-2xl flex items-center justify-center text-white transition-all hover:scale-110 active:scale-95 border border-white/30"
                         >
-                            <motion.img
-                                src={promo.imagen}
-                                alt={promo.titulo}
-                                className="w-full h-full object-cover"
-                                initial={{ scale: 1.1 }}
-                                animate={{ scale: 1 }}
-                                transition={{ duration: 0.6 }}
-                            />
+                            <ArrowLeft size={20} />
+                        </button>
+
+                        {/* Active badge */}
+                        <div className="absolute top-4 right-4">
+                            <span className="bg-orange-600 text-white px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 shadow-xl">
+                                <Gift size={12} />Oferta Activa
+                            </span>
+                        </div>
 
 
-                            {/* Botón cerrar */}
-                            <motion.button
-                                onClick={onClose}
-                                className="absolute top-4 right-4 z-50 w-12 h-12 bg-white/80 backdrop-blur-md hover:bg-white rounded-full flex items-center justify-center text-slate-900 transition-all shadow-xl border border-slate-100"
-                                whileHover={{ scale: 1.1 }}
-                                whileTap={{ scale: 0.9 }}
-                            >
-                                <X size={22} />
-                            </motion.button>
-                        </motion.div>
+                        {/* Title overlay */}
+                        <div className="absolute bottom-4 left-4 right-4">
+                            {promo.fechaFin && (
+                                <p className="text-white/70 text-[10px] font-black uppercase tracking-widest mb-1">
+                                    Válido hasta {new Date(promo.fechaFin).toLocaleDateString('es-CR', { day: 'numeric', month: 'long' })}
+                                </p>
+                            )}
+                            <h2 className="text-2xl sm:text-3xl font-black text-white leading-tight drop-shadow-lg">
+                                {(promo.titulo || '').toString().replace(/^o\s+/i, '').trim()}
+                            </h2>
+                        </div>
+                    </div>
 
+                    {/* Scrollable content */}
+                    <div className="flex-1 overflow-y-auto side-panel-scrollbar">
+                        <div className="p-5 sm:p-6 space-y-6">
 
-                        {/* Contenido */}
-                        <motion.div
-                            className="p-6 md:p-10 bg-white flex-1"
-                            initial={{ y: 20, opacity: 0 }}
-                            animate={{ y: 0, opacity: 1 }}
-                            transition={{ delay: 0.3, duration: 0.4 }}
-                        >
-                            <div className="mb-6">
-                                <div className="flex flex-wrap items-center gap-2 mb-4">
-                                    <motion.span
-                                        className="bg-orange-600 text-white px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 shadow-xl shadow-orange-500/20"
-                                        whileHover={{ scale: 1.05 }}
-                                    >
-                                        <Gift size={14} />Oferta Activa
-                                    </motion.span>
-                                    {promo.fechaFin && (
-                                        <span className="bg-slate-50 text-slate-900 px-4 py-1.5 rounded-full text-[11px] font-bold border border-slate-100">
-                                            Hasta {new Date(promo.fechaFin).toLocaleDateString('es-CR', { day: 'numeric', month: 'long' })}
-                                        </span>
-                                    )}
+                            {/* Precio especial */}
+                            {promo.precio && promo.precio > 0 && (
+                                <div className="inline-flex items-center gap-3 bg-slate-50 border border-slate-100 text-slate-900 px-4 py-2.5 rounded-2xl">
+                                    <span className="text-[9px] font-black text-orange-500 uppercase tracking-widest">Precio Especial</span>
+                                    <span className="text-xl font-black tracking-tighter">{formatPrice(promo.precio)}</span>
                                 </div>
-                                <h2 className="text-xl md:text-3xl font-black text-slate-900 tracking-tighter leading-tight mb-4">
-                                    {(promo.titulo || '').toString().replace(/^o\s+/i, '').trim()}
-                                </h2>
-                                {promo.precio && promo.precio > 0 && (
-                                    <div className="inline-flex items-center gap-3 bg-slate-50 border border-slate-100 text-slate-900 px-4 py-2 rounded-xl">
-                                        <span className="text-[9px] font-black text-orange-500 uppercase tracking-widest">Precio Especial</span>
-                                        <span className="text-xl font-black tracking-tighter">{formatPrice(promo.precio)}</span>
-                                    </div>
-                                )}
-                            </div>
-                            <p className="text-slate-500 text-base leading-relaxed mb-8 font-medium border-l-2 border-orange-500 pl-4 py-1">
+                            )}
+
+                            {/* Descripción */}
+                            <p className="text-slate-500 text-sm leading-relaxed font-medium border-l-2 border-orange-500 pl-4 py-1">
                                 {(promo.descripcion || '').toString().replace(/^o\s+/i, '').trim()}
                             </p>
 
@@ -479,8 +471,7 @@ function PromoDetail({ promo, onClose, addToCart, onPackClick }) {
                                         ].filter(item => item.active).map((item, idx) => (
                                             <motion.div
                                                 key={idx}
-                                                className="relative group h-full"
-                                                whileHover={{ y: -4 }}
+                                                className="relative group h-full hover:-translate-y-1 transition-transform duration-200"
                                             >
                                                 <div className="relative bg-slate-50 border border-slate-100 rounded-2xl p-4 flex flex-col items-center justify-center h-full transition-all duration-300 group-hover:border-orange-200 group-hover:bg-white shadow-sm">
                                                     <div className="text-2xl mb-3 flex items-center justify-center w-12 h-12 rounded-full bg-white border border-slate-100 shadow-sm">
@@ -577,9 +568,7 @@ function PromoDetail({ promo, onClose, addToCart, onPackClick }) {
                                                                     onPackClick(pack, promoPrice, promo.imagen || '', promo);
                                                                 }
                                                             }}
-                                                            className="px-5 py-2.5 rounded-full bg-white border border-slate-200 text-slate-700 text-xs font-bold hover:bg-orange-500 hover:text-white hover:border-orange-400 hover:shadow-lg transition-all duration-300"
-                                                            whileHover={{ scale: 1.05, y: -2 }}
-                                                            whileTap={{ scale: 0.95 }}
+                                                            className="px-5 py-2.5 rounded-full bg-white border border-slate-200 text-slate-700 text-xs font-bold hover:bg-orange-500 hover:text-white hover:border-orange-400 hover:shadow-lg hover:scale-105 hover:-translate-y-0.5 active:scale-95 transition-all duration-200"
                                                         >
                                                             {pack}
                                                         </motion.button>
@@ -607,12 +596,10 @@ function PromoDetail({ promo, onClose, addToCart, onPackClick }) {
                                                     <motion.button
                                                         key={idx}
                                                         onClick={() => setSelectedPack(pack)}
-                                                        className={`relative group rounded-[2rem] p-6 text-center transition-all duration-500 border overflow-hidden ${selectedPack?.nombre === pack.nombre
+                                                        className={`relative group rounded-[2rem] p-6 text-center transition-all duration-300 border overflow-hidden hover:-translate-y-1.5 active:scale-[0.98] ${selectedPack?.nombre === pack.nombre
                                                             ? 'border-orange-500 bg-orange-50 shadow-md'
                                                             : 'border-slate-100 bg-slate-50 hover:border-slate-200'
                                                             }`}
-                                                        whileHover={{ y: -6 }}
-                                                        whileTap={{ scale: 0.98 }}
                                                     >
                                                         <span className={`text-[10px] uppercase tracking-[0.25em] font-black mb-3 transition-colors ${selectedPack?.nombre === pack.nombre ? 'text-orange-600' : 'text-slate-500'}`}>
                                                             {pack.nombre}
@@ -657,25 +644,21 @@ function PromoDetail({ promo, onClose, addToCart, onPackClick }) {
 
                                                 {/* Col 2: Stepper */}
                                                 <div className="flex items-center justify-center gap-6">
-                                                    <motion.button
+                                                    <button
                                                         onClick={() => updateQuantity(-1)}
-                                                        className="w-12 h-12 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-400 font-black text-2xl hover:bg-orange-500 hover:text-white hover:border-orange-400 transition-all duration-300 shadow-sm"
-                                                        whileHover={{ scale: 1.05 }}
-                                                        whileTap={{ scale: 0.9 }}
+                                                        className="w-12 h-12 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-400 font-black text-2xl hover:bg-orange-500 hover:text-white hover:border-orange-400 hover:scale-105 active:scale-90 transition-all duration-200 shadow-sm"
                                                     >
                                                         -
-                                                    </motion.button>
+                                                    </button>
                                                     <div className="relative min-w-[3rem] text-center">
                                                         <span className="font-black text-3xl md:text-4xl text-slate-900">{quantity}</span>
                                                     </div>
-                                                    <motion.button
+                                                    <button
                                                         onClick={() => updateQuantity(1)}
-                                                        className="w-12 h-12 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-400 font-black text-2xl hover:bg-orange-500 hover:text-white hover:border-orange-400 transition-all duration-300 shadow-sm"
-                                                        whileHover={{ scale: 1.05 }}
-                                                        whileTap={{ scale: 0.9 }}
+                                                        className="w-12 h-12 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-400 font-black text-2xl hover:bg-orange-500 hover:text-white hover:border-orange-400 hover:scale-105 active:scale-90 transition-all duration-200 shadow-sm"
                                                     >
                                                         +
-                                                    </motion.button>
+                                                    </button>
                                                 </div>
 
                                                 {/* Col 3: Price */}
@@ -706,11 +689,10 @@ function PromoDetail({ promo, onClose, addToCart, onPackClick }) {
                                                 {selectedPack.menu.map((item, idx) => (
                                                     <motion.div
                                                         key={`menu-item-${idx}`}
-                                                        className="flex items-center gap-4 bg-slate-50 p-5 rounded-[1.5rem] border border-slate-100 shadow-sm hover:bg-white transition-colors"
+                                                        className="flex items-center gap-4 bg-slate-50 p-5 rounded-[1.5rem] border border-slate-100 shadow-sm hover:bg-white hover:translate-x-1.5 transition-all duration-200"
                                                         initial={{ x: -10, opacity: 0 }}
                                                         animate={{ x: 0, opacity: 1 }}
                                                         transition={{ delay: idx * 0.05 }}
-                                                        whileHover={{ x: 5 }}
                                                     >
                                                         <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center flex-shrink-0 border border-orange-200">
                                                             <Check size={16} className="text-orange-500" />
@@ -739,11 +721,10 @@ function PromoDetail({ promo, onClose, addToCart, onPackClick }) {
                                                 {promo.beneficios.map((beneficio, idx) => (
                                                     <motion.div
                                                         key={`benefit-${idx}`}
-                                                        className="flex gap-4 bg-emerald-50 p-4 rounded-2xl border border-emerald-100 shadow-sm"
+                                                        className="flex gap-4 bg-emerald-50 p-4 rounded-2xl border border-emerald-100 shadow-sm hover:scale-[1.02] transition-transform duration-200"
                                                         initial={{ x: -10, opacity: 0 }}
                                                         animate={{ x: 0, opacity: 1 }}
                                                         transition={{ delay: 0.5 + (idx * 0.05) }}
-                                                        whileHover={{ scale: 1.02 }}
                                                     >
                                                         <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center flex-shrink-0 text-emerald-600">
                                                             <Star size={20} className="fill-current" />
@@ -758,56 +739,58 @@ function PromoDetail({ promo, onClose, addToCart, onPackClick }) {
                                 </>
                             )}
 
-                            {/* Botones de acción - FIXED PREMIUM FOOTER */}
-                            <div className="sticky bottom-0 left-0 right-0 pt-8 pb-4 bg-white/90 backdrop-blur-xl border-t border-slate-100 mt-auto z-30">
-                                <div className="flex flex-col md:flex-row gap-4 px-6 md:px-8 max-w-lg mx-auto md:max-w-none">
-                                    <a
-                                        href={whatsappUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-900 font-bold py-4 px-6 rounded-2xl transition-all duration-300 flex items-center justify-center gap-2 border border-slate-200 group"
-                                    >
-                                        <MessageCircle size={20} className="text-orange-500 group-hover:scale-110 transition-transform" />
-                                        <span className="text-sm">Consultar</span>
-                                    </a>
-                                    <button
-                                        onClick={onClose}
-                                        className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-900 font-bold py-4 px-6 rounded-2xl transition-all duration-300 border border-slate-200"
-                                    >
-                                        Cerrar
-                                    </button>
-                                    <button
-                                        onClick={handleAddToCart}
-                                        disabled={addedToCart}
-                                        className={`flex-[1.5] py-4 px-8 rounded-2xl font-black shadow-xl transition-all duration-300 flex items-center justify-center gap-3 active:scale-95 ${addedToCart
-                                            ? 'bg-green-500 text-white'
-                                            : 'bg-slate-900 hover:bg-slate-800 text-white shadow-slate-900/10'
-                                            }`}
-                                    >
-                                        {addedToCart ? (
-                                            <>
-                                                <Check size={20} />
-                                                <span>Añadido</span>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <ShoppingCart size={20} />
-                                                <span>{promo.detalles?.packs ? 'Confirmar Pack' : 'Añadir a Pedido'}</span>
-                                            </>
-                                        )}
-                                    </button>
-                                </div>
-                            </div>
-                        </motion.div>
+                            {/* Spacer */}
+                            <div className="h-4" />
+                        </div>
+                    </div>
+
+                    {/* Sticky footer */}
+                    <div
+                        className="shrink-0 bg-white border-t border-slate-100 px-5 pt-4 shadow-[0_-12px_32px_rgba(0,0,0,0.08)]"
+                        style={{ paddingBottom: 'max(20px, env(safe-area-inset-bottom, 20px))' }}
+                    >
+                        <div className="flex gap-3">
+                            <a
+                                href={whatsappUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-900 font-bold py-4 px-4 rounded-2xl transition-all border border-slate-200 min-h-[56px]"
+                            >
+                                <MessageCircle size={20} className="text-orange-500" />
+                            </a>
+                            <button
+                                onClick={handleAddToCart}
+                                disabled={addedToCart}
+                                className={`flex-1 py-4 px-5 rounded-2xl font-black shadow-xl transition-all flex items-center justify-center gap-2 text-sm uppercase tracking-wider active:scale-95 ${
+                                    addedToCart
+                                        ? 'bg-emerald-500 text-white'
+                                        : 'bg-slate-900 hover:bg-orange-600 text-white'
+                                }`}
+                            >
+                                {addedToCart ? (
+                                    <>
+                                        <Check size={18} strokeWidth={3} />
+                                        Añadido
+                                    </>
+                                ) : (
+                                    <>
+                                        <ShoppingCart size={18} />
+                                        {promo.detalles?.packs ? 'Confirmar Pack' : 'Añadir a Pedido'}
+                                    </>
+                                )}
+                            </button>
+                        </div>
                     </div>
                 </motion.div>
-                <style>{`
-                    .custom-scrollbar::-webkit-scrollbar { width: 5px; }
-                    .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-                    .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
-                `}</style>
-            </DialogContent>
-        </Dialog>
+            </div>
+
+            <style>{`
+                .side-panel-scrollbar::-webkit-scrollbar { width: 3px; }
+                .side-panel-scrollbar::-webkit-scrollbar-track { background: transparent; }
+                .side-panel-scrollbar::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 10px; }
+            `}</style>
+        </AnimatePresence>,
+        document.body
     );
 }
 
@@ -1085,7 +1068,10 @@ export default function PromocionesPage() {
 
     return (
         <PageTransition>
-            <SEOHead {...SEO_CONFIG.promociones} />
+            <SEOHead
+                {...SEO_CONFIG.promociones}
+                structuredData={getBreadcrumbSchema([{ name: 'Promociones', url: 'https://bikitchencr.com/promociones' }])}
+            />
             <div className="min-h-screen bg-gradient-to-b from-bikitchen-beige to-white">
                 <Navbar />
 
@@ -1100,6 +1086,7 @@ export default function PromocionesPage() {
                             : (isMobile ? '90px' : '104px')
                     }}
                 >
+                    <UrgencyBanner className="shadow-sm rounded-2xl mb-6 overflow-hidden" />
 
                     {loading ? (
                         // Skeleton loader mientras cargan datos e imágenes
@@ -1145,9 +1132,9 @@ export default function PromocionesPage() {
                                         viewport={{ once: true }}
                                         className="text-center mb-8"
                                     >
-                                        <h2 className="text-3xl md:text-5xl font-black text-gray-900 mb-2">
+                                        <h1 className="text-3xl md:text-5xl font-black text-gray-900 mb-2">
                                             Promociones del Mes
-                                        </h2>
+                                        </h1>
                                         <p className="text-gray-500 text-base md:text-lg max-w-2xl mx-auto font-medium">
                                             Aprovecha estas ofertas exclusivas y ahorra en tus packs favoritos
                                         </p>
@@ -1196,7 +1183,7 @@ export default function PromocionesPage() {
                                                     initial={{ scale: 0.9 }}
                                                     whileInView={{ scale: 1 }}
                                                     viewport={{ once: true }}
-                                                    className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-md px-4 py-2 rounded-full mb-4"
+                                                    className="inline-flex items-center gap-2 bg-white/25 px-4 py-2 rounded-full mb-4"
                                                 >
                                                     <Users size={20} />
                                                     <span className="font-bold text-sm">PACK PARA DOS PERSONAS</span>
@@ -1211,13 +1198,13 @@ export default function PromocionesPage() {
                                                 </p>
 
                                                 <div className="flex flex-wrap gap-3 mb-6 justify-center md:justify-start">
-                                                    <div className="bg-white/20 backdrop-blur-md px-4 py-2 rounded-xl border border-white/30">
+                                                    <div className="bg-white/25 px-4 py-2 rounded-xl border border-white/30">
                                                         <span className="font-bold">✨ 25% OFF en plan mensual</span>
                                                     </div>
-                                                    <div className="bg-white/20 backdrop-blur-md px-4 py-2 rounded-xl border border-white/30">
+                                                    <div className="bg-white/25 px-4 py-2 rounded-xl border border-white/30">
                                                         <span className="font-bold">🚚 Envío disponible</span>
                                                     </div>
-                                                    <div className="bg-white/20 backdrop-blur-md px-4 py-2 rounded-xl border border-white/30">
+                                                    <div className="bg-white/25 px-4 py-2 rounded-xl border border-white/30">
                                                         <span className="font-bold">👥 Ideal para parejas</span>
                                                     </div>
                                                 </div>
@@ -1226,16 +1213,14 @@ export default function PromocionesPage() {
                                                     Ahorra más comprando para dos. 7 opciones de packs disponibles con el mejor precio del mercado.
                                                 </p>
 
-                                                <motion.a
+                                                <a
                                                     href="/packs"
-                                                    className="inline-flex items-center gap-3 bg-white text-orange-600 px-8 py-4 rounded-2xl font-black text-lg shadow-2xl hover:shadow-xl transition-all hover:scale-105"
-                                                    whileHover={{ scale: 1.05 }}
-                                                    whileTap={{ scale: 0.95 }}
+                                                    className="inline-flex items-center gap-3 bg-white text-orange-600 px-8 py-4 rounded-2xl font-black text-lg shadow-2xl hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-200"
                                                 >
                                                     <ShoppingCart size={22} />
                                                     Ver Two Pack
                                                     <ChevronRight size={22} />
-                                                </motion.a>
+                                                </a>
                                             </div>
 
                                             <div className="flex-shrink-0">
@@ -1243,7 +1228,7 @@ export default function PromocionesPage() {
                                                     initial={{ scale: 0.8, opacity: 0 }}
                                                     whileInView={{ scale: 1, opacity: 1 }}
                                                     viewport={{ once: true }}
-                                                    className="bg-white/10 backdrop-blur-md rounded-3xl p-8 border-2 border-white/30"
+                                                    className="bg-white/15 rounded-3xl p-8 border-2 border-white/30"
                                                 >
                                                     <div className="text-center">
                                                         <div className="text-6xl mb-4">👥</div>
