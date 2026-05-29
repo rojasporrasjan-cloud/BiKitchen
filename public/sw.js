@@ -1,6 +1,6 @@
-// BiKitchen Service Worker - Enhanced v7
-// ACTUALIZACIÓN: createUI con parámetros mínimos + reintentos
-const CACHE_VERSION = 'v8';
+// BiKitchen Service Worker - Enhanced v9
+// ACTUALIZACIÓN: Cloudinary agregado a IMAGE_DOMAINS, fix undefined Response
+const CACHE_VERSION = 'v9';
 const STATIC_CACHE = `bikitchen-static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `bikitchen-dynamic-${CACHE_VERSION}`;
 const IMAGE_CACHE = `bikitchen-images-${CACHE_VERSION}`;
@@ -46,6 +46,7 @@ const NETWORK_ONLY = [
 
 // Dominios de imágenes para cachear agresivamente
 const IMAGE_DOMAINS = [
+  'res.cloudinary.com',
   'firebasestorage.googleapis.com',
   'images.unsplash.com',
   'cdn.jsdelivr.net',
@@ -147,15 +148,17 @@ self.addEventListener('fetch', (event) => {
             const responseClone = response.clone();
             caches.open(IMAGE_CACHE).then((cache) => {
               cache.put(event.request, responseClone);
-              // Limpiar caché si es muy grande
               trimImageCache();
             });
             return response;
           }
-          // Si Storage devuelve 304/412 u otro status no-200, servir caché si existe
           if (cachedResponse) return cachedResponse;
           return response;
-        }).catch(() => cachedResponse);
+        }).catch(() => {
+          if (cachedResponse) return cachedResponse;
+          // Sin caché y sin red: respuesta vacía para no romper el SW
+          return new Response('', { status: 503, statusText: 'Offline' });
+        });
 
         // Retornar caché inmediatamente si existe
         return cachedResponse || fetchPromise;
