@@ -127,7 +127,25 @@ export default function LoginPage() {
                             animate={{ opacity: 1, y: 0 }}
                             className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-sm text-emerald-700"
                         >
-                            {info}
+                            {info === '__RESET_SENT__' ? (
+                                <div className="space-y-2">
+                                    <p className="font-semibold">📧 Correo de recuperación enviado</p>
+                                    <p>Revisá tu bandeja de entrada en <strong>{email}</strong>.</p>
+                                    <p className="text-emerald-600">⚠️ <strong>Si no aparece en 2 minutos</strong>, revisá la carpeta de <strong>Spam</strong> o <strong>Correo no deseado</strong> — algunos proveedores filtran correos automáticos.</p>
+                                    <p className="pt-1">¿Seguís sin poder ingresar?{' '}
+                                        <a
+                                            href={getWhatsAppUrl(`Hola, no me llega el correo de recuperación de contraseña para ${email} 🔐`)}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="underline font-bold text-emerald-800"
+                                        >
+                                            Escribinos por WhatsApp
+                                        </a>
+                                    </p>
+                                </div>
+                            ) : (
+                                info
+                            )}
                         </motion.div>
                     )}
 
@@ -208,9 +226,9 @@ export default function LoginPage() {
                                         }
                                         const result = await resetPassword(email);
                                         if (result.success) {
-                                            setInfo('Te enviamos un correo para restablecer tu contraseña. Revisa tu bandeja de entrada.');
+                                            setInfo('__RESET_SENT__');
                                         } else {
-                                            setError(result.error);
+                                            setError(result.error || 'No encontramos una cuenta con ese correo. Verificá que esté bien escrito.');
                                         }
                                     }}
                                     className="mt-2 text-xs text-bikitchen-orange hover:text-bikitchen-orange-dark font-semibold"
