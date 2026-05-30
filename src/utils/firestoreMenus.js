@@ -13,6 +13,7 @@ import {
   getDoc,
   getDocFromServer,
   setDoc,
+  updateDoc,
   serverTimestamp
 } from 'firebase/firestore';
 import { cachedFetch, invalidateCache, invalidateCacheByType, setCache } from './firestoreCache';
@@ -372,6 +373,95 @@ export async function savePackPrices(prices) {
   await setDoc(ref, payload, { merge: true });
 
   // Invalidar caché
+  invalidateCache('pack_prices');
+}
+
+/**
+ * savePackDiscountUpdate
+ *
+ * Guarda SOLO los campos de descuento de un pack específico usando updateDoc
+ * con dotted paths. Esto es más preciso y confiable que setDoc/merge para
+ * actualizar valores booleanos en mapas anidados.
+ */
+export async function savePackDiscountUpdate(categoryKey, packName, discountData) {
+  const ref = doc(db, 'config', 'pack_prices');
+  const prefix = `${categoryKey}.packs.${packName}`;
+
+  const updatePayload = {
+    [`${prefix}.descuentoActivo`]: discountData.descuentoActivo,
+    [`${prefix}.tipoDescuento`]: discountData.tipoDescuento || 'porcentaje',
+    [`${prefix}.valorDescuento`]: Number(discountData.valorDescuento) || 0,
+    [`${prefix}.etiquetaTexto`]: discountData.etiquetaTexto || '',
+    [`${prefix}.mostrarEtiqueta`]: discountData.mostrarEtiqueta ?? true,
+    [`${prefix}.planesAplicables`]: discountData.planesAplicables || [],
+    [`${prefix}.metodosPermitidos`]: discountData.metodosPermitidos || [],
+    [`${prefix}.fechaInicio`]: discountData.fechaInicio ? new Date(discountData.fechaInicio) : null,
+    [`${prefix}.fechaFin`]: discountData.fechaFin ? new Date(discountData.fechaFin) : null,
+    lastModifiedAt: serverTimestamp()
+  };
+
+  try {
+    await updateDoc(ref, updatePayload);
+  } catch (err) {
+    if (err.code === 'not-found') {
+      // Documento no existe aún — crearlo con setDoc
+      await setDoc(ref, {
+        [categoryKey]: {
+          packs: {
+            [packName]: {
+              descuentoActivo: discountData.descuentoActivo,
+              tipoDescuento: discountData.tipoDescuento || 'porcentaje',
+              valorDescuento: Number(discountData.valorDescuento) || 0,
+              etiquetaTexto: discountData.etiquetaTexto || '',
+              mostrarEtiqueta: discountData.mostrarEtiqueta ?? true,
+              planesAplicables: discountData.planesAplicables || [],
+              metodosPermitidos: discountData.metodosPermitidos || [],
+              fechaInicio: discountData.fechaInicio ? new Date(discountData.fechaInicio) : null,
+              fechaFin: discountData.fechaFin ? new Date(discountData.fechaFin) : null
+            }
+          }
+        },
+        lastModifiedAt: serverTimestamp()
+      }, { merge: true });
+    } else {
+      throw err;
+    }
+  }
+
+  invalidateCache('pack_prices');
+}
+
+/**
+ * resetAllPackDiscounts
+ *
+ * Quita el descuento de TODOS los packs en todas las categorías.
+ * Usa updateDoc con dotted paths para ser quirúrgico y confiable.
+ * @param {object} packsData - PACKS_DATA estático con todas las categorías/packs
+ */
+export async function resetAllPackDiscounts(packsData) {
+  const ref = doc(db, 'config', 'pack_prices');
+
+  const updatePayload = { lastModifiedAt: serverTimestamp() };
+
+  Object.entries(packsData).forEach(([catKey, catData]) => {
+    if (!catData.packs) return;
+    catData.packs.forEach(pack => {
+      const prefix = `${catKey}.packs.${pack.name}`;
+      updatePayload[`${prefix}.descuentoActivo`] = false;
+      updatePayload[`${prefix}.valorDescuento`] = 0;
+      updatePayload[`${prefix}.etiquetaTexto`] = '';
+      updatePayload[`${prefix}.fechaInicio`] = null;
+      updatePayload[`${prefix}.fechaFin`] = null;
+    });
+  });
+
+  try {
+    await updateDoc(ref, updatePayload);
+  } catch (err) {
+    if (err.code !== 'not-found') throw err;
+    // Si no existe el documento no hay descuentos que borrar
+  }
+
   invalidateCache('pack_prices');
 }
 

@@ -53,22 +53,27 @@ export const OrdersProvider = ({ children }) => {
                 return;
             }
 
-            // Verificación primaria: lista estática de emails admin
-            if (ADMIN_EMAILS.includes(user.email)) {
+            // Verificación primaria: lista estática de emails admin (case-insensitive)
+            const cleanEmail = user.email.toLowerCase().trim();
+            if (ADMIN_EMAILS.includes(cleanEmail)) {
                 setIsAdmin(true);
                 return;
             }
 
-            // Verificación secundaria: campo isAdmin en Firestore users/{uid}
+            // Verificación secundaria: campo role o isAdmin en Firestore users/{uid}
             try {
                 const userSnap = await getDoc(doc(db, 'users', user.uid));
-                if (userSnap.exists() && userSnap.data().isAdmin === true) {
-                    setIsAdmin(true);
-                } else {
-                    setIsAdmin(false);
-                    setOrders([]);
-                    setLoading(false);
+                if (userSnap.exists()) {
+                    const userData = userSnap.data();
+                    const hasAdminRole = userData.isAdmin === true || userData.role?.toLowerCase().trim() === 'admin';
+                    if (hasAdminRole) {
+                        setIsAdmin(true);
+                        return;
+                    }
                 }
+                setIsAdmin(false);
+                setOrders([]);
+                setLoading(false);
             } catch {
                 setIsAdmin(false);
                 setOrders([]);

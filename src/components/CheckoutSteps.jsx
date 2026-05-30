@@ -651,10 +651,24 @@ export default function CheckoutSteps({ isOpen, onClose }) {
             let orderRefId = pendingOrderDocId;
             try {
                 if (orderRefId) {
-                    await updateDoc(doc(db, 'pedidos', orderRefId), {
-                        ...safeOrder,
-                        updatedAt: serverTimestamp()
-                    });
+                    // Intentar actualizar el borrador existente
+                    try {
+                        await updateDoc(doc(db, 'pedidos', orderRefId), {
+                            ...safeOrder,
+                            updatedAt: serverTimestamp()
+                        });
+                    } catch (updateErr) {
+                        // ID caducado (not-found) o sin permisos para actualizar → crear pedido nuevo
+                        if (updateErr.code === 'not-found' || updateErr.code === 'permission-denied') {
+                            sessionStorage.removeItem('bk_pending_order_id');
+                            const orderRef = await addDoc(collection(db, 'pedidos'), safeOrder);
+                            orderRefId = orderRef.id;
+                            sessionStorage.setItem('bk_pending_order_id', orderRefId);
+                            setPendingOrderDocId(orderRefId);
+                        } else {
+                            throw updateErr; // Re-lanzar errores de red u otros
+                        }
+                    }
                 } else {
                     const orderRef = await addDoc(collection(db, 'pedidos'), safeOrder);
                     orderRefId = orderRef.id;

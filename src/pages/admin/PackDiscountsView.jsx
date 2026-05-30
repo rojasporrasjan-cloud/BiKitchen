@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PACKS_DATA } from '../../data/packsData';
-import { getPackPrices, savePackPrices } from '../../utils/firestoreMenus';
+import { getPackPrices, savePackDiscountUpdate, resetAllPackDiscounts } from '../../utils/firestoreMenus';
 import AdminPageHeader from '../../components/admin/AdminPageHeader';
 
 export default function PackDiscountsView() {
@@ -76,6 +76,20 @@ export default function PackDiscountsView() {
         });
     };
 
+    const handleResetAll = async () => {
+        if (!window.confirm('¿Quitar TODOS los descuentos activos de todos los packs? Esta acción no se puede deshacer.')) return;
+        setSaving(true);
+        try {
+            await resetAllPackDiscounts(PACKS_DATA);
+            await loadData(); // Refrescar desde Firestore
+        } catch (error) {
+            console.error('Error resetting all discounts:', error);
+            alert('Error al quitar descuentos: ' + (error.message || 'Intenta de nuevo'));
+        } finally {
+            setSaving(false);
+        }
+    };
+
     const handleSave = async (e) => {
         e.preventDefault();
         if (!editingPack) return;
@@ -84,36 +98,35 @@ export default function PackDiscountsView() {
         try {
             const { categoryKey, packName } = editingPack;
 
-            // Preparar objeto de actualización profunda
-            const currentCategory = packPrices[categoryKey] || { packs: {} };
-            const currentPacks = currentCategory.packs || {};
-            const currentPackData = currentPacks[packName] || {};
+            // Guardar con updateDoc + dotted paths (quirúrgico, sin riesgo de merge parcial)
+            await savePackDiscountUpdate(categoryKey, packName, formData);
 
-            const updatedPackData = {
-                ...currentPackData,
-                ...formData,
-                fechaInicio: formData.fechaInicio ? new Date(formData.fechaInicio) : null,
-                fechaFin: formData.fechaFin ? new Date(formData.fechaFin) : null,
-                valorDescuento: Number(formData.valorDescuento)
-            };
-
-            const newPrices = {
-                ...packPrices,
-                [categoryKey]: {
-                    ...currentCategory,
-                    packs: {
-                        ...currentPacks,
-                        [packName]: updatedPackData
+            // Actualizar estado local de forma quirúrgica
+            setPackPrices(prev => {
+                const cat = prev?.[categoryKey] || { packs: {} };
+                const currentPack = cat.packs?.[packName] || {};
+                return {
+                    ...prev,
+                    [categoryKey]: {
+                        ...cat,
+                        packs: {
+                            ...(cat.packs || {}),
+                            [packName]: {
+                                ...currentPack,
+                                ...formData,
+                                fechaInicio: formData.fechaInicio ? new Date(formData.fechaInicio) : null,
+                                fechaFin: formData.fechaFin ? new Date(formData.fechaFin) : null,
+                                valorDescuento: Number(formData.valorDescuento)
+                            }
+                        }
                     }
-                }
-            };
+                };
+            });
 
-            await savePackPrices(newPrices);
-            setPackPrices(newPrices);
             setEditingPack(null);
         } catch (error) {
             console.error('Error saving pack discount:', error);
-            alert('Error al guardar cambios');
+            alert('Error al guardar: ' + (error.message || 'Intenta de nuevo'));
         } finally {
             setSaving(false);
         }
@@ -150,6 +163,20 @@ export default function PackDiscountsView() {
                     { value: totalPacks - activeDiscounts, label: 'Sin Descuento' }
                 ]}
             />
+            {/* Botón de emergencia — quita TODOS los descuentos de golpe */}
+            {activeDiscounts > 0 && (
+                <div className="flex justify-end">
+                    <button
+                        onClick={handleResetAll}
+                        disabled={saving}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-red-50 text-red-600 border border-red-200 rounded-xl text-sm font-bold hover:bg-red-100 active:scale-95 transition-all"
+                    >
+                        {saving ? <Loader2 size={16} className="animate-spin" /> : <X size={16} />}
+                        Quitar todos los descuentos ({activeDiscounts})
+                    </button>
+                </div>
+            )}
+
             {Object.entries(PACKS_DATA).map(([catKey, catData]) => (
                 <div key={catKey} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
                     <div className="flex items-center gap-3 mb-6">
@@ -241,7 +268,8 @@ export default function PackDiscountsView() {
                                 <p className="text-white/80 text-sm mt-1">{editingPack.packName}</p>
                             </div>
 
-                            <form onSubmit={handleSave} className="p-6 space-y-4 overflow-y-auto flex-1">
+                            <form onSubmit={handleSave} className="flex flex-col flex-1 overflow-hidden">
+                                <div className="p-6 space-y-4 overflow-y-auto flex-1">
                                 <div className="flex items-center justify-between bg-gray-50 p-4 rounded-xl">
                                     <span className="font-medium text-gray-700">Activar Descuento</span>
                                     <label className="relative inline-flex items-center cursor-pointer">
@@ -439,7 +467,9 @@ export default function PackDiscountsView() {
                                     </div>
                                 </div>
 
-                                <div className="flex gap-3 pt-4">
+                                </div>
+                                {/* Botones siempre visibles — fuera del área scrollable */}
+                                <div className="flex gap-3 p-4 border-t border-gray-100 bg-white shrink-0">
                                     <button
                                         type="button"
                                         onClick={() => setEditingPack(null)}
