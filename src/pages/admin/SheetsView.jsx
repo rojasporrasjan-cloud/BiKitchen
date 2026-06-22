@@ -14,6 +14,7 @@ import { motion } from 'framer-motion';
 import { db } from '../../firebase/config';
 import { cachedFetch, invalidateCache } from '../../utils/firestoreCache';
 import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
+import { getScheduleFromOrder } from '../../utils/orderDates';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import AdminPageHeader from '../../components/admin/AdminPageHeader';
@@ -23,12 +24,34 @@ import {
     buildKitchenSheetData,
     buildPackagingSheetData
 } from '../../utils/logisticsUtils';
+import { useOrders } from '../../context/OrdersContext';
 
 export default function SheetsView() {
+    const { orders: allOrders } = useOrders();
+    const [availableDates, setAvailableDates] = useState([]);
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
     // Pedidos ya normalizados al modelo de platos/ingredientes
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(false);
+
+    // Obtener fechas disponibles de pedidos activos
+    useEffect(() => {
+        if (!allOrders || allOrders.length === 0) return;
+        
+        const dates = allOrders
+            .map(o => o.fecha_entrega || (o.details && o.details.fechaEntrega))
+            .filter(Boolean); // Remover nulls/undefined
+            
+        // Valores únicos, ordenados descendente
+        const uniqueDates = [...new Set(dates)].sort((a, b) => new Date(b) - new Date(a));
+        
+        setAvailableDates(uniqueDates);
+        
+        // Auto-seleccionar la primera fecha disponible si es la primera carga
+        if (uniqueDates.length > 0 && !uniqueDates.includes(selectedDate)) {
+            setSelectedDate(uniqueDates[0]);
+        }
+    }, [allOrders]);
 
     const loadOrdersForDate = async (date, force = false) => {
         setLoading(true);
@@ -37,16 +60,34 @@ export default function SheetsView() {
             if (force) invalidateCache(cacheKey);
 
             const rawOrders = await cachedFetch(cacheKey, async () => {
+                const targetDate = new Date(date + "T12:00:00");
+                const pastDate = new Date(targetDate);
+                pastDate.setDate(pastDate.getDate() - 40); // Buscar hasta 40 días atrás para mensualidades
+                const pastDateStr = pastDate.toISOString().split('T')[0];
+
+                // Obtener todos los pedidos recientes que podrían tener entregas en esta fecha
                 const q = query(
                     collection(db, "pedidos"),
-                    where("fecha_entrega", "==", date),
-                    orderBy("cliente", "asc")
+                    where("fecha_entrega", ">=", pastDateStr)
                 );
+                
                 const snapshot = await getDocs(q);
-                return snapshot.docs.map(doc => ({
+                let results = snapshot.docs.map(doc => ({
                     id: doc.id,
                     ...doc.data()
                 }));
+
+                // Filtrar localmente usando la función que genera el schedule real
+                results = results.filter(order => {
+                    if (order.status === 'cancelled') return false;
+                    const schedule = getScheduleFromOrder(order);
+                    return schedule.includes(date);
+                });
+
+                // Ordenar por cliente
+                results.sort((a, b) => (a.cliente || '').localeCompare(b.cliente || ''));
+
+                return results;
             }, 'dashboard');
 
             const normalized = mapPedidosFromLegacy(rawOrders);
@@ -516,12 +557,16 @@ export default function SheetsView() {
                 actions={[
                     <div key="date" className="flex items-center gap-2 bg-white/20 backdrop-blur-sm px-4 py-2 rounded-xl">
                         <Calendar size={18} className="text-white" />
-                        <input
-                            type="date"
+                        <select
                             value={selectedDate}
                             onChange={(e) => setSelectedDate(e.target.value)}
-                            className="bg-transparent outline-none text-sm font-medium text-white"
-                        />
+                            className="bg-transparent outline-none text-sm font-medium text-white appearance-none cursor-pointer"
+                        >
+                            <option value={selectedDate} className="text-gray-900">{selectedDate}</option>
+                            {availableDates.filter(d => d !== selectedDate).map(date => (
+                                <option key={date} value={date} className="text-gray-900">{date}</option>
+                            ))}
+                        </select>
                     </div>,
                     <button
                         key="refresh"
@@ -540,12 +585,18 @@ export default function SheetsView() {
                         <Calendar size={20} className="text-orange-500" />
                         <span className="font-medium">Fecha de Entrega:</span>
                     </div>
-                    <input
-                        type="date"
+                    <select
                         value={selectedDate}
                         onChange={(e) => setSelectedDate(e.target.value)}
-                        className="px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/20"
-                    />
+                        className="px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/20 bg-white cursor-pointer"
+                    >
+                        <option value={selectedDate}>{new Date(selectedDate + 'T12:00:00').toLocaleDateString('es-CR', { weekday: 'long', day: 'numeric', month: 'long' }).replace(/^\w/, c => c.toUpperCase())}</option>
+                        {availableDates.filter(d => d !== selectedDate).map(date => (
+                            <option key={date} value={date}>
+                                {new Date(date + 'T12:00:00').toLocaleDateString('es-CR', { weekday: 'long', day: 'numeric', month: 'long' }).replace(/^\w/, c => c.toUpperCase())}
+                            </option>
+                        ))}
+                    </select>
                     <div className="ml-auto text-sm text-gray-500">
                         {orders.length} pedido{orders.length !== 1 ? 's' : ''} para esta fecha
                     </div>
@@ -553,30 +604,39 @@ export default function SheetsView() {
             </div>
 
             {/* Action Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
                 {/* Kitchen Sheet */}
                 <motion.div
                     whileHover={{ scale: 1.02 }}
                     className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-8 shadow-sm border border-blue-200 cursor-pointer"
-                    onClick={orders.length > 0 ? generateKitchenSheet : null}
+                    onClick={() => {
+                        if (orders.length > 0) {
+                            window.open(`/admin/print-production?date=${selectedDate}&view=cocina`, '_blank');
+                        }
+                    }}
                 >
                     <div className="flex items-start justify-between mb-4">
                         <div className="p-3 bg-blue-500 text-white rounded-lg">
                             <ChefHat size={32} />
                         </div>
-                        <Download size={20} className="text-blue-600" />
+                        <Printer size={20} className="text-blue-600" />
                     </div>
                     <h3 className="text-xl font-bold text-gray-900 mb-2">Hoja de Cocina</h3>
                     <p className="text-sm text-gray-600 mb-4">
-                        Genera PDF con menús agrupados, cantidades y totales de ingredientes para el equipo de cocina.
+                        Abre una vista web idéntica al Excel con las cantidades y totales de ingredientes para el equipo de cocina. Lista para imprimir.
                     </p>
                     <button
-                        onClick={generateKitchenSheet}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            if (orders.length > 0) {
+                                window.open(`/admin/print-production?date=${selectedDate}&view=cocina`, '_blank');
+                            }
+                        }}
                         disabled={orders.length === 0}
                         className="w-full py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
                         <Printer size={18} />
-                        Generar Hoja de Cocina
+                        Abrir Hoja de Cocina
                     </button>
                 </motion.div>
 
@@ -584,51 +644,34 @@ export default function SheetsView() {
                 <motion.div
                     whileHover={{ scale: 1.02 }}
                     className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-8 shadow-sm border border-purple-200 cursor-pointer"
-                    onClick={orders.length > 0 ? generatePackingSheet : null}
+                    onClick={() => {
+                        if (orders.length > 0) {
+                            window.open(`/admin/print-production?date=${selectedDate}&view=empaque`, '_blank');
+                        }
+                    }}
                 >
                     <div className="flex items-start justify-between mb-4">
                         <div className="p-3 bg-purple-500 text-white rounded-lg">
                             <PackageIcon size={32} />
                         </div>
-                        <Download size={20} className="text-purple-600" />
+                        <Printer size={20} className="text-purple-600" />
                     </div>
                     <h3 className="text-xl font-bold text-gray-900 mb-2">Hoja de Empaque</h3>
                     <p className="text-sm text-gray-600 mb-4">
-                        Genera PDF con listado por cliente, menús del día y etiquetas para cada plato.
+                        Abre una vista web idéntica al Excel con el listado por cliente y las etiquetas para cada plato. Lista para imprimir.
                     </p>
                     <button
-                        onClick={generatePackingSheet}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            if (orders.length > 0) {
+                                window.open(`/admin/print-production?date=${selectedDate}&view=empaque`, '_blank');
+                            }
+                        }}
                         disabled={orders.length === 0}
                         className="w-full py-3 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
                         <Printer size={18} />
-                        Generar Hoja de Empaque
-                    </button>
-                </motion.div>
-
-                {/* Excel Export */}
-                <motion.div
-                    whileHover={{ scale: 1.02 }}
-                    className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-8 shadow-sm border border-green-200 cursor-pointer"
-                    onClick={orders.length > 0 ? generateExcel : null}
-                >
-                    <div className="flex items-start justify-between mb-4">
-                        <div className="p-3 bg-green-500 text-white rounded-lg">
-                            <FileSpreadsheet size={32} />
-                        </div>
-                        <Download size={20} className="text-green-600" />
-                    </div>
-                    <h3 className="text-xl font-bold text-gray-900 mb-2">Exportar Excel</h3>
-                    <p className="text-sm text-gray-600 mb-4">
-                        Descarga CSV con cálculos de cocción y lista de empaque.
-                    </p>
-                    <button
-                        onClick={generateExcel}
-                        disabled={orders.length === 0}
-                        className="w-full py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                    >
-                        <FileSpreadsheet size={18} />
-                        Descargar Excel
+                        Abrir Hoja de Empaque
                     </button>
                 </motion.div>
             </div>

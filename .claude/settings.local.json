@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(python3)",
-      "Bash(convert --version)"
+      "Bash(convert --version)",
+      "mcp__Claude_Preview__preview_start"
     ]
   }
 }

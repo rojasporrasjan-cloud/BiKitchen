@@ -23,6 +23,7 @@ import {
     History,
     ChevronDown,
     Filter,
+    Copy,
     CalendarDays,
     Plus,
     Trash2,
@@ -213,6 +214,7 @@ export default function OrdersView() {
     const [showErrorModal, setShowErrorModal] = useState(false);
     const [selectedError, setSelectedError] = useState(null);
     const [showDateDropdown, setShowDateDropdown] = useState(false);
+    const [isSyncingNMI, setIsSyncingNMI] = useState(false);
     const [showManualOrderModal, setShowManualOrderModal] = useState(false);
     const [manualOrderData, setManualOrderData] = useState({
         clientName: '',
@@ -227,6 +229,8 @@ export default function OrdersView() {
     });
     const [productSearch, setProductSearch] = useState('');
     const [showProductDropdown, setShowProductDropdown] = useState(false);
+    const [clientSearchTerm, setClientSearchTerm] = useState('');
+    const [showClientSuggestions, setShowClientSuggestions] = useState(false);
     const [orderType, setOrderType] = useState('packs'); // 'packs' o 'individuales'
     const [selectedPackCategory, setSelectedPackCategory] = useState('5_comidas');
     const [selectedPlan, setSelectedPlan] = useState('weekly'); // 'weekly', 'biweekly', 'monthly'
@@ -249,6 +253,50 @@ export default function OrdersView() {
             .replace(/\b(pack|menu|menu)\b/g, '')
             .replace(/\s+/g, ' ')
             .trim();
+    };
+
+    const syncNMIHistory = async () => {
+        setIsSyncingNMI(true);
+        try {
+            const approved = [
+                "ORD-VRU3F", "ORD-XDT3C", "ORD-XE150", "ORD-YWT2", "ORD-ZK77F", "ORD-ZNF7Y", "ORD-1SPW", "ORD-46CCE", "ORD-4E4ZV", "ORD-5C2PF", "ORD-5K5JS", "ORD-79T6C", "ORD-7EMO", "ORD-8PPDV", "ORD-8YIHR", "ORD-B9R11", "ORD-BJ87I", "ORD-D108C", "ORD-HBSIV", "ORD-IGPG1", "ORD-LKBDF", "ORD-LOFV",
+                "ORD-3AXI1", "ORD-K6BY4", "ORD-GVWH", "ORD-IR109", "ORD-JOU24", "ORD-O6H44", "ORD-KYAT4", "ORD-YSOQ", "ORD-XQ8W", "ORD-JVR25", "ORD-00T39", "ORD-39749", "ORD-XIK82", "ORD-0HTS7", "ORD-OIDV4", "ORD-VKN52", "ORD-1CBO5", "ORD-TZ5Q7", "ORD-N7ZU8", "ORD-PHUM", "ORD-R8G0Y", "ORD-RHPN0", "ORD-RLF5F", "ORD-T0RW"
+            ];
+            const failed = {
+                "ORD-VGKH": "INVALID CARD", "ORD-VY734": "RES NEGATIVE IN SECURITY CODE", "ORD-ZIRLX": "DENIED INSUFFICIENT FUNDS",
+                "ORD-058PI": "RES NEGATIVE IN SECURITY CODE", "ORD-43ORI": "RES NEGATIVE IN SECURITY CODE", "ORD-KCUH": "INVALID CARD",
+                "ORD-LIVJF2": "EXPIRED CARD", "ORD-LKU2V": "CALL ISSUER", "ORD-LL1YE": "CALL ISSUER",
+                "ORD-P9W2": "INVALID SECURITY CODE", "ORD-VEAZ3": "INVALID SECURITY CODE", "ORD-BN3E2": "INVALID CARD",
+                "ORD-53V12": "INVALID CARD", "ORD-YW8C": "CALL ISSUER", "ORD-9IFW6": "INVALID SECURITY CODE",
+                "ORD-SF267": "RES NEGATIVE IN SECURITY CODE", "ORD-UDR13": "INVALID CARD", "ORD-YB2R1": "CALL ISSUER",
+                "ORD-2EQ63": "CALL ISSUER", "ORD-K91H1": "CALL ISSUER", "ORD-DUI18": "INVALID SECURITY CODE", "ORD-RKR9J": "INVALID CARD"
+            };
+
+            let updatedCount = 0;
+            for (const order of orders) {
+                if (order.status !== 'pending_payment' && order.status !== 'pending') continue;
+                
+                const rawId = (order.displayId || order.numeroOrden || order.id || '').toUpperCase();
+                
+                const isApproved = approved.some(id => rawId.includes(id.replace('ORD-', '')));
+                if (isApproved) {
+                    await updateOrderStatus(order.id, 'confirmed', { paymentStatus: 'paid', pendingReason: 'Pago recuperado (Automático)' });
+                    updatedCount++;
+                } else {
+                    const failedId = Object.keys(failed).find(id => rawId.includes(id.replace('ORD-', '')));
+                    if (failedId) {
+                        await updateOrderStatus(order.id, 'payment_failed', { paymentStatus: 'failed', paymentError: failed[failedId], isPaymentError: true });
+                        updatedCount++;
+                    }
+                }
+            }
+            alert(`Sincronización completa. Se actualizaron ${updatedCount} pedidos históricos.`);
+        } catch (e) {
+            console.error(e);
+            alert('Error sincronizando historial');
+        } finally {
+            setIsSyncingNMI(false);
+        }
     };
 
     const openClientProfile = async (order) => {
@@ -398,6 +446,48 @@ export default function OrdersView() {
         });
         return ['all', ...Array.from(zones)].sort();
     }, [orders]);
+
+    // Extraer clientes únicos para el autocompletado
+    const uniqueClients = useMemo(() => {
+        const clientsMap = {};
+        orders.forEach(order => {
+            const phone = order.telefono || order.details?.phone;
+            const name = order.cliente || order.client || order.details?.clientName;
+            if (phone && name) {
+                const createdAt = order.createdAt?.toDate?.()?.getTime() || new Date(order.createdAt || 0).getTime();
+                if (!clientsMap[phone] || (createdAt > clientsMap[phone].createdAt)) {
+                    clientsMap[phone] = {
+                        name,
+                        phone,
+                        address: order.direccion || order.details?.address || '',
+                        zoneId: order.zona_envio || order.details?.zoneId || '',
+                        zoneName: order.zona_nombre || order.details?.zoneName || '',
+                        createdAt
+                    };
+                }
+            }
+        });
+        return Object.values(clientsMap);
+    }, [orders]);
+
+    // Manejador para duplicar un pedido existente
+    const handleDuplicateOrder = (order) => {
+        setManualOrderData({
+            clientName: order.cliente || order.client || order.details?.clientName || '',
+            phone: order.telefono || order.details?.phone || '',
+            address: order.direccion || order.details?.address || '',
+            paymentMethod: order.metodo_pago || order.paymentMethod || 'Efectivo',
+            deliveryDate: '', // Siempre requerir nueva fecha
+            zoneId: order.zona_envio || order.details?.zoneId || '',
+            zoneName: order.zona_nombre || order.details?.zoneName || '',
+            shippingCost: order.costo_envio !== undefined ? order.costo_envio : (order.details?.shippingCost || 0),
+            discount: order.descuento || order.details?.discount || 0,
+            discountType: order.discountType || 'percentage',
+            notes: order.observaciones || order.details?.notes || '',
+            items: order.items || []
+        });
+        setShowManualOrderModal(true);
+    };
 
     // Obtener todas las fechas de entrega únicas presentes en los pedidos (para el filtro de Cierre)
     const uniqueDeliveryDates = useMemo(() => {
@@ -1466,6 +1556,15 @@ export default function OrdersView() {
                     ]}
                     actions={[
                         <button
+                            key="sync-nmi"
+                            disabled={isSyncingNMI}
+                            onClick={syncNMIHistory}
+                            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 shadow-md transition-colors disabled:opacity-50"
+                        >
+                            <History size={16} className={isSyncingNMI ? 'animate-spin' : ''} /> 
+                            {isSyncingNMI ? 'Sincronizando...' : 'Arreglar Automáticamente'}
+                        </button>,
+                        <button
                             key="new"
                             onClick={() => setShowManualOrderModal(true)}
                             className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white text-blue-600 text-sm font-semibold hover:bg-blue-50 shadow-md transition-colors"
@@ -1899,6 +1998,11 @@ export default function OrdersView() {
                                                         <StatusIcon size={12} />
                                                         {status.label}
                                                     </span>
+                                                    {order.status === 'pending_payment' && (
+                                                        <span className="text-[10px] text-orange-600 bg-orange-50 px-2 py-1 rounded-md max-w-[180px] leading-tight font-medium border border-orange-100">
+                                                            {order.pendingReason || 'Pago no completado (Abandono/Rechazo)'}
+                                                        </span>
+                                                    )}
                                                     {order.isPaymentError && (
                                                         <button
                                                             onClick={(e) => {
@@ -1934,15 +2038,28 @@ export default function OrdersView() {
                                                 })()}
                                             </td>
                                             <td className="py-4 px-6 text-center">
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        setSelectedOrder(order);
-                                                    }}
-                                                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-500 hover:text-orange-500"
-                                                >
-                                                    <Eye size={18} />
-                                                </button>
+                                                <div className="flex items-center justify-center gap-1">
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setSelectedOrder(order);
+                                                        }}
+                                                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-500 hover:text-orange-500"
+                                                        title="Ver Detalles"
+                                                    >
+                                                        <Eye size={18} />
+                                                    </button>
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleDuplicateOrder(order);
+                                                        }}
+                                                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-500 hover:text-green-600"
+                                                        title="Repetir Pedido (Copiar)"
+                                                    >
+                                                        <Copy size={18} />
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     );
@@ -2028,13 +2145,43 @@ export default function OrdersView() {
                                         </span>
                                     </div>
 
-                                    <div className="flex items-center justify-between mt-2 pt-2">
-                                        <div className="text-sm text-gray-500 font-medium">{pm.label}</div>
-                                        <div>
-                                            <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide ${status.color}`}>
-                                                <StatusIcon size={14} />
-                                                {status.label}
-                                            </span>
+                                    <div className="flex flex-col items-end gap-2 mt-2 pt-2">
+                                        <div className="w-full flex flex-col items-end gap-2">
+                                            <div className="w-full flex items-center justify-between">
+                                                <div className="text-sm text-gray-500 font-medium">{pm.label}</div>
+                                                <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide ${status.color}`}>
+                                                    <StatusIcon size={14} />
+                                                    {status.label}
+                                                </span>
+                                            </div>
+                                            {order.status === 'pending_payment' && (
+                                                <span className="text-[10px] text-orange-600 bg-orange-50 px-2 py-1 rounded-md max-w-[200px] text-right leading-tight font-medium border border-orange-100">
+                                                    {order.pendingReason || 'Pago no completado (Abandono/Rechazo)'}
+                                                </span>
+                                            )}
+                                        {order.isPaymentError && (
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setSelectedError(order.paymentError);
+                                                    setShowErrorModal(true);
+                                                }}
+                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-red-100 text-red-700 hover:bg-red-200 transition-all w-fit mt-1"
+                                            >
+                                                <AlertCircle size={14} />
+                                                Ver Error de Pago
+                                            </button>
+                                        )}
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleDuplicateOrder(order);
+                                            }}
+                                            className="w-full mt-3 py-2 px-4 bg-orange-50 text-orange-600 rounded-lg font-medium text-sm flex items-center justify-center gap-2 border border-orange-100 hover:bg-orange-100 transition-colors"
+                                        >
+                                            <Copy size={16} />
+                                            Repetir Pedido
+                                        </button>
                                         </div>
                                     </div>
 
@@ -2534,6 +2681,24 @@ Somos de BiKitchen, te contactamos sobre tu pedido ${selectedOrder.displayId}.
                                         Acciones Rápidas
                                     </h3>
                                     <div className="flex flex-wrap gap-2">
+                                        {selectedOrder.status === 'pending_payment' && (
+                                            <button
+                                                onClick={async () => {
+                                                    const ok = window.confirm('¿Verificaste en el banco que el pago sí entró? Al confirmar, el pedido pasará a la hoja de cocina.');
+                                                    if (!ok) return;
+                                                    try {
+                                                        await updateOrderStatus(selectedOrder.id, 'confirmed', { paymentStatus: 'paid', pendingReason: 'Confirmado manualmente por el admin' });
+                                                        setSelectedOrder(prev => ({ ...prev, status: 'confirmed', paymentStatus: 'paid', pendingReason: 'Confirmado manualmente por el admin' }));
+                                                    } catch (e) {
+                                                        alert('Error al confirmar el pedido');
+                                                    }
+                                                }}
+                                                className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+                                            >
+                                                <CheckCircle size={16} />
+                                                Forzar Confirmación
+                                            </button>
+                                        )}
                                         {selectedOrder.details?.phone && (
                                             <a
                                                 href={`https://wa.me/506${selectedOrder.details.phone.replace(/\D/g, '')}?text=Hola ${selectedOrder.client}, gracias por tu pedido ${selectedOrder.displayId} en BiKitchen! 🍽️`}
@@ -2655,8 +2820,60 @@ Somos de BiKitchen, te contactamos sobre tu pedido ${selectedOrder.displayId}.
                                     <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
                                         Información del Cliente
                                     </h3>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
+                                {/* Buscador Rápido */}
+                                <div className="mb-6 bg-orange-50/50 p-4 rounded-xl border border-orange-100">
+                                    <label className="block text-sm font-medium text-orange-800 mb-1 flex items-center gap-2">
+                                        <Search size={16} />
+                                        Autocompletar Cliente Registrado
+                                    </label>
+                                    <div className="relative">
+                                        <input
+                                            type="text"
+                                            placeholder="Buscar por nombre o teléfono..."
+                                            value={clientSearchTerm}
+                                            onChange={(e) => {
+                                                setClientSearchTerm(e.target.value);
+                                                setShowClientSuggestions(true);
+                                            }}
+                                            onFocus={() => setShowClientSuggestions(true)}
+                                            className="w-full px-4 py-2.5 rounded-lg border border-orange-200 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none"
+                                        />
+                                        {showClientSuggestions && clientSearchTerm && (
+                                            <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                                                {uniqueClients
+                                                    .filter(c => c.name.toLowerCase().includes(clientSearchTerm.toLowerCase()) || c.phone.includes(clientSearchTerm))
+                                                    .slice(0, 10) // Mostrar max 10 sugerencias
+                                                    .map((client, idx) => (
+                                                        <div
+                                                            key={idx}
+                                                            className="p-3 hover:bg-orange-50 cursor-pointer border-b border-gray-50 last:border-0"
+                                                            onClick={() => {
+                                                                setManualOrderData(prev => ({
+                                                                    ...prev,
+                                                                    clientName: client.name,
+                                                                    phone: client.phone,
+                                                                    address: client.address,
+                                                                    zoneId: client.zoneId,
+                                                                    zoneName: client.zoneName
+                                                                }));
+                                                                setClientSearchTerm('');
+                                                                setShowClientSuggestions(false);
+                                                            }}
+                                                        >
+                                                            <div className="font-medium text-gray-900">{client.name}</div>
+                                                            <div className="text-sm text-gray-500">{client.phone} • {client.address?.substring(0, 40)}{client.address?.length > 40 ? '...' : ''}</div>
+                                                        </div>
+                                                    ))}
+                                                {uniqueClients.filter(c => c.name.toLowerCase().includes(clientSearchTerm.toLowerCase()) || c.phone.includes(clientSearchTerm)).length === 0 && (
+                                                    <div className="p-3 text-sm text-gray-500 text-center">No se encontraron clientes</div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
                                             <label className="block text-sm font-medium text-gray-700 mb-1">
                                                 Nombre del Cliente *
                                             </label>

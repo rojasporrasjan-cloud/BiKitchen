@@ -30,7 +30,7 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
     return <img src={icons[type]} alt={type} className={className} />;
 };
 
-/* BIKITCHEN_NMI_BUILD_20260328 */ export default function NMIPaymentModal({ isOpen, onClose, total, orderId, requestId, customerInfo, onPaymentSuccess, onPaymentError }) {
+/* BIKITCHEN_NMI_BUILD_20260328 */ export default function NMIPaymentModal({ isOpen, onClose, total, orderId, requestId, customerInfo, onPaymentSuccess, onPaymentError, onPaymentValidationFailed }) {
     const [step, setStep] = useState('card'); // 'card', '3ds', 'processing', 'success', 'error'
     const [loading, setLoading] = useState(false);
     const [gateway, setGateway] = useState(null);
@@ -126,6 +126,7 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
             if (!isValidCardNumber(cardData.number)) {
                 setError('❌ Número de tarjeta inválido. Verifica los dígitos.');
                 setLoading(false);
+                if (onPaymentValidationFailed) onPaymentValidationFailed('Número de tarjeta inválido o con error de tipeo');
                 return;
             }
 
@@ -134,6 +135,7 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
             if (!isValidExpiration(expMonth, expYear)) {
                 setError('❌ Fecha de expiración inválida o vencida. Verifica MM/YY.');
                 setLoading(false);
+                if (onPaymentValidationFailed) onPaymentValidationFailed('Fecha de expiración vencida o inválida');
                 return;
             }
 
@@ -141,6 +143,7 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
             if (!isValidCVV(cardData.cvv)) {
                 setError('❌ CVV debe tener 3 o 4 dígitos.');
                 setLoading(false);
+                if (onPaymentValidationFailed) onPaymentValidationFailed('Código de seguridad (CVV) incompleto');
                 return;
             }
 
@@ -231,7 +234,8 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
                     transactionid: result.transactionid || (isDuplicate ? 'DUPLICATE' : '')
                 };
 
-                setTimeout(() => onPaymentSuccess(finalResult), 2000);
+                // Llamar inmediatamente para que se guarde en Firebase sin riesgo de que cierren la pestaña
+                onPaymentSuccess(finalResult);
             } else {
                 // If it's a timeout error from our internal proxy check
                 if (result.responsetext === 'TIMEOUT_LIMIT_REACHED') {

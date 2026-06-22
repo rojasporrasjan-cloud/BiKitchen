@@ -173,6 +173,16 @@ html, body {
   overflow-x: hidden;
 }
 
+/* FIX: Allow printing multiple pages by disabling fixed height and overflow restrictions during print */
+@media print {
+  html, body {
+    height: auto !important;
+    overflow: visible !important;
+    overflow-x: visible !important;
+    overflow-y: visible !important;
+  }
+}
+
 body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;

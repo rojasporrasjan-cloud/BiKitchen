@@ -622,6 +622,8 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                     categoryLabel: item.categoryLabel ?? null,
                     planLabel: item.planLabel ?? null,
                     proteinas: Array.isArray(item.proteinas) ? item.proteinas : undefined,
+                    carbos: Array.isArray(item.carbos) ? item.carbos : undefined,
+                    vegetales: Array.isArray(item.vegetales) ? item.vegetales : undefined,
                     desc: item.desc || undefined,
                     customizations: stripUndefined(item.customizations || {})
                 })),
@@ -1940,11 +1942,38 @@ export default function CheckoutSteps({ isOpen, onClose }) {
             {showNMIModal && (
                 <NMIPaymentModal
                     isOpen={showNMIModal}
-                    onClose={() => { setShowNMIModal(false); setNmiRequestId(null); setNmiDocId(null); setNmiTotal(0); }}
+                    onClose={async () => { 
+                        const orderIdToUpdate = nmiDocId || pendingOrderDocId;
+                        if (orderIdToUpdate) {
+                            try {
+                                await updateDoc(doc(db, 'pedidos', orderIdToUpdate), {
+                                    pendingReason: 'El cliente cerró la ventana de pago sin completar la transacción.',
+                                    updatedAt: serverTimestamp()
+                                });
+                            } catch (e) {
+                                console.error('[Checkout] Error saving close reason:', e);
+                            }
+                        }
+                        setShowNMIModal(false); 
+                        setNmiRequestId(null); 
+                        setNmiDocId(null); 
+                        setNmiTotal(0); 
+                    }}
                     total={nmiTotal}
                     orderId={orderNumber}
                     requestId={nmiRequestId}
                     customerInfo={formData}
+                    onPaymentValidationFailed={async (reason) => {
+                        const orderIdToUpdate = nmiDocId || pendingOrderDocId;
+                        if (orderIdToUpdate) {
+                            try {
+                                await updateDoc(doc(db, 'pedidos', orderIdToUpdate), {
+                                    pendingReason: `Validación fallida: ${reason}`,
+                                    updatedAt: serverTimestamp()
+                                });
+                            } catch (error) {}
+                        }
+                    }}
                     onPaymentError={async (errorData) => {
                         // Guardar el error de pago en Firestore — nmiDocId capturado sincrónicamente
                         const orderIdToUpdate = nmiDocId || pendingOrderDocId;

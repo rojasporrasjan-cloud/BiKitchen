@@ -105,37 +105,62 @@ export function mapPedidosFromLegacy(rawPedidos) {
   return rawPedidos.map((p) => {
     const platosNormalizados = [];
 
-    // Cada entrada en p.menu la tratamos como un "plato" del 1 al N
-    (p.menu || []).forEach((item, index) => {
-      const numero = index + 1; // Plato 1, 2, 3...
-
-      const protMatch = String(item.proteina || '').match(/([0-9]+(?:\.[0-9]+)?)/);
-      const gramosPorcionProteina = protMatch ? parseFloat(protMatch[1]) : 0;
+    (p.menu || p.items || []).forEach((item, index) => {
+      // Extraer gramos de size o nombre (ej: "500g" o "Pack 5 Proteínas (250g)")
+      const sizeMatch = String(item.size || item.nombre || '').match(/([0-9]+(?:\.[0-9]+)?)\s*g/i);
+      const protMatchLegacy = String(item.proteina || '').match(/([0-9]+(?:\.[0-9]+)?)/);
+      const gramosPorcionProteina = sizeMatch ? parseFloat(sizeMatch[1]) : (protMatchLegacy ? parseFloat(protMatchLegacy[1]) : 0);
 
       const carboInfo = parseCantidadUnidad(item.carbo);
       const ensaladaInfo = parseCantidadUnidad(item.ensalada);
 
-      platosNormalizados.push({
-        numero,
-        // Proteína siempre en gramos por porción
-        proteina: {
-          nombre: item.proteinaNombre || item.nombre || 'Proteína',
-          gramosPorPorcion: gramosPorcionProteina || 0
-        },
-        // Carbohidrato puede ir en gramos o tazas
-        carbo: {
-          nombre: item.carboNombre || (item.carbo ? 'Carbohidrato' : null),
-          unidad: carboInfo.unidad,
-          cantidadPorPorcion: carboInfo.cantidad
-        },
-        // Vegetal puede ir en gramos o tazas
-        vegetal: {
-          nombre: item.ensaladaNombre || (item.ensalada ? 'Vegetales' : null),
-          unidad: ensaladaInfo.unidad,
-          cantidadPorPorcion: ensaladaInfo.cantidad
-        },
-        descripcion: item.desc || item.descripcion || ''
-      });
+      // Si tiene un array de proteinas (nuevo formato Checkout)
+      if (Array.isArray(item.proteinas) && item.proteinas.length > 0) {
+        item.proteinas.forEach((protName, idx) => {
+          const carboName = (Array.isArray(item.carbos) && item.carbos[idx]) ? item.carbos[idx] : null;
+          const vegName = (Array.isArray(item.vegetales) && item.vegetales[idx]) ? item.vegetales[idx] : null;
+          
+          platosNormalizados.push({
+            numero: idx + 1,
+            proteina: {
+              nombre: protName,
+              gramosPorPorcion: gramosPorcionProteina || 0
+            },
+            carbo: {
+              nombre: carboName,
+              unidad: 'g',
+              cantidadPorPorcion: 0 // Si tuvieramos tazas, se extrae de size
+            },
+            vegetal: {
+              nombre: vegName,
+              unidad: 'g',
+              cantidadPorPorcion: 0
+            },
+            descripcion: item.desc || item.descripcion || ''
+          });
+        });
+      } else {
+        // Formato Legacy
+        const numero = index + 1;
+        platosNormalizados.push({
+          numero,
+          proteina: {
+            nombre: item.proteinaNombre || item.proteina || item.nombre || 'Proteína',
+            gramosPorPorcion: gramosPorcionProteina || 0
+          },
+          carbo: {
+            nombre: item.carboNombre || (item.carbo ? 'Carbohidrato' : null),
+            unidad: carboInfo.unidad,
+            cantidadPorPorcion: carboInfo.cantidad
+          },
+          vegetal: {
+            nombre: item.ensaladaNombre || (item.ensalada ? 'Vegetales' : null),
+            unidad: ensaladaInfo.unidad,
+            cantidadPorPorcion: ensaladaInfo.cantidad
+          },
+          descripcion: item.desc || item.descripcion || ''
+        });
+      }
     });
 
     return {
@@ -148,7 +173,7 @@ export function mapPedidosFromLegacy(rawPedidos) {
       fecha_entrega: p.fecha_entrega,
       observaciones: p.observaciones || '',
       incluyeDesayuno: !!p.incluyeDesayuno,
-      platos: platosNormalizados
+      platos: platosNormalizados.length > 0 ? platosNormalizados : (p.platos || [])
     };
   });
 }
@@ -439,7 +464,10 @@ export function buildPackagingSheetData(pedidos, menus, workloadInfo) {
     observaciones: p.observaciones || '',
     incluyeDesayuno: !!p.incluyeDesayuno,
     platos: p.platos || [],
-    empaquetador: empaquetadorPorCliente[p.cliente] || null
+    empaquetador: empaquetadorPorCliente[p.cliente] || null,
+    categoria: p.categoria || p.category || (p.platos && p.platos[0]?.category) || '',
+    categoryLabel: p.categoryLabel || (p.platos && p.platos[0]?.categoryLabel) || '',
+    rawPedido: p
   }));
 
   const desayunos = clientes

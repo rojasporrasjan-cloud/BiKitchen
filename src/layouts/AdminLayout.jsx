@@ -247,13 +247,13 @@ export default function AdminLayout() {
     );
 
     return (
-        <div className="flex h-screen bg-gray-50 font-sans text-gray-800 overflow-hidden">
+        <div className="flex h-screen bg-gray-50 font-sans text-gray-800 overflow-hidden print:h-auto print:overflow-visible">
             {/* Desktop Sidebar */}
             <motion.aside
                 initial={false}
                 animate={{ width: isSidebarCollapsed ? 80 : 256 }}
                 transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                className="bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 hidden md:flex flex-col shadow-2xl border-r border-white/5 z-20 overflow-hidden"
+                className="bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 hidden md:flex flex-col shadow-2xl border-r border-white/5 z-20 overflow-hidden print:hidden"
             >
                 <SidebarContent collapsed={isSidebarCollapsed} />
             </motion.aside>
@@ -277,7 +277,7 @@ export default function AdminLayout() {
                             animate={{ x: 0 }}
                             exit={{ x: -280 }}
                             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                            className="fixed left-0 top-0 bottom-0 w-72 bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 text-white flex flex-col shadow-2xl border-r border-white/5 z-50 md:hidden"
+                            className="fixed left-0 top-0 bottom-0 w-72 bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 text-white flex flex-col shadow-2xl border-r border-white/5 z-50 md:hidden print:hidden"
                         >
                             <SidebarContent mobile />
                         </motion.aside>
@@ -286,9 +286,9 @@ export default function AdminLayout() {
             </AnimatePresence>
 
             {/* Main Content */}
-            <div className="flex-1 flex flex-col h-full overflow-hidden relative">
+            <div className="flex-1 flex flex-col h-full overflow-hidden relative print:h-auto print:overflow-visible">
                 {/* Header */}
-                <header className="bg-gradient-to-r from-white via-gray-50 to-white shadow-sm p-3 md:p-4 flex justify-between items-center sticky top-0 z-10 border-b border-gray-200 backdrop-blur-sm shrink-0">
+                <header className="bg-gradient-to-r from-white via-gray-50 to-white shadow-sm p-3 md:p-4 flex justify-between items-center sticky top-0 z-10 border-b border-gray-200 backdrop-blur-sm shrink-0 print:hidden">
                     <div className="flex items-center gap-3">
                         <button
                             onClick={() => setIsMobileMenuOpen(true)}
@@ -332,7 +332,7 @@ export default function AdminLayout() {
                 </header>
 
                 {/* Contenido principal */}
-                <main className="flex-1 overflow-y-auto overflow-x-hidden p-3 md:p-6 bg-gradient-to-br from-gray-50 via-white to-gray-50">
+                <main className="flex-1 overflow-y-auto overflow-x-hidden p-3 md:p-6 bg-gradient-to-br from-gray-50 via-white to-gray-50 print:p-0 print:bg-white print:overflow-visible">
 
                     <Outlet />
                 </main>

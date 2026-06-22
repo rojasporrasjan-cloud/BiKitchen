@@ -80,6 +80,7 @@ const IndividualDiscountsView = lazyWithRetry(() => import('./pages/admin/Indivi
 const NotificationsConfigView = lazyWithRetry(() => import('./pages/admin/NotificationsConfigView'));
 const PoliciesConfigView = lazyWithRetry(() => import('./pages/admin/PoliciesConfigView'));
 const SubstitutionsConfigView = lazyWithRetry(() => import('./pages/admin/SubstitutionsConfigView'));
+const PrintProductionView = lazyWithRetry(() => import('./pages/admin/PrintProductionView'));
 
 import SmoothScroll from './components/SmoothScroll';
 import ScrollToTop from './components/ScrollToTop';
@@ -284,6 +285,7 @@ function AnimatedRoutes() {
               <Route path="notifications-config" element={<NotificationsConfigView />} />
               <Route path="policies-config" element={<PoliciesConfigView />} />
               <Route path="substitutions-config" element={<SubstitutionsConfigView />} />
+              <Route path="print-production" element={<PrintProductionView />} />
             </Route>
 
             {/* 404 - Catch all */}

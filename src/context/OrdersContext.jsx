@@ -210,6 +210,8 @@ export const OrdersProvider = ({ children }) => {
                     cantidad: item.quantity || 1,
                     precio: item.price || 0,
                     proteinas: item.proteinas || null, // null is allowed, undefined is not
+                    carbos: item.carbos || null,
+                    vegetales: item.vegetales || null,
                     desc: item.desc || '',
                     category: item.category || 'individuales',
                     size: item.size || '' // preserve size label like (500g), prevent undefined
