@@ -111,7 +111,7 @@ export default function PromoMenuModal({
 
     return ReactDOM.createPortal(
         <AnimatePresence>
-            <div className="fixed inset-0 z-[60] flex justify-end">
+            <div key="promo-menu-modal-wrapper" className="fixed inset-0 z-[60] flex justify-end">
 
                 {/* Backdrop */}
                 <motion.div

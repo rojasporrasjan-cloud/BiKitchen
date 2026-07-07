@@ -79,31 +79,43 @@ export default function PrintProductionView() {
 
     const kitchenData = buildKitchenSheetData(orders, {});
     const packagingData = buildPackagingSheetData(orders, {}, null);
-
+    
     // Group packaging data by Pack
     const packsMap = {};
-    packagingData.clientes.forEach((c) => {
-        const packName = c.plan || c.tipoMenu || 'Pack Estándar';
-        if (!packsMap[packName]) {
-            packsMap[packName] = { name: packName, clientes: [], platosBase: [], totalPacks: 0 };
+    
+    const addClientToPackMap = (pName, cData, overridePlates = null) => {
+        if (!packsMap[pName]) {
+            packsMap[pName] = { name: pName, clientes: [], platosBase: [], totalPacks: 0 };
         }
-        // Find duplicate client
-        const existingClient = packsMap[packName].clientes.find(existing => existing.nombre === c.cliente);
+        const existingClient = packsMap[pName].clientes.find(existing => existing.nombre === cData.cliente);
         if (existingClient) {
-            existingClient.cantidad += (c.cantidadMenus || 1);
-            if (c.observaciones) existingClient.observaciones += ` | ${c.observaciones}`;
+            existingClient.cantidad += (cData.cantidadMenus || 1);
+            if (cData.observaciones) existingClient.observaciones += ` | ${cData.observaciones}`;
         } else {
-            packsMap[packName].clientes.push({ 
-                nombre: c.cliente, 
-                cantidad: c.cantidadMenus || 1, 
-                observaciones: c.observaciones || '',
-                platos: c.platos || [],
-                rawPedido: c
+            packsMap[pName].clientes.push({ 
+                nombre: cData.cliente, 
+                cantidad: cData.cantidadMenus || 1, 
+                observaciones: cData.observaciones || '',
+                platos: overridePlates !== null ? overridePlates : (cData.platos || []),
+                rawPedido: cData
             });
         }
-        packsMap[packName].totalPacks += (c.cantidadMenus || 1);
-        if (packsMap[packName].platosBase.length === 0 && c.platos && c.platos.length > 0) {
-            packsMap[packName].platosBase = c.platos;
+        packsMap[pName].totalPacks += (cData.cantidadMenus || 1);
+        if (packsMap[pName].platosBase.length === 0 && cData.platos && cData.platos.length > 0 && overridePlates === null) {
+            packsMap[pName].platosBase = cData.platos;
+        }
+    };
+
+    packagingData.clientes.forEach((c) => {
+        const packName = c.plan || c.tipoMenu || 'Pack Estándar';
+        addClientToPackMap(packName, c);
+
+        // Si el cliente tiene el add-on de desayunos, lo agregamos también al "Pack de Desayunos"
+        // para que se impriman sus etiquetas y se calculen sus ingredientes en la cocina.
+        if (c.incluyeDesayuno && !packName.toLowerCase().includes('desayuno')) {
+            // Le pasamos overridePlates = [] para que NO use los platos de almuerzo/cena,
+            // sino que caiga al fallback del menú oficial de desayunos.
+            addClientToPackMap('Pack de Desayunos', c, []);
         }
     });
 
@@ -115,6 +127,7 @@ export default function PrintProductionView() {
         if (n.includes('vegetariano')) return 'vegetariano';
         if (n.includes('casadito')) return 'casaditos';
         if (n.includes('full pack')) return 'fullPack';
+        if (n.includes('desayuno')) return 'desayuno';
         if (n.includes('regular') || n.includes('estandar') || n.includes('estándar')) return 'regular';
         if ((n.includes('mensual') || n.includes('quincenal')) && !n.includes('proteína') && !n.includes('proteina')) return 'regular';
         return null;
@@ -123,6 +136,14 @@ export default function PrintProductionView() {
     const isIndividualPack = (name) => {
         const n = name.toLowerCase();
         return n.includes('individual') || n.includes('proteína') || n.includes('proteina') || n.includes('granel');
+    };
+
+    const getDefaultGrams = (packName) => {
+        const n = (packName || '').toLowerCase();
+        if (n.includes('bajo calor') || n.includes('sin carbo')) return 120;
+        if (n.includes('keto')) return 200;
+        if (n.includes('regular') || n.includes('casadito')) return 100;
+        return 150; // Full pack y default
     };
 
     const allPackNames = Object.keys(packsMap).sort();
@@ -287,7 +308,7 @@ export default function PrintProductionView() {
                 return {
                     proteina: {
                         nombre: isOfficial ? p.proteina : p.proteina?.nombre,
-                        gramosPorPorcion: 150
+                        gramosPorPorcion: getDefaultGrams(packName)
                     },
                     vegetal: {
                         nombre: isOfficial ? p.vegetal : p.vegetal?.nombre,
@@ -304,7 +325,7 @@ export default function PrintProductionView() {
             platosEmpaque.forEach(p => {
                 if (p.proteina?.nombre && p.proteina.nombre !== '—') {
                     const name = p.proteina.nombre;
-                    const grams = (p.proteina.gramosPorPorcion || 150) * totalPlatos;
+                    const grams = (p.proteina.gramosPorPorcion || getDefaultGrams(packName)) * totalPlatos;
                     if (!itemsMap[name]) itemsMap[name] = { name, category: guessCategory(name), totalQty: 0, unit: 'g' };
                     itemsMap[name].totalQty += grams;
                 }
@@ -331,14 +352,14 @@ export default function PrintProductionView() {
                 if (c.platos && c.platos.length > 0) {
                     c.platos.forEach(p => {
                         const name = p.proteina?.nombre || packName;
-                        const grams = (p.proteina?.gramosPorPorcion || 150) * c.cantidad;
+                        const grams = (p.proteina?.gramosPorPorcion || getDefaultGrams(packName)) * c.cantidad;
                         if (!itemsMap[name]) itemsMap[name] = { name, category: guessCategory(name), totalQty: 0, unit: 'g' };
                         itemsMap[name].totalQty += grams;
                     });
                 } else {
                     const name = packName;
                     if (!itemsMap[name]) itemsMap[name] = { name, category: guessCategory(name), totalQty: 0, unit: 'g' };
-                    itemsMap[name].totalQty += (150 * c.cantidad); // Fallback a 150g si no hay platos definidos
+                    itemsMap[name].totalQty += (getDefaultGrams(packName) * c.cantidad); // Fallback a default si no hay platos definidos
                 }
             });
         });
@@ -568,7 +589,7 @@ export default function PrintProductionView() {
                         numero: p.numero || idx + 1,
                         proteina: {
                             nombre: isOfficial ? p.proteina : (p.proteina?.nombre || original.proteina?.nombre || '—'),
-                            gramosPorPorcion: isOfficial ? 150 : (p.proteina?.gramosPorPorcion || original.proteina?.gramosPorPorcion || 150)
+                            gramosPorPorcion: isOfficial ? getDefaultGrams(packName) : (p.proteina?.gramosPorPorcion || original.proteina?.gramosPorPorcion || getDefaultGrams(packName))
                         },
                         vegetal: {
                             nombre: isOfficial ? p.vegetal : (p.vegetal?.nombre || original.vegetal?.nombre || '—'),
@@ -597,7 +618,7 @@ export default function PrintProductionView() {
                                 <div className="border-x border-black bg-white flex flex-col text-xs font-bold w-full uppercase">
                                     <div className="flex border-b border-black">
                                         <div className="w-48 p-1 border-r border-black">CANTIDAD POR PLATO</div>
-                                        <div className="flex-1 p-1">{platosEmpaque[0]?.proteina?.gramosPorPorcion ? `${platosEmpaque[0].proteina.gramosPorPorcion} GRAMOS DE PROTEINA` : '150 GRAMOS DE PROTEINA'}</div>
+                                        <div className="flex-1 p-1">{platosEmpaque[0]?.proteina?.gramosPorPorcion ? `${platosEmpaque[0].proteina.gramosPorPorcion} GRAMOS DE PROTEINA` : `${getDefaultGrams(packName)} GRAMOS DE PROTEINA`}</div>
                                     </div>
                                     <div className="flex border-b border-black">
                                         <div className="w-48 p-1 border-r border-black">CANTIDAD POR PLATO</div>

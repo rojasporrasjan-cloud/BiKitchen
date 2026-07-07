@@ -332,7 +332,7 @@ function PromoDetail({ promo, onClose, addToCart, onPackClick }) {
 
     return ReactDOM.createPortal(
         <AnimatePresence>
-            <div className="fixed inset-0 z-[9998] flex justify-end">
+            <div key="promo-modal-wrapper" className="fixed inset-0 z-[9998] flex justify-end">
 
                 {/* Backdrop */}
                 <motion.div
@@ -404,8 +404,8 @@ function PromoDetail({ promo, onClose, addToCart, onPackClick }) {
                             )}
 
                             {/* Descripción */}
-                            <p className="text-slate-500 text-sm leading-relaxed font-medium border-l-2 border-orange-500 pl-4 py-1">
-                                {(promo.descripcion || '').toString().replace(/^o\s+/i, '').trim()}
+                            <p className="text-slate-500 text-sm leading-relaxed font-medium border-l-2 border-orange-500 pl-4 py-1 whitespace-pre-line">
+                                {(promo.descripcion || '').toString().replace(/^o[\s\n]*/i, '').trim()}
                             </p>
 
 

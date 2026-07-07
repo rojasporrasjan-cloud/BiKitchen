@@ -892,13 +892,10 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                     };
 
                     // Si es tarjeta o PayPal, ya está pagado
-                    // Para NMI: updateOrderStatus ya escribió 'confirmed' en onPaymentSuccess — solo metadata
                     if (['nmi', 'paypal', 'tilopay'].includes(formData.metodoPago)) {
-                        if (formData.metodoPago !== 'nmi') {
-                            updates.status = 'confirmed';
-                            updates.paymentStatus = 'paid';
-                            updates.paymentConfirmed = true;
-                        }
+                        updates.status = 'confirmed';
+                        updates.paymentStatus = 'paid';
+                        updates.paymentConfirmed = true;
                         if (orderDetails.paymentResult?.transactionid) {
                             updates.transactionId = orderDetails.paymentResult.transactionid;
                         }
@@ -1992,6 +1989,30 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                             }
                         }
                     }}
+                    onSwitchToSinpe={async () => {
+                        const orderIdToUpdate = nmiDocId || pendingOrderDocId;
+                        setShowNMIModal(false);
+                        setFormData(prev => ({ ...prev, metodoPago: 'sinpe' }));
+                        
+                        if (orderIdToUpdate) {
+                            try {
+                                await updateDoc(doc(db, 'pedidos', orderIdToUpdate), {
+                                    metodo_pago: 'sinpe',
+                                    details: { ...formData, paymentMethod: 'sinpe' },
+                                    pendingReason: 'Cambio a SINPE tras rechazo de tarjeta',
+                                    updatedAt: serverTimestamp()
+                                });
+                                // Llamar a handleOrderCompletion para mostrar pantalla de éxito SINPE
+                                await handleOrderCompletion({
+                                    orderNumber: orderNumber,
+                                    docId: orderIdToUpdate,
+                                    metodoPago: 'sinpe'
+                                });
+                            } catch (error) {
+                                console.error('[Checkout] Error switching to SINPE:', error);
+                            }
+                        }
+                    }}
                     onPaymentSuccess={async (nmiResult) => {
                         // 1. Obtener el ID del pedido — nmiDocId está capturado sincrónicamente al abrir el modal
                         const orderIdToUpdate = nmiDocId || pendingOrderDocId;
@@ -2015,14 +2036,33 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                             }
                         } catch (error) {
                             console.error('[Checkout] ❌ Error actualizando pedido tras pago NMI:', error);
-                            // Reintento directo con updateDoc como fallback
                             try {
                                 await updateDoc(doc(db, 'pedidos', orderIdToUpdate), {
                                     status: 'confirmed',
                                     paymentStatus: 'paid',
+                                    paymentConfirmed: true,
+                                    pointsAwarded: true,
+                                    pointsAwardedAt: new Date().toISOString(),
                                     transactionId: nmiResult.transactionid || 'NMI',
                                     updatedAt: serverTimestamp()
                                 });
+                                
+                                // Award points in fallback
+                                const pointsToAward = Math.floor((getTotalWithShipping() + getPaymentMethodAdjustment(formData.metodoPago)) * 0.02);
+                                if (formData.correo && pointsToAward > 0) {
+                                    try {
+                                        const pointsRef = doc(db, "loyalty", formData.correo.toLowerCase());
+                                        const { increment, setDoc } = await import('firebase/firestore');
+                                        await setDoc(pointsRef, {
+                                            email: formData.correo.toLowerCase(),
+                                            points: increment(pointsToAward),
+                                            totalEarned: increment(pointsToAward),
+                                            lastUpdated: new Date().toISOString()
+                                        }, { merge: true });
+                                    } catch (ptsErr) {
+                                        console.error('[Checkout] Error saving points in fallback:', ptsErr);
+                                    }
+                                }
                                 firestoreOk = true;
                             } catch (fallbackErr) {
                                 console.error('[Checkout] ❌ Fallback también falló:', fallbackErr);

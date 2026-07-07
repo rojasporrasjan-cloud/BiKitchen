@@ -243,7 +243,7 @@ export const OrdersProvider = ({ children }) => {
         try {
             let orderRef = doc(db, "pedidos", orderId);
             let orderSnap;
-            
+
             try {
                 // Try fetching by doc ID first
                 orderSnap = await getDoc(orderRef);
@@ -254,7 +254,7 @@ export const OrdersProvider = ({ children }) => {
             if (!orderSnap?.exists?.()) {
                 const q = query(collection(db, "pedidos"), where("numeroOrden", "==", orderId));
                 const querySnap = await getDocs(q);
-                
+
                 if (!querySnap.empty) {
                     orderRef = doc(db, "pedidos", querySnap.docs[0].id);
                     orderSnap = await getDoc(orderRef);
@@ -338,15 +338,15 @@ export const OrdersProvider = ({ children }) => {
                         const rrPoints = 1000; // REFERRAL_REWARD_POINTS aligned with ReferidosPage.jsx
                         const userRef = doc(db, "users", orderData.referral_uid);
                         const userSnap = await getDoc(userRef);
-                        
+
                         if (userSnap.exists()) {
                             const userData = userSnap.data();
                             const userEmail = userData.email?.toLowerCase();
-                            
+
                             if (userEmail) {
                                 const lRef = doc(db, "loyalty", userEmail);
                                 const lSnap = await getDoc(lRef);
-                                
+
                                 const referralHistory = {
                                     id: `ref_${orderId}_${Date.now()}`,
                                     type: 'referral_bonus',
@@ -385,6 +385,7 @@ export const OrdersProvider = ({ children }) => {
             await updateDoc(orderRef, secondaryUpdates);
         } catch (error) {
             console.error("Error updating order status:", error);
+            throw error;
         }
     };
 
