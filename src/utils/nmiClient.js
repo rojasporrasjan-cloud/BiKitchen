@@ -146,6 +146,25 @@ export async function initGateway() {
     return gateway;
 }
 
+// Module-level ref to the pre-initialized 3DS instance
+let _preInitializedThreeDS = null;
+
+/**
+ * Pre-initializes 3D Secure to give Cardinal Commerce enough time (3-4s)
+ * to perform "device profiling" in the background before the user pays.
+ * @param {Object} gateway - Initialized gateway instance
+ */
+export function preInit3DS(gateway) {
+    if (!gateway) return;
+    try {
+        _preInitializedThreeDS = gateway.get3DSecure();
+        console.log('[NMI] 3DS pre-initialized successfully.');
+    } catch (e) {
+        console.warn('[NMI] 3DS pre-initialization failed:', e.message);
+        _preInitializedThreeDS = null;
+    }
+}
+
 /**
  * Starts 3DS Authentication process
  * @param {Object} gateway - Initialized gateway instance
@@ -161,7 +180,7 @@ export function authenticate3DS(gateway, paymentInfo) {
 
         let threeDS;
         try {
-            threeDS = gateway.get3DSecure();
+            threeDS = _preInitializedThreeDS || gateway.get3DSecure();
             console.log('[NMI] 3DS module found:', !!threeDS);
         } catch (e) {
             console.error('[NMI] Error getting 3DS module:', e);
@@ -256,6 +275,13 @@ export function authenticate3DS(gateway, paymentInfo) {
                     // 3DS UI not available — this likely means Payer Authentication
                     // isn't enabled on the BAC/NMI account. Fall back to payment
                     // without 3DS instead of blocking the customer.
+                    // FIX #2: Si el usuario tiene AdBlock, Gateway.js no lanza error pero createUI puede retornar null
+                    // o fallar silenciosamente. Verificamos si _preInitializedThreeDS existe pero createUI falló.
+                    if (_preInitializedThreeDS) {
+                         reject(new Error('⚠️ Error de Seguridad del Banco\n\nTu navegador bloqueó la ventana de verificación de tu tarjeta. Esto suele pasar por:\n\n1. Tienes un AdBlocker encendido (apágalo para esta página).\n2. Estás usando el navegador Brave (apaga los escudos).\n3. Estás usando Safari en iPhone (intenta con Chrome u otro navegador).\n\n👉 Soluciónalo recargando la página sin bloqueadores, o elige "Transferencia / SINPE" como método de pago.'));
+                         return;
+                    }
+                    
                     const keyLen = NMI_PUBLIC_KEY?.length || 0;
                     console.warn(`[NMI] createUI returned null (Key Length: ${keyLen}). 3DS no disponible — procesando pago sin autenticación 3DS.`);
                     resolve({

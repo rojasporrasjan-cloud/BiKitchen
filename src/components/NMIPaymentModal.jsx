@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, CreditCard, Shield, Loader2, AlertCircle, CheckCircle, Lock as LucideLock, ChevronDown, ChevronUp } from 'lucide-react';
-import { initGateway, authenticate3DS, processTransaction, unmount3DS, isValidCardNumber, isValidExpiration, isValidCVV } from '../utils/nmiClient';
+import { initGateway, authenticate3DS, preInit3DS, processTransaction, unmount3DS, isValidCardNumber, isValidExpiration, isValidCVV } from '../utils/nmiClient';
 
 // Helper to detect card type
 const getCardType = (number) => {
@@ -30,7 +30,7 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
     return <img src={icons[type]} alt={type} className={className} />;
 };
 
-/* BIKITCHEN_NMI_BUILD_20260328 */ export default function NMIPaymentModal({ isOpen, onClose, total, orderId, requestId, customerInfo, onPaymentSuccess, onPaymentError, onPaymentValidationFailed }) {
+/* BIKITCHEN_NMI_BUILD_20260328 */ export default function NMIPaymentModal({ isOpen, onClose, total, orderId, requestId, customerInfo, onPaymentSuccess, onPaymentError, onPaymentValidationFailed, onSwitchToSinpe }) {
     const [step, setStep] = useState('card'); // 'card', '3ds', 'processing', 'success', 'error'
     const [loading, setLoading] = useState(false);
     const [gateway, setGateway] = useState(null);
@@ -53,7 +53,11 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
     useEffect(() => {
         if (isOpen) {
             initGateway()
-                .then(setGateway)
+                .then(gw => {
+                    setGateway(gw);
+                    // FIX #1: Pre-inicializar 3DS de inmediato para ganar los 4 segundos vitales
+                    preInit3DS(gw);
+                })
                 .catch(err => {
                     console.error('[NMI] Error initializing gateway:', err);
                     setError('No se pudo inicializar la plataforma de pago de forma segura.');
@@ -570,9 +574,20 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
                                             }}
                                             className="w-full py-4 bg-orange-600 text-white rounded-2xl font-black hover:bg-orange-700 transition-all shadow-lg shadow-orange-100"
                                         >
-                                            REINTENTAR PAGO
+                                            REINTENTAR CON TARJETA
                                         </button>
-                                        <button onClick={onClose} className="w-full text-sm font-bold text-gray-400 hover:text-gray-600 tracking-widest uppercase">
+                                        
+                                        {/* FIX: Salvavidas para Call Issuer / Decline */}
+                                        {onSwitchToSinpe && (
+                                            <button
+                                                onClick={onSwitchToSinpe}
+                                                className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 mt-2 border-2 border-blue-600"
+                                            >
+                                                ALTERNATIVA: PAGAR CON SINPE
+                                            </button>
+                                        )}
+                                        
+                                        <button onClick={onClose} className="w-full text-sm font-bold text-gray-400 hover:text-gray-600 tracking-widest uppercase mt-2">
                                             Cancelar pago
                                         </button>
                                     </div>
