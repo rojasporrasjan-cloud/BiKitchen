@@ -86,6 +86,19 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
         };
     }, [isOpen, customerInfo]);
 
+    // Auto-scroll a la caja 3DS cuando se activa el paso
+    useEffect(() => {
+        if (step === '3ds') {
+            const timer = setTimeout(() => {
+                const container = document.getElementById('three-ds-container');
+                if (container) {
+                    container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            }, 500);
+            return () => clearTimeout(timer);
+        }
+    }, [step]);
+
     const handleCardChange = (e) => {
         const { name, value, type, checked } = e.target;
         
@@ -506,11 +519,17 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
                                         </div>
                                     </div>
                                     
-                                    <p className="text-xs text-gray-500 text-center mb-6 px-4 leading-relaxed">
-                                        Tu banco requiere una verificación adicional. 
-                                        <strong> Si no ves el campo para el código, desliza hacia abajo </strong> 
-                                        dentro del cuadro inferior.
-                                    </p>
+                                    <div className="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-4 mb-6 w-full text-left shadow-sm relative overflow-hidden">
+                                        <div className="absolute top-0 left-0 w-1 h-full bg-yellow-400" />
+                                        <h4 className="text-sm text-yellow-800 font-black flex items-center gap-2 mb-2">
+                                            <AlertCircle size={16} />
+                                            ⚠️ IMPORTANTE: ¿No ves dónde poner el código?
+                                        </h4>
+                                        <ul className="text-xs text-yellow-700 space-y-1 ml-6 list-disc font-medium">
+                                            <li><strong>Desliza hacia abajo:</strong> La ventana del banco puede estar al fondo de esta pantalla.</li>
+                                            <li><strong>Ventana Oculta:</strong> A veces el banco abre una ventana nueva que queda <strong>"escondida por debajo"</strong> o detrás de tu navegador.</li>
+                                        </ul>
+                                    </div>
                                     
                                     <div
                                         id="three-ds-container"

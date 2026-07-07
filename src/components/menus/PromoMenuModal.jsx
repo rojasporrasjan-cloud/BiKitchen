@@ -94,7 +94,7 @@ export default function PromoMenuModal({
             promoTitle: promoMetadata?.title,
             benefits: promoMetadata?.benefits || [],
             image: promoImage,
-            plan: 'monthly',
+            plan: (promoMetadata?.title && promoMetadata.title.toLowerCase().includes('dos semanas')) ? 'biweekly' : 'monthly',
             planLabel: promoMetadata?.planLabel || 'Promoción Mensual',
             customizations: substitutions
         };

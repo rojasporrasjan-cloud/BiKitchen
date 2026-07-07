@@ -315,8 +315,8 @@ function PromoDetail({ promo, onClose, addToCart, onPackClick }) {
             benefits: promo.detalles?.beneficios || [],
             image: promo.imagen,
             // Agregar propiedades para detectar descuentos de envío
-            plan: 'monthly',
-            planLabel: esDesayunosGratis ? 'Promo Desayunos Gratis' : (esTwoPack ? 'Two Pack' : (es50DescuentoEnvio ? 'Promo 50% Envío' : 'Promoción Mensual'))
+            plan: (promo.titulo && promo.titulo.toLowerCase().includes('dos semanas')) ? 'biweekly' : 'monthly',
+            planLabel: esDesayunosGratis ? 'Promo Desayunos Gratis' : (esTwoPack ? 'Two Pack' : (es50DescuentoEnvio ? 'Promo 50% Envío' : ((promo.titulo && promo.titulo.toLowerCase().includes('dos semanas')) ? 'Promo 2 Semanas' : 'Promoción Mensual')))
         };
 
         if (addToCart && typeof addToCart === 'function') {

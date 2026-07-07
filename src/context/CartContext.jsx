@@ -170,8 +170,8 @@ export function CartProvider({ children }) {
 
             // Reglas acumulativas (se queda con el mayor descuento posible)
 
-            // Promoción mensual con desayunos gratis: 10% descuento
-            if (planLabel.includes('desayunos gratis') || promoTitle.includes('desayunos gratis') || name.includes('desayunos gratis')) {
+            // Promoción mensual con desayunos gratis: 10% descuento (NO aplica si es quincenal)
+            if (plan !== 'biweekly' && (planLabel.includes('desayunos gratis') || promoTitle.includes('desayunos gratis') || name.includes('desayunos gratis'))) {
                 maxDiscount = Math.max(maxDiscount, 10);
             }
 
