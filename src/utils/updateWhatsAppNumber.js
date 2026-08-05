@@ -1,30 +1,27 @@
 import { db } from '../firebase/config';
 import { doc, setDoc } from 'firebase/firestore';
+import { WHATSAPP_PHONE, WHATSAPP_PHONE_ALT, formatWhatsAppDisplay } from '../config/whatsappMessages';
 
 /**
- * Script para actualizar el número de WhatsApp en Firebase
- * 
- * Para usar:
- * 1. Abre la consola del navegador
- * 2. Ejecuta: await window.updateWhatsAppToProduction()
+ * Restablece el número de WhatsApp en Firebase a los valores por defecto del código.
+ *
+ * ⚠️ Este módulo NO debe importarse de forma global (ej: en App.jsx).
+ * Antes lo hacía y exponía la función en window para cualquier visitante,
+ * lo que permitía sobreescribir el WhatsApp del sitio desde la consola.
+ *
+ * Para cambiar el número normalmente, usar /admin/whatsapp-config.
  */
-
 export async function updateWhatsAppToProduction() {
     try {
-        console.log('🔄 Actualizando número de WhatsApp a producción...');
-
         const configRef = doc(db, 'config', 'contact');
 
         await setDoc(configRef, {
-            whatsappPhone: '50685067200', // Número de producción
-            whatsappPhoneAlt: '50688311500',
+            whatsappPhone: WHATSAPP_PHONE,
+            whatsappPhoneAlt: WHATSAPP_PHONE_ALT,
             updatedAt: new Date().toISOString()
         });
 
-        console.log('✅ Número actualizado exitosamente a: 7275-2645');
-        alert('✅ Número de WhatsApp actualizado a 7275-2645\n\nLa página se recargará para aplicar los cambios.');
-
-        // Recargar la página para aplicar cambios
+        alert(`✅ Número de WhatsApp restablecido a ${formatWhatsAppDisplay()}\n\nLa página se recargará para aplicar los cambios.`);
         window.location.reload();
 
         return { success: true };
@@ -33,9 +30,4 @@ export async function updateWhatsAppToProduction() {
         alert('❌ Error al actualizar el número de WhatsApp');
         return { success: false, error: error.message };
     }
-}
-
-// Exponer función globalmente
-if (typeof window !== 'undefined') {
-    window.updateWhatsAppToProduction = updateWhatsAppToProduction;
 }

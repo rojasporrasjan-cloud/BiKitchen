@@ -43,3 +43,28 @@ export const formatDiscount = (value) => {
     if (!value) return '';
     return `-${Math.round(value)}%`;
 };
+
+/**
+ * Formatea una lista de proteínas agrupando las repetidas.
+ * Los packs de proteínas permiten elegir la misma opción más de una vez,
+ * así que la lista puede traer duplicados.
+ *
+ * @param {string[]} proteinas - Lista de nombres (puede tener repetidos)
+ * @returns {string} "Pollo mechado x2, Res en salsa"
+ *
+ * @example
+ * formatProteinList(['Pollo mechado', 'Pollo mechado', 'Res'])
+ * // "Pollo mechado x2, Res"
+ */
+export const formatProteinList = (proteinas) => {
+    if (!Array.isArray(proteinas) || proteinas.length === 0) return '';
+
+    const conteo = new Map();
+    for (const nombre of proteinas) {
+        conteo.set(nombre, (conteo.get(nombre) || 0) + 1);
+    }
+
+    return [...conteo.entries()]
+        .map(([nombre, cantidad]) => (cantidad > 1 ? `${nombre} x${cantidad}` : nombre))
+        .join(', ');
+};

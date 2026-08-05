@@ -47,6 +47,8 @@ import { useAuth } from '../../context/AuthContext';
 import { useShipping } from '../../context/ShippingContext';
 import ClientProfileModal from '../../components/admin/ClientProfileModal';
 import { parseFirebaseDate } from '../../utils/dateUtils';
+import { getClientWhatsAppUrl, getClientTelUrl } from '../../utils/phoneUtils';
+import { formatProteinList } from '../../utils/formatters';
 
 // Generar próximas fechas de entrega disponibles (lógica mirror de Checkout)
 const getNextDeliveryDatesForZone = (zoneId) => {
@@ -1401,7 +1403,7 @@ export default function OrdersView() {
                     let desc = details.length ? `${base} (${details.join(' · ')})` : base;
                     const extras = [];
                     if (Array.isArray(i.proteinas) && i.proteinas.length) {
-                        extras.push(`Incluye: ${i.proteinas.join(', ')}`);
+                        extras.push(`Incluye: ${formatProteinList(i.proteinas)}`);
                     }
                     if (i.desc && !extras.length) {
                         extras.push(String(i.desc));
@@ -2364,29 +2366,32 @@ export default function OrdersView() {
                                         {(selectedOrder.telefono || selectedOrder.details?.phone) && (
                                             <div className="flex gap-2 pt-3 border-t border-gray-100 mt-3">
                                                 <a
-                                                    href={`tel:${(selectedOrder.telefono || selectedOrder.details.phone).replace(/[^0-9]/g, '')}`}
+                                                    href={getClientTelUrl(selectedOrder.telefono || selectedOrder.details.phone)}
                                                     className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-500 text-white text-sm font-medium rounded-lg hover:bg-blue-600 transition-colors"
                                                     onClick={(e) => e.stopPropagation()}
                                                 >
                                                     <Phone size={16} />
                                                     Llamar
                                                 </a>
-                                                <a
-                                                    href={`https://wa.me/506${(selectedOrder.telefono || selectedOrder.details.phone).replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
-                                                        `Hola ${selectedOrder.client}! 👋
+                                                {getClientWhatsAppUrl(selectedOrder.telefono || selectedOrder.details.phone) && (
+                                                    <a
+                                                        href={getClientWhatsAppUrl(
+                                                            selectedOrder.telefono || selectedOrder.details.phone,
+                                                            `Hola ${selectedOrder.client}! 👋
 
 Somos de BiKitchen, te contactamos sobre tu pedido ${selectedOrder.displayId}.
 
 ¿En qué podemos ayudarte?`
-                                                    )}`}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-green-500 text-white text-sm font-medium rounded-lg hover:bg-green-600 transition-colors"
-                                                    onClick={(e) => e.stopPropagation()}
-                                                >
-                                                    <MessageCircle size={16} />
-                                                    WhatsApp
-                                                </a>
+                                                        )}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-green-500 text-white text-sm font-medium rounded-lg hover:bg-green-600 transition-colors"
+                                                        onClick={(e) => e.stopPropagation()}
+                                                    >
+                                                        <MessageCircle size={16} />
+                                                        WhatsApp
+                                                    </a>
+                                                )}
                                             </div>
                                         )}
                                     </div>
@@ -2570,7 +2575,7 @@ Somos de BiKitchen, te contactamos sobre tu pedido ${selectedOrder.displayId}.
                                                                             <div className="text-sm text-gray-500 mt-1">{desc}</div>
                                                                         )}
                                                                         {Array.isArray(item.proteinas) && item.proteinas.length > 0 && (
-                                                                            <div className="text-sm text-gray-500 mt-1">Incluye: {item.proteinas.join(', ')}</div>
+                                                                            <div className="text-sm text-gray-500 mt-1">Incluye: {formatProteinList(item.proteinas)}</div>
                                                                         )}
                                                                         {finalProtein && (
                                                                             <div className="text-xs text-gray-400 mt-1">Proteína: {finalProtein}</div>
@@ -2699,9 +2704,12 @@ Somos de BiKitchen, te contactamos sobre tu pedido ${selectedOrder.displayId}.
                                                 Forzar Confirmación
                                             </button>
                                         )}
-                                        {selectedOrder.details?.phone && (
+                                        {getClientWhatsAppUrl(selectedOrder.details?.phone) && (
                                             <a
-                                                href={`https://wa.me/506${selectedOrder.details.phone.replace(/\D/g, '')}?text=Hola ${selectedOrder.client}, gracias por tu pedido ${selectedOrder.displayId} en BiKitchen! 🍽️`}
+                                                href={getClientWhatsAppUrl(
+                                                    selectedOrder.details.phone,
+                                                    `Hola ${selectedOrder.client}, gracias por tu pedido ${selectedOrder.displayId} en BiKitchen! 🍽️`
+                                                )}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
                                                 className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-green-500 text-white text-sm font-medium rounded-lg hover:bg-green-600 transition-colors"
@@ -2712,9 +2720,9 @@ Somos de BiKitchen, te contactamos sobre tu pedido ${selectedOrder.displayId}.
                                         )}
                                         <button
                                             onClick={() => {
-                                                const phone = selectedOrder.details?.phone;
-                                                if (phone) {
-                                                    window.location.href = `tel:${phone}`;
+                                                const telUrl = getClientTelUrl(selectedOrder.details?.phone);
+                                                if (telUrl) {
+                                                    window.location.href = telUrl;
                                                 }
                                             }}
                                             className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded-lg hover:bg-blue-600 transition-colors"

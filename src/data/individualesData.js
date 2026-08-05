@@ -1476,8 +1476,8 @@ export const individualesData = [
     imagen: 'https://res.cloudinary.com/ddx6sns1g/image/upload/v1776193839/bikitchen/individuales/chili_con_carne.jpg'
   },
   {
-    id: 'cubaces-carne-cerdo-pollo',
-    nombre: 'Cubaces con carne de cerdo o pollo',
+    id: 'cubaces-pollo',
+    nombre: 'Cubaces con pollo',
     descripcion: '4 tazas / 6 tazas',
     precio500: 9850,
     precio1kg: 13750,
@@ -1485,8 +1485,17 @@ export const individualesData = [
     imagen: 'https://res.cloudinary.com/ddx6sns1g/image/upload/v1776193841/bikitchen/individuales/cubaces_carne_cerdo_pollo.jpg'
   },
   {
-    id: 'frijoles-blancos-carne-cerdo-pollo',
-    nombre: 'Frijoles blancos con carne de cerdo o pollo',
+    id: 'cubaces-cerdo',
+    nombre: 'Cubaces con cerdo',
+    descripcion: '4 tazas / 6 tazas',
+    precio500: 9850,
+    precio1kg: 13750,
+    categoria: 'Leguminosas',
+    imagen: 'https://res.cloudinary.com/ddx6sns1g/image/upload/v1776193841/bikitchen/individuales/cubaces_carne_cerdo_pollo.jpg'
+  },
+  {
+    id: 'frijoles-blancos-pollo',
+    nombre: 'Frijoles blancos con pollo',
     descripcion: '4 tazas / 6 tazas',
     precio500: 9500,
     precio1kg: 14250,
@@ -1494,8 +1503,26 @@ export const individualesData = [
     imagen: 'https://res.cloudinary.com/ddx6sns1g/image/upload/v1776193842/bikitchen/individuales/frijoles_blancos_carne_cerdo_pollo.jpg'
   },
   {
-    id: 'garbanzos-pollo-cerdo',
-    nombre: 'Garbanzos con pollo o carne de cerdo',
+    id: 'frijoles-blancos-cerdo',
+    nombre: 'Frijoles blancos con cerdo',
+    descripcion: '4 tazas / 6 tazas',
+    precio500: 9500,
+    precio1kg: 14250,
+    categoria: 'Leguminosas',
+    imagen: 'https://res.cloudinary.com/ddx6sns1g/image/upload/v1776193842/bikitchen/individuales/frijoles_blancos_carne_cerdo_pollo.jpg'
+  },
+  {
+    id: 'garbanzos-pollo',
+    nombre: 'Garbanzos con pollo',
+    descripcion: '4 tazas / 6 tazas',
+    precio500: 9500,
+    precio1kg: 14250,
+    categoria: 'Leguminosas',
+    imagen: 'https://res.cloudinary.com/ddx6sns1g/image/upload/v1776193844/bikitchen/individuales/garbanzos_pollo_cerdo.jpg'
+  },
+  {
+    id: 'garbanzos-cerdo',
+    nombre: 'Garbanzos con cerdo',
     descripcion: '4 tazas / 6 tazas',
     precio500: 9500,
     precio1kg: 14250,

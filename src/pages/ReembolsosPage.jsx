@@ -8,6 +8,7 @@ import { RefreshCw, ArrowLeft, CreditCard, Timer, Truck, AlertTriangle, FileText
 import { useWhatsApp } from '../hooks/useWhatsApp';
 import { db } from '../firebase/config';
 import { doc, getDoc } from 'firebase/firestore';
+import { WHATSAPP_PHONE_DISPLAY } from '../config/whatsappMessages';
 
 // Íconos por posición (para asociarlos aunque se agreguen o cambien secciones)
 const SECTION_ICONS = [FileText, Timer, Truck, CreditCard, AlertTriangle, RefreshCw, FileText, MessageCircle];
@@ -67,7 +68,7 @@ export default function ReembolsosPage() {
       icon: <MessageCircle size={22} />,
       title: '8. Cómo solicitar un reembolso',
       content:
-        'Escríbenos por email a bikitchenfood@gmail.com o WhatsApp +506 8506-7200 indicando: nombre, número de pedido, fecha de entrega y motivo. Nuestro equipo te dará seguimiento en horario laboral.'
+        `Escríbenos por email a bikitchenfood@gmail.com o WhatsApp ${WHATSAPP_PHONE_DISPLAY} indicando: nombre, número de pedido, fecha de entrega y motivo. Nuestro equipo te dará seguimiento en horario laboral.`
     }
   ];
 

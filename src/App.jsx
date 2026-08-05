@@ -1,7 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { lazy, Suspense, Component, useEffect } from 'react';
-import './utils/updateWhatsAppNumber'; // Script para actualizar número de WhatsApp
 import { checkAppVersion } from './utils/appVersion'; // Sistema de versión para forzar actualizaciones
 import { hardRefresh } from './utils/cacheUtils';
 import { captureSource } from './services/sourceTracking';
@@ -70,6 +69,7 @@ const PackImagesView = lazyWithRetry(() => import('./pages/admin/PackImagesView'
 const NotificationsView = lazyWithRetry(() => import('./pages/admin/NotificationsView'));
 const DispatchSheetView = lazyWithRetry(() => import('./pages/admin/DispatchSheetView'));
 const WhatsAppConfigView = lazyWithRetry(() => import('./pages/admin/WhatsAppConfigView'));
+const PhoneAuditView = lazyWithRetry(() => import('./pages/admin/PhoneAuditView'));
 const ShippingDiscountView = lazyWithRetry(() => import('./views/ShippingDiscountView'));
 const GiftCardsView = lazyWithRetry(() => import('./pages/admin/GiftCardsView'));
 const ShippingView = lazyWithRetry(() => import('./pages/admin/ShippingView'));
@@ -251,9 +251,6 @@ function AnimatedRoutes() {
             <Route path="/mis-cupones" element={<MisCuponesPage />} />
             <Route path="/acceso-denegado" element={<AccesoDenegadoPage />} />
 
-            {/* Test WhatsApp */}
-            <Route path="/test-whatsapp" element={<TestWhatsAppPage />} />
-
             {/* Tilopay payment return */}
             <Route path="/tilopay/return" element={<TilopayReturnPage />} />
 
@@ -277,6 +274,8 @@ function AnimatedRoutes() {
               <Route path="notifications" element={<NotificationsView />} />
               <Route path="gift-cards" element={<GiftCardsView />} />
               <Route path="whatsapp-config" element={<WhatsAppConfigView />} />
+              <Route path="test-whatsapp" element={<TestWhatsAppPage />} />
+              <Route path="phone-audit" element={<PhoneAuditView />} />
               <Route path="shipping-discount" element={<ShippingDiscountView />} />
               <Route path="shipping" element={<ShippingView />} />
               <Route path="reports" element={<ReportsView />} />

@@ -21,6 +21,20 @@ export const WHATSAPP_PHONE = '50685067200'; // Número de producción por defec
 export const WHATSAPP_PHONE_ALT = '50688311500';
 
 /**
+ * Formatea un número completo (50685067200) al formato visible (+506 8506-7200)
+ */
+export const formatWhatsAppDisplay = (phone = WHATSAPP_PHONE) =>
+    `+506 ${String(phone).replace(/^506/, '').replace(/(\d{4})(\d{4})/, '$1-$2')}`;
+
+/**
+ * Número visible en textos estáticos (SEO, páginas legales, schema).
+ * Estos contextos no pueden leer Firebase, así que usan el fallback.
+ * Si cambia el número en Firebase, actualizar también WHATSAPP_PHONE aquí
+ * y el JSON-LD de index.html.
+ */
+export const WHATSAPP_PHONE_DISPLAY = formatWhatsAppDisplay();
+
+/**
  * Genera una URL de WhatsApp con mensaje prellenado
  */
 export const getWhatsAppUrl = (message, phone = WHATSAPP_PHONE) => {

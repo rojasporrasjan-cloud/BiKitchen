@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase/config';
+import { WHATSAPP_PHONE, WHATSAPP_PHONE_ALT } from '../config/whatsappMessages';
 
 const ContactConfigContext = createContext();
 
@@ -14,8 +15,8 @@ export const useContactConfig = () => {
 
 export const ContactConfigProvider = ({ children }) => {
     const [config, setConfig] = useState({
-        whatsappPhone: '50685067200', // Número de producción
-        whatsappPhoneAlt: '50688311500',
+        whatsappPhone: WHATSAPP_PHONE,
+        whatsappPhoneAlt: WHATSAPP_PHONE_ALT,
         loading: true
     });
 
@@ -29,8 +30,8 @@ export const ContactConfigProvider = ({ children }) => {
                 if (docSnap.exists()) {
                     const data = docSnap.data();
                     setConfig({
-                        whatsappPhone: data.whatsappPhone || '50685067200',
-                        whatsappPhoneAlt: data.whatsappPhoneAlt || '50688311500',
+                        whatsappPhone: data.whatsappPhone || WHATSAPP_PHONE,
+                        whatsappPhoneAlt: data.whatsappPhoneAlt || WHATSAPP_PHONE_ALT,
                         loading: false
                     });
                 } else {
@@ -50,8 +51,8 @@ export const ContactConfigProvider = ({ children }) => {
     const initializeConfig = async (configRef) => {
         try {
             const defaultConfig = {
-                whatsappPhone: '50685067200', // Número de producción
-                whatsappPhoneAlt: '50688311500',
+                whatsappPhone: WHATSAPP_PHONE,
+                whatsappPhoneAlt: WHATSAPP_PHONE_ALT,
                 updatedAt: new Date().toISOString()
             };
 

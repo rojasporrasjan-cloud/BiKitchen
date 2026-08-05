@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { useWhatsApp } from '../hooks/useWhatsApp';
 import { useContactConfig } from '../context/ContactConfigContext';
 
@@ -8,23 +9,7 @@ import { useContactConfig } from '../context/ContactConfigContext';
  */
 export default function TestWhatsAppPage() {
     const { whatsappPhone, getWhatsAppUrl, urls } = useWhatsApp();
-    const { whatsappPhone: configPhone, whatsappPhoneAlt, loading, updateWhatsAppPhone } = useContactConfig();
-
-    const handleChangeToProduction = async () => {
-        const confirmed = window.confirm('¿Cambiar a número de producción (85067200)?');
-        if (confirmed) {
-            await updateWhatsAppPhone('50685067200');
-            alert('Número actualizado a producción');
-        }
-    };
-
-    const handleChangeToTest = async () => {
-        const confirmed = window.confirm('¿Cambiar al número principal (8506-7200)?');
-        if (confirmed) {
-            await updateWhatsAppPhone('50685067200');
-            alert('Número actualizado a pruebas');
-        }
-    };
+    const { whatsappPhoneAlt, loading } = useContactConfig();
 
     if (loading) {
         return (
@@ -71,28 +56,21 @@ export default function TestWhatsAppPage() {
                         </div>
                     </div>
 
-                    {/* Acciones Rápidas */}
+                    {/* Dónde se cambia el número */}
                     <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-6 mb-8">
                         <h2 className="text-xl font-bold text-blue-900 mb-4">
                             🔄 Cambiar Número
                         </h2>
-                        <div className="flex gap-4">
-                            <button
-                                onClick={handleChangeToTest}
-                                className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-xl transition-colors"
-                            >
-                                📱 Principal (8506-7200)
-                            </button>
-                            <button
-                                onClick={handleChangeToProduction}
-                                className="flex-1 bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-6 rounded-xl transition-colors"
-                            >
-                                🚀 Producción (85067200)
-                            </button>
-                        </div>
-                        <p className="text-sm text-gray-600 mt-3">
-                            Los cambios se reflejan inmediatamente en toda la aplicación
+                        <p className="text-sm text-gray-700 mb-4">
+                            Esta página es solo de verificación. El número se cambia desde la
+                            configuración oficial, que actualiza toda la aplicación en tiempo real.
                         </p>
+                        <Link
+                            to="/admin/whatsapp-config"
+                            className="inline-block bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-xl transition-colors"
+                        >
+                            ⚙️ Ir a Configuración de WhatsApp
+                        </Link>
                     </div>
 
                     {/* URLs de Prueba */}
@@ -183,12 +161,12 @@ export default function TestWhatsAppPage() {
 
                     {/* Botón Volver */}
                     <div className="mt-8 text-center">
-                        <a
-                            href="/"
+                        <Link
+                            to="/"
                             className="inline-block bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 px-8 rounded-xl transition-colors"
                         >
                             ← Volver al Inicio
-                        </a>
+                        </Link>
                     </div>
                 </div>
             </div>

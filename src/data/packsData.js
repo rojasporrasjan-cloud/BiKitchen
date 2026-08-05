@@ -27,6 +27,7 @@ export const PACKS_DATA = {
     'two_pack': {
         title: 'Two Pack',
         subtitle: 'Plan Parejas: 10 Comidas Totales (5 para cada uno) • 25% OFF Pack Mensual',
+        comidasLabel: '10 comidas (5 c/u)',
         icon: '👥',
         monthlyDiscount: 25,
         shipping: {
@@ -61,6 +62,7 @@ export const PACKS_DATA = {
     '5_comidas': {
         title: '5 Comidas a la Semana',
         subtitle: 'Lunes a Viernes - Perfecto para empezar',
+        comidasLabel: '5 comidas',
         icon: '🥗',
         shipping: {
             weekly: '🚚 Envío no incluido (según tu zona)',
@@ -80,6 +82,7 @@ export const PACKS_DATA = {
     '10_comidas': {
         title: 'Almuerzo y Cena',
         subtitle: 'Lunes a Viernes - Almuerzo y Cena',
+        comidasLabel: '10 comidas',
         icon: '🍗',
         shipping: {
             weekly: '🚚 Envío no incluido (según tu zona)',
@@ -99,6 +102,7 @@ export const PACKS_DATA = {
     'desayuno_almuerzo_cena': {
         title: 'Desayuno, Almuerzo y Cena',
         subtitle: '15 Comidas - Plan Completo',
+        comidasLabel: '15 comidas',
         icon: '🌅',
         shipping: {
             weekly: '🚚 Envío no incluido (según tu zona)',
@@ -145,6 +149,7 @@ export const PACKS_DATA = {
     'desayunos': {
         title: 'Pack de Desayunos',
         subtitle: '5 opciones saludables para tu semana',
+        comidasLabel: '5 desayunos',
         icon: '🍳',
         shipping: {
             weekly: '🚚 Envío según zona',

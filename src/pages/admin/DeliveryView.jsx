@@ -5,6 +5,7 @@ import { db } from '../../firebase/config';
 import { cachedFetch, invalidateCache } from '../../utils/firestoreCache';
 import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
 import AdminPageHeader from '../../components/admin/AdminPageHeader';
+import { getClientWhatsAppUrl } from '../../utils/phoneUtils';
 
 /**
  * DeliveryView - Vista de Reparto
@@ -336,9 +337,9 @@ export default function DeliveryView() {
                                                 </button>
                                             )}
 
-                                            {delivery.telefono && (
+                                            {getClientWhatsAppUrl(delivery.telefono) && (
                                                 <a
-                                                    href={`https://wa.me/506${delivery.telefono.replace(/\D/g, '')}`}
+                                                    href={getClientWhatsAppUrl(delivery.telefono)}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
                                                     className="p-2 bg-green-100 text-green-600 rounded-lg hover:bg-green-200 transition-colors"

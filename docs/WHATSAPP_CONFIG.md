@@ -1,5 +1,17 @@
 # Configuración de Números de WhatsApp
 
+> ## 📌 NÚMERO OFICIAL
+>
+> **`8506-7200` (`50685067200`)** — confirmado 1 ago 2026.
+>
+> Forma normal de cambiarlo: **`/admin/whatsapp-config`**.
+> Si cambia de forma permanente, actualizar también `WHATSAPP_PHONE`
+> en `src/config/whatsappMessages.js` y el JSON-LD de `index.html`,
+> que son estáticos y no leen Firebase.
+>
+> Los archivos `CAMBIOS_WHATSAPP.md`, `docs/RESUMEN_CAMBIO_WHATSAPP.md` y
+> `docs/CAMBIO_WHATSAPP_PRODUCCION.md` son históricos y tienen números obsoletos.
+
 ## 📱 Sistema Dinámico de WhatsApp
 
 Los números de WhatsApp ahora se gestionan desde Firebase en tiempo real, permitiendo cambiar los números sin necesidad de redesplegar la aplicación.
@@ -15,7 +27,7 @@ Los números de WhatsApp ahora se gestionan desde Firebase en tiempo real, permi
 
 ```json
 {
-  "whatsappPhone": "50672752645",
+  "whatsappPhone": "50685067200",
   "whatsappPhoneAlt": "50688311500",
   "updatedAt": "2024-01-15T10:00:00.000Z",
   "description": "Configuración de números de WhatsApp para BiKitchen"
@@ -33,9 +45,12 @@ node scripts/initWhatsAppConfig.js
 
 ## 📞 Números Configurados
 
-- **Número Principal (Pruebas)**: `50672752645`
-- **Número Alternativo**: `50688311500`
-- **Número de Producción**: `50685067200`
+- **Número Principal (oficial)**: `50685067200` → 8506-7200
+- **Número Alternativo**: `50688311500` → 8831-1500 (Gabriela Li Carmona, también receptor SINPE)
+
+⚠️ Los números que aparecen en el checkout para **SINPE Móvil** (8831-7663 de Gina
+Marozzi Li y 8831-1500 de Gabriela Li Carmona) son cuentas para **recibir el pago**,
+no líneas de atención. No unificarlos con el WhatsApp oficial.
 
 ## 🔄 Cambiar Números
 
@@ -106,7 +121,7 @@ Los siguientes componentes ya usan el sistema dinámico:
 
 ## ⚠️ Notas Importantes
 
-- El número debe incluir el código de país (ej: `50660813117` para Costa Rica)
+- El número debe incluir el código de país (ej: `50685067200` para Costa Rica)
 - No incluir espacios, guiones ni el símbolo `+`
 - Los cambios se propagan automáticamente a todos los usuarios conectados
 - Si Firebase falla, se usa el número por defecto configurado en `whatsappMessages.js`

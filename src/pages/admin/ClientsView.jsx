@@ -38,6 +38,7 @@ import {
 import AdminPageHeader from '../../components/admin/AdminPageHeader';
 import { useOrders } from '../../context/OrdersContext';
 import ClientProfileModal from '../../components/admin/ClientProfileModal';
+import { getClientWhatsAppUrl } from '../../utils/phoneUtils';
 
 export default function ClientsView() {
     const { orders } = useOrders(); // Access global orders for CRM history
@@ -487,15 +488,17 @@ export default function ClientsView() {
 
                             {/* Contact Shortcuts */}
                             <div className="flex gap-2 mb-4">
-                                <a
-                                    href={`https://wa.me/506${(client.telefono || '').replace(/[^0-9]/g, '')}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex-1 flex items-center justify-center gap-2 py-2 px-3 bg-green-50 text-green-600 rounded-xl text-xs font-bold hover:bg-green-100 transition-all border border-green-100"
-                                >
-                                    <MessageSquare size={14} />
-                                    WhatsApp
-                                </a>
+                                {getClientWhatsAppUrl(client.telefono) && (
+                                    <a
+                                        href={getClientWhatsAppUrl(client.telefono)}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex-1 flex items-center justify-center gap-2 py-2 px-3 bg-green-50 text-green-600 rounded-xl text-xs font-bold hover:bg-green-100 transition-all border border-green-100"
+                                    >
+                                        <MessageSquare size={14} />
+                                        WhatsApp
+                                    </a>
+                                )}
                                 <a
                                     href={`mailto:${client.correo}`}
                                     className="flex-1 flex items-center justify-center gap-2 py-2 px-3 bg-blue-50 text-blue-600 rounded-xl text-xs font-bold hover:bg-blue-100 transition-all border border-blue-100"

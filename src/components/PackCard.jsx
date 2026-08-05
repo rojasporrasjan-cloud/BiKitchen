@@ -9,13 +9,17 @@ import { useAuth } from '../context/AuthContext';
 import MenuDetailsModal from './menus/MenuDetailsModal';
 import MenuDetailsModalWithTabs from './menus/MenuDetailsModalWithTabs';
 import { PACKS_DATA, PACK_TO_MENU_KEY, DEFAULT_PACK_IMAGES, PACKS_ESPECIALES_BASE } from '../data/packsData';
-import { formatPrice } from '../utils/formatters';
+import { formatPrice, formatProteinList } from '../utils/formatters';
 import SmoothImage from './SmoothImage';
 import useWhatsApp from '../hooks/useWhatsApp';
 import { WHATSAPP_MESSAGES } from '../config/whatsappMessages';
 
 // Imagen por defecto para packs
 const DEFAULT_PACK_IMAGE = 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=400&h=250&fit=crop&q=80';
+
+// Cuántas veces se puede repetir la MISMA proteína dentro de un pack.
+// Ej: con 2, el cliente puede pedir dos "Pollo mechado" pero no tres.
+const MAX_POR_PROTEINA = 2;
 
 // Variantes de animacion optimizadas
 const cardVariants = {
@@ -94,6 +98,10 @@ const PackCard = memo(({ pack, shipping, category, categoryLabel: customCategory
         displayCategoryLabel = 'Almuerzo y Cena';
     }
 
+    // Cuántas comidas trae la categoría. Es lo que explica por qué el mismo pack
+    // (ej. "Pack Keto") cuesta distinto según la sección.
+    const comidasLabel = PACKS_DATA[category]?.comidasLabel;
+
     // Datos del pack especial memoizados (ahora disponibles para todos los que los necesiten)
     const packEspecialData = useMemo(() => {
         if (!isFamiliarPack && !isProteinsPack) return null;
@@ -149,14 +157,29 @@ const PackCard = memo(({ pack, shipping, category, categoryLabel: customCategory
         setShowSpecialModal(false);
     }, []);
 
-    const toggleProteina = useCallback((proteina) => {
+    // Cuántas veces está elegida una proteína
+    const contarProteina = useCallback(
+        (proteina) => proteinasSeleccionadas.filter(p => p === proteina).length,
+        [proteinasSeleccionadas]
+    );
+
+    const agregarProteina = useCallback((proteina) => {
         setProteinasSeleccionadas(prev => {
-            const exists = prev.includes(proteina);
-            if (exists) return prev.filter(p => p !== proteina);
+            // Tope global del pack (3 o 5 proteínas)
             if (prev.length >= packEspecialData?.cantidad) return prev;
+            // Tope por proteína repetida
+            if (prev.filter(p => p === proteina).length >= MAX_POR_PROTEINA) return prev;
             return [...prev, proteina];
         });
     }, [packEspecialData?.cantidad]);
+
+    const quitarProteina = useCallback((proteina) => {
+        setProteinasSeleccionadas(prev => {
+            const idx = prev.lastIndexOf(proteina);
+            if (idx === -1) return prev;
+            return [...prev.slice(0, idx), ...prev.slice(idx + 1)];
+        });
+    }, []);
 
 
 
@@ -487,11 +510,16 @@ const PackCard = memo(({ pack, shipping, category, categoryLabel: customCategory
                         {/* Status/Category Badge with Glassmorphism */}
                         <div className="flex flex-col gap-2">
                             {displayCategoryLabel && (
-                                <div className="bg-white/25 px-2 py-1 sm:px-4 sm:py-2 rounded-xl sm:rounded-2xl border border-white/25 shadow-xl">
-                                    <span className="text-[9px] sm:text-xs font-black text-white tracking-tight flex items-center gap-1 sm:gap-2">
-                                        <Package size={14} className="text-orange-400" />
+                                <div className="bg-white/25 px-2.5 py-1.5 sm:px-4 sm:py-2 rounded-xl sm:rounded-2xl border border-white/25 shadow-xl">
+                                    <span className="text-[11px] sm:text-xs font-black text-white tracking-tight flex items-center gap-1.5 sm:gap-2">
+                                        <Package size={14} className="text-orange-400 flex-shrink-0" aria-hidden="true" />
                                         {displayCategoryLabel}
                                     </span>
+                                    {comidasLabel && (
+                                        <span className="block text-[10px] sm:text-[11px] font-bold text-orange-200 tracking-tight mt-0.5">
+                                            {comidasLabel}
+                                        </span>
+                                    )}
                                 </div>
                             )}
 
@@ -547,8 +575,8 @@ const PackCard = memo(({ pack, shipping, category, categoryLabel: customCategory
                             </div>
 
                             <div className="flex items-center gap-1 sm:gap-1.5 text-[10px] font-black text-white bg-orange-600 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl shadow-lg hover:bg-orange-500 transition-colors uppercase tracking-widest">
-                                <Plus size={11} strokeWidth={4} />
-                                <span className="hidden sm:inline">Ver menú</span>
+                                <Plus size={11} strokeWidth={4} aria-hidden="true" />
+                                <span>Ver menú</span>
                             </div>
                         </div>
 
@@ -655,37 +683,82 @@ const PackCard = memo(({ pack, shipping, category, categoryLabel: customCategory
                                                 )}
                                             </div>
 
+                                            {isProteinsPack && (
+                                                <p className="text-xs text-slate-500 -mt-3 mb-5">
+                                                    Podés repetir la misma proteína hasta {MAX_POR_PROTEINA} veces.
+                                                </p>
+                                            )}
+
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-8">
                                                 {isProteinsPack ? (
                                                     (getDisplayItems() || []).map((rawProtein, idx) => {
                                                         // Normalizar a string si viene como objeto desde Firebase
                                                         const proteinName = typeof rawProtein === 'string' ? rawProtein : (rawProtein.proteina || rawProtein.nombre || 'Proteína');
-                                                        const isSelected = proteinasSeleccionadas.includes(proteinName);
                                                         // Fallback seguro para cantidad si packEspecialData es null
                                                         const maxCantidad = packEspecialData?.cantidad || (pack?.name?.includes('3') ? 3 : 5);
-                                                        const isDisabled = !isSelected && proteinasSeleccionadas.length >= maxCantidad;
 
-                                                        return (
-                                                            <button
-                                                                key={idx}
-                                                                onClick={(e) => {
-                                                                    e.preventDefault();
-                                                                    toggleProteina(proteinName);
-                                                                }}
-                                                                disabled={isDisabled}
-                                                                className={`p-4 rounded-2xl flex items-center justify-between transition-all border-2 text-left appearance-none outline-none ${isSelected
-                                                                    ? 'bg-orange-50 border-orange-500 text-orange-900 shadow-md ring-2 ring-orange-500/10'
-                                                                    : isDisabled
+                                                        const cantidad = contarProteina(proteinName);
+                                                        const packLleno = proteinasSeleccionadas.length >= maxCantidad;
+                                                        const puedeAgregar = !packLleno && cantidad < MAX_POR_PROTEINA;
+
+                                                        // Sin elegir: toda la tarjeta es un botón para agregar (tap grande en móvil)
+                                                        if (cantidad === 0) {
+                                                            return (
+                                                                <button
+                                                                    key={idx}
+                                                                    onClick={(e) => {
+                                                                        e.preventDefault();
+                                                                        agregarProteina(proteinName);
+                                                                    }}
+                                                                    disabled={packLleno}
+                                                                    aria-label={`Agregar ${proteinName}`}
+                                                                    className={`p-4 rounded-2xl flex items-center justify-between transition-all border-2 text-left appearance-none outline-none ${packLleno
                                                                         ? 'bg-slate-50 border-transparent opacity-30 grayscale cursor-not-allowed'
                                                                         : 'bg-slate-50 border-slate-100 hover:border-orange-200 text-slate-600 hover:text-slate-900'
-                                                                    }`}
+                                                                        }`}
+                                                                >
+                                                                    <span className="font-bold text-sm sm:text-base leading-tight pr-2">{proteinName}</span>
+                                                                    <div className="w-6 h-6 rounded-full border-2 border-slate-300 flex items-center justify-center flex-shrink-0" aria-hidden="true">
+                                                                        <Plus size={14} strokeWidth={3} className="text-slate-400" />
+                                                                    </div>
+                                                                </button>
+                                                            );
+                                                        }
+
+                                                        // Ya elegida: controles de cantidad
+                                                        return (
+                                                            <div
+                                                                key={idx}
+                                                                className="p-4 rounded-2xl flex items-center justify-between transition-all border-2 bg-orange-50 border-orange-500 text-orange-900 shadow-md ring-2 ring-orange-500/10"
                                                             >
                                                                 <span className="font-bold text-sm sm:text-base leading-tight pr-2">{proteinName}</span>
-                                                                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all flex-shrink-0 ${isSelected ? 'bg-orange-500 border-orange-500' : 'border-slate-300'
-                                                                    }`}>
-                                                                    {isSelected && <Check size={14} strokeWidth={4} className="text-white" />}
+                                                                <div className="flex items-center gap-2 flex-shrink-0">
+                                                                    <button
+                                                                        onClick={(e) => {
+                                                                            e.preventDefault();
+                                                                            quitarProteina(proteinName);
+                                                                        }}
+                                                                        aria-label={`Quitar una unidad de ${proteinName}`}
+                                                                        className="w-7 h-7 rounded-full bg-white border-2 border-orange-300 text-orange-600 font-black flex items-center justify-center hover:bg-orange-100 active:scale-95 transition-all"
+                                                                    >
+                                                                        −
+                                                                    </button>
+                                                                    <span className="w-5 text-center font-black text-base tabular-nums" aria-label={`${cantidad} seleccionadas`}>
+                                                                        {cantidad}
+                                                                    </span>
+                                                                    <button
+                                                                        onClick={(e) => {
+                                                                            e.preventDefault();
+                                                                            agregarProteina(proteinName);
+                                                                        }}
+                                                                        disabled={!puedeAgregar}
+                                                                        aria-label={`Agregar otra unidad de ${proteinName}`}
+                                                                        className="w-7 h-7 rounded-full bg-orange-500 border-2 border-orange-500 text-white font-black flex items-center justify-center hover:bg-orange-600 active:scale-95 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                                                                    >
+                                                                        <Plus size={14} strokeWidth={3} aria-hidden="true" />
+                                                                    </button>
                                                                 </div>
-                                                            </button>
+                                                            </div>
                                                         );
                                                     })
                                                 ) : (
@@ -846,7 +919,7 @@ const PackCard = memo(({ pack, shipping, category, categoryLabel: customCategory
                                                         addToCart({
                                                             id: `${category}-${pack?.name || 'proteina'}-${Date.now()}`,
                                                             name: `${pack?.name || 'Pack'} (${selectedSize}g)`,
-                                                            desc: `Incluye: ${proteinasSeleccionadas.join(', ')} • Porción: ${selectedSize}g`,
+                                                            desc: `Incluye: ${formatProteinList(proteinasSeleccionadas)} • Porción: ${selectedSize}g`,
                                                             proteinas: proteinasSeleccionadas,
                                                             size: `${selectedSize}g`,
                                                             price: finalPrice,

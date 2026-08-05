@@ -1,7 +1,8 @@
 import { useEffect } from 'react';
+import { WHATSAPP_PHONE, WHATSAPP_PHONE_DISPLAY } from '../config/whatsappMessages';
 
 const BASE_URL = 'https://bikitchencr.com';
-const PHONE = '+506 8506-7200';
+const PHONE = WHATSAPP_PHONE_DISPLAY;
 
 /**
  * SEOHead — inyecta meta tags y JSON-LD dinámicamente por página.
@@ -307,7 +308,7 @@ export const getHomeSchemas = () => [
         sameAs: [
             'https://www.instagram.com/bikitchencr',
             'https://www.facebook.com/bikitchencr',
-            `https://wa.me/50685067200`
+            `https://wa.me/${WHATSAPP_PHONE}`
         ],
         knowsAbout: [
             'Meal Prep', 'Comida Saludable', 'Dieta Keto', 'Alimentación Vegetariana',
@@ -377,7 +378,7 @@ export const getFAQSchema = () => ({
             name: '¿En qué zonas de Costa Rica hace delivery BiKitchen?',
             acceptedAnswer: {
                 '@type': 'Answer',
-                text: 'Cubrimos la mayor parte del Gran Área Metropolitana (GAM) y Alajuela: San José, Escazú, Santa Ana, Heredia, Cartago, Curridabat, Desamparados, La Unión y zonas aledañas. Si tenés dudas de tu zona, escribinos por WhatsApp al +506 8506-7200.'
+                text: 'Cubrimos la mayor parte del Gran Área Metropolitana (GAM) y Alajuela: San José, Escazú, Santa Ana, Heredia, Cartago, Curridabat, Desamparados, La Unión y zonas aledañas. Si tenés dudas de tu zona, escribinos por WhatsApp al ' + PHONE + '.'
             }
         },
         {

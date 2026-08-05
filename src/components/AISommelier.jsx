@@ -2,9 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageCircle, X, Send, Phone, Sparkles, ChevronRight, Bot } from 'lucide-react';
 import { useWhatsApp } from '../hooks/useWhatsApp';
+import { formatWhatsAppDisplay } from '../config/whatsappMessages';
 
 // ─── System Prompt: contexto completo de BiKitchen ───────────────────────────
-const BIKITCHEN_CONTEXT = `Eres el asistente virtual de BiKitchen, una empresa costarricense de meal prep saludable.
+// Recibe el número real (desde Firebase) para que el bot nunca invente uno.
+const buildBikitchenContext = (phoneDisplay) => `Eres el asistente virtual de BiKitchen, una empresa costarricense de meal prep saludable.
 Tu nombre es "Biki" y eres amigable, cercano y usas emojis corregidamente.
 Responde SIEMPRE en español. Sé conciso pero informativo.
 
@@ -33,7 +35,8 @@ Los planes MENSUALES tienen 50% de DESCUENTO en el envío.
 ✨ FORMATO DE RESPUESTA:
 - Usa listas con viñetas para precios o pasos.
 - Usa negritas (**texto**) para resaltar precios o nombres de packs.
-- Sé muy servicial y si el cliente parece confundido, invitalo a escribir por WhatsApp al +506 8888-8888.`;
+- Sé muy servicial y si el cliente parece confundido, invitalo a escribir por WhatsApp al ${phoneDisplay}.
+- NUNCA inventes ni menciones otro número de teléfono que no sea ${phoneDisplay}.`;
 
 // ─── Preguntas predeterminadas ────────────────────────────────────────────────
 const QUICK_QUESTIONS = [
@@ -65,7 +68,7 @@ export default function AIAssistant() {
     const [error, setError] = useState(null);
     const scrollRef = useRef(null);
     const inputRef = useRef(null);
-    const { getWhatsAppUrl } = useWhatsApp();
+    const { getWhatsAppUrl, whatsappPhone } = useWhatsApp();
 
     // History for Gemini multi-turn (exclude first greeting)
     const conversationHistory = useRef([]);
@@ -106,7 +109,7 @@ export default function AIAssistant() {
 
         try {
             const body = {
-                system_instruction: { parts: [{ text: BIKITCHEN_CONTEXT }] },
+                system_instruction: { parts: [{ text: buildBikitchenContext(formatWhatsAppDisplay(whatsappPhone)) }] },
                 contents: conversationHistory.current,
                 generationConfig: {
                     temperature: 0.7,

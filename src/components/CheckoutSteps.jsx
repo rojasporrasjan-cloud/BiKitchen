@@ -16,6 +16,8 @@ import PayPalButton from './PayPalButton';
 import { useContactConfig } from '../context/ContactConfigContext';
 import { getSourceLabel } from '../services/sourceTracking';
 import { useWhatsApp } from '../hooks/useWhatsApp';
+import { WHATSAPP_PHONE, formatWhatsAppDisplay } from '../config/whatsappMessages';
+import { toCRInternational } from '../utils/phoneUtils';
 import { trackInitiateCheckout, trackPurchase, trackContact, trackAddPaymentInfo } from '../services/facebookPixel';
 import ShippingZoneSelector from './ShippingZoneSelector';
 import NMIPaymentModal from './NMIPaymentModal';
@@ -24,7 +26,7 @@ import { getScheduleFromOrder } from '../utils/orderDates';
 // TILOPAY: Desactivado temporalmente - pendiente aprobación
 // import { processTilopayPayment } from '../utils/tilopayClient';
 import { upsertClient } from '../services/clientService';
-import { formatPrice } from '../utils/formatters';
+import { formatPrice, formatProteinList } from '../utils/formatters';
 
 const STEPS = [
     { id: 1, name: 'Datos', icon: User },
@@ -159,7 +161,7 @@ export default function CheckoutSteps({ isOpen, onClose }) {
 
             // Proteínas
             if (item.proteinas && Array.isArray(item.proteinas) && item.proteinas.length > 0) {
-                summary += `  └ Proteínas: ${item.proteinas.join(', ')}\n`;
+                summary += `  └ Proteínas: ${formatProteinList(item.proteinas)}\n`;
             } else if (item.desc && item.desc.includes('Incluye:')) {
                 // Fallback si la descripción tiene las proteínas (caso legacy o duplicado)
                 summary += `  └ ${item.desc}\n`;
@@ -404,6 +406,7 @@ export default function CheckoutSteps({ isOpen, onClose }) {
         if (step === 1) {
             if (!formData.nombre.trim()) newErrors.nombre = 'Nombre requerido';
             if (!formData.telefono.trim()) newErrors.telefono = 'Teléfono requerido';
+            else if (!toCRInternational(formData.telefono)) newErrors.telefono = 'Ingresa un teléfono válido de 8 dígitos';
             if (!formData.correo.trim()) newErrors.correo = 'Correo requerido';
             else if (!/\S+@\S+\.\S+/.test(formData.correo)) newErrors.correo = 'Correo inválido';
         }
@@ -713,7 +716,7 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                     const base = `• ${item.quantity}× ${item.name}${tagStr}`;
                     const extras = [];
                     if (Array.isArray(item.proteinas) && item.proteinas.length) {
-                        extras.push(`   └ Proteínas: ${item.proteinas.join(', ')}`);
+                        extras.push(`   └ Proteínas: ${formatProteinList(item.proteinas)}`);
                     }
                     if (item.protein) extras.push(`   └ Proteína: ${item.protein}`);
                     // Sustituciones por plato — formato nuevo (3 categorías separadas)
@@ -1148,6 +1151,15 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                                                     <p className="text-xs text-gray-500 mt-1">Nombre: Gabriela Li Carmona</p>
                                                 </div>
                                             </div>
+                                            <div className="flex items-start gap-2 bg-amber-50 border border-amber-300 rounded-lg p-3 mt-3">
+                                                <AlertCircle size={16} className="text-amber-600 flex-shrink-0 mt-0.5" aria-hidden="true" />
+                                                <p className="text-xs text-amber-900">
+                                                    Estos números son <span className="font-bold">solo para hacer el pago</span>.
+                                                    No mandes el comprobante ahí — enviálo con el botón verde de abajo,
+                                                    o a nuestro WhatsApp <span className="font-bold">{formatWhatsAppDisplay(whatsappPhone || WHATSAPP_PHONE)}</span>.
+                                                </p>
+                                            </div>
+
                                             <p className="text-xs text-gray-600 mt-3 mb-3">
                                                 Incluye tu número de orden <span className="font-bold">{orderNumber}</span> en la descripción del SINPE
                                             </p>
@@ -1530,9 +1542,11 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                                                                 }`}
                                                         >
                                                             {formData.fechaEntrega === dateObj.value && (
-                                                                <motion.div
-                                                                    layoutId="activeDate"
+                                                                // Sin layoutId: la animación compartida de Framer crea una capa de
+                                                                // GPU persistente que puede colgar iOS Safari dentro del checkout.
+                                                                <div
                                                                     className="absolute inset-0 bg-gradient-to-br from-orange-500 to-orange-600"
+                                                                    aria-hidden="true"
                                                                 />
                                                             )}
                                                             <p className={`relative z-10 text-[10px] font-black uppercase tracking-widest ${formData.fechaEntrega === dateObj.value ? 'text-orange-100' : 'text-gray-400'}`}>

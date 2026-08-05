@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, Outlet, Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Menu as MenuIcon, LogOut, X, LayoutDashboard, ShoppingBag, Users, ClipboardList, Truck, UtensilsCrossed, Gift, Tag, Search, Bell, Image, MessageCircle, FileText, Target, BadgePercent, Settings } from 'lucide-react';
+import { Menu as MenuIcon, LogOut, X, LayoutDashboard, ShoppingBag, Users, ClipboardList, Truck, UtensilsCrossed, Gift, Tag, Search, Bell, Image, MessageCircle, FileText, Target, BadgePercent, Settings, Phone } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useOrders } from '../context/OrdersContext';
 import { getAllCoupons } from '../utils/firestoreCoupons';
@@ -121,6 +121,7 @@ export default function AdminLayout() {
 
         // ⚙️ Configuración
         { to: '/admin/whatsapp-config', label: 'WhatsApp', icon: MessageCircle },
+        { to: '/admin/phone-audit', label: 'Revisar Teléfonos', icon: Phone },
         { to: '/admin/notifications-config', label: 'Config. Notificaciones', icon: Settings },
         { to: '/admin/policies-config', label: 'Políticas Legales', icon: FileText },
         { to: '/admin/substitutions-config', label: 'Sustituciones', icon: UtensilsCrossed },

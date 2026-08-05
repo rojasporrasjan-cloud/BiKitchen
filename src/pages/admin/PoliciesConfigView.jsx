@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { db } from '../../firebase/config';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { WHATSAPP_PHONE_DISPLAY } from '../../config/whatsappMessages';
 
 // ─── Default content (texto sin íconos, igual que en las páginas públicas) ────
 
@@ -31,7 +32,7 @@ const DEFAULTS = {
         { title: '5. Incidencias en el pedido', content: 'Si recibes un producto en mal estado o distinto al solicitado, notifícanos dentro de las primeras 2 horas tras la entrega con evidencia (foto/video). Ofrecemos reposición prioritaria o reembolso según el caso.' },
         { title: '6. Reprogramaciones y créditos', content: 'Podrás reprogramar tu entrega o convertir el monto en crédito para pedidos futuros (cuando aplique y sujeto a agenda y zonas de entrega).' },
         { title: '7. No reembolsables', content: 'No se reembolsan: diferencias por promociones finalizadas, costos de envío ya incurridos, artículos de cortesía y saldos de cupones expirados.' },
-        { title: '8. Cómo solicitar un reembolso', content: 'Escríbenos por email a bikitchenfood@gmail.com o WhatsApp +506 8506-7200 indicando: nombre, número de pedido, fecha de entrega y motivo. Nuestro equipo te dará seguimiento en horario laboral.' },
+        { title: '8. Cómo solicitar un reembolso', content: `Escríbenos por email a bikitchenfood@gmail.com o WhatsApp ${WHATSAPP_PHONE_DISPLAY} indicando: nombre, número de pedido, fecha de entrega y motivo. Nuestro equipo te dará seguimiento en horario laboral.` },
     ],
     privacidad: [
         { title: '1. Introducción', content: 'En BiKitchen Food (en adelante "BiKitchen", "nosotros" o "nuestro"), nos comprometemos a proteger la privacidad de nuestros usuarios y clientes. Esta Política de Privacidad describe cómo recopilamos, usamos, almacenamos y protegemos su información personal cuando utiliza nuestro sitio web y servicios.\n\nAl utilizar nuestros servicios, usted acepta las prácticas descritas en esta política. Le recomendamos leerla detenidamente.' },
@@ -44,7 +45,7 @@ const DEFAULTS = {
         { title: '8. Menores de Edad', content: 'Nuestros servicios no están dirigidos a menores de 18 años. No recopilamos intencionalmente información personal de menores. Si descubrimos que hemos recopilado información de un menor sin el consentimiento parental verificable, tomaremos medidas para eliminar esa información.' },
         { title: '9. Enlaces a Terceros', content: 'Nuestro sitio web puede contener enlaces a sitios web de terceros (como redes sociales). No somos responsables de las prácticas de privacidad de estos sitios. Le recomendamos revisar las políticas de privacidad de cualquier sitio que visite.' },
         { title: '10. Cambios a esta Política', content: 'Podemos actualizar esta Política de Privacidad periódicamente. Le notificaremos sobre cambios significativos publicando la nueva política en nuestro sitio web y, cuando sea apropiado, enviándole una notificación por correo electrónico.\n\nLa fecha de "última actualización" al inicio de esta política indica cuándo se realizaron las últimas modificaciones.' },
-        { title: '11. Contacto', content: 'Si tiene preguntas, comentarios o solicitudes relacionadas con esta Política de Privacidad o el tratamiento de sus datos personales, puede contactarnos:\n\nBiKitchen Food\n📧 Email: bikitchenfood@gmail.com\n📱 WhatsApp: +506 8506-7200\n📍 Ubicación: Alajuela, Costa Rica' },
+        { title: '11. Contacto', content: `Si tiene preguntas, comentarios o solicitudes relacionadas con esta Política de Privacidad o el tratamiento de sus datos personales, puede contactarnos:\n\nBiKitchen Food\n📧 Email: bikitchenfood@gmail.com\n📱 WhatsApp: ${WHATSAPP_PHONE_DISPLAY}\n📍 Ubicación: Alajuela, Costa Rica` },
     ],
     cookies: [
         { title: '¿Qué son las Cookies?', content: 'Las cookies son pequeños archivos de texto que se almacenan en tu dispositivo (ordenador, tablet o móvil) cuando visitas un sitio web. Se utilizan ampliamente para hacer que los sitios web funcionen de manera más eficiente y proporcionar información a los propietarios del sitio.\n\nLas cookies pueden ser "persistentes" (permanecen en tu dispositivo hasta que las eliminas) o "de sesión" (se eliminan cuando cierras el navegador).' },

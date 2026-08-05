@@ -2,6 +2,7 @@ import React from 'react';
 import { Instagram, Facebook, Phone, Mail, MapPin, Send, Heart, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useWhatsApp } from '../hooks/useWhatsApp';
+import { WHATSAPP_PHONE, formatWhatsAppDisplay } from '../config/whatsappMessages';
 
 /**
  * Footer Component - BiKitchen Brand
@@ -125,7 +126,7 @@ export default function Footer() {
                                             <Phone size={18} className="text-green-400 group-hover:text-white transition-colors" />
                                         </div>
                                         <p className="text-gray-300 text-sm font-medium group-hover:text-white transition-colors">
-                                            +506 {whatsappPhone ? whatsappPhone.replace(/^506/, '').replace(/(\d{4})(\d{4})/, '$1-$2') : '8506-7200'}
+                                            {formatWhatsAppDisplay(whatsappPhone || WHATSAPP_PHONE)}
                                         </p>
                                     </a>
                                 </li>

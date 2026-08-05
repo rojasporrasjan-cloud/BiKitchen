@@ -86,24 +86,29 @@ const VideoHero = ({ videoSrc, title, subtitle, primaryCTA, secondaryCTA }) => {
 
                     {/* Title */}
                     <h1 className={`font-black text-white mb-3 leading-tight drop-shadow-2xl ${isMobile ? 'text-3xl sm:text-4xl' : 'text-4xl sm:text-5xl md:text-6xl lg:text-7xl md:leading-[1.05] md:mb-8'}`}>
-                        {title.split(' ').map((word, i) => (
-                            <motion.span
-                                key={i}
-                                className="inline-block mr-[0.2em]"
-                                initial={{ opacity: 0, x: -50, y: 50 }}
-                                animate={{ opacity: 1, x: 0, y: 0 }}
-                                transition={{
-                                    duration: 1,
-                                    delay: 1.5 + (i * 0.18),
-                                    ease: [0.25, 0.46, 0.45, 0.94]
-                                }}
-                            >
-                                {word.toLowerCase() === 'saludable' ? (
-                                    <span className="text-transparent bg-clip-text bg-gradient-to-r from-bikitchen-orange to-bikitchen-gold">
-                                        {word}
-                                    </span>
-                                ) : word}
-                            </motion.span>
+                        {/* Cada palabra se anima por separado, pero el espacio entre ellas
+                            debe ser un espacio REAL: si se simula con margen, Google y los
+                            lectores de pantalla leen el título como una sola palabra pegada. */}
+                        {title.split(' ').map((word, i, palabras) => (
+                            <React.Fragment key={i}>
+                                <motion.span
+                                    className="inline-block"
+                                    initial={{ opacity: 0, x: -50, y: 50 }}
+                                    animate={{ opacity: 1, x: 0, y: 0 }}
+                                    transition={{
+                                        duration: 1,
+                                        delay: 1.5 + (i * 0.18),
+                                        ease: [0.25, 0.46, 0.45, 0.94]
+                                    }}
+                                >
+                                    {word.toLowerCase() === 'saludable' ? (
+                                        <span className="text-transparent bg-clip-text bg-gradient-to-r from-bikitchen-orange to-bikitchen-gold">
+                                            {word}
+                                        </span>
+                                    ) : word}
+                                </motion.span>
+                                {i < palabras.length - 1 && ' '}
+                            </React.Fragment>
                         ))}
                     </h1>
 

@@ -330,8 +330,7 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
                             {step === 'card' && (
                                 <form onSubmit={handleSubmitCard} className="space-y-6">
                                     {/* Virtual Card Preview */}
-                                    <motion.div 
-                                        layout
+                                    <div
                                         className={`relative w-full aspect-[1.6/1] rounded-[1.5rem] p-6 text-white overflow-hidden shadow-2xl transition-all duration-500 ${
                                             cardType === 'visa' ? 'bg-gradient-to-br from-blue-600 to-indigo-800' :
                                             cardType === 'mastercard' ? 'bg-gradient-to-br from-red-600 to-orange-700' :
@@ -364,7 +363,7 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
                                                 </div>
                                             </div>
                                         </div>
-                                    </motion.div>
+                                    </div>
 
                                     {/* Form Fields */}
                                     <div className="space-y-4">

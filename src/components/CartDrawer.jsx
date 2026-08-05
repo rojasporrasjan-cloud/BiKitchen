@@ -112,7 +112,6 @@ export default function CartDrawer() {
                                     {cart.map((item, index) => (
                                         <motion.div
                                             key={`${item.id || 'item'}-${index}`}
-                                            layout
                                             initial={{ opacity: 0, y: 20 }}
                                             animate={{ opacity: 1, y: 0 }}
                                             exit={{ opacity: 0, y: -20 }}
@@ -120,8 +119,7 @@ export default function CartDrawer() {
                                         >
                                             <div className="w-20 h-20 rounded-lg overflow-hidden bg-gray-200 flex-shrink-0">
                                                 {item.image ? (
-                                                    <motion.img
-                                                        layoutId={`cart-img-${item.id}`}
+                                                    <img
                                                         src={item.image}
                                                         alt={item.name}
                                                         className="w-full h-full object-cover"

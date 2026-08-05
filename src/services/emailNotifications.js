@@ -1,6 +1,7 @@
 import emailjs from '@emailjs/browser';
 import { db } from '../firebase/config';
 import { doc, getDoc } from 'firebase/firestore';
+import { formatProteinList } from '../utils/formatters';
 
 // Flag para desactivar/activar envío de emails
 const EMAILS_ENABLED = true; // Cambiar a false para desactivar emails
@@ -174,7 +175,7 @@ const formatItemsForEmail = (items) => {
         // Soporta varios formatos de proteínas para asegurar que siempre se envíen
         const proteinas = item.proteinas || (item.proteina ? [item.proteina] : []) || (item.protein ? [item.protein] : []);
         if (proteinas.length > 0) {
-            line += `\n└ Proteínas: ${proteinas.join(', ')}`;
+            line += `\n└ Proteínas: ${formatProteinList(proteinas)}`;
         }
 
         // Sustituciones — todos los formatos históricos

@@ -7,6 +7,7 @@ import PageTransition from '../components/PageTransition';
 import { Shield, ArrowLeft, Database, Eye, Lock, Users, Globe, Mail, Trash2, Baby } from 'lucide-react';
 import { db } from '../firebase/config';
 import { doc, getDoc } from 'firebase/firestore';
+import { WHATSAPP_PHONE_DISPLAY } from '../config/whatsappMessages';
 
 const SECTION_ICONS = [Shield, Database, Eye, Users, Lock, Globe, Trash2, Baby, Globe, Mail, Mail];
 
@@ -127,7 +128,7 @@ La fecha de "última actualización" al inicio de esta política indica cuándo 
 
 **BiKitchen Food**
 📧 Email: bikitchenfood@gmail.com
-📱 WhatsApp: +506 8506-7200
+📱 WhatsApp: ${WHATSAPP_PHONE_DISPLAY}
 📍 Ubicación: Alajuela, Costa Rica`
         }
     ];
