@@ -277,7 +277,16 @@ export const handler = async (event) => {
                     const orderData = snapshot.docs[0].data();
                     const now = new Date();
 
-                    if (result.response === '1') {
+                    // --- Ground truth: authcode ---
+                    // BAC/NMI puede devolver response=2 "Authentication Failed" en la validación
+                    // 3DS DESPUÉS de que el banco ya autorizó y cobró la tarjeta. Si viene
+                    // authcode, el cargo se hizo. Es la misma regla que aplica NMIPaymentModal.jsx:
+                    // sin esto el servidor marca como fallido un pedido que SÍ se cobró, y solo se
+                    // corrige si el navegador del cliente sigue abierto para arreglarlo.
+                    const bankApprovedByAuthcode = !!(result.authcode && String(result.authcode).trim());
+                    const isApproved = result.response === '1' || bankApprovedByAuthcode;
+
+                    if (isApproved) {
                         // Pago aprobado
                         const pointsToAward = orderData.pointsToAward || Math.floor((orderData.total || 0) * 0.02);
                         await orderRef.update({
@@ -292,8 +301,8 @@ export const handler = async (event) => {
                             updatedAt: now
                         });
 
-                        // Otorgar puntos de fidelidad
-                        if (orderData.correo && pointsToAward > 0) {
+                        // Otorgar puntos de fidelidad (nunca dos veces por el mismo pedido)
+                        if (orderData.correo && pointsToAward > 0 && !orderData.pointsAwarded) {
                             try {
                                 const loyaltyRef = db.collection('loyalty').doc(orderData.correo.toLowerCase());
                                 const loyaltySnap = await loyaltyRef.get();
@@ -318,7 +327,7 @@ export const handler = async (event) => {
                                 console.error(`[NMI Function] Error otorgando puntos:`, loyaltyError.message);
                             }
                         }
-                        console.log(`[NMI Function] ✅ Orden ${orderid} confirmada en Firestore`);
+                        console.log(`[NMI Function] ✅ Orden ${orderid} confirmada en Firestore${result.response !== '1' ? ` (aprobada por authcode, response=${result.response})` : ''}`);
                     } else if (result.response === '2' || result.response === '3') {
                         // Pago rechazado/fallido — solo actualizar si no está ya confirmado
                         if (orderData.status !== 'confirmed') {

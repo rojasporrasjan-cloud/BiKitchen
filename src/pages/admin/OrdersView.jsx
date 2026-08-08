@@ -29,7 +29,8 @@ import {
     Trash2,
     ClipboardList,
     UserPlus,
-    TrendingUp
+    TrendingUp,
+    Mail
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useOrders } from '../../context/OrdersContext';
@@ -1078,6 +1079,34 @@ export default function OrdersView() {
         await updateOrderStatus(orderId, newStatus);
         if (selectedOrder?.id === orderId) {
             setSelectedOrder(prev => ({ ...prev, status: newStatus }));
+        }
+    };
+
+    // Revertir una cancelación hecha por error.
+    // Vuelve al estado que le corresponde según el pago: confirmado si ya estaba
+    // pagado, pago pendiente si no. Los puntos no se duplican porque OrdersContext
+    // ignora el otorgamiento cuando pointsAwarded ya es true.
+    const handleReactivateOrder = async (order) => {
+        const wasPaid = order.paymentStatus === 'paid' || order.paymentConfirmed === true || order.pointsAwarded === true;
+        const restoredStatus = wasPaid ? 'confirmed' : 'pending_payment';
+
+        const ok = window.confirm(
+            `¿Reactivar el pedido ${order.displayId}?\n\n` +
+            `Volverá al estado "${ORDER_STATUS[restoredStatus].label}".` +
+            (order.pointsAwarded ? '\nLos puntos ya otorgados no se vuelven a dar.' : '')
+        );
+        if (!ok) return;
+
+        try {
+            await updateOrderStatus(order.id, restoredStatus, {
+                reactivatedAt: new Date().toISOString()
+            });
+            if (selectedOrder?.id === order.id) {
+                setSelectedOrder(prev => ({ ...prev, status: restoredStatus }));
+            }
+        } catch (error) {
+            console.error('Error reactivando pedido:', error);
+            alert('No se pudo reactivar el pedido. Intentá de nuevo.');
         }
     };
 
@@ -2315,12 +2344,27 @@ export default function OrdersView() {
                                                 Entregado
                                             </button>
                                         )}
+                                        {selectedOrder.status === 'cancelled' && (
+                                            <button
+                                                onClick={() => handleReactivateOrder(selectedOrder)}
+                                                className="px-4 py-2 bg-blue-500 text-white text-sm font-medium rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2"
+                                            >
+                                                <History size={16} aria-hidden="true" />
+                                                Reactivar pedido
+                                            </button>
+                                        )}
                                         {selectedOrder.status !== 'cancelled' && selectedOrder.status !== 'delivered' && (
                                             <button
-                                                onClick={() => handleStatusChange(selectedOrder.id, 'cancelled')}
+                                                onClick={() => {
+                                                    const ok = window.confirm(
+                                                        `¿Cancelar el pedido ${selectedOrder.displayId}?\n\n` +
+                                                        'Esto marca el pedido como CANCELADO. Si sólo querés salir de esta ventana, usá el botón "Cerrar".'
+                                                    );
+                                                    if (ok) handleStatusChange(selectedOrder.id, 'cancelled');
+                                                }}
                                                 className="px-4 py-2 bg-white border border-red-200 text-red-500 text-sm font-medium rounded-lg hover:bg-red-50 transition-colors"
                                             >
-                                                Cancelar
+                                                Cancelar pedido
                                             </button>
                                         )}
                                     </div>
@@ -2330,6 +2374,20 @@ export default function OrdersView() {
                                         <div className="mt-2 text-xs text-green-600 flex items-center gap-1">
                                             <CheckCircle size={12} />
                                             Puntos otorgados: +{selectedOrder.pointsToAward || 0} pts
+                                        </div>
+                                    )}
+
+                                    {/* Estado del correo de aviso — deja ver si la notificación salió o falló */}
+                                    {selectedOrder.emailAdminStatus && (
+                                        <div className={`mt-2 text-xs flex items-center gap-1 ${selectedOrder.emailAdminStatus === 'sent' ? 'text-green-600'
+                                            : selectedOrder.emailAdminStatus === 'pending' ? 'text-amber-600'
+                                                : 'text-red-600'}`}>
+                                            <Mail size={12} aria-hidden="true" />
+                                            {selectedOrder.emailAdminStatus === 'sent'
+                                                ? 'Correo de aviso enviado'
+                                                : selectedOrder.emailAdminStatus === 'pending'
+                                                    ? 'Correo de aviso enviado, sin confirmación del servidor'
+                                                    : `Correo de aviso NO enviado — ${selectedOrder.emailAdminError || 'motivo desconocido'}`}
                                         </div>
                                     )}
                                 </div>

@@ -75,8 +75,18 @@ export const getNotificationEmail = async () => {
     return DEFAULT_NOTIFICATION_EMAIL;
 };
 
+// Endpoint REST de EmailJS — el mismo que usa el SDK por debajo.
+const EMAILJS_API_URL = 'https://api.emailjs.com/api/v1.0/email/send';
+
 /**
- * Enviar email con reintentos y timeout
+ * Enviar email con reintentos y timeout.
+ *
+ * Usa fetch con `keepalive: true` en vez de emailjs.send() a propósito: el
+ * navegador garantiza que una petición keepalive se termine de entregar aunque
+ * la página pase a segundo plano o se cierre. Eso es exactamente lo que pasa
+ * cuando el cliente salta a WhatsApp o cierra la pestaña apenas paga — con el
+ * SDK normal, iOS Safari congela la pestaña y el aviso nunca sale.
+ *
  * @param {string} serviceId - EmailJS service ID
  * @param {string} templateId - EmailJS template ID
  * @param {object} params - Parámetros del template
@@ -86,26 +96,69 @@ export const getNotificationEmail = async () => {
  */
 async function sendWithRetryAndTimeout(serviceId, templateId, params, publicKey, maxRetries = 3) {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        let timedOut = false;
+        let timeoutId;
         try {
-            // Envolver emailjs.send con timeout de 5 segundos
-            const promise = emailjs.send(serviceId, templateId, params, publicKey);
-            const result = await Promise.race([
-                promise,
-                new Promise((_, reject) =>
-                    setTimeout(() => reject(new Error('Timeout esperando EmailJS (5s)')), 5000)
-                )
-            ]);
-            return { success: true, result, attempt };
-        } catch (error) {
-            const isLastAttempt = attempt === maxRetries;
-            console.warn(`[EmailJS] Intento ${attempt}/${maxRetries} falló para ${params.to_email}:`, {
-                message: error.message,
-                status: error.status,
-                statusText: error.statusText,
-                response: error.response,
-                errorFull: error
+            // Mismo payload que arma @emailjs/browser 4.4.1 en send.js
+            const body = JSON.stringify({
+                lib_version: '4.4.1',
+                user_id: publicKey,
+                service_id: serviceId,
+                template_id: templateId,
+                template_params: params
             });
 
+            // keepalive tiene un tope de 64KB de cuerpo. Un pedido enorme podría
+            // pasarse y hacer que fetch falle de una: en ese caso se manda sin
+            // keepalive, que es peor que con él pero mucho mejor que no mandarlo.
+            const bodyBytes = new TextEncoder().encode(body).length;
+
+            const request = fetch(EMAILJS_API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                keepalive: bodyBytes < 60000,
+                body
+            });
+
+            // Si gana el timeout, nadie más escucharía un rechazo posterior de fetch.
+            // Este handler vacío lo evita sin alterar el resultado de la carrera.
+            request.catch(() => { });
+
+            // El timeout deja de ESPERAR la respuesta; no cancela el envío.
+            // Con keepalive el navegador sigue entregando la petición por su cuenta.
+            const response = await Promise.race([
+                request,
+                new Promise((_, reject) => {
+                    timeoutId = setTimeout(() => {
+                        timedOut = true;
+                        reject(new Error('Timeout esperando EmailJS (5s)'));
+                    }, 5000);
+                })
+            ]);
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+                const detail = await response.text().catch(() => '');
+                throw new Error(`EmailJS ${response.status}: ${detail || response.statusText}`);
+            }
+
+            return { success: true, result: 'OK', attempt };
+        } catch (error) {
+            clearTimeout(timeoutId);
+            console.warn(`[EmailJS] Intento ${attempt}/${maxRetries} falló para ${params.to_email}: ${error.message}`);
+
+            // Tras un timeout NO se reintenta: la petición original sigue viva por
+            // keepalive y un reintento le mandaría el correo duplicado a Gina.
+            if (timedOut) {
+                return {
+                    success: false,
+                    error: 'Sin respuesta de EmailJS en 5s — el envío sigue en curso (keepalive)',
+                    attempt,
+                    _pending: true
+                };
+            }
+
+            const isLastAttempt = attempt === maxRetries;
             if (isLastAttempt) {
                 console.error(`[EmailJS] ❌ Fallo definitivo para ${params.to_email} después de ${maxRetries} intentos`);
                 return { success: false, error: error.message, attempt };
@@ -465,7 +518,17 @@ export const sendTestNotification = async (targetEmail) => {
             to_name: "Test Admin"
         };
 
-        const result = await emailjs.send(EMAILJS_CONFIG.serviceId, EMAILJS_CONFIG.templateId, templateParams, EMAILJS_CONFIG.publicKey);
+        // Usa exactamente el mismo camino de envío que los pedidos reales,
+        // para que esta prueba sirva para verificar que el envío funciona.
+        const result = await sendWithRetryAndTimeout(
+            EMAILJS_CONFIG.serviceId,
+            EMAILJS_CONFIG.templateId,
+            templateParams,
+            EMAILJS_CONFIG.publicKey,
+            1 // sin reintentos: en una prueba querés ver el error real
+        );
+
+        if (!result.success) throw new Error(result.error);
         return { success: true, result };
     } catch (error) {
         console.error('[Email Test] Error completo:', {

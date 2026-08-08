@@ -914,24 +914,44 @@ export default function CheckoutSteps({ isOpen, onClose }) {
             }
 
             // 2. Enviar notificaciones por email (Admin y Cliente)
+            let adminResult = null;
+            let customerResult = null;
             try {
                 const { sendOrderNotification, sendCustomerOrderConfirmation } = await import('../services/emailNotifications');
 
                 // Admin (Gina) - Con logging detallado
-                const adminResult = await sendOrderNotification(fullOrderData);
+                adminResult = await sendOrderNotification(fullOrderData);
                 if (!adminResult?.success) {
                     console.warn(`⚠️ Fallo al enviar email a admin: ${adminResult?.error || 'Unknown error'}`);
-                } else {
                 }
 
                 // Cliente - Con logging detallado
-                const customerResult = await sendCustomerOrderConfirmation(fullOrderData);
+                customerResult = await sendCustomerOrderConfirmation(fullOrderData);
                 if (!customerResult?.success) {
                     console.warn(`⚠️ Fallo al enviar email a cliente: ${customerResult?.error || 'Unknown error'}`);
-                } else {
                 }
             } catch (emailErr) {
                 console.error('⚠️ Error crítico en notificaciones email:', emailErr);
+                adminResult = { success: false, error: emailErr.message };
+            }
+
+            // 2b. Dejar rastro del envío en el pedido.
+            // Sin esto, un correo que no sale sólo queda en la consola del cliente y
+            // el admin no tiene forma de saber que la notificación nunca llegó.
+            if (docIdToUpdate) {
+                try {
+                    await updateDoc(doc(db, 'pedidos', docIdToUpdate), {
+                        // 'pending' = se mandó pero no llegó confirmación a tiempo; con
+                        // keepalive lo más probable es que sí haya salido.
+                        emailAdminStatus: adminResult?.success ? 'sent' : (adminResult?._pending ? 'pending' : 'failed'),
+                        emailAdminError: adminResult?.success ? null : (adminResult?.error || 'Sin respuesta de EmailJS'),
+                        emailClienteStatus: customerResult?.success ? 'sent' : (customerResult?._pending ? 'pending' : 'failed'),
+                        emailClienteError: customerResult?.success ? null : (customerResult?.error || 'Sin respuesta de EmailJS'),
+                        emailCheckedAt: new Date().toISOString()
+                    });
+                } catch (logErr) {
+                    console.warn('[Checkout] No se pudo guardar el estado del correo:', logErr.message);
+                }
             }
 
             // 3. Puntos de fidelidad se otorgan cuando el admin confirma la orden (ver OrdersContext.updateOrderStatus)
@@ -2051,6 +2071,18 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                         } catch (error) {
                             console.error('[Checkout] ❌ Error actualizando pedido tras pago NMI:', error);
                             try {
+                                // ¿El servidor (nmi-charge.js) ya otorgó los puntos de este pedido?
+                                // Si sí, actualizamos el estado pero NO volvemos a sumarlos.
+                                let alreadyAwarded = false;
+                                try {
+                                    const prevSnap = await getDoc(doc(db, 'pedidos', orderIdToUpdate));
+                                    alreadyAwarded = prevSnap.exists() && prevSnap.data().pointsAwarded === true;
+                                } catch {
+                                    // Si no se puede leer, asumimos que ya se otorgaron:
+                                    // es preferible no dar puntos a darlos dos veces.
+                                    alreadyAwarded = true;
+                                }
+
                                 await updateDoc(doc(db, 'pedidos', orderIdToUpdate), {
                                     status: 'confirmed',
                                     paymentStatus: 'paid',
@@ -2060,10 +2092,10 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                                     transactionId: nmiResult.transactionid || 'NMI',
                                     updatedAt: serverTimestamp()
                                 });
-                                
+
                                 // Award points in fallback
                                 const pointsToAward = Math.floor((getTotalWithShipping() + getPaymentMethodAdjustment(formData.metodoPago)) * 0.02);
-                                if (formData.correo && pointsToAward > 0) {
+                                if (formData.correo && pointsToAward > 0 && !alreadyAwarded) {
                                     try {
                                         const pointsRef = doc(db, "loyalty", formData.correo.toLowerCase());
                                         const { increment, setDoc } = await import('firebase/firestore');

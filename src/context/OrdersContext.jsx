@@ -286,16 +286,16 @@ export const OrdersProvider = ({ children }) => {
                 if (!shouldAwardPoints) {
                     // Los puntos ya fueron otorgados por otra instancia — solo actualizar status
                     await updateDoc(orderRef, { status: newStatus, ...additionalUpdates });
-                    return;
                 }
             } else {
                 await updateDoc(orderRef, { status: newStatus, ...additionalUpdates });
-                if (newStatus !== 'confirmed' || orderData.pointsAwarded) return;
             }
 
-            // Actualización secundaria: marcar paymentStatus y referralPoints
-            // (la transacción ya escribió status/pointsAwarded/paymentConfirmed)
-            const secondaryUpdates = { paymentStatus: 'paid' };
+            // De aquí en adelante solo aplica a confirmaciones de pago
+            if (newStatus !== 'confirmed') return;
+
+            // (la transacción ya escribió status/pointsAwarded/paymentConfirmed;
+            //  paymentStatus se marca al final, después de otorgar los puntos)
 
             if (shouldAwardPoints) {
                 // Calcular puntos a dar (2 puntos por cada ₡100)
@@ -331,58 +331,73 @@ export const OrdersProvider = ({ children }) => {
                         console.error("❌ Error awarding points:", pointsError);
                     }
                 }
+            }
 
-                // NUEVO: Otorgar puntos por referido
-                if (orderData.referral_uid && !orderData.referralPointsAwarded) {
-                    try {
-                        const rrPoints = 1000; // REFERRAL_REWARD_POINTS aligned with ReferidosPage.jsx
-                        const userRef = doc(db, "users", orderData.referral_uid);
-                        const userSnap = await getDoc(userRef);
+            // Puntos por referido — INDEPENDIENTES de los puntos del cliente.
+            // En pagos con tarjeta los puntos del pedido los otorga nmi-charge.js en el
+            // servidor, así que shouldAwardPoints llega en false; si esto viviera dentro
+            // de ese bloque, quien refiere nunca recibiría su bono.
+            // La marca se reclama con una transacción (igual que los puntos del pedido)
+            // para que dos confirmaciones simultáneas no den el bono dos veces.
+            let shouldAwardReferral = false;
+            if (orderData.referral_uid && !orderData.referralPointsAwarded) {
+                await runTransaction(db, async (transaction) => {
+                    const freshSnap = await transaction.get(orderRef);
+                    if (!freshSnap.exists() || freshSnap.data().referralPointsAwarded) return;
+                    transaction.update(orderRef, { referralPointsAwarded: true });
+                    shouldAwardReferral = true;
+                });
+            }
 
-                        if (userSnap.exists()) {
-                            const userData = userSnap.data();
-                            const userEmail = userData.email?.toLowerCase();
+            if (shouldAwardReferral) {
+                try {
+                    const rrPoints = 1000; // REFERRAL_REWARD_POINTS aligned with ReferidosPage.jsx
+                    const userRef = doc(db, "users", orderData.referral_uid);
+                    const userSnap = await getDoc(userRef);
 
-                            if (userEmail) {
-                                const lRef = doc(db, "loyalty", userEmail);
-                                const lSnap = await getDoc(lRef);
+                    if (userSnap.exists()) {
+                        const userData = userSnap.data();
+                        const userEmail = userData.email?.toLowerCase();
 
-                                const referralHistory = {
-                                    id: `ref_${orderId}_${Date.now()}`,
-                                    type: 'referral_bonus',
+                        if (userEmail) {
+                            const lRef = doc(db, "loyalty", userEmail);
+                            const lSnap = await getDoc(lRef);
+
+                            const referralHistory = {
+                                id: `ref_${orderId}_${Date.now()}`,
+                                type: 'referral_bonus',
+                                points: rrPoints,
+                                description: `Bono por referir a ${orderData.cliente || 'un amigo'}`,
+                                date: new Date().toISOString()
+                            };
+
+                            if (lSnap.exists()) {
+                                await updateDoc(lRef, {
+                                    points: increment(rrPoints),
+                                    totalEarned: increment(rrPoints),
+                                    lastUpdated: new Date().toISOString(),
+                                    history: [referralHistory, ...(lSnap.data().history || [])]
+                                });
+                            } else {
+                                await setDoc(lRef, {
+                                    email: userEmail,
                                     points: rrPoints,
-                                    description: `Bono por referir a ${orderData.cliente || 'un amigo'}`,
-                                    date: new Date().toISOString()
-                                };
-
-                                if (lSnap.exists()) {
-                                    await updateDoc(lRef, {
-                                        points: increment(rrPoints),
-                                        totalEarned: increment(rrPoints),
-                                        lastUpdated: new Date().toISOString(),
-                                        history: [referralHistory, ...(lSnap.data().history || [])]
-                                    });
-                                } else {
-                                    await setDoc(lRef, {
-                                        email: userEmail,
-                                        points: rrPoints,
-                                        totalEarned: rrPoints,
-                                        totalRedeemed: 0,
-                                        createdAt: new Date().toISOString(),
-                                        lastUpdated: new Date().toISOString(),
-                                        history: [referralHistory]
-                                    });
-                                }
-                                secondaryUpdates.referralPointsAwarded = true;
+                                    totalEarned: rrPoints,
+                                    totalRedeemed: 0,
+                                    createdAt: new Date().toISOString(),
+                                    lastUpdated: new Date().toISOString(),
+                                    history: [referralHistory]
+                                });
                             }
                         }
-                    } catch (refError) {
-                        console.error("Error awarding referral points:", refError);
                     }
+                } catch (refError) {
+                    console.error("Error awarding referral points:", refError);
                 }
             }
 
-            await updateDoc(orderRef, secondaryUpdates);
+            // Confirmar un pedido implica que está pagado
+            await updateDoc(orderRef, { paymentStatus: 'paid' });
         } catch (error) {
             console.error("Error updating order status:", error);
             throw error;
