@@ -82,6 +82,7 @@ const PoliciesConfigView = lazyWithRetry(() => import('./pages/admin/PoliciesCon
 const SubstitutionsConfigView = lazyWithRetry(() => import('./pages/admin/SubstitutionsConfigView'));
 const PrintProductionView = lazyWithRetry(() => import('./pages/admin/PrintProductionView'));
 const WhatsAppImportView = lazyWithRetry(() => import('./pages/admin/WhatsAppImportView'));
+const MonthlyPacksView = lazyWithRetry(() => import('./pages/admin/MonthlyPacksView'));
 
 import SmoothScroll from './components/SmoothScroll';
 import ScrollToTop from './components/ScrollToTop';
@@ -289,6 +290,7 @@ function AnimatedRoutes() {
               {/* Herramienta interna del dueño — la vista valida isSuperAdmin() por su cuenta,
                   para que esconder la opción del menú no sea la única barrera. */}
               <Route path="whatsapp-import" element={<WhatsAppImportView />} />
+              <Route path="monthly-packs" element={<MonthlyPacksView />} />
             </Route>
 
             {/* 404 - Catch all */}
