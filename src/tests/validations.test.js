@@ -93,27 +93,37 @@ describe('Sanitización de Texto', () => {
 });
 
 describe('Validación de Formulario Checkout', () => {
+    // El campo se llama `correo`, no `email`: es el nombre que usa el formulario
+    // de checkout y el que espera validateCheckoutForm().
     it('valida paso 1 correctamente', () => {
         const validData = {
             nombre: 'Juan Pérez',
             telefono: '88887777',
-            email: 'juan@test.com'
+            correo: 'juan@test.com'
         };
         const result = validateCheckoutForm(validData, 1);
         expect(result.isValid).toBe(true);
+        expect(result.errors).toEqual({});
     });
 
     it('detecta errores en paso 1', () => {
         const invalidData = {
             nombre: 'Juan',
             telefono: '123',
-            email: 'invalid'
+            correo: 'invalid'
         };
         const result = validateCheckoutForm(invalidData, 1);
         expect(result.isValid).toBe(false);
         expect(result.errors.nombre).toBeDefined();
         expect(result.errors.telefono).toBeDefined();
-        expect(result.errors.email).toBeDefined();
+        expect(result.errors.correo).toBeDefined();
+    });
+
+    it('exige el correo: sin él no se puede pasar del paso 1', () => {
+        const sinCorreo = { nombre: 'Juan Pérez', telefono: '88887777' };
+        const result = validateCheckoutForm(sinCorreo, 1);
+        expect(result.isValid).toBe(false);
+        expect(result.errors.correo).toBeDefined();
     });
 });
 

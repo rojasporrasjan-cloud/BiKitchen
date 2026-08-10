@@ -15,6 +15,34 @@ vi.mock('../firebase/config', () => ({
     storage: {}
 }));
 
+// CartContext depende de otros tres contextos. Se stubean para que estos tests
+// prueben el CARRITO y no media aplicación: si un día falla, el problema está
+// en el carrito y no en una dependencia suya.
+vi.mock('../context/ShippingDiscountContext', () => ({
+    ShippingDiscountProvider: ({ children }) => children,
+    useShippingDiscount: () => ({ discountConfig: { enabled: false, percentage: 0 } })
+}));
+
+vi.mock('../context/AuthContext', () => ({
+    AuthProvider: ({ children }) => children,
+    useAuth: () => ({ currentUser: null, isAdmin: () => false, isSuperAdmin: () => false })
+}));
+
+vi.mock('../context/ShippingContext', () => ({
+    ShippingProvider: ({ children }) => children,
+    useShipping: () => ({
+        getShippingCost: () => 0,
+        getZoneById: () => null,
+        zoneRequiresContact: () => false,
+        SHIPPING_ZONES: []
+    })
+}));
+
+vi.mock('../services/facebookPixel', () => ({
+    trackAddToCart: vi.fn(),
+    trackInitiateCheckout: vi.fn()
+}));
+
 // Wrapper para tests con providers
 const TestWrapper = ({ children }) => (
     <BrowserRouter>
