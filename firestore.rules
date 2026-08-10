@@ -1,4 +1,21 @@
 rules_version = '2';
+
+// ⚠️ ATENCIÓN ANTES DE DESPLEGAR ESTE ARCHIVO
+//
+// Netlify NO despliega estas reglas: solo cambian si alguien corre
+// `firebase deploy --only firestore:rules` o las pega en la consola de Firebase.
+//
+// Hay evidencia fuerte de que este archivo NO refleja las reglas que están
+// corriendo en producción. Si `allow update: if isAdmin()` de /pedidos/ estuviera
+// activo, el navegador del cliente no podría actualizar su propio pedido después
+// de pagar, y CheckoutSteps.jsx terminaría mostrando el alert de
+// "Contáctanos en WhatsApp para confirmar tu pedido" a TODOS los que pagan con
+// tarjeta. Eso no está pasando.
+//
+// Conclusión: desplegar este archivo tal cual podría romper el checkout.
+// Antes de hacerlo, comparalo contra la consola de Firebase y actualizá acá lo
+// que esté distinto.
+
 service cloud.firestore {
   match /databases/{database}/documents {
     
@@ -109,28 +126,35 @@ service cloud.firestore {
         (isAuthenticated() && resource.data.userId == request.auth.uid) ||
         (isAuthenticated() && resource.data.correo.lower() == request.auth.token.email.lower());
       // FIX 5: Validar campos mínimos en creación de pedidos
-      allow create: if
+      // El bypass de isAdmin() permite pedidos creados desde el panel (importador de
+      // WhatsApp, pedidos manuales) sin relajar la validación para el público.
+      // No amplía privilegios: un admin ya tiene `allow update, delete` acá abajo.
+      allow create: if isAdmin() || (
         request.resource.data.keys().hasAll(['cliente', 'correo', 'telefono', 'items', 'total'])
         && request.resource.data.total is number
         && request.resource.data.total > 0
         && request.resource.data.items is list
         && request.resource.data.items.size() > 0
         && request.resource.data.correo is string
-        && request.resource.data.correo.size() > 4;
+        && request.resource.data.correo.size() > 4
+      );
       allow update, delete: if isAdmin();
     }
 
+    // Colección legacy: ya nadie escribe acá (todo el sistema usa /pedidos/).
+    // Se mantiene para poder leer el historial viejo.
     match /orders/{orderId} {
       allow read: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
       // FIX 5: Validar campos mínimos en creación de órdenes
-      allow create: if
+      allow create: if isAdmin() || (
         request.resource.data.keys().hasAll(['cliente', 'correo', 'telefono', 'items', 'total'])
         && request.resource.data.total is number
         && request.resource.data.total > 0
         && request.resource.data.items is list
         && request.resource.data.items.size() > 0
         && request.resource.data.correo is string
-        && request.resource.data.correo.size() > 4;
+        && request.resource.data.correo.size() > 4
+      );
       allow update, delete: if isAdmin();
     }
     

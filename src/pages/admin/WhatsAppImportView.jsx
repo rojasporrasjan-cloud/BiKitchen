@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { MessageCircle, Search, CheckCircle, AlertTriangle, Package, Lock } from 'lucide-react';
-import { collection, query, where, getDocs, limit } from 'firebase/firestore';
+import { collection, query, where, getDocs, limit, addDoc } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { useAuth } from '../../context/AuthContext';
 import { useOrders } from '../../context/OrdersContext';
 import AdminPageHeader from '../../components/admin/AdminPageHeader';
-import { extractOrderNumbers } from '../../utils/parseOrderText';
+import ImportedOrderPreview from '../../components/admin/ImportedOrderPreview';
+import { extractOrderNumbers, parseOrderBlock } from '../../utils/parseOrderText';
+import { buildPedidoFromImport, validatePedidoForFirestore } from '../../utils/buildPedidoFromImport';
 import { formatPrice } from '../../utils/formatters';
 import { getOrderStatusLabel, CONFIRMABLE_STATUSES } from '../../config/orderStatus';
 
@@ -20,13 +22,16 @@ import { getOrderStatusLabel, CONFIRMABLE_STATUSES } from '../../config/orderSta
  * para que se otorguen los BiPuntos y el bono de referido igual que siempre.
  */
 export default function WhatsAppImportView() {
-    const { isSuperAdmin } = useAuth();
+    const { isSuperAdmin, currentUser } = useAuth();
     const { updateOrderStatus } = useOrders();
 
     const [rawText, setRawText] = useState('');
     const [results, setResults] = useState([]);
     const [searching, setSearching] = useState(false);
     const [notice, setNotice] = useState(null);
+    const [draft, setDraft] = useState(null);
+    const [creating, setCreating] = useState(false);
+    const [created, setCreated] = useState(null);
 
     if (!isSuperAdmin()) {
         return (
@@ -98,6 +103,42 @@ export default function WhatsAppImportView() {
         }
     };
 
+    /** Lee TODO el texto pegado como un pedido nuevo y arma la vista previa. */
+    const handlePrepareDraft = () => {
+        const parsed = parseOrderBlock(rawText);
+        const pedido = buildPedidoFromImport(parsed, {
+            createdBy: currentUser?.email || 'admin'
+        });
+        setDraft({ parsed, pedido, problems: validatePedidoForFirestore(pedido) });
+        setCreated(null);
+    };
+
+    const handleCreate = async () => {
+        if (!draft || draft.problems.length > 0) return;
+        setCreating(true);
+        try {
+            const ref = await addDoc(collection(db, 'pedidos'), draft.pedido);
+            setCreated({ numeroOrden: draft.pedido.numeroOrden, docId: ref.id });
+
+            // Se suma a los resultados para poder confirmarlo con el mismo botón de arriba,
+            // que es el único camino que otorga BiPuntos y bono de referido.
+            setResults(prev => [...prev, {
+                numeroOrden: draft.pedido.numeroOrden,
+                found: true,
+                docId: ref.id,
+                order: draft.pedido
+            }]);
+        } catch (error) {
+            console.error('[Importador] Error creando pedido:', error);
+            setNotice({
+                type: 'error',
+                text: 'Firebase rechazó el pedido. Suele ser por las reglas de Firestore: revisá que la regla de create de /pedidos/ permita este documento.'
+            });
+        } finally {
+            setCreating(false);
+        }
+    };
+
     const pendientes = results.filter(r => r.found && CONFIRMABLE_STATUSES.includes(r.order.status));
     const noEncontrados = results.filter(r => !r.found);
 
@@ -141,9 +182,20 @@ export default function WhatsAppImportView() {
                         )}
                     </button>
 
+                    <button
+                        onClick={handlePrepareDraft}
+                        disabled={!rawText.trim()}
+                        className="w-full sm:w-auto px-6 py-3.5 bg-white border-2 border-gray-200 text-gray-700 rounded-xl font-bold hover:bg-gray-50 hover:border-gray-300 active:scale-95 transition-all disabled:opacity-50"
+                    >
+                        Es un pedido nuevo del chat
+                    </button>
+
                     {rawText && (
                         <button
-                            onClick={() => { setRawText(''); setResults([]); setNotice(null); }}
+                            onClick={() => {
+                                setRawText(''); setResults([]); setNotice(null);
+                                setDraft(null); setCreated(null);
+                            }}
                             className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
                         >
                             Limpiar
@@ -159,6 +211,19 @@ export default function WhatsAppImportView() {
                     </div>
                 )}
             </div>
+
+            {/* Vista previa de un pedido manual, antes de crearlo */}
+            {draft && (
+                <ImportedOrderPreview
+                    parsed={draft.parsed}
+                    pedido={draft.pedido}
+                    problems={draft.problems}
+                    warnings={draft.parsed.warnings}
+                    creating={creating}
+                    created={created}
+                    onCreate={handleCreate}
+                />
+            )}
 
             {/* Resultados */}
             {results.map((result) => (
