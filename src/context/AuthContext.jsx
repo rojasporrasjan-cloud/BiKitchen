@@ -9,7 +9,7 @@ import {
     updateProfile
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { ADMIN_EMAILS } from '../config/admins';
+import { ADMIN_EMAILS, isSuperAdminEmail } from '../config/admins';
 
 const AuthContext = createContext();
 
@@ -27,8 +27,16 @@ export function AuthProvider({ children }) {
         const emailToTest = currentUser.email.toLowerCase().trim();
         const isWhitelisted = ADMIN_EMAILS.includes(emailToTest);
         const hasAdminRole = userRole === 'admin' || userRole === 'ADMIN';
-        return isWhitelisted || hasAdminRole;
+        // Un super admin siempre es admin: si no, quedaría fuera del panel
+        // cuando su correo no esté en VITE_ADMIN_EMAILS.
+        return isWhitelisted || hasAdminRole || isSuperAdminEmail(emailToTest);
     };
+
+    /**
+     * Jerarquía por encima de admin — solo el dueño ve las herramientas internas.
+     * Controla visibilidad en el panel, NO permisos de Firestore.
+     */
+    const isSuperAdmin = () => isSuperAdminEmail(currentUser?.email);
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -115,6 +123,7 @@ export function AuthProvider({ children }) {
         currentUser,
         userRole,
         isAdmin,
+        isSuperAdmin,
         login,
         register,
         resetPassword,

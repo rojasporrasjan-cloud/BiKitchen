@@ -30,7 +30,7 @@ export default function AdminLayout() {
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
-    const { logout, currentUser } = useAuth();
+    const { logout, currentUser, isSuperAdmin } = useAuth();
     const navigate = useNavigate();
     const isMobile = useIsMobile();
     const { orders, getStats } = useOrders();
@@ -127,7 +127,10 @@ export default function AdminLayout() {
         { to: '/admin/substitutions-config', label: 'Sustituciones', icon: UtensilsCrossed },
         { to: '/admin/shipping', label: 'Costos de Envío', icon: Truck },
         { to: '/admin/shipping-discount', label: 'Descuento Envío', icon: Truck },
-    ];
+
+        // 👑 Herramientas internas del dueño — marcar con superOnly: true.
+        // Solo se renderizan para un super admin (ver filtro debajo).
+    ].filter(item => !item.superOnly || isSuperAdmin());
 
     const handleLogout = async () => {
         await logout();
@@ -153,7 +156,9 @@ export default function AdminLayout() {
                             className="flex flex-col"
                         >
                             <span className="text-base font-bold tracking-wide bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">BiKitchen</span>
-                            <span className="text-[10px] text-orange-400 tracking-widest uppercase font-semibold">Panel Admin</span>
+                            <span className="text-[10px] text-orange-400 tracking-widest uppercase font-semibold">
+                                {isSuperAdmin() ? 'Panel Dueño' : 'Panel Admin'}
+                            </span>
                         </motion.div>
                     )}
                 </Link>
