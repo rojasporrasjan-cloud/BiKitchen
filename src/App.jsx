@@ -315,28 +315,6 @@ function AppContent() {
     captureSource();
   }, [location]);
 
-  // HACK INJECT UPDATE PROMO
-  useEffect(() => {
-    if (!localStorage.getItem('fix_promo_text_v3')) {
-      import('./utils/firestorePromotions').then(({ getAllPromotions, updatePromotion, deletePromotion }) => {
-        getAllPromotions().then(async (promos) => {
-          const targetPromos = promos.filter(p => p.titulo && p.titulo.includes('PACK DOS SEMANAS CON DESAYUNOS GRATIS'));
-          if (targetPromos.length > 0) {
-            await updatePromotion(targetPromos[0].id, {
-              descripcion: `Por la compra de tu pack de dos semanas de almuerzo y cena te regalamos los desayunos.\n\nPack 2 semanas 3 comidas al día para 1 persona. Abarca de lunes a viernes.\n\nLa entrega se hace por semana de 5 desayunos, 5 almuerzos y 5 cenas. Los menús son diferentes durante esas dos semanas.\n\nSi en dado caso no comes algo del menú nos indicas y te damos opciones de cambio.\n\nEl envío tiene costo adicional.\n\nCualquier consulta quedamos atentos.`
-            });
-            for (let i = 1; i < targetPromos.length; i++) {
-              await deletePromotion(targetPromos[i].id);
-            }
-          }
-          localStorage.setItem('fix_promo_text_v3', 'true');
-          window.location.reload();
-        });
-      });
-    }
-  }, []);
-  // END HACK
-
   return (
     <div className="App min-h-screen bg-white transition-colors duration-300">
       <ScrollToTop />
