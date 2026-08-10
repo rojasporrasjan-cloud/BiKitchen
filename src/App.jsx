@@ -81,6 +81,7 @@ const NotificationsConfigView = lazyWithRetry(() => import('./pages/admin/Notifi
 const PoliciesConfigView = lazyWithRetry(() => import('./pages/admin/PoliciesConfigView'));
 const SubstitutionsConfigView = lazyWithRetry(() => import('./pages/admin/SubstitutionsConfigView'));
 const PrintProductionView = lazyWithRetry(() => import('./pages/admin/PrintProductionView'));
+const WhatsAppImportView = lazyWithRetry(() => import('./pages/admin/WhatsAppImportView'));
 
 import SmoothScroll from './components/SmoothScroll';
 import ScrollToTop from './components/ScrollToTop';
@@ -285,6 +286,9 @@ function AnimatedRoutes() {
               <Route path="policies-config" element={<PoliciesConfigView />} />
               <Route path="substitutions-config" element={<SubstitutionsConfigView />} />
               <Route path="print-production" element={<PrintProductionView />} />
+              {/* Herramienta interna del dueño — la vista valida isSuperAdmin() por su cuenta,
+                  para que esconder la opción del menú no sea la única barrera. */}
+              <Route path="whatsapp-import" element={<WhatsAppImportView />} />
             </Route>
 
             {/* 404 - Catch all */}

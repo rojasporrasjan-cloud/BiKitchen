@@ -130,6 +130,7 @@ export default function AdminLayout() {
 
         // 👑 Herramientas internas del dueño — marcar con superOnly: true.
         // Solo se renderizan para un super admin (ver filtro debajo).
+        { to: '/admin/whatsapp-import', label: 'Importar WhatsApp', icon: MessageCircle, superOnly: true },
     ].filter(item => !item.superOnly || isSuperAdmin());
 
     const handleLogout = async () => {
