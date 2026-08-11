@@ -113,20 +113,37 @@ export default function WhatsAppImportView() {
         setCreated(null);
     };
 
-    const handleCreate = async () => {
+    /**
+     * @param {boolean} confirmar - true = además marcarlo confirmado.
+     *
+     * Confirmar importa para la hoja impresa: la pantalla de Producción muestra
+     * todos los pedidos, pero la hoja que se imprime para cocina y empaque SOLO
+     * incluye los confirmados. Un pedido sin confirmar se ve en pantalla y no
+     * sale impreso.
+     */
+    const handleCreate = async (confirmar = false) => {
         if (!draft || draft.problems.length > 0) return;
         setCreating(true);
         try {
             const ref = await addDoc(collection(db, 'pedidos'), draft.pedido);
-            setCreated({ numeroOrden: draft.pedido.numeroOrden, docId: ref.id });
 
-            // Se suma a los resultados para poder confirmarlo con el mismo botón de arriba,
-            // que es el único camino que otorga BiPuntos y bono de referido.
+            // Confirmar pasa por updateOrderStatus, que es el único camino que
+            // otorga BiPuntos y bono de referido.
+            if (confirmar) {
+                await updateOrderStatus(ref.id, 'confirmed');
+            }
+
+            const finalOrder = confirmar
+                ? { ...draft.pedido, status: 'confirmed' }
+                : draft.pedido;
+
+            setCreated({ numeroOrden: draft.pedido.numeroOrden, docId: ref.id, confirmado: confirmar });
+
             setResults(prev => [...prev, {
                 numeroOrden: draft.pedido.numeroOrden,
                 found: true,
                 docId: ref.id,
-                order: draft.pedido
+                order: finalOrder
             }]);
         } catch (error) {
             console.error('[Importador] Error creando pedido:', error);

@@ -40,8 +40,12 @@ export default function ImportedOrderPreview({
                 Pedido nuevo, leído del texto
             </h2>
             <p className="text-sm text-gray-500 mt-1">
-                Revisá que esté todo bien antes de crearlo. Se va a guardar como
-                <strong> pago pendiente</strong>; los BiPuntos se dan cuando lo confirmés.
+                Revisá que esté todo bien antes de crearlo.
+            </p>
+            <p className="text-sm text-gray-600 mt-2 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                <strong>Para que salga en la hoja impresa de cocina y empaque, el pedido
+                    tiene que quedar confirmado.</strong> Si lo dejás sin confirmar, lo vas a ver
+                en la pantalla de Producción pero no va a salir en la hoja.
             </p>
 
             {/* Bloqueos */}
@@ -115,15 +119,25 @@ export default function ImportedOrderPreview({
                     <span className="inline-flex items-center gap-2 px-4 py-2 bg-green-100 text-green-700 rounded-lg text-sm font-bold">
                         <CheckCircle size={16} aria-hidden="true" />
                         Pedido {created.numeroOrden} creado
+                        {created.confirmado ? ' y confirmado — ya sale en la hoja' : ' (sin confirmar)'}
                     </span>
                 ) : (
-                    <button
-                        onClick={onCreate}
-                        disabled={creating || problems.length > 0}
-                        className="flex items-center justify-center gap-2 bg-gradient-to-r from-bikitchen-orange to-orange-600 text-white px-8 py-3.5 rounded-xl font-bold shadow-lg shadow-orange-200 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 disabled:hover:scale-100"
-                    >
-                        {creating ? 'Creando…' : 'Crear pedido'}
-                    </button>
+                    <>
+                        <button
+                            onClick={() => onCreate(true)}
+                            disabled={creating || problems.length > 0}
+                            className="flex items-center justify-center gap-2 bg-gradient-to-r from-bikitchen-orange to-orange-600 text-white px-8 py-3.5 rounded-xl font-bold shadow-lg shadow-orange-200 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 disabled:hover:scale-100"
+                        >
+                            {creating ? 'Creando…' : 'Crear y confirmar'}
+                        </button>
+                        <button
+                            onClick={() => onCreate(false)}
+                            disabled={creating || problems.length > 0}
+                            className="px-5 py-3 text-sm text-gray-600 hover:text-gray-900 font-medium transition-colors disabled:opacity-50"
+                        >
+                            Solo crear, todavía no pagó
+                        </button>
+                    </>
                 )}
             </div>
         </div>

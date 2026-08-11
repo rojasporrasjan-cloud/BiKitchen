@@ -5,6 +5,7 @@ import { cachedFetch, invalidateCache } from '../../utils/firestoreCache';
 import AdminPageHeader from '../../components/admin/AdminPageHeader';
 import { ClipboardList, Printer, Calendar, RefreshCw, FileText } from 'lucide-react';
 import { mapPedidosFromLegacy } from '../../utils/logisticsUtils';
+import { getScheduleFromOrder } from '../../utils/orderDates';
 
 /**
  * DispatchSheetView ("Hoja de Despacho / Reparto")
@@ -24,12 +25,28 @@ export default function DispatchSheetView() {
             if (force) invalidateCache(cacheKey);
 
             const rawOrders = await cachedFetch(cacheKey, async () => {
+                // Mismo criterio que SheetsView. Antes se buscaba por
+                // fecha_entrega == selectedDate, y eso dejaba fuera las semanas 2, 3
+                // y 4 de los packs mensuales: solo la primera entrega tiene esa fecha
+                // guardada, el resto vive en el calendario del pedido.
+                const targetDate = new Date(selectedDate + "T12:00:00");
+                const pastDate = new Date(targetDate);
+                pastDate.setDate(pastDate.getDate() - 40); // cubre packs de hasta 4 semanas
+                const pastDateStr = pastDate.toISOString().split('T')[0];
+
                 const q = query(
                     collection(db, "pedidos"),
-                    where("fecha_entrega", "==", selectedDate)
+                    where("fecha_entrega", ">=", pastDateStr)
                 );
                 const snapshot = await getDocs(q);
-                return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+                return snapshot.docs
+                    .map(doc => ({ id: doc.id, ...doc.data() }))
+                    .filter(order => {
+                        // Un pedido cancelado no se empaca
+                        if (order.status === 'cancelled') return false;
+                        return getScheduleFromOrder(order).includes(selectedDate);
+                    });
             }, 'dashboard'); // share cache group with dashboard/sheets
 
             // Normalize orders using shared utility

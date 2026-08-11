@@ -33,6 +33,10 @@ export default function SheetsView() {
     // Pedidos ya normalizados al modelo de platos/ingredientes
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(false);
+    // Pedidos de esta fecha que NO están confirmados. Esta pantalla los muestra,
+    // pero la hoja que se imprime para cocina y empaque solo incluye confirmados,
+    // así que hay que avisarlo o se cocina de menos.
+    const [sinConfirmar, setSinConfirmar] = useState([]);
 
     // Obtener fechas disponibles de pedidos activos
     useEffect(() => {
@@ -89,6 +93,12 @@ export default function SheetsView() {
 
                 return results;
             }, 'dashboard');
+
+            // Mismos estados que acepta PrintProductionView para la hoja impresa
+            const ESTADOS_QUE_SI_IMPRIMEN = ['confirmed', 'confirmado', 'pagado', 'preparing', 'preparando', 'making', 'ready', 'listo'];
+            setSinConfirmar(
+                rawOrders.filter(o => !ESTADOS_QUE_SI_IMPRIMEN.includes((o.status || o.estado || '').toLowerCase()))
+            );
 
             const normalized = mapPedidosFromLegacy(rawOrders);
 
@@ -577,6 +587,26 @@ export default function SheetsView() {
                     </button>
                 ]}
             />
+
+            {/* Pedidos que se ven acá pero NO salen en la hoja impresa */}
+            {sinConfirmar.length > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
+                    <p className="font-bold text-amber-900">
+                        ⚠️ {sinConfirmar.length} pedido{sinConfirmar.length > 1 ? 's' : ''} de esta fecha no va{sinConfirmar.length > 1 ? 'n' : ''} a salir en la hoja impresa
+                    </p>
+                    <p className="text-sm text-amber-800 mt-1">
+                        La hoja de cocina y la de empaque solo incluyen pedidos confirmados.
+                        Confirmalos en <strong>Pedidos</strong> antes de imprimir, o esa comida no se prepara.
+                    </p>
+                    <ul className="mt-3 space-y-1 text-sm text-amber-900">
+                        {sinConfirmar.map(o => (
+                            <li key={o.id}>
+                                • <strong>{o.cliente || 'Sin nombre'}</strong> — {o.numeroOrden || o.id.slice(0, 8)}
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
 
             {/* Date Selector */}
             <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
