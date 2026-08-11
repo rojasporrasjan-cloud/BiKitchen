@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { parseOrderBlock } from '../utils/parseOrderText';
-import { buildPedidoFromImport } from '../utils/buildPedidoFromImport';
+import { buildPedidoFromImport, validatePedidoForFirestore } from '../utils/buildPedidoFromImport';
 import { mapPedidosFromLegacy } from '../utils/logisticsUtils';
 import { getScheduleFromOrder } from '../utils/orderDates';
 
@@ -86,6 +86,99 @@ describe('De la factura a la hoja de cocina', () => {
     it('el tipo de menú no queda en "Desconocido"', () => {
         expect(hoja.tipoMenu).not.toBe('Desconocido');
         expect(hoja.tipoMenu).toContain('Pack 3 Proteínas');
+    });
+});
+
+/**
+ * Pedido REAL, pegado tal cual lo recibe la administración.
+ * Es el formato exacto que se mete a mano, así que si algún día deja de leerse
+ * bien, este test lo caza antes de que llegue a la cocina.
+ */
+describe('Pedido real de producción', () => {
+    const REAL = `PEDIDO: #ORD-MLMPMVGE99
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+👤 INFORMACIÓN DEL CLIENTE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Nombre: Jairo Monge
+Teléfono: 88670025
+Email: jai.mv@hotmail.com
+Cédula: N/A
+
+📦 ITEMS DEL PEDIDO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1× Pack de Proteínas - Pack 3 Proteínas (250g) (Semanal) - ₡13.500
+└ Proteínas: Carne mechada en salsa, Pollo al pesto, Pollo en salsa mediterranea
+
+💰 RESUMEN DE PAGO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Subtotal: ₡13.500
+Descuento: Sin descuento
+Envío: ₡3.000
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TOTAL: ₡16.500
+
+🚚 INFORMACIÓN DE ENTREGA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Zona: Moravia (San Vicente, San Jerónimo, La Trinidad)
+Dirección: Calle 51
+Referencias: Sin referencias
+Fecha de Entrega: 2026-08-12
+
+💳 MÉTODO DE PAGO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SINPE Móvil`;
+
+    const parsed = parseOrderBlock(REAL);
+    const pedido = buildPedidoFromImport(parsed);
+
+    it('saca todos los datos del cliente', () => {
+        expect(parsed.numeroOrden).toBe('#ORD-MLMPMVGE99');
+        expect(parsed.cliente).toBe('Jairo Monge');
+        expect(parsed.telefono).toBe('88670025');
+        expect(parsed.correo).toBe('jai.mv@hotmail.com');
+    });
+
+    it('distingue el TOTAL del Subtotal y lee el envío con tilde', () => {
+        expect(parsed.subtotal).toBe(13500);
+        expect(parsed.total).toBe(16500);
+        expect(parsed.costoEnvio).toBe(3000); // "Envío: ₡3.000"
+        expect(parsed.descuento).toBe(0);     // "Sin descuento" es relleno
+    });
+
+    it('trata N/A y "Sin referencias" como campos vacíos, no como texto', () => {
+        expect(parsed.cedula).toBeNull();
+        expect(parsed.referencias).toBeNull();
+    });
+
+    it('guarda la zona completa con sus distritos entre paréntesis', () => {
+        expect(parsed.zona).toBe('Moravia (San Vicente, San Jerónimo, La Trinidad)');
+        expect(parsed.direccion).toBe('Calle 51');
+    });
+
+    it('lee las 3 proteínas del pack', () => {
+        expect(parsed.items).toHaveLength(1);
+        expect(parsed.items[0].proteinas).toEqual([
+            'Carne mechada en salsa',
+            'Pollo al pesto',
+            'Pollo en salsa mediterranea'
+        ]);
+    });
+
+    it('no deja ningún aviso pendiente y se puede guardar', () => {
+        expect(parsed.warnings).toEqual([]);
+        expect(validatePedidoForFirestore(pedido)).toEqual([]);
+    });
+
+    it('llega a la hoja de cocina con los 3 platos a 250g', () => {
+        const [hoja] = mapPedidosFromLegacy([{ id: 'real-1', ...pedido }]);
+        expect(hoja.cliente).toBe('Jairo Monge');
+        expect(hoja.platos).toHaveLength(3);
+        hoja.platos.forEach(plato => {
+            expect(plato.proteina.gramosPorPorcion).toBe(250);
+            expect(plato.cantidad).toBe(1);
+        });
+        expect(getScheduleFromOrder(pedido)).toEqual(['2026-08-12']);
     });
 });
 
