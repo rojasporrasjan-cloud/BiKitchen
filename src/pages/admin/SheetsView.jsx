@@ -27,7 +27,8 @@ import {
 import { useOrders } from '../../context/OrdersContext';
 
 export default function SheetsView() {
-    const { orders: allOrders } = useOrders();
+    const { orders: allOrders, updateOrderStatus } = useOrders();
+    const [confirmandoTodos, setConfirmandoTodos] = useState(false);
     const [availableDates, setAvailableDates] = useState([]);
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
     // Pedidos ya normalizados al modelo de platos/ingredientes
@@ -42,10 +43,18 @@ export default function SheetsView() {
     useEffect(() => {
         if (!allOrders || allOrders.length === 0) return;
         
-        const dates = allOrders
-            .map(o => o.fecha_entrega || (o.details && o.details.fechaEntrega))
-            .filter(Boolean); // Remover nulls/undefined
-            
+        // Se listan TODAS las fechas del calendario de cada pedido, no solo la primera.
+        // Antes se usaba únicamente fecha_entrega, así que un día en el que solo tocaban
+        // semanas 2, 3 o 4 de packs mensuales ni siquiera aparecía en la lista: no había
+        // forma de sacar la hoja de ese día.
+        const dates = [];
+        allOrders.forEach(o => {
+            if (o.status === 'cancelled') return;
+            getScheduleFromOrder(o).forEach(d => {
+                if (d) dates.push(d);
+            });
+        });
+
         // Valores únicos, ordenados descendente
         const uniqueDates = [...new Set(dates)].sort((a, b) => new Date(b) - new Date(a));
         
@@ -112,6 +121,37 @@ export default function SheetsView() {
     useEffect(() => {
         loadOrdersForDate(selectedDate);
     }, [selectedDate]);
+
+    /**
+     * Confirma de una todos los pedidos de esta fecha que no iban a imprimirse.
+     * Pasa por updateOrderStatus (no por un updateDoc directo) para que se otorguen
+     * los BiPuntos y el bono de referido igual que al confirmar desde Pedidos.
+     */
+    const confirmarTodos = async () => {
+        const ok = window.confirm(
+            `Vas a confirmar ${sinConfirmar.length} pedido(s) como PAGADOS:\n\n` +
+            sinConfirmar.map(o => `• ${o.cliente || 'Sin nombre'}`).join('\n') +
+            `\n\nSe les van a otorgar los BiPuntos al cliente. ¿Seguro?`
+        );
+        if (!ok) return;
+
+        setConfirmandoTodos(true);
+        const fallaron = [];
+        for (const pedido of sinConfirmar) {
+            try {
+                await updateOrderStatus(pedido.id, 'confirmed');
+            } catch (error) {
+                console.error('[Sheets] Error confirmando pedido:', pedido.id, error);
+                fallaron.push(pedido.cliente || pedido.id);
+            }
+        }
+        setConfirmandoTodos(false);
+
+        if (fallaron.length > 0) {
+            alert(`No se pudieron confirmar: ${fallaron.join(', ')}.\nRevisalos en Pedidos.`);
+        }
+        await loadOrdersForDate(selectedDate, true);
+    };
 
     const generateKitchenSheet = () => {
         const doc = new jsPDF();
@@ -605,6 +645,13 @@ export default function SheetsView() {
                             </li>
                         ))}
                     </ul>
+                    <button
+                        onClick={confirmarTodos}
+                        disabled={confirmandoTodos}
+                        className="mt-4 px-5 py-2.5 bg-amber-600 text-white text-sm font-bold rounded-lg hover:bg-amber-700 active:scale-95 transition-all disabled:opacity-50"
+                    >
+                        {confirmandoTodos ? 'Confirmando…' : `Confirmar los ${sinConfirmar.length} y que salgan en la hoja`}
+                    </button>
                 </div>
             )}
 
@@ -627,6 +674,19 @@ export default function SheetsView() {
                             </option>
                         ))}
                     </select>
+
+                    {/* Cualquier otra fecha, por si la que se busca no está en la lista */}
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-400">o elegí otro día:</span>
+                        <input
+                            type="date"
+                            value={selectedDate}
+                            onChange={(e) => e.target.value && setSelectedDate(e.target.value)}
+                            className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 cursor-pointer"
+                            aria-label="Elegir cualquier fecha de entrega"
+                        />
+                    </div>
+
                     <div className="ml-auto text-sm text-gray-500">
                         {orders.length} pedido{orders.length !== 1 ? 's' : ''} para esta fecha
                     </div>

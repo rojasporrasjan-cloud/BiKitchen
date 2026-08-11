@@ -89,6 +89,44 @@ describe('De la factura a la hoja de cocina', () => {
     });
 });
 
+describe('Pedido importado de varias semanas', () => {
+    const FACTURA_MENSUAL = `📦 PEDIDO: #ORD-MENSUAL01
+Nombre: Carlos Vega
+Teléfono: 89991111
+Email: carlos.vega@gmail.com
+
+1× Pack 5 Comidas Mensual - ₡100.000
+└ Proteínas: Pollo, Res, Cerdo
+
+TOTAL: ₡100.000
+Zona: Escazú
+Fechas de Entrega:
+ • Entrega 1: 2026-08-05
+ • Entrega 2: 2026-08-12
+ • Entrega 3: 2026-08-19
+ • Entrega 4: 2026-08-26`;
+
+    const pedido = buildPedidoFromImport(parseOrderBlock(FACTURA_MENSUAL));
+
+    it('guarda las 4 fechas', () => {
+        expect(pedido.fechas_entrega).toHaveLength(4);
+        expect(pedido.fecha_entrega).toBe('2026-08-05');
+    });
+
+    it('la hoja lo ve en LAS CUATRO semanas, no solo en la primera', () => {
+        // Sin la etiqueta de plan en el item, getScheduleFromOrder devolvería
+        // solo 2026-08-05 y las semanas 2, 3 y 4 no se cocinarían.
+        const schedule = getScheduleFromOrder(pedido);
+        expect(schedule).toEqual(['2026-08-05', '2026-08-12', '2026-08-19', '2026-08-26']);
+    });
+
+    it('un pedido de una sola entrega no se marca como mensual', () => {
+        const simple = buildPedidoFromImport(parseOrderBlock(FACTURA));
+        expect(simple.items[0].plan).toBeNull();
+        expect(getScheduleFromOrder(simple)).toEqual(['2026-08-12']);
+    });
+});
+
 describe('Packs de varias semanas en la hoja', () => {
     it('un pack mensual cae en sus 4 fechas, no solo en la primera', () => {
         const pedido = {

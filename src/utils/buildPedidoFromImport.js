@@ -41,6 +41,13 @@ export const buildPedidoFromImport = (parsed, options = {}) => {
     const fechas = Array.isArray(parsed?.fechasEntrega) ? parsed.fechasEntrega.filter(Boolean) : [];
     const rawItems = Array.isArray(parsed?.items) ? parsed.items : [];
 
+    // La cocina no lee `fechas_entrega` directamente: pasa por getScheduleFromOrder(),
+    // que deduce cuántas entregas tocan mirando el plan del ítem. Sin esta etiqueta,
+    // un pedido con 4 fechas guardadas se vería en la hoja SOLO la primera semana.
+    const planPorEntregas = fechas.length >= 4 ? 'monthly'
+        : fechas.length === 2 ? 'biweekly'
+            : null;
+
     const items = rawItems.map((item) => {
         const cantidad = num(item?.cantidad, 1) || 1;
         const precio = num(item?.precio);
@@ -59,7 +66,10 @@ export const buildPedidoFromImport = (parsed, options = {}) => {
             ensalada: '',
             category: null,
             categoryLabel: null,
-            planLabel: null,
+            // Marca el plan para que la hoja de producción vea TODAS las entregas
+            plan: planPorEntregas,
+            planLabel: planPorEntregas === 'monthly' ? 'Mensual'
+                : planPorEntregas === 'biweekly' ? 'Quincenal' : null,
             desc: ''
         };
     });
