@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { MessageCircle, Search, CheckCircle, AlertTriangle, Package, Lock } from 'lucide-react';
 import { collection, query, where, getDocs, limit, addDoc } from 'firebase/firestore';
 import { db } from '../../firebase/config';
@@ -30,8 +30,41 @@ export default function WhatsAppImportView() {
     const [searching, setSearching] = useState(false);
     const [notice, setNotice] = useState(null);
     const [draft, setDraft] = useState(null);
+    const [edits, setEdits] = useState({});
     const [creating, setCreating] = useState(false);
     const [created, setCreated] = useState(null);
+
+    /**
+     * El pedido se recalcula con lo que el usuario corrigió a mano.
+     *
+     * Hace falta porque el mensaje de WhatsApp NO trae teléfono ni correo, y
+     * Firestore exige los dos para crear el pedido. Sin poder completarlos,
+     * ningún pedido pegado desde WhatsApp se podría guardar.
+     *
+     * Va ANTES del guard de permisos a propósito: los hooks tienen que llamarse
+     * siempre en el mismo orden. Al cargar la página currentUser todavía es null,
+     * así que isSuperAdmin() pasa de false a true y React reventaría si el hook
+     * quedara del otro lado del return.
+     */
+    const draftPedido = useMemo(() => {
+        if (!draft) return null;
+
+        const merged = {
+            ...draft.parsed,
+            ...(edits.cliente !== undefined && { cliente: edits.cliente }),
+            ...(edits.telefono !== undefined && { telefono: edits.telefono }),
+            ...(edits.correo !== undefined && { correo: edits.correo }),
+            ...(edits.zona !== undefined && { zona: edits.zona }),
+            ...(edits.direccion !== undefined && { direccion: edits.direccion }),
+            ...(edits.fecha && { fechasEntrega: [edits.fecha] })
+        };
+
+        const pedido = buildPedidoFromImport(merged, {
+            createdBy: currentUser?.email || 'admin'
+        });
+
+        return { merged, pedido, problems: validatePedidoForFirestore(pedido) };
+    }, [draft, edits, currentUser]);
 
     if (!isSuperAdmin()) {
         return (
@@ -105,11 +138,8 @@ export default function WhatsAppImportView() {
 
     /** Lee TODO el texto pegado como un pedido nuevo y arma la vista previa. */
     const handlePrepareDraft = () => {
-        const parsed = parseOrderBlock(rawText);
-        const pedido = buildPedidoFromImport(parsed, {
-            createdBy: currentUser?.email || 'admin'
-        });
-        setDraft({ parsed, pedido, problems: validatePedidoForFirestore(pedido) });
+        setDraft({ parsed: parseOrderBlock(rawText) });
+        setEdits({});
         setCreated(null);
     };
 
@@ -122,10 +152,11 @@ export default function WhatsAppImportView() {
      * sale impreso.
      */
     const handleCreate = async (confirmar = false) => {
-        if (!draft || draft.problems.length > 0) return;
+        if (!draftPedido || draftPedido.problems.length > 0) return;
+        const { pedido } = draftPedido;
         setCreating(true);
         try {
-            const ref = await addDoc(collection(db, 'pedidos'), draft.pedido);
+            const ref = await addDoc(collection(db, 'pedidos'), pedido);
 
             // Confirmar pasa por updateOrderStatus, que es el único camino que
             // otorga BiPuntos y bono de referido.
@@ -134,13 +165,13 @@ export default function WhatsAppImportView() {
             }
 
             const finalOrder = confirmar
-                ? { ...draft.pedido, status: 'confirmed' }
-                : draft.pedido;
+                ? { ...pedido, status: 'confirmed' }
+                : pedido;
 
-            setCreated({ numeroOrden: draft.pedido.numeroOrden, docId: ref.id, confirmado: confirmar });
+            setCreated({ numeroOrden: pedido.numeroOrden, docId: ref.id, confirmado: confirmar });
 
             setResults(prev => [...prev, {
-                numeroOrden: draft.pedido.numeroOrden,
+                numeroOrden: pedido.numeroOrden,
                 found: true,
                 docId: ref.id,
                 order: finalOrder
@@ -211,7 +242,7 @@ export default function WhatsAppImportView() {
                         <button
                             onClick={() => {
                                 setRawText(''); setResults([]); setNotice(null);
-                                setDraft(null); setCreated(null);
+                                setDraft(null); setCreated(null); setEdits({});
                             }}
                             className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
                         >
@@ -230,15 +261,16 @@ export default function WhatsAppImportView() {
             </div>
 
             {/* Vista previa de un pedido manual, antes de crearlo */}
-            {draft && (
+            {draftPedido && (
                 <ImportedOrderPreview
-                    parsed={draft.parsed}
-                    pedido={draft.pedido}
-                    problems={draft.problems}
+                    parsed={draftPedido.merged}
+                    pedido={draftPedido.pedido}
+                    problems={draftPedido.problems}
                     warnings={draft.parsed.warnings}
                     creating={creating}
                     created={created}
                     onCreate={handleCreate}
+                    onEdit={(campo, valor) => setEdits(prev => ({ ...prev, [campo]: valor }))}
                 />
             )}
 

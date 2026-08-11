@@ -123,6 +123,68 @@ Fechas de Entrega:
     });
 });
 
+// Formato EXACTO del mensaje que arma CheckoutSteps.jsx y se manda por WhatsApp.
+// Es distinto al del correo: viñetas, negritas con asteriscos, emojis como
+// etiqueta, precio en su propia línea, y sin teléfono ni correo.
+const WHATSAPP_REAL = `🛒 *NUEVO PEDIDO #ORD-WSAP12345*
+
+━━━━━━━━━━━━━━━━━━━━
+📦 *ITEMS DEL PEDIDO*
+
+• 1× Pack Bajo Calorías (Two Pack · Semanal)
+   └ Proteínas: Pollo al pesto, Res en salsa
+   └ ₡122.390
+
+• 2× Tortas maduro con queso
+   └ ₡6.000
+
+━━━━━━━━━━━━━━━━━━━━
+💰 *RESUMEN*
+Total: ₡128.390
+
+👤 *CLIENTE*: Priscilla Montoya
+🚚 *ENTREGA*: 2026-08-12
+💳 *PAGO*: SINPE
+📝 *NOTAS*: Sin cebolla`;
+
+describe('parseOrderBlock con el formato de WhatsApp', () => {
+    const parsed = parseOrderBlock(WHATSAPP_REAL);
+
+    it('lee el cliente aunque venga con emoji y negritas', () => {
+        expect(parsed.cliente).toBe('Priscilla Montoya');
+        expect(parsed.numeroOrden).toBe('#ORD-WSAP12345');
+    });
+
+    it('lee la fecha de la etiqueta ENTREGA', () => {
+        expect(parsed.fechasEntrega).toEqual(['2026-08-12']);
+    });
+
+    it('lee el total, el pago y las notas', () => {
+        expect(parsed.total).toBe(128390);
+        expect(parsed.metodoPago).toBe('SINPE');
+        expect(parsed.observaciones).toBe('Sin cebolla');
+    });
+
+    it('lee los ítems con viñeta y el precio de la línea de abajo', () => {
+        expect(parsed.items).toHaveLength(2);
+
+        expect(parsed.items[0].cantidad).toBe(1);
+        expect(parsed.items[0].nombre).toContain('Pack Bajo Calorías');
+        expect(parsed.items[0].precio).toBe(122390);
+        expect(parsed.items[0].proteinas).toEqual(['Pollo al pesto', 'Res en salsa']);
+
+        expect(parsed.items[1].cantidad).toBe(2);
+        expect(parsed.items[1].precio).toBe(6000);
+    });
+
+    it('avisa que faltan teléfono y correo, que WhatsApp no manda', () => {
+        expect(parsed.telefono).toBeNull();
+        expect(parsed.correo).toBeNull();
+        expect(parsed.warnings.join(' ')).toMatch(/tel[ée]fono/i);
+        expect(parsed.warnings.join(' ')).toMatch(/correo/i);
+    });
+});
+
 describe('buildPedidoFromImport', () => {
     const pedido = buildPedidoFromImport(parseOrderBlock(PEDIDO_COMPLETO), { createdBy: 'jan' });
 

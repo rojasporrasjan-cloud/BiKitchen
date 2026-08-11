@@ -11,6 +11,15 @@ import { formatPrice } from '../../utils/formatters';
  * `problems` bloquea la creación (Firestore lo rechazaría igual).
  * `warnings` no bloquea, pero avisa de lo que va a quedar incompleto.
  */
+/** Campos que se pueden corregir a mano antes de crear el pedido. */
+const CAMPOS_EDITABLES = [
+    { campo: 'cliente', label: 'Cliente', tipo: 'text', placeholder: 'Nombre y apellido' },
+    { campo: 'telefono', label: 'Teléfono', tipo: 'tel', placeholder: '8888-8888' },
+    { campo: 'correo', label: 'Correo', tipo: 'email', placeholder: 'cliente@correo.com' },
+    { campo: 'zona', label: 'Zona', tipo: 'text', placeholder: 'Moravia, Escazú…' },
+    { campo: 'direccion', label: 'Dirección', tipo: 'text', placeholder: 'Señas exactas' }
+];
+
 export default function ImportedOrderPreview({
     parsed,
     pedido,
@@ -18,20 +27,10 @@ export default function ImportedOrderPreview({
     warnings = [],
     creating = false,
     created = null,
-    onCreate
+    onCreate,
+    onEdit
 }) {
-    const rows = [
-        ['Cliente', parsed.cliente],
-        ['Teléfono', parsed.telefono],
-        ['Correo', parsed.correo],
-        ['Zona', parsed.zona],
-        ['Dirección', parsed.direccion],
-        ['Entrega', parsed.fechasEntrega?.length > 1
-            ? `${parsed.fechasEntrega.length} entregas · ${parsed.fechasEntrega.join(', ')}`
-            : (parsed.fechasEntrega?.[0] || null)],
-        ['Método de pago', parsed.metodoPago],
-        ['Observaciones', parsed.observaciones]
-    ];
+    const variasEntregas = parsed.fechasEntrega?.length > 1;
 
     return (
         <div className="bg-white rounded-2xl shadow-xl shadow-gray-100 border border-gray-100 p-6">
@@ -74,17 +73,61 @@ export default function ImportedOrderPreview({
                 </div>
             )}
 
-            {/* Datos */}
-            <dl className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
-                {rows.map(([label, value]) => (
-                    <div key={label} className="flex gap-2">
-                        <dt className="text-gray-500 shrink-0">{label}:</dt>
-                        <dd className={value ? 'text-gray-900 font-medium' : 'text-gray-400 italic'}>
-                            {value || 'sin dato'}
-                        </dd>
-                    </div>
-                ))}
-            </dl>
+            {/* Datos — editables, porque el mensaje de WhatsApp no trae teléfono ni correo */}
+            <p className="mt-5 text-xs text-gray-500 uppercase tracking-wider">
+                Datos del pedido — podés corregir o completar lo que falte
+            </p>
+            <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {CAMPOS_EDITABLES.map(({ campo, label, tipo, placeholder }) => {
+                    const valor = parsed[campo] || '';
+                    const falta = !valor;
+                    return (
+                        <div key={campo}>
+                            <label htmlFor={`imp-${campo}`} className="block text-xs font-medium text-gray-600 mb-1">
+                                {label}
+                            </label>
+                            <input
+                                id={`imp-${campo}`}
+                                type={tipo}
+                                value={valor}
+                                placeholder={placeholder}
+                                onChange={(e) => onEdit(campo, e.target.value)}
+                                className={`w-full px-3 py-2 border rounded-lg text-sm outline-none transition-all focus:ring-4 focus:ring-orange-100 focus:border-bikitchen-orange ${falta ? 'border-red-300 bg-red-50' : 'border-gray-200'
+                                    }`}
+                            />
+                        </div>
+                    );
+                })}
+
+                <div>
+                    <label htmlFor="imp-fecha" className="block text-xs font-medium text-gray-600 mb-1">
+                        Fecha de entrega
+                    </label>
+                    {variasEntregas ? (
+                        <p className="px-3 py-2 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-800">
+                            {parsed.fechasEntrega.length} entregas: {parsed.fechasEntrega.join(', ')}
+                        </p>
+                    ) : (
+                        <input
+                            id="imp-fecha"
+                            type="date"
+                            value={parsed.fechasEntrega?.[0] || ''}
+                            onChange={(e) => onEdit('fecha', e.target.value)}
+                            className={`w-full px-3 py-2 border rounded-lg text-sm outline-none transition-all focus:ring-4 focus:ring-orange-100 focus:border-bikitchen-orange ${!parsed.fechasEntrega?.[0] ? 'border-red-300 bg-red-50' : 'border-gray-200'
+                                }`}
+                        />
+                    )}
+                </div>
+
+                <div className="text-sm text-gray-600 self-end pb-2">
+                    <span className="text-gray-500">Pago:</span> {parsed.metodoPago || '—'}
+                    {parsed.observaciones && (
+                        <span className="block mt-1">
+                            <span className="text-gray-500">Notas:</span> {parsed.observaciones}
+                        </span>
+                    )}
+                </div>
+            </div>
 
             {/* Ítems */}
             <div className="mt-5 border-t border-gray-100 pt-4">

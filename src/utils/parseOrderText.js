@@ -48,14 +48,33 @@ const parseAmount = (raw) => {
     return digits ? parseInt(digits, 10) : null;
 };
 
-/** Captura el valor de una etiqueta tipo "Nombre: Jairo Monge" */
+/**
+ * Textos de relleno que el sistema escribe cuando un campo viene vacío.
+ *
+ * La lista es EXACTA a propósito. Antes se descartaba cualquier valor que
+ * empezara con "sin", y eso se tragaba observaciones reales como "Sin cebolla"
+ * o "Sin sal", que son las notas más comunes en comida.
+ */
+const ES_RELLENO = /^(n\/a|no especificad[oa]s?|ningun[ao]|sin referencias|sin observaciones|sin descuento|sin cup[óo]n|sin datos|sin especificar)$/i;
+
+/**
+ * Captura el valor de una etiqueta.
+ *
+ * Tiene que servir para los DOS formatos que genera el sistema:
+ *   correo:    "Nombre: Jairo Monge"
+ *   WhatsApp:  "👤 *CLIENTE*: Jairo Monge"
+ *
+ * Por eso admite emojis, viñetas y los asteriscos de negrita de WhatsApp antes
+ * y después de la etiqueta. `[^\p{L}\n]*` se queda dentro de la línea: sin
+ * excluir el salto de línea se comería las líneas de arriba.
+ */
 const grab = (text, labels) => {
     for (const label of labels) {
-        const re = new RegExp(`^\\s*${label}\\s*:\\s*(.+)$`, 'im');
+        const re = new RegExp(`^[^\\p{L}\\n]*\\*?\\s*${label}\\s*\\*?\\s*:\\s*(.+)$`, 'imu');
         const match = text.match(re);
         if (match) {
-            const value = match[1].trim();
-            if (value && !/^(n\/a|no especificad[oa]|ninguna|sin .+)$/i.test(value)) return value;
+            const value = match[1].replace(/\*/g, '').trim();
+            if (value && !ES_RELLENO.test(value)) return value;
         }
     }
     return null;
@@ -70,7 +89,8 @@ const grabDeliveryDates = (text) => {
         .filter(Boolean);
     if (multi.length > 0) return multi;
 
-    const single = grab(text, ['Fecha de Entrega', 'Fecha Entrega']);
+    // 'ENTREGA' cubre el formato de WhatsApp: "🚚 *ENTREGA*: 2026-08-12"
+    const single = grab(text, ['Fecha de Entrega', 'Fecha Entrega', 'ENTREGA']);
     const iso = single && (single.match(ISO_DATE_RE) || [])[0];
     return iso ? [iso] : [];
 };
@@ -88,12 +108,14 @@ const grabItems = (text) => {
     const lines = text.split('\n');
 
     for (const line of lines) {
-        const itemMatch = line.match(/^\s*(\d+)\s*[×x]\s*(.+)$/i);
+        // La viñeta "• " solo aparece en el formato de WhatsApp
+        const itemMatch = line.match(/^[\s•·*-]*(\d+)\s*[×x]\s*(.+)$/i);
         if (itemMatch) {
             let rest = itemMatch[2].trim();
             let precio = null;
 
-            // El precio es el ÚLTIMO " - ₡..." de la línea: el nombre también trae guiones.
+            // Formato correo: el precio va al final de la misma línea. Es el ÚLTIMO
+            // " - ₡..." porque el nombre del pack también trae guiones.
             const priceMatch = rest.match(/^(.*)\s-\s*₡\s*([\d.,\s]+)$/);
             if (priceMatch) {
                 rest = priceMatch[1].trim();
@@ -102,20 +124,30 @@ const grabItems = (text) => {
 
             items.push({
                 cantidad: parseInt(itemMatch[1], 10) || 1,
-                nombre: rest,
+                nombre: rest.replace(/\*/g, '').trim(),
                 precio: precio,
                 proteinas: []
             });
             continue;
         }
 
-        // Líneas de detalle: pertenecen al último ítem leído
+        if (items.length === 0) continue;
+        const ultimo = items[items.length - 1];
+
+        // Líneas de detalle "└ ...", pertenecen al último ítem leído
         const protMatch = line.match(/└\s*Prote[íi]nas?\s*:\s*(.+)/i);
-        if (protMatch && items.length > 0) {
-            items[items.length - 1].proteinas = protMatch[1]
+        if (protMatch) {
+            ultimo.proteinas = protMatch[1]
                 .split(',')
-                .map(p => p.trim())
+                .map(p => p.replace(/\*/g, '').trim())
                 .filter(Boolean);
+            continue;
+        }
+
+        // Formato WhatsApp: el precio del ítem va en su propia línea "   └ ₡13.500"
+        const precioSuelto = line.match(/└\s*₡\s*([\d.,\s]+)$/);
+        if (precioSuelto && ultimo.precio === null) {
+            ultimo.precio = parseAmount(precioSuelto[1]);
         }
     }
 
@@ -138,8 +170,9 @@ export const parseOrderBlock = (text) => {
         return { warnings: ['El texto está vacío.'], items: [], fechasEntrega: [] };
     }
 
+    // Las etiquetas cubren los dos formatos: el del correo y el de WhatsApp
     const numeroOrden = extractOrderNumbers(text)[0] || null;
-    const cliente = grab(text, ['Nombre', 'Cliente']);
+    const cliente = grab(text, ['Nombre', 'CLIENTE', 'Cliente']);
     const telefono = grab(text, ['Tel[ée]fono', 'Tel']);
     const correo = grab(text, ['Email', 'Correo', 'E-mail']);
     const cedula = grab(text, ['C[ée]dula']);
@@ -149,7 +182,7 @@ export const parseOrderBlock = (text) => {
 
     // Las observaciones no llevan dos puntos: van en la línea siguiente al
     // encabezado "📝 OBSERVACIONES DEL CLIENTE" (ver generateStyledSummary).
-    let observaciones = grab(text, ['Observaciones', 'Notas']);
+    let observaciones = grab(text, ['Observaciones', 'NOTAS', 'Notas']);
     if (!observaciones) {
         const obsMatch = text.match(/OBSERVACIONES[^\n]*\n\s*([^\n]+)/i);
         const value = obsMatch && obsMatch[1].trim();
@@ -165,10 +198,13 @@ export const parseOrderBlock = (text) => {
     const fechasEntrega = grabDeliveryDates(text);
     const items = grabItems(text);
 
-    // El método de pago va en su propia línea, después del encabezado
-    let metodoPago = null;
-    const payMatch = text.match(/M[ÉE]TODO DE PAGO[^\n]*\n[━\-=\s]*\n?\s*([^\n]+)/i);
-    if (payMatch) metodoPago = payMatch[1].trim();
+    // WhatsApp lo trae como "💳 *PAGO*: SINPE"; el correo lo pone en la línea
+    // siguiente al encabezado "MÉTODO DE PAGO".
+    let metodoPago = grab(text, ['PAGO', 'M[ée]todo de pago']);
+    if (!metodoPago) {
+        const payMatch = text.match(/M[ÉE]TODO DE PAGO[^\n]*\n[━\-=\s]*\n?\s*([^\n]+)/i);
+        if (payMatch) metodoPago = payMatch[1].replace(/\*/g, '').trim();
+    }
 
     // Lo que la cocina y las reglas de Firestore necesitan sí o sí
     if (!cliente) warnings.push('Falta el nombre del cliente.');
