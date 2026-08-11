@@ -122,6 +122,8 @@ export function mapPedidosFromLegacy(rawPedidos) {
           
           platosNormalizados.push({
             numero: idx + 1,
+            // Cuántas veces pidió este ítem el cliente (ej: 2 packs iguales)
+            cantidad: Number(item.cantidad) || 1,
             proteina: {
               nombre: protName,
               gramosPorPorcion: gramosPorcionProteina || 0
@@ -144,6 +146,8 @@ export function mapPedidosFromLegacy(rawPedidos) {
         const numero = index + 1;
         platosNormalizados.push({
           numero,
+          // Individuales pedidos varias veces (ej: 3× Pollo Teriyaki)
+          cantidad: Number(item.cantidad) || 1,
           proteina: {
             nombre: item.proteinaNombre || item.proteina || item.nombre || 'Proteína',
             gramosPorPorcion: gramosPorcionProteina || 0
@@ -390,12 +394,20 @@ export function buildKitchenSheetData(pedidos, menus) {
       }
 
       const agregado = porMenu[tipo].platos[key];
-      agregado.totalPlatos += cantidadMenus;
+
+      // Cuántas porciones de ESTE plato hay que preparar.
+      // cantidadMenus multiplica el pedido entero; plato.cantidad viene de la
+      // cantidad del ítem (ej: 3× Pollo Teriyaki). Antes solo se usaba el primero,
+      // que nunca se escribe en Firestore y siempre valía 1: por eso un ítem
+      // pedido 3 veces se cocinaba una sola vez.
+      const factor = cantidadMenus * (plato.cantidad || 1);
+
+      agregado.totalPlatos += factor;
 
       // Proteína siempre en gramos
       if (plato.proteina?.gramosPorPorcion) {
         agregado.proteina.totalGramos +=
-          (plato.proteina.gramosPorPorcion || 0) * cantidadMenus;
+          (plato.proteina.gramosPorPorcion || 0) * factor;
         // Guardar porción base (asumimos que es la misma para todos si es el mismo plato)
         agregado.proteina.gramosPorPorcion = plato.proteina.gramosPorPorcion;
       }
@@ -407,10 +419,10 @@ export function buildKitchenSheetData(pedidos, menus) {
 
         if (plato.carbo.unidad === 'g') {
           agregado.carbo.totalGramos +=
-            (plato.carbo.cantidadPorPorcion || 0) * cantidadMenus;
+            (plato.carbo.cantidadPorPorcion || 0) * factor;
         } else {
           agregado.carbo.totalTazas +=
-            (plato.carbo.cantidadPorPorcion || 0) * cantidadMenus;
+            (plato.carbo.cantidadPorPorcion || 0) * factor;
         }
       }
 
@@ -421,10 +433,10 @@ export function buildKitchenSheetData(pedidos, menus) {
 
         if (plato.vegetal.unidad === 'g') {
           agregado.vegetal.totalGramos +=
-            (plato.vegetal.cantidadPorPorcion || 0) * cantidadMenus;
+            (plato.vegetal.cantidadPorPorcion || 0) * factor;
         } else {
           agregado.vegetal.totalTazas +=
-            (plato.vegetal.cantidadPorPorcion || 0) * cantidadMenus;
+            (plato.vegetal.cantidadPorPorcion || 0) * factor;
         }
       }
     });
