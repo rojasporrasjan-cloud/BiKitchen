@@ -56,7 +56,18 @@ export default function WhatsAppImportView() {
             ...(edits.correo !== undefined && { correo: edits.correo }),
             ...(edits.zona !== undefined && { zona: edits.zona }),
             ...(edits.direccion !== undefined && { direccion: edits.direccion }),
-            ...(edits.fecha && { fechasEntrega: [edits.fecha] })
+            ...(edits.fecha && { fechasEntrega: [edits.fecha] }),
+            // Las proteínas se escriben separadas por coma; sin ellas la cocina
+            // no sabe qué preparar en un pack que solo dice "3 proteínas".
+            items: (draft.parsed.items || []).map((item, i) => (
+                edits[`proteinas_${i}`] === undefined ? item : {
+                    ...item,
+                    proteinas: edits[`proteinas_${i}`]
+                        .split(',')
+                        .map(s => s.trim())
+                        .filter(Boolean)
+                }
+            ))
         };
 
         const pedido = buildPedidoFromImport(merged, {

@@ -68,9 +68,13 @@ const ES_RELLENO = /^(n\/a|no especificad[oa]s?|ningun[ao]|sin referencias|sin o
  * y después de la etiqueta. `[^\p{L}\n]*` se queda dentro de la línea: sin
  * excluir el salto de línea se comería las líneas de arriba.
  */
-const grab = (text, labels) => {
+const grab = (text, labels, { sinDosPuntos = false } = {}) => {
     for (const label of labels) {
-        const re = new RegExp(`^[^\\p{L}\\n]*\\*?\\s*${label}\\s*\\*?\\s*:\\s*(.+)$`, 'imu');
+        // Por defecto se exigen los dos puntos. Sin ellos, un encabezado de varias
+        // palabras como "OBSERVACIONES DEL CLIENTE" devolvería "DEL CLIENTE".
+        // `sinDosPuntos` se usa solo donde se escribe a mano sin ellos ("Envíos 3000").
+        const separador = sinDosPuntos ? '[:\\s]' : ':';
+        const re = new RegExp(`^[^\\p{L}\\n]*\\*?\\s*${label}\\s*\\*?\\s*${separador}\\s*(.+)$`, 'imu');
         const match = text.match(re);
         if (match) {
             const value = match[1].replace(/\*/g, '').trim();
@@ -82,17 +86,100 @@ const grab = (text, labels) => {
 
 const ISO_DATE_RE = /\d{4}-\d{2}-\d{2}/;
 
-/** Fecha única ("Fecha de Entrega: 2026-08-12") o lista (" • Entrega 1: ...") */
-const grabDeliveryDates = (text) => {
+const MESES = {
+    enero: 0, febrero: 1, marzo: 2, abril: 3, mayo: 4, junio: 5,
+    julio: 6, agosto: 7, septiembre: 8, setiembre: 8, octubre: 9,
+    noviembre: 10, diciembre: 11
+};
+
+const sinTildes = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+const aISO = (y, m, d) => `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+
+/**
+ * Lee una fecha escrita a mano y la devuelve en AAAA-MM-DD.
+ *
+ * Acepta lo que escribe la administración: "Miércoles 12 de agosto",
+ * "12 de agosto de 2026", "12/08/2026" y el ISO de siempre.
+ *
+ * Cuando no viene el año se usa el actual, y si eso daría una fecha ya pasada
+ * hace más de un mes se asume el año siguiente (un pedido de "5 de enero"
+ * escrito en diciembre es del año que viene, no del que termina).
+ *
+ * @param {string} texto
+ * @param {Date} [hoy] - inyectable para poder testear
+ * @returns {string|null}
+ */
+export const parseFechaEspanol = (texto, hoy = new Date()) => {
+    if (!texto || typeof texto !== 'string') return null;
+
+    const iso = texto.match(ISO_DATE_RE);
+    if (iso) return iso[0];
+
+    // 12/08/2026 o 12-08-2026
+    const numerica = texto.match(/\b(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})\b/);
+    if (numerica) {
+        const [, d, m, yRaw] = numerica;
+        const y = yRaw.length === 2 ? 2000 + Number(yRaw) : Number(yRaw);
+        return aISO(y, Number(m) - 1, Number(d));
+    }
+
+    // "12 de agosto" (con o sin año, con o sin día de la semana adelante)
+    const conMes = sinTildes(texto).match(/\b(\d{1,2})\s+de\s+([a-z]+)(?:\s+(?:de\s+)?(\d{4}))?/);
+    if (conMes) {
+        const dia = Number(conMes[1]);
+        const mes = MESES[conMes[2]];
+        if (mes === undefined || dia < 1 || dia > 31) return null;
+
+        if (conMes[3]) return aISO(Number(conMes[3]), mes, dia);
+
+        // Sin año: el actual, salvo que ya haya quedado muy atrás
+        const base = new Date(hoy);
+        base.setHours(0, 0, 0, 0);
+        let anio = base.getFullYear();
+        const candidata = new Date(anio, mes, dia);
+        const treintaDias = 30 * 86400000;
+        if (base - candidata > treintaDias) anio += 1;
+        return aISO(anio, mes, dia);
+    }
+
+    return null;
+};
+
+/**
+ * Fechas de entrega. Cubre tres formas:
+ *   " • Entrega 1: 2026-08-12"     (correo, packs de varias semanas)
+ *   "Fecha de Entrega: 2026-08-12" / "🚚 *ENTREGA*: ..."
+ *   "Entregas" y en las líneas de abajo "Miércoles 12 de agosto"
+ */
+const grabDeliveryDates = (text, hoy) => {
     const multi = [...text.matchAll(/•\s*Entrega\s*\d+\s*:\s*(.+)/gi)]
-        .map(m => (m[1].match(ISO_DATE_RE) || [])[0])
+        .map(m => parseFechaEspanol(m[1], hoy))
         .filter(Boolean);
     if (multi.length > 0) return multi;
 
-    // 'ENTREGA' cubre el formato de WhatsApp: "🚚 *ENTREGA*: 2026-08-12"
-    const single = grab(text, ['Fecha de Entrega', 'Fecha Entrega', 'ENTREGA']);
-    const iso = single && (single.match(ISO_DATE_RE) || [])[0];
-    return iso ? [iso] : [];
+    // Encabezado "Entregas" solo, con las fechas en las líneas siguientes.
+    // Va ANTES del grab de etiqueta: ese permite cruzar el salto de línea y se
+    // quedaría solo con la primera fecha, perdiendo las semanas de un mensual.
+    const lineas = text.split('\n');
+    const idx = lineas.findIndex(l => /^\s*Entregas?\s*:?\s*$/i.test(l));
+    if (idx !== -1) {
+        const fechas = [];
+        for (let i = idx + 1; i < lineas.length; i++) {
+            const linea = lineas[i].trim();
+            if (!linea) continue;
+            const fecha = parseFechaEspanol(linea, hoy);
+            if (!fecha) break;
+            fechas.push(fecha);
+        }
+        if (fechas.length > 0) return fechas;
+    }
+
+    const single = grab(text, ['Fecha de Entrega', 'Fecha Entrega', 'ENTREGA', 'Entregas?']);
+    const desdeEtiqueta = parseFechaEspanol(single || '', hoy);
+    if (desdeEtiqueta) return [desdeEtiqueta];
+
+    return [];
 };
 
 /**
@@ -108,8 +195,21 @@ const grabItems = (text) => {
     const lines = text.split('\n');
 
     for (const line of lines) {
-        // La viñeta "• " solo aparece en el formato de WhatsApp
-        const itemMatch = line.match(/^[\s•·*-]*(\d+)\s*[×x]\s*(.+)$/i);
+        // Tres formas de escribir un ítem:
+        //   "1× Pack ..."              (correo)
+        //   "• 1× Pack ..."            (WhatsApp)
+        //   "□ 1 pack 3 proteínas..."  (escrito a mano, sin la ×)
+        // La viñeta puede ser •, □, ▢, guion o asterisco.
+        let itemMatch = line.match(/^[\s•·*□▢▪◦-]*(\d+)\s*[×x]\s*(.+)$/i);
+
+        // Sin ×: número, espacio y texto. Se descarta si la línea es una fecha
+        // ("12 de agosto") o un monto suelto, que si no se colarían como ítems.
+        if (!itemMatch) {
+            const suelto = line.match(/^[\s•·*□▢▪◦-]*(\d+)\s+(\p{L}.*)$/u);
+            const pareceFecha = /\bde\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\b/i.test(line);
+            if (suelto && !pareceFecha) itemMatch = suelto;
+        }
+
         if (itemMatch) {
             let rest = itemMatch[2].trim();
             let precio = null;
@@ -144,8 +244,11 @@ const grabItems = (text) => {
             continue;
         }
 
-        // Formato WhatsApp: el precio del ítem va en su propia línea "   └ ₡13.500"
-        const precioSuelto = line.match(/└\s*₡\s*([\d.,\s]+)$/);
+        // El precio del ítem puede venir en su propia línea:
+        //   "   └ ₡13.500"     (WhatsApp)
+        //   "Precio 25.850"    (escrito a mano)
+        const precioSuelto = line.match(/└\s*₡\s*([\d.,\s]+)$/)
+            || line.match(/^\s*Precio\s*:?\s*₡?\s*([\d.,\s]+)\s*$/i);
         if (precioSuelto && ultimo.precio === null) {
             ultimo.precio = parseAmount(precioSuelto[1]);
         }
@@ -164,7 +267,7 @@ const grabItems = (text) => {
  * @param {string} text
  * @returns {object} datos del pedido + warnings
  */
-export const parseOrderBlock = (text) => {
+export const parseOrderBlock = (text, hoy = new Date()) => {
     const warnings = [];
     if (!text || typeof text !== 'string') {
         return { warnings: ['El texto está vacío.'], items: [], fechasEntrega: [] };
@@ -176,8 +279,9 @@ export const parseOrderBlock = (text) => {
     const telefono = grab(text, ['Tel[ée]fono', 'Tel']);
     const correo = grab(text, ['Email', 'Correo', 'E-mail']);
     const cedula = grab(text, ['C[ée]dula']);
-    const zona = grab(text, ['Zona']);
-    const direccion = grab(text, ['Direcci[óo]n']);
+    // "Lugar" es como lo escribe la administración a mano
+    const zona = grab(text, ['Zona', 'Lugar']);
+    const direccion = grab(text, ['Direcci[óo]n', 'Se[ñn]as']);
     const referencias = grab(text, ['Referencias']);
 
     // Las observaciones no llevan dos puntos: van en la línea siguiente al
@@ -191,11 +295,12 @@ export const parseOrderBlock = (text) => {
 
     const total = parseAmount(grab(text, ['TOTAL', 'Total']));
     const subtotal = parseAmount(grab(text, ['Subtotal']));
-    const envioRaw = grab(text, ['Env[íi]o']);
+    // "Envíos 3000" — en plural y sin dos puntos, como se escribe a mano
+    const envioRaw = grab(text, ['Env[íi]os?', 'Flete'], { sinDosPuntos: true });
     const costoEnvio = /confirmar/i.test(envioRaw || '') ? 0 : (parseAmount(envioRaw) ?? 0);
     const descuento = parseAmount(grab(text, ['Descuento'])) ?? 0;
 
-    const fechasEntrega = grabDeliveryDates(text);
+    const fechasEntrega = grabDeliveryDates(text, hoy);
     const items = grabItems(text);
 
     // WhatsApp lo trae como "💳 *PAGO*: SINPE"; el correo lo pone en la línea
@@ -212,6 +317,15 @@ export const parseOrderBlock = (text) => {
     if (!correo) warnings.push('Falta el correo — Firestore lo exige para crear el pedido.');
     if (!total || total <= 0) warnings.push('Falta el TOTAL o quedó en cero.');
     if (items.length === 0) warnings.push('No pude leer ningún ítem del pedido.');
+
+    // Un pack que anuncia N proteínas pero no dice cuáles deja a la cocina sin
+    // saber qué preparar: saldría un solo renglón con el nombre del pack.
+    items.forEach((item) => {
+        const anuncia = String(item.nombre || '').match(/(\d+)\s*prote[íi]nas?/i);
+        if (anuncia && item.proteinas.length === 0) {
+            warnings.push(`"${item.nombre}" dice ${anuncia[1]} proteínas pero no dice cuáles — escribilas abajo o la cocina no sabrá qué preparar.`);
+        }
+    });
     if (fechasEntrega.length === 0) warnings.push('Falta la fecha de entrega en formato AAAA-MM-DD — sin ella el pedido no sale en la hoja de producción.');
 
     return {
