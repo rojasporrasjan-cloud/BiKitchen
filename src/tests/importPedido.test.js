@@ -112,8 +112,9 @@ Fechas de Entrega:
         const incompleto = parseOrderBlock('Nombre: Ana\nTOTAL: ₡5.000');
         expect(incompleto.cliente).toBe('Ana');
         expect(incompleto.warnings.join(' ')).toMatch(/tel[ée]fono/i);
-        expect(incompleto.warnings.join(' ')).toMatch(/correo/i);
         expect(incompleto.warnings.join(' ')).toMatch(/fecha de entrega/i);
+        // El correo NO se reclama: se arma a partir del teléfono
+        expect(incompleto.warnings.join(' ')).not.toMatch(/correo/i);
     });
 
     it('no revienta con basura', () => {
@@ -177,11 +178,12 @@ describe('parseOrderBlock con el formato de WhatsApp', () => {
         expect(parsed.items[1].precio).toBe(6000);
     });
 
-    it('avisa que faltan teléfono y correo, que WhatsApp no manda', () => {
+    it('pide el teléfono, que WhatsApp tampoco manda', () => {
         expect(parsed.telefono).toBeNull();
         expect(parsed.correo).toBeNull();
         expect(parsed.warnings.join(' ')).toMatch(/tel[ée]fono/i);
-        expect(parsed.warnings.join(' ')).toMatch(/correo/i);
+        // El correo no se reclama: se arma con el teléfono
+        expect(parsed.warnings.join(' ')).not.toMatch(/correo/i);
     });
 });
 

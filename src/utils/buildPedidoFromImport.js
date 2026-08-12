@@ -29,6 +29,29 @@ const num = (value, fallback = 0) => {
     return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+/** Dominio de los correos inventados, para poder reconocerlos después. */
+export const DOMINIO_SIN_CORREO = 'sin-correo.bikitchen.cr';
+
+/**
+ * Los pedidos que llegan por WhatsApp casi nunca traen correo, pero la regla de
+ * creación de Firestore lo exige (`correo.size() > 4`). En vez de bloquear el
+ * pedido o de obligar a inventar uno a mano, se arma a partir del teléfono.
+ *
+ * Se deriva del teléfono a propósito: el mismo cliente siempre genera el mismo
+ * correo, así que sus pedidos quedan agrupados igual que si tuviera uno real.
+ *
+ * @returns {{ correo: string, esPlaceholder: boolean }}
+ */
+export const resolverCorreo = (correoCrudo, telefono) => {
+    const correo = String(correoCrudo || '').toLowerCase().trim();
+    if (correo.length > 4) return { correo, esPlaceholder: false };
+
+    const digitos = String(telefono || '').replace(/\D/g, '');
+    if (!digitos) return { correo: '', esPlaceholder: false };
+
+    return { correo: `${digitos}@${DOMINIO_SIN_CORREO}`, esPlaceholder: true };
+};
+
 /**
  * @param {object} parsed - salida de parseOrderBlock()
  * @param {object} [options] - { createdBy, orderNumber }
@@ -74,11 +97,15 @@ export const buildPedidoFromImport = (parsed, options = {}) => {
         };
     });
 
+    const { correo, esPlaceholder } = resolverCorreo(parsed?.correo, parsed?.telefono);
+
     return {
         numeroOrden: orderNumber || parsed?.numeroOrden || generateImportOrderNumber(),
         cliente: parsed?.cliente || '',
         telefono: parsed?.telefono || '',
-        correo: (parsed?.correo || '').toLowerCase().trim(),
+        correo,
+        // Deja rastro de que el correo se inventó a partir del teléfono
+        correoEsPlaceholder: esPlaceholder,
         cedula: parsed?.cedula || '-',
         direccion: parsed?.direccion || '',
         referencias: parsed?.referencias || '',
@@ -124,7 +151,8 @@ export const buildPedidoFromImport = (parsed, options = {}) => {
 export const validatePedidoForFirestore = (pedido) => {
     const problems = [];
     if (!pedido?.cliente) problems.push('Falta el nombre del cliente.');
-    if (!pedido?.telefono) problems.push('Falta el teléfono.');
+    // El correo se arma solo a partir del teléfono, así que basta con el teléfono
+    if (!pedido?.telefono) problems.push('Falta el teléfono (de ahí sale el correo también).');
     if (typeof pedido?.correo !== 'string' || pedido.correo.length <= 4) {
         problems.push('El correo falta o es demasiado corto.');
     }

@@ -315,7 +315,8 @@ export const parseOrderBlock = (text, hoy = new Date()) => {
     // Lo que la cocina y las reglas de Firestore necesitan sí o sí
     if (!cliente) warnings.push('Falta el nombre del cliente.');
     if (!telefono) warnings.push('Falta el teléfono.');
-    if (!correo) warnings.push('Falta el correo — Firestore lo exige para crear el pedido.');
+    // El correo NO se avisa: si no viene, se arma a partir del teléfono
+    // (ver resolverCorreo en buildPedidoFromImport.js).
     if (!total || total <= 0) warnings.push('Falta el TOTAL o quedó en cero.');
     if (items.length === 0) warnings.push('No pude leer ningún ítem del pedido.');
 

@@ -15,9 +15,10 @@ import { formatPrice } from '../../utils/formatters';
 const CAMPOS_EDITABLES = [
     { campo: 'cliente', label: 'Cliente', tipo: 'text', placeholder: 'Nombre y apellido' },
     { campo: 'telefono', label: 'Teléfono', tipo: 'tel', placeholder: '8888-8888' },
-    { campo: 'correo', label: 'Correo', tipo: 'email', placeholder: 'cliente@correo.com' },
-    { campo: 'zona', label: 'Zona', tipo: 'text', placeholder: 'Moravia, Escazú…' },
-    { campo: 'direccion', label: 'Dirección', tipo: 'text', placeholder: 'Señas exactas' }
+    // El correo es opcional: si no viene, se arma a partir del teléfono
+    { campo: 'correo', label: 'Correo (opcional)', tipo: 'email', placeholder: 'Si no tiene, dejalo vacío', opcional: true },
+    { campo: 'zona', label: 'Zona', tipo: 'text', placeholder: 'Moravia, Escazú…', opcional: true },
+    { campo: 'direccion', label: 'Dirección', tipo: 'text', placeholder: 'Señas exactas', opcional: true }
 ];
 
 export default function ImportedOrderPreview({
@@ -78,9 +79,9 @@ export default function ImportedOrderPreview({
                 Datos del pedido — podés corregir o completar lo que falte
             </p>
             <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {CAMPOS_EDITABLES.map(({ campo, label, tipo, placeholder }) => {
+                {CAMPOS_EDITABLES.map(({ campo, label, tipo, placeholder, opcional }) => {
                     const valor = parsed[campo] || '';
-                    const falta = !valor;
+                    const falta = !valor && !opcional;
                     return (
                         <div key={campo}>
                             <label htmlFor={`imp-${campo}`} className="block text-xs font-medium text-gray-600 mb-1">
@@ -95,6 +96,11 @@ export default function ImportedOrderPreview({
                                 className={`w-full px-3 py-2 border rounded-lg text-sm outline-none transition-all focus:ring-4 focus:ring-orange-100 focus:border-bikitchen-orange ${falta ? 'border-red-300 bg-red-50' : 'border-gray-200'
                                     }`}
                             />
+                            {campo === 'correo' && pedido.correoEsPlaceholder && (
+                                <p className="mt-1 text-xs text-gray-500">
+                                    Sin correo se guarda como <strong>{pedido.correo}</strong>, armado con el teléfono.
+                                </p>
+                            )}
                         </div>
                     );
                 })}

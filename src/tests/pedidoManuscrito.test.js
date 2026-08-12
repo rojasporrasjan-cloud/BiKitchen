@@ -57,10 +57,31 @@ describe('Pedido escrito a mano', () => {
         expect(p.items).toHaveLength(1);
     });
 
-    it('avisa que faltan teléfono y correo', () => {
+    it('pide el teléfono, que es lo único que hace falta de contacto', () => {
         expect(p.telefono).toBeNull();
         expect(p.correo).toBeNull();
         expect(validatePedidoForFirestore(buildPedidoFromImport(p)).length).toBeGreaterThan(0);
+        // El correo NO se reclama: se arma solo
+        expect(p.warnings.join(' ')).not.toMatch(/correo/i);
+    });
+
+    it('con solo el teléfono ya se puede guardar: el correo se arma solo', () => {
+        const conTelefono = buildPedidoFromImport({ ...p, telefono: '8888-1111' });
+        expect(validatePedidoForFirestore(conTelefono)).toEqual([]);
+        expect(conTelefono.correo).toBe('88881111@sin-correo.bikitchen.cr');
+        expect(conTelefono.correoEsPlaceholder).toBe(true);
+    });
+
+    it('el mismo teléfono genera siempre el mismo correo', () => {
+        const a = buildPedidoFromImport({ ...p, telefono: '8888-1111' });
+        const b = buildPedidoFromImport({ ...p, telefono: '88881111' });
+        expect(a.correo).toBe(b.correo);
+    });
+
+    it('si trae correo real, ese se respeta', () => {
+        const real = buildPedidoFromImport({ ...p, telefono: '8888-1111', correo: 'Paola.Vacca@Gmail.com' });
+        expect(real.correo).toBe('paola.vacca@gmail.com');
+        expect(real.correoEsPlaceholder).toBe(false);
     });
 
     it('avisa que el pack anuncia 3 proteínas pero no dice cuáles', () => {
