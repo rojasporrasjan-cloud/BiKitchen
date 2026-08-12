@@ -88,6 +88,36 @@ describe('Cantidades en la hoja de cocina', () => {
         expect(plato.proteina.totalGramos).toBe(300);
     });
 
+    it('un individual junto a un pack NO se fusiona con un plato del pack', () => {
+        // Antes cada ítem numeraba desde 1, así que el individual quedaba con el
+        // número 2 y se fusionaba con el plato 2 del pack: desaparecía de la hoja
+        // y sus porciones se sumaban a la proteína equivocada.
+        const { menu } = totalesDe({
+            cliente: 'Ana Mora',
+            plan: 'Pack + individual',
+            fecha_entrega: '2026-08-12',
+            items: [
+                { nombre: 'Pack 3 Proteínas (250g)', cantidad: 1, proteinas: ['Pollo', 'Res', 'Cerdo'] },
+                { nombre: 'Tortas maduro con queso', cantidad: 3, proteina: 'Tortas maduro con queso' }
+            ]
+        });
+
+        const platos = Object.values(menu.platos);
+        expect(platos).toHaveLength(4); // 3 del pack + 1 individual
+
+        const nombres = platos.map(p => p.proteina.nombre);
+        expect(nombres).toContain('Tortas maduro con queso');
+
+        // Cada proteína del pack se queda en 1 porción, no absorbe las 3 tortas
+        ['Pollo', 'Res', 'Cerdo'].forEach(prot => {
+            const plato = platos.find(p => p.proteina.nombre === prot);
+            expect(plato.totalPlatos).toBe(1);
+        });
+
+        const tortas = platos.find(p => p.proteina.nombre === 'Tortas maduro con queso');
+        expect(tortas.totalPlatos).toBe(3);
+    });
+
     it('varios individuales distintos salen como platos separados', () => {
         const { menu } = totalesDe({
             cliente: 'Pedido Mixto',

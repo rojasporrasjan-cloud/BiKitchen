@@ -122,6 +122,101 @@ describe('parseFechaEspanol', () => {
     });
 });
 
+/**
+ * PLANTILLA OFICIAL para que la administración mande los pedidos.
+ *
+ * Si estos dos tests pasan, un pedido escrito con esa plantilla entra completo
+ * y sin tener que corregir nada a mano. Si alguien cambia el parser y rompe
+ * alguno, la plantilla dejó de servir y hay que avisarle a la administración.
+ */
+describe('Plantilla oficial', () => {
+    it('un pedido de una entrega entra sin tocar nada', () => {
+        const p = parseOrderBlock(`Cliente: Paola Vacca
+Teléfono: 8888-1111
+Correo: paola.vacca@gmail.com
+Lugar: Heredia, Belén
+Dirección: 200m norte de la iglesia, casa verde
+
+1× Pack 3 Proteínas (500g)
+Proteínas: Carne mechada, Pollo al pesto, Pollo mediterráneo
+Precio 25.850
+
+Envíos 3000
+TOTAL: 28.850
+
+Pago: SINPE
+
+Entregas
+Miércoles 12 de agosto
+
+Notas: Sin cebolla`, HOY);
+
+        expect(p.warnings).toEqual([]);
+        expect(p.cliente).toBe('Paola Vacca');
+        expect(p.telefono).toBe('8888-1111');
+        expect(p.correo).toBe('paola.vacca@gmail.com');
+        expect(p.zona).toBe('Heredia, Belén');
+        expect(p.direccion).toBe('200m norte de la iglesia, casa verde');
+        expect(p.metodoPago).toBe('SINPE');
+        expect(p.observaciones).toBe('Sin cebolla');
+        expect(p.costoEnvio).toBe(3000);
+        expect(p.total).toBe(28850);
+        expect(p.fechasEntrega).toEqual(['2026-08-12']);
+        expect(p.items[0].proteinas).toHaveLength(3);
+
+        const pedido = buildPedidoFromImport(p);
+        expect(validatePedidoForFirestore(pedido)).toEqual([]);
+
+        const [hoja] = mapPedidosFromLegacy([{ id: 'x', ...pedido }]);
+        expect(hoja.platos).toHaveLength(3);
+        hoja.platos.forEach(pl => expect(pl.proteina.gramosPorPorcion).toBe(500));
+    });
+
+    it('un pack mensual con individuales entra completo y con sus 4 fechas', () => {
+        const p = parseOrderBlock(`Cliente: Ana Mora
+Teléfono: 8777-2222
+Correo: ana.mora@gmail.com
+Lugar: Escazú
+Dirección: Condominio Vistas, casa 12
+
+1× Pack 5 Comidas (250g)
+Proteínas: Pollo al pesto, Res en salsa, Cerdo BBQ, Pollo teriyaki, Carne mechada
+Precio 100.000
+
+3× Tortas maduro con queso
+Precio 9.000
+
+Envíos 3000
+TOTAL: 112.000
+
+Pago: Transferencia
+
+Entregas
+Miércoles 12 de agosto
+Miércoles 19 de agosto
+Miércoles 26 de agosto
+Miércoles 2 de septiembre
+
+Notas: Alérgica al maní`, HOY);
+
+        expect(p.warnings).toEqual([]);
+        expect(p.fechasEntrega).toEqual([
+            '2026-08-12', '2026-08-19', '2026-08-26', '2026-09-02'
+        ]);
+        expect(p.items).toHaveLength(2);
+        expect(p.items[1].cantidad).toBe(3);
+
+        const pedido = buildPedidoFromImport(p);
+        expect(validatePedidoForFirestore(pedido)).toEqual([]);
+        expect(pedido.items[0].plan).toBe('monthly');
+
+        // 5 proteínas del pack + el individual, sin fusionarse
+        const [hoja] = mapPedidosFromLegacy([{ id: 'x', ...pedido }]);
+        expect(hoja.platos).toHaveLength(6);
+        expect(hoja.platos.map(pl => pl.numero)).toEqual([1, 2, 3, 4, 5, 6]);
+    });
+});
+
 describe('Varias entregas escritas a mano', () => {
     it('lee las 4 fechas de un pack mensual y lo marca como mensual', () => {
         const mensual = parseOrderBlock(`Cliente: Ana Mora

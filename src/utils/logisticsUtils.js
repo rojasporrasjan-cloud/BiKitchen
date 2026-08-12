@@ -105,7 +105,15 @@ export function mapPedidosFromLegacy(rawPedidos) {
   return rawPedidos.map((p) => {
     const platosNormalizados = [];
 
-    (p.menu || p.items || []).forEach((item, index) => {
+    // Numeración CORRIDA para todo el pedido.
+    // Antes cada ítem numeraba desde 1 por su cuenta, así que en un pedido con
+    // un pack de 5 proteínas más un individual, el individual quedaba con el
+    // número 2 y buildKitchenSheetData —que agrupa por número— lo fusionaba con
+    // el plato 2 del pack: el individual desaparecía de la hoja y sus porciones
+    // se sumaban a la proteína equivocada.
+    let numeroPlato = 0;
+
+    (p.menu || p.items || []).forEach((item) => {
       // Extraer gramos de size o nombre (ej: "500g" o "Pack 5 Proteínas (250g)")
       const sizeMatch = String(item.size || item.nombre || '').match(/([0-9]+(?:\.[0-9]+)?)\s*g/i);
       const protMatchLegacy = String(item.proteina || '').match(/([0-9]+(?:\.[0-9]+)?)/);
@@ -121,7 +129,7 @@ export function mapPedidosFromLegacy(rawPedidos) {
           const vegName = (Array.isArray(item.vegetales) && item.vegetales[idx]) ? item.vegetales[idx] : null;
           
           platosNormalizados.push({
-            numero: idx + 1,
+            numero: ++numeroPlato,
             // Cuántas veces pidió este ítem el cliente (ej: 2 packs iguales)
             cantidad: Number(item.cantidad) || 1,
             proteina: {
@@ -143,9 +151,8 @@ export function mapPedidosFromLegacy(rawPedidos) {
         });
       } else {
         // Formato Legacy
-        const numero = index + 1;
         platosNormalizados.push({
-          numero,
+          numero: ++numeroPlato,
           // Individuales pedidos varias veces (ej: 3× Pollo Teriyaki)
           cantidad: Number(item.cantidad) || 1,
           proteina: {

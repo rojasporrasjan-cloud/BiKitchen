@@ -234,8 +234,9 @@ const grabItems = (text) => {
         if (items.length === 0) continue;
         const ultimo = items[items.length - 1];
 
-        // Líneas de detalle "└ ...", pertenecen al último ítem leído
-        const protMatch = line.match(/└\s*Prote[íi]nas?\s*:\s*(.+)/i);
+        // Líneas de detalle del último ítem leído. El "└" lo pone el sistema;
+        // escrito a mano suele venir como "Proteínas: ..." pelado.
+        const protMatch = line.match(/^[\s└│├•·*-]*Prote[íi]nas?\s*:\s*(.+)$/i);
         if (protMatch) {
             ultimo.proteinas = protMatch[1]
                 .split(',')
