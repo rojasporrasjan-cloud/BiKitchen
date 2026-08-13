@@ -181,11 +181,17 @@ export default function ImportedOrderPreview({
             {/* Acción */}
             <div className="mt-5 flex items-center gap-4 flex-wrap">
                 {created ? (
-                    <span className="inline-flex items-center gap-2 px-4 py-2 bg-green-100 text-green-700 rounded-lg text-sm font-bold">
-                        <CheckCircle size={16} aria-hidden="true" />
-                        Pedido {created.numeroOrden} creado
-                        {created.confirmado ? ' y confirmado — ya sale en la hoja' : ' (sin confirmar)'}
-                    </span>
+                    <div className="space-y-1">
+                        <span className="inline-flex items-center gap-2 px-4 py-2 bg-green-100 text-green-700 rounded-lg text-sm font-bold">
+                            <CheckCircle size={16} aria-hidden="true" />
+                            Pedido {created.numeroOrden} creado
+                            {created.confirmado ? ' y confirmado — ya sale en la hoja' : ' (sin confirmar)'}
+                        </span>
+                        <p className="text-xs text-gray-500">
+                            {parsed.cliente} quedó registrado en Clientes. Si vuelve a pedir,
+                            se le suma el pedido en vez de crear una ficha nueva.
+                        </p>
+                    </div>
                 ) : (
                     <>
                         <button

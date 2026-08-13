@@ -8,6 +8,7 @@ import AdminPageHeader from '../../components/admin/AdminPageHeader';
 import ImportedOrderPreview from '../../components/admin/ImportedOrderPreview';
 import { extractOrderNumbers, parseOrderBlock } from '../../utils/parseOrderText';
 import { buildPedidoFromImport, validatePedidoForFirestore } from '../../utils/buildPedidoFromImport';
+import { upsertClient } from '../../services/clientService';
 import { formatPrice } from '../../utils/formatters';
 import { getOrderStatusLabel, CONFIRMABLE_STATUSES } from '../../config/orderStatus';
 
@@ -168,6 +169,25 @@ export default function WhatsAppImportView() {
         setCreating(true);
         try {
             const ref = await addDoc(collection(db, 'pedidos'), pedido);
+
+            // Registrar al cliente en el CRM, igual que hace el checkout de la web.
+            // upsertClient busca primero por correo y después por teléfono, así que
+            // un cliente que vuelve a pedir NO se duplica: se le suma el pedido.
+            //
+            // OJO: si el correo es inventado no se manda, para que el cliente quede
+            // identificado por su teléfono. Si se mandara, se crearía una ficha con
+            // un correo falso que después no cruzaría con el real del cliente.
+            try {
+                await upsertClient({
+                    nombre: pedido.cliente,
+                    telefono: pedido.telefono,
+                    correo: pedido.correoEsPlaceholder ? undefined : pedido.correo,
+                    direccion: pedido.direccion
+                });
+            } catch (crmError) {
+                // Que falle el CRM no puede tumbar el pedido, que es lo importante
+                console.error('[Importador] Error registrando el cliente:', crmError);
+            }
 
             // Confirmar pasa por updateOrderStatus, que es el único camino que
             // otorga BiPuntos y bono de referido.
