@@ -211,7 +211,7 @@ export default function OrdersView() {
     const { currentUser } = useAuth();
     // Use menus for individual products
     const { menus } = useMenus();
-    const [searchParams] = useSearchParams();
+    const [searchParams, setSearchParams] = useSearchParams();
 
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [showErrorModal, setShowErrorModal] = useState(false);
@@ -824,6 +824,22 @@ export default function OrdersView() {
             }
         }
     }, [searchParams]);
+
+    // Abrir un pedido concreto desde otra pantalla: /admin/orders?order=<id>
+    // Se usa desde Packs Mensuales para ver el detalle sin duplicar este modal.
+    // El parámetro se quita de la URL apenas se abre, para que cerrar el modal
+    // no lo vuelva a abrir y para que refrescar la página no reabra nada.
+    useEffect(() => {
+        const orderParam = searchParams.get('order');
+        if (!orderParam || orders.length === 0) return;
+
+        const encontrado = orders.find(o => o.id === orderParam || o.numeroOrden === orderParam);
+        if (encontrado) setSelectedOrder(encontrado);
+
+        const limpio = new URLSearchParams(searchParams);
+        limpio.delete('order');
+        setSearchParams(limpio, { replace: true });
+    }, [searchParams, orders, setSearchParams]);
 
     // Estados Temporales (Lo que el usuario está eligiendo antes de dar "Aplicar")
     const [stagedFilters, setStagedFilters] = useState({
