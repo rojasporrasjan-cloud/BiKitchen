@@ -114,6 +114,8 @@ export default function AdminLayout() {
         { to: '/admin/promotions', label: 'Promociones', icon: Gift },
         { to: '/admin/coupons', label: 'Cupones', icon: Tag },
         { to: '/admin/gift-cards', label: 'Tarjeta de Regalo', icon: Gift, badge: pendingGiftCardsCount },
+        // Tablero que junta las 5 pantallas de descuento; va antes que ellas
+        { to: '/admin/active-discounts', label: 'Descuentos Activos', icon: BadgePercent },
         { to: '/admin/pack-discounts', label: 'Descuentos Packs', icon: BadgePercent },
         { to: '/admin/individual-discounts', label: 'Descuentos Platos', icon: BadgePercent },
         { to: '/admin/reports', label: 'Admin', icon: Target, highlight: true },
