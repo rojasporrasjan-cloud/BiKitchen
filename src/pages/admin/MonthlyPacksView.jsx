@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useOrders } from '../../context/OrdersContext';
 import AdminPageHeader from '../../components/admin/AdminPageHeader';
 import PackClienteCard from '../../components/admin/PackClienteCard';
+import PackPedidoModal from '../../components/admin/PackPedidoModal';
 import { isSubscription, getSubscriptionProgress } from '../../utils/subscriptionProgress';
 import { formatFechaLarga, diasHasta } from '../../utils/dateDisplay';
 
@@ -50,6 +51,8 @@ export default function MonthlyPacksView() {
     const { orders, loading } = useOrders();
     const [tab, setTab] = useState('activas');
     const [busqueda, setBusqueda] = useState('');
+    // Pedido abierto en el detalle, sin salir de esta pantalla
+    const [detalle, setDetalle] = useState(null);
 
     const subscriptions = useMemo(() => (
         orders
@@ -195,11 +198,24 @@ export default function MonthlyPacksView() {
                             </div>
 
                             {items.map(({ order, progress }) => (
-                                <PackClienteCard key={order.id} order={order} progress={progress} />
+                                <PackClienteCard
+                                    key={order.id}
+                                    order={order}
+                                    progress={progress}
+                                    onVerDetalle={(o, p) => setDetalle({ order: o, progress: p })}
+                                />
                             ))}
                         </section>
                     );
                 })
+            )}
+
+            {detalle && (
+                <PackPedidoModal
+                    order={detalle.order}
+                    progress={detalle.progress}
+                    onClose={() => setDetalle(null)}
+                />
             )}
         </div>
     );

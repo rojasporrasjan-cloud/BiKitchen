@@ -1,5 +1,4 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
 import { MessageCircle, CheckCircle2, AlertTriangle, Eye } from 'lucide-react';
 import { getClientWhatsAppUrl } from '../../utils/phoneUtils';
 import { formatPrice } from '../../utils/formatters';
@@ -12,7 +11,7 @@ import { getPlanLabel } from '../../utils/subscriptionProgress';
  * La tarjeta responde de un vistazo lo único que importa al operar:
  * quién es, por qué semana va, y cuántas le faltan.
  */
-export default function PackClienteCard({ order, progress }) {
+export default function PackClienteCard({ order, progress, onVerDetalle }) {
     const waUrl = getClientWhatsAppUrl(order.telefono);
     const faltan = progress.total - progress.completadas;
 
@@ -81,14 +80,13 @@ export default function PackClienteCard({ order, progress }) {
                 <div className="text-right min-w-[130px]">
                     <p className="font-bold text-gray-900">{formatPrice(order.totalValue || 0)}</p>
                     <p className="text-xs text-gray-400 mt-0.5">{order.displayId}</p>
-                    {/* Abre el detalle completo en Pedidos, sin duplicar ese modal acá */}
-                    <Link
-                        to={`/admin/orders?order=${order.id}`}
+                    <button
+                        onClick={() => onVerDetalle(order, progress)}
                         className="inline-flex items-center gap-1.5 mt-2 px-3 py-1.5 bg-gray-100 text-gray-700 text-xs font-bold rounded-lg hover:bg-gray-200 active:scale-95 transition-all"
                     >
                         <Eye size={14} aria-hidden="true" />
                         Ver pedido
-                    </Link>
+                    </button>
                 </div>
             </div>
 
