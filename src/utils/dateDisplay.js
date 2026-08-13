@@ -20,6 +20,17 @@ export const formatFechaCorta = (iso) => {
     return `${DIAS[d.getDay()]} ${d.getDate()} ${MESES[d.getMonth()]}`;
 };
 
+const DIAS_LARGO = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+const MESES_LARGO = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio',
+    'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+/** '2026-08-17' → 'lunes 17 de agosto'. Para encabezados, donde hay espacio. */
+export const formatFechaLarga = (iso) => {
+    const d = parseDateStr(iso);
+    if (!d) return iso || '—';
+    return `${DIAS_LARGO[d.getDay()]} ${d.getDate()} de ${MESES_LARGO[d.getMonth()]}`;
+};
+
 /**
  * Días entre hoy y la fecha. Negativo = ya pasó, 0 = hoy.
  * @param {string} iso

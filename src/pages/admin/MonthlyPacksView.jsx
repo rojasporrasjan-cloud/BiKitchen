@@ -1,20 +1,22 @@
 import React, { useState, useMemo } from 'react';
-import { CalendarDays, AlertTriangle, Lock, MessageCircle, CheckCircle2, Info } from 'lucide-react';
+import { CalendarDays, AlertTriangle, Lock, Search, Info } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useOrders } from '../../context/OrdersContext';
 import AdminPageHeader from '../../components/admin/AdminPageHeader';
-import { isSubscription, getSubscriptionProgress, getPlanLabel } from '../../utils/subscriptionProgress';
-import { getOrderStatusLabel } from '../../config/orderStatus';
-import { getClientWhatsAppUrl } from '../../utils/phoneUtils';
-import { formatPrice } from '../../utils/formatters';
-import { formatFechaCorta, diasHasta, textoRelativo } from '../../utils/dateDisplay';
+import PackClienteCard from '../../components/admin/PackClienteCard';
+import { isSubscription, getSubscriptionProgress } from '../../utils/subscriptionProgress';
+import { formatFechaLarga, diasHasta } from '../../utils/dateDisplay';
 
 /**
- * Packs multi-entrega: quién compró un pack mensual y por qué semana va.
+ * Packs de varias semanas: quién compró uno y por cuál semana va.
  *
- * Vista de SOLO LECTURA. El calendario de las 4 semanas ya vive dentro de cada
+ * Vista de SOLO LECTURA. El calendario de las entregas ya vive dentro de cada
  * pedido y la hoja de producción ya lo usa; generar un pedido por cada semana
  * haría que el cliente saliera dos veces en la cocina.
+ *
+ * Se agrupa por fecha de entrega porque la pregunta de todos los días es
+ * "¿a quién le toca esta semana?", no "¿cómo va el cliente X?". Para eso
+ * segundo está el buscador.
  */
 
 const TABS = [
@@ -23,21 +25,37 @@ const TABS = [
     { id: 'todas', label: 'Todos' }
 ];
 
+/** Encabezado del grupo: "HOY · lunes 17 de agosto" */
+const tituloGrupo = (iso) => {
+    if (!iso) return { texto: 'Ya recibieron todas sus entregas', tono: 'verde' };
+
+    const dias = diasHasta(iso);
+    const fecha = formatFechaLarga(iso);
+
+    if (dias < 0) return { texto: `Atrasada · ${fecha}`, tono: 'rojo' };
+    if (dias === 0) return { texto: `HOY · ${fecha}`, tono: 'naranja' };
+    if (dias === 1) return { texto: `Mañana · ${fecha}`, tono: 'naranja' };
+    return { texto: `En ${dias} días · ${fecha}`, tono: 'gris' };
+};
+
+const TONOS = {
+    rojo: 'bg-red-50 text-red-800 border-red-200',
+    naranja: 'bg-orange-50 text-orange-800 border-orange-200',
+    verde: 'bg-green-50 text-green-800 border-green-200',
+    gris: 'bg-gray-50 text-gray-700 border-gray-200'
+};
+
 export default function MonthlyPacksView() {
     const { isSuperAdmin } = useAuth();
     const { orders, loading } = useOrders();
     const [tab, setTab] = useState('activas');
+    const [busqueda, setBusqueda] = useState('');
 
-    const subscriptions = useMemo(() => {
-        return orders
+    const subscriptions = useMemo(() => (
+        orders
             .filter(o => o.status !== 'cancelled' && isSubscription(o))
             .map(o => ({ order: o, progress: getSubscriptionProgress(o) }))
-            .sort((a, b) => {
-                if (!a.progress.proxima) return 1;
-                if (!b.progress.proxima) return -1;
-                return a.progress.proxima.localeCompare(b.progress.proxima);
-            });
-    }, [orders]);
+    ), [orders]);
 
     if (!isSuperAdmin()) {
         return (
@@ -54,14 +72,31 @@ export default function MonthlyPacksView() {
     const desincronizadas = subscriptions.filter(s => s.progress.cocinaDesincronizada);
     const entregasHoy = activas.filter(s => s.progress.esHoy);
 
-    const visibles = tab === 'activas' ? activas : tab === 'completadas' ? completadas : subscriptions;
+    const base = tab === 'activas' ? activas : tab === 'completadas' ? completadas : subscriptions;
+
+    const termino = busqueda.trim().toLowerCase();
+    const visibles = termino
+        ? base.filter(s => (s.order.cliente || '').toLowerCase().includes(termino))
+        : base;
+
+    // Agrupar por próxima entrega, ordenando por fecha; los terminados al final
+    const grupos = [];
+    const porFecha = new Map();
+    visibles.forEach(s => {
+        const clave = s.progress.proxima || '';
+        if (!porFecha.has(clave)) porFecha.set(clave, []);
+        porFecha.get(clave).push(s);
+    });
+    [...porFecha.keys()]
+        .sort((a, b) => (a === '' ? 1 : b === '' ? -1 : a.localeCompare(b)))
+        .forEach(clave => grupos.push({ clave, items: porFecha.get(clave) }));
 
     return (
         <div className="space-y-6 pb-20">
             <AdminPageHeader
                 icon={CalendarDays}
-                title="Packs Mensuales"
-                subtitle="Quién compró un pack de varias semanas y por cuál semana va"
+                title="Packs de varias semanas"
+                subtitle="Quién compró un pack y por cuál semana va"
                 stats={[
                     { value: activas.length, label: 'En curso' },
                     { value: entregasHoy.length, label: 'Entregan hoy' },
@@ -70,175 +105,101 @@ export default function MonthlyPacksView() {
                 gradient="from-purple-600 via-indigo-500 to-blue-500"
             />
 
-            {/* Qué es esta pantalla */}
             <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 flex items-start gap-3">
                 <Info size={18} className="text-blue-600 mt-0.5 shrink-0" aria-hidden="true" />
                 <p className="text-sm text-blue-900 leading-relaxed">
-                    Cuando alguien compra un pack de varias semanas, el pedido ya trae adentro sus
-                    fechas de entrega y la cocina lo ve en cada una. Esta pantalla te muestra
-                    <strong> por cuál semana va cada cliente</strong>, sin que tengas que llevar nada aparte.
+                    Los clientes están agrupados por <strong>el día que les toca su próxima entrega</strong>.
+                    El pedido ya trae adentro todas sus fechas y la cocina lo ve en cada una,
+                    así que acá no hay que crear nada: es solo para saber cómo va cada quien.
                 </p>
             </div>
 
-            {/* Packs cuyas semanas la cocina no está viendo */}
             {desincronizadas.length > 0 && (
                 <div className="bg-red-50 border border-red-200 rounded-2xl p-5">
                     <p className="font-bold text-red-800 flex items-center gap-2">
                         <AlertTriangle size={18} aria-hidden="true" />
-                        Atención: {desincronizadas.length} pack{desincronizadas.length > 1 ? 's' : ''} que la cocina no está viendo completo
+                        {desincronizadas.length} pack{desincronizadas.length > 1 ? 's' : ''} que la cocina no está viendo completo
                     </p>
                     <p className="text-sm text-red-700 mt-2 leading-relaxed">
-                        Estos pedidos tienen varias entregas guardadas, pero la hoja de producción solo
-                        reconoce la primera. <strong>Esas semanas hay que agregarlas a mano a la hoja</strong>,
-                        o el cliente no recibe su comida. Abajo salen marcados en rojo.
+                        Tienen varias entregas guardadas pero la hoja de producción solo reconoce
+                        algunas. <strong>Esas semanas hay que agregarlas a mano</strong>, o el cliente
+                        no recibe su comida.
                     </p>
                 </div>
             )}
 
-            {/* Pestañas */}
-            <div className="flex gap-2 flex-wrap">
-                {TABS.map(t => {
-                    const count = t.id === 'activas' ? activas.length
-                        : t.id === 'completadas' ? completadas.length
-                            : subscriptions.length;
-                    return (
-                        <button
-                            key={t.id}
-                            onClick={() => setTab(t.id)}
-                            className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${tab === t.id
-                                ? 'bg-bikitchen-orange text-white shadow-lg shadow-orange-200'
-                                : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
-                        >
-                            {t.label} ({count})
-                        </button>
-                    );
-                })}
+            {/* Buscador + pestañas */}
+            <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+                <div className="relative flex-1 max-w-sm">
+                    <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" aria-hidden="true" />
+                    <input
+                        type="text"
+                        value={busqueda}
+                        onChange={(e) => setBusqueda(e.target.value)}
+                        placeholder="Buscar por nombre…"
+                        aria-label="Buscar cliente por nombre"
+                        className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-4 focus:ring-orange-100 focus:border-bikitchen-orange transition-all"
+                    />
+                </div>
+
+                <div className="flex gap-2 flex-wrap">
+                    {TABS.map(t => {
+                        const count = t.id === 'activas' ? activas.length
+                            : t.id === 'completadas' ? completadas.length
+                                : subscriptions.length;
+                        return (
+                            <button
+                                key={t.id}
+                                onClick={() => setTab(t.id)}
+                                className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${tab === t.id
+                                    ? 'bg-bikitchen-orange text-white shadow-lg shadow-orange-200'
+                                    : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
+                            >
+                                {t.label} ({count})
+                            </button>
+                        );
+                    })}
+                </div>
             </div>
 
             {loading ? (
                 <div className="flex justify-center py-16">
                     <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-bikitchen-orange" aria-hidden="true" />
                 </div>
-            ) : visibles.length === 0 ? (
+            ) : grupos.length === 0 ? (
                 <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
                     <CalendarDays size={40} className="text-gray-300 mx-auto mb-3" aria-hidden="true" />
                     <p className="text-gray-600 font-medium">
-                        {tab === 'activas'
-                            ? 'Ningún pack de varias semanas en curso'
-                            : tab === 'completadas'
-                                ? 'Todavía no hay packs terminados'
-                                : 'No hay packs de varias semanas'}
+                        {termino
+                            ? `Ningún cliente con "${busqueda}"`
+                            : tab === 'activas'
+                                ? 'Ningún pack de varias semanas en curso'
+                                : 'Nada por acá todavía'}
                     </p>
-                    <p className="text-sm text-gray-400 mt-1">
-                        Acá van a aparecer solos los pedidos con más de una entrega.
-                    </p>
+                    {!termino && (
+                        <p className="text-sm text-gray-400 mt-1">
+                            Acá aparecen solos los pedidos con más de una entrega.
+                        </p>
+                    )}
                 </div>
             ) : (
-                <div className="space-y-4">
-                    {visibles.map(({ order, progress }) => {
-                        const dias = diasHasta(progress.proxima);
-                        const vencida = dias !== null && dias < 0;
-                        const waUrl = getClientWhatsAppUrl(order.telefono);
-                        const faltan = progress.total - progress.completadas;
-
-                        return (
-                            <div key={order.id} className="bg-white rounded-2xl shadow-lg shadow-gray-100 border border-gray-100 overflow-hidden">
-                                <div className="p-5 flex flex-wrap items-start justify-between gap-5">
-                                    {/* Quién */}
-                                    <div className="min-w-[200px] flex-1">
-                                        <p className="font-bold text-gray-900 text-lg">{order.cliente || 'Sin nombre'}</p>
-                                        <p className="text-xs text-gray-500 mt-0.5">
-                                            {order.displayId} · {getOrderStatusLabel(order.status)}
-                                        </p>
-                                        {waUrl ? (
-                                            <a
-                                                href={waUrl}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="inline-flex items-center gap-1.5 mt-2 text-sm text-green-600 hover:text-green-700 font-medium transition-colors"
-                                            >
-                                                <MessageCircle size={14} aria-hidden="true" />
-                                                Escribirle por WhatsApp
-                                            </a>
-                                        ) : order.telefono ? (
-                                            <p className="text-sm text-gray-400 mt-2">{order.telefono} (teléfono inválido)</p>
-                                        ) : null}
-                                    </div>
-
-                                    {/* Por cuál semana va */}
-                                    <div className="min-w-[180px]">
-                                        <p className="text-xs text-gray-500 uppercase tracking-wider">{getPlanLabel(progress.total)}</p>
-                                        <p className={`text-2xl font-bold mt-1 ${progress.finalizado ? 'text-green-600' : 'text-bikitchen-orange'}`}>
-                                            {progress.finalizado ? 'Terminado' : `Semana ${progress.semanaActual} de ${progress.total}`}
-                                        </p>
-                                        <p className="text-sm text-gray-600 mt-1">
-                                            {progress.completadas} entregada{progress.completadas === 1 ? '' : 's'}
-                                            {!progress.finalizado && ` · faltan ${faltan}`}
-                                        </p>
-                                        {progress.cocinaDesincronizada && (
-                                            <p className="text-xs text-red-600 font-bold mt-2 flex items-center gap-1">
-                                                <AlertTriangle size={12} aria-hidden="true" />
-                                                La cocina solo ve {progress.entregasQueVeLaCocina} de {progress.total}
-                                            </p>
-                                        )}
-                                    </div>
-
-                                    {/* Próxima entrega */}
-                                    <div className="min-w-[170px]">
-                                        <p className="text-xs text-gray-500 uppercase tracking-wider">Próxima entrega</p>
-                                        {progress.finalizado ? (
-                                            <p className="font-bold text-green-600 mt-1 flex items-center gap-1.5">
-                                                <CheckCircle2 size={16} aria-hidden="true" />
-                                                Ya recibió todo
-                                            </p>
-                                        ) : (
-                                            <>
-                                                <p className={`text-lg font-bold mt-1 ${progress.esHoy ? 'text-bikitchen-orange'
-                                                    : vencida ? 'text-red-600' : 'text-gray-900'}`}>
-                                                    {formatFechaCorta(progress.proxima)}
-                                                </p>
-                                                <p className={`text-sm font-medium ${progress.esHoy ? 'text-bikitchen-orange'
-                                                    : vencida ? 'text-red-600' : 'text-gray-500'}`}>
-                                                    {vencida ? `Atrasada — ${textoRelativo(dias)}` : textoRelativo(dias)}
-                                                </p>
-                                            </>
-                                        )}
-                                    </div>
-
-                                    {/* Monto */}
-                                    <div className="text-right min-w-[110px]">
-                                        <p className="text-xs text-gray-500 uppercase tracking-wider">Pagó</p>
-                                        <p className="font-bold text-gray-900 mt-1">{formatPrice(order.totalValue || 0)}</p>
-                                    </div>
-                                </div>
-
-                                {/* Calendario completo */}
-                                <div className="bg-gray-50 border-t border-gray-100 px-5 py-3">
-                                    <p className="text-xs text-gray-500 mb-2">Las {progress.total} entregas de este pack:</p>
-                                    <div className="flex flex-wrap gap-2">
-                                        {progress.fechas.map((fecha, i) => {
-                                            const entregada = i < progress.completadas;
-                                            const esProxima = fecha === progress.proxima;
-                                            return (
-                                                <span
-                                                    key={fecha}
-                                                    className={`text-xs px-3 py-1.5 rounded-lg font-medium ${entregada
-                                                        ? 'bg-green-100 text-green-700'
-                                                        : esProxima
-                                                            ? 'bg-bikitchen-orange text-white'
-                                                            : 'bg-white text-gray-600 border border-gray-200'}`}
-                                                >
-                                                    {entregada ? '✓ ' : esProxima ? '→ ' : ''}
-                                                    Semana {i + 1}: {formatFechaCorta(fecha)}
-                                                </span>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
+                grupos.map(({ clave, items }) => {
+                    const { texto, tono } = tituloGrupo(clave);
+                    return (
+                        <section key={clave || 'terminados'} className="space-y-3">
+                            <div className={`flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl border ${TONOS[tono]}`}>
+                                <h2 className="font-bold text-sm uppercase tracking-wide">{texto}</h2>
+                                <span className="text-sm font-medium shrink-0">
+                                    {items.length} cliente{items.length > 1 ? 's' : ''}
+                                </span>
                             </div>
-                        );
-                    })}
-                </div>
+
+                            {items.map(({ order, progress }) => (
+                                <PackClienteCard key={order.id} order={order} progress={progress} />
+                            ))}
+                        </section>
+                    );
+                })
             )}
         </div>
     );

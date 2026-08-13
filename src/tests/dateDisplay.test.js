@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatFechaCorta, diasHasta, textoRelativo } from '../utils/dateDisplay';
+import { formatFechaCorta, formatFechaLarga, diasHasta, textoRelativo } from '../utils/dateDisplay';
 
 const el = (iso) => new Date(`${iso}T12:00:00`);
 
@@ -15,6 +15,18 @@ describe('formatFechaCorta', () => {
         expect(formatFechaCorta(null)).toBe('—');
         expect(formatFechaCorta('')).toBe('—');
         expect(formatFechaCorta('no es fecha')).toBe('no es fecha');
+    });
+});
+
+describe('formatFechaLarga', () => {
+    it('escribe la fecha completa para encabezados', () => {
+        expect(formatFechaLarga('2026-08-17')).toBe('lunes 17 de agosto');
+        expect(formatFechaLarga('2026-09-05')).toBe('sábado 5 de septiembre');
+    });
+
+    it('no revienta con basura', () => {
+        expect(formatFechaLarga(null)).toBe('—');
+        expect(formatFechaLarga('no es fecha')).toBe('no es fecha');
     });
 });
 
