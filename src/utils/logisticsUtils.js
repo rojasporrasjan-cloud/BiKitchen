@@ -113,7 +113,40 @@ export function mapPedidosFromLegacy(rawPedidos) {
     // se sumaban a la proteína equivocada.
     let numeroPlato = 0;
 
+    /**
+     * Aplica los cambios de proteína/vegetal/carbo que pidió el cliente.
+     *
+     * Se guardaban en el pedido y se veían en el correo y en el detalle del
+     * admin, pero la hoja de cocina NO los leía: el cocinero preparaba la
+     * proteína original y el cliente recibía algo que no había pedido.
+     *
+     * Se muestra "original → nuevo" en vez de reemplazar el nombre a secas,
+     * para que se vea de dónde salió el cambio y para que esa porción quede
+     * separada en los totales: hay que prepararla distinto.
+     *
+     * Dos formatos conviven:
+     *   por plato   → { proteinChanges: [{ dishNumber, newValue }], ... }
+     *   por ítem    → { protein, vegetal, carbo }   (packs familiares, individuales)
+     *
+     * @param {string} original - nombre actual del ingrediente
+     * @param {object} custom - item.customizations
+     * @param {string} campo - 'protein' | 'vegetal' | 'carbo'
+     * @param {number} nroLocal - número del plato DENTRO del ítem (1..n)
+     */
+    const aplicarCambio = (original, custom, campo, nroLocal) => {
+      if (!original || !custom) return original;
+
+      const listas = { protein: 'proteinChanges', vegetal: 'vegeChanges', carbo: 'carboChanges' };
+      const porPlato = Array.isArray(custom[listas[campo]]) ? custom[listas[campo]] : [];
+      const cambio = porPlato.find(c => Number(c?.dishNumber) === nroLocal);
+      const nuevo = cambio ? (cambio.newValue || cambio.newProtein) : custom[campo];
+
+      if (!nuevo || nuevo === original) return original;
+      return `${original} → ${nuevo}`;
+    };
+
     (p.menu || p.items || []).forEach((item) => {
+      const custom = item.customizations || null;
       // Extraer gramos de size o nombre (ej: "500g" o "Pack 5 Proteínas (250g)")
       const sizeMatch = String(item.size || item.nombre || '').match(/([0-9]+(?:\.[0-9]+)?)\s*g/i);
       const protMatchLegacy = String(item.proteina || '').match(/([0-9]+(?:\.[0-9]+)?)/);
@@ -133,16 +166,16 @@ export function mapPedidosFromLegacy(rawPedidos) {
             // Cuántas veces pidió este ítem el cliente (ej: 2 packs iguales)
             cantidad: Number(item.cantidad) || 1,
             proteina: {
-              nombre: protName,
+              nombre: aplicarCambio(protName, custom, 'protein', idx + 1),
               gramosPorPorcion: gramosPorcionProteina || 0
             },
             carbo: {
-              nombre: carboName,
+              nombre: aplicarCambio(carboName, custom, 'carbo', idx + 1),
               unidad: 'g',
               cantidadPorPorcion: 0 // Si tuvieramos tazas, se extrae de size
             },
             vegetal: {
-              nombre: vegName,
+              nombre: aplicarCambio(vegName, custom, 'vegetal', idx + 1),
               unidad: 'g',
               cantidadPorPorcion: 0
             },
@@ -155,17 +188,28 @@ export function mapPedidosFromLegacy(rawPedidos) {
           numero: ++numeroPlato,
           // Individuales pedidos varias veces (ej: 3× Pollo Teriyaki)
           cantidad: Number(item.cantidad) || 1,
+          // Los packs familiares y los individuales caen acá: el cambio viene
+          // por ítem ({ protein, vegetal, carbo }), no por plato.
           proteina: {
-            nombre: item.proteinaNombre || item.proteina || item.nombre || 'Proteína',
+            nombre: aplicarCambio(
+              item.proteinaNombre || item.proteina || item.nombre || 'Proteína',
+              custom, 'protein', 1
+            ),
             gramosPorPorcion: gramosPorcionProteina || 0
           },
           carbo: {
-            nombre: item.carboNombre || (item.carbo ? 'Carbohidrato' : null),
+            nombre: aplicarCambio(
+              item.carboNombre || (item.carbo ? 'Carbohidrato' : null),
+              custom, 'carbo', 1
+            ),
             unidad: carboInfo.unidad,
             cantidadPorPorcion: carboInfo.cantidad
           },
           vegetal: {
-            nombre: item.ensaladaNombre || (item.ensalada ? 'Vegetales' : null),
+            nombre: aplicarCambio(
+              item.ensaladaNombre || (item.ensalada ? 'Vegetales' : null),
+              custom, 'vegetal', 1
+            ),
             unidad: ensaladaInfo.unidad,
             cantidadPorPorcion: ensaladaInfo.cantidad
           },

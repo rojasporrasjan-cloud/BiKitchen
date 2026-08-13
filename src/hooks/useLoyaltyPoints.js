@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase/config';
-import { doc, getDoc, setDoc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, onSnapshot, increment } from 'firebase/firestore';
 
 // Las reglas del programa viven en un solo lugar: src/config/loyalty.js
 import {
@@ -257,11 +257,30 @@ export default function useLoyaltyPoints() {
             history: newHistory.slice(0, 50)
         };
 
+        // El saldo se descuenta con increment(), no escribiendo el número que
+        // tenía la pantalla. Los puntos entran por otro lado (el servidor al
+        // cobrar la tarjeta, o el admin al confirmar un pedido): si se guardara
+        // el total calculado acá, un canje hecho justo después de que entraran
+        // puntos los borraría. El resto del documento sí se escribe completo.
         setPointsData(newData);
-        const saveResult = await saveToFirestore(newData);
+
+        let saveResult = { success: false, error: 'No hay usuario' };
+        try {
+            const normalizedEmail = currentUser.email?.toLowerCase().trim();
+            const docRef = doc(db, 'loyalty', normalizedEmail);
+            await updateDoc(docRef, {
+                currentPoints: increment(-pointsCost),
+                totalRedeemed: increment(pointsCost),
+                history: newHistory.slice(0, 50),
+                updatedAt: new Date().toISOString()
+            });
+            saveResult = { success: true };
+        } catch (error) {
+            console.error('[Loyalty] Error al guardar canje:', error);
+            saveResult = { success: false, error: error.message };
+        }
 
         if (!saveResult.success) {
-            console.error('[Loyalty] Error al guardar canje:', saveResult.error);
             setPointsData(originalPointsData); // Revertir estado
             return { success: false, error: 'Error al procesar canje. Por favor intenta de nuevo.' };
         }
