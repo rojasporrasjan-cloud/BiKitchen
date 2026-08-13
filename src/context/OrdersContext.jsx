@@ -20,6 +20,7 @@ import {
 } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { ADMIN_EMAILS } from '../config/admins';
+import { PUNTOS_REFERIDO, calcularPuntos } from '../config/loyalty';
 
 const OrdersContext = createContext();
 
@@ -299,7 +300,10 @@ export const OrdersProvider = ({ children }) => {
 
             if (shouldAwardPoints) {
                 // Calcular puntos a dar (2 puntos por cada ₡100)
-                const pointsToAward = orderData.pointsToAward || Math.floor((orderData.total || 0) * 0.02);
+                // El pedido trae los puntos ya calculados con el multiplicador del
+                // nivel que tenía el cliente al comprar. El cálculo de respaldo es
+                // para pedidos sin ese campo (manuales o importados): tasa base.
+                const pointsToAward = orderData.pointsToAward || calcularPuntos(orderData.total);
 
 
                 // Si el pedido tiene correo, guardar los puntos en Firestore
@@ -351,7 +355,7 @@ export const OrdersProvider = ({ children }) => {
 
             if (shouldAwardReferral) {
                 try {
-                    const rrPoints = 1000; // REFERRAL_REWARD_POINTS aligned with ReferidosPage.jsx
+                    const rrPoints = PUNTOS_REFERIDO;
                     const userRef = doc(db, "users", orderData.referral_uid);
                     const userSnap = await getDoc(userRef);
 

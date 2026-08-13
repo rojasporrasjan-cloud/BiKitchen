@@ -17,6 +17,8 @@
  * Si lo creáramos ya confirmado, el cliente perdería sus puntos en silencio.
  */
 
+import { calcularPuntos } from '../config/loyalty';
+
 /** Mismo formato que generateOrderNumber() en CheckoutSteps.jsx (ahí es privada). */
 export const generateImportOrderNumber = () => {
     const ts = Date.now().toString(36).toUpperCase().slice(-6);
@@ -132,7 +134,8 @@ export const buildPedidoFromImport = (parsed, options = {}) => {
         status: 'pending_payment',
         paymentConfirmed: false,
         pointsAwarded: false,
-        pointsToAward: Math.floor(total * 0.02),
+        // Tasa base: de un pedido metido a mano no se conoce el nivel del cliente
+        pointsToAward: calcularPuntos(total),
 
         fuente: 'Importado de WhatsApp',
         source: 'whatsapp-import',

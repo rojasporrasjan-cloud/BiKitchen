@@ -27,6 +27,7 @@ import { getScheduleFromOrder } from '../utils/orderDates';
 // import { processTilopayPayment } from '../utils/tilopayClient';
 import { upsertClient } from '../services/clientService';
 import { formatPrice, formatProteinList } from '../utils/formatters';
+import { calcularPuntos, nivelPorPuntos } from '../config/loyalty';
 
 const STEPS = [
     { id: 1, name: 'Datos', icon: User },
@@ -594,6 +595,26 @@ export default function CheckoutSteps({ isOpen, onClose }) {
             const total = getTotalWithShipping() + paymentAdjustment;
             const deliverySchedule = computeDeliverySchedule(formData.fechaEntrega);
 
+            // BiPuntos del pedido, CON el multiplicador del nivel del cliente.
+            // Se calcula acá y se guarda en el pedido porque es lo que el carrito
+            // le prometió al cliente: el nivel que tenía al comprar. Los dos
+            // caminos que acreditan (OrdersContext y nmi-charge.js) usan este
+            // campo, así que basta con calcularlo bien una vez.
+            //
+            // Antes se guardaba 2% parejo: un cliente Oro veía "3 puntos por cada
+            // ₡100" en el carrito y se le acreditaban 2.
+            let nivelDelCliente = null;
+            if (formData.correo) {
+                try {
+                    const loyaltySnap = await getDoc(doc(db, 'loyalty', formData.correo.toLowerCase().trim()));
+                    nivelDelCliente = nivelPorPuntos(loyaltySnap.exists() ? loyaltySnap.data().totalEarned : 0);
+                } catch (nivelErr) {
+                    // Sin nivel se cae a Bronce (1x): mejor dar de menos que romper la compra
+                    console.warn('[Checkout] No se pudo leer el nivel de BiPuntos:', nivelErr.message);
+                }
+            }
+            const puntosDelPedido = calcularPuntos(total, nivelDelCliente);
+
              const productionOrder = {
                 numeroOrden: newOrderNumber,
                 userId: currentUser?.uid || null, // Vínculo CRUCIAL para historial senior
@@ -647,7 +668,7 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                 status: 'pending_payment', // Pendiente de pago - no confirmado aún
                 paymentConfirmed: false, // Se marca true cuando admin confirma pago
                 pointsAwarded: false, // Se marca true cuando se dan los puntos
-                pointsToAward: Math.floor(total * 0.02), // Puntos que se darán al confirmar (2%)
+                pointsToAward: puntosDelPedido, // Se acreditan al confirmar el pago
                 fuente: getSourceLabel(),
                 createdAt: serverTimestamp()
             };
@@ -2080,9 +2101,12 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                                 // ¿El servidor (nmi-charge.js) ya otorgó los puntos de este pedido?
                                 // Si sí, actualizamos el estado pero NO volvemos a sumarlos.
                                 let alreadyAwarded = false;
+                                let puntosGuardados = null;
                                 try {
                                     const prevSnap = await getDoc(doc(db, 'pedidos', orderIdToUpdate));
                                     alreadyAwarded = prevSnap.exists() && prevSnap.data().pointsAwarded === true;
+                                    // Los puntos ya vienen calculados con el multiplicador del nivel
+                                    if (prevSnap.exists()) puntosGuardados = prevSnap.data().pointsToAward ?? null;
                                 } catch {
                                     // Si no se puede leer, asumimos que ya se otorgaron:
                                     // es preferible no dar puntos a darlos dos veces.
@@ -2099,8 +2123,11 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                                     updatedAt: serverTimestamp()
                                 });
 
-                                // Award points in fallback
-                                const pointsToAward = Math.floor((getTotalWithShipping() + getPaymentMethodAdjustment(formData.metodoPago)) * 0.02);
+                                // Award points in fallback — se usan los puntos guardados
+                                // en el pedido para no perder el multiplicador del nivel
+                                const pointsToAward = puntosGuardados ?? calcularPuntos(
+                                    getTotalWithShipping() + getPaymentMethodAdjustment(formData.metodoPago)
+                                );
                                 if (formData.correo && pointsToAward > 0 && !alreadyAwarded) {
                                     try {
                                         const pointsRef = doc(db, "loyalty", formData.correo.toLowerCase());

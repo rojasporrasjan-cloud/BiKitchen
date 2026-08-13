@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import CheckoutSteps from './CheckoutSteps';
 import { UPSELL_INDIVIDUAL_PRODUCTS, CATEGORY_ICONS } from '../data/individualesData';
 import useLoyaltyPoints from '../hooks/useLoyaltyPoints';
+import { calcularPuntos } from '../config/loyalty';
 
 export default function CartDrawer() {
     const { 
@@ -343,11 +344,12 @@ export default function CartDrawer() {
 
                                 {/* ── BiPuntos a ganar con este pedido ── */}
                                 {(() => {
+                                    // Mismo cálculo que se acredita al confirmar el
+                                    // pedido: lo que se promete acá es lo que entra.
                                     const total = getTotalPrice();
-                                    const basePoints = Math.floor(total * 0.02);
-                                    if (basePoints <= 0) return null;
+                                    const totalPoints = calcularPuntos(total, currentLevel);
+                                    if (totalPoints <= 0) return null;
                                     const multiplier = currentLevel?.multiplier || 1;
-                                    const totalPoints = Math.floor(basePoints * multiplier);
                                     const hasBonus = multiplier > 1;
                                     return (
                                         <div className="bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-100 rounded-xl px-4 py-3 flex items-center justify-between">

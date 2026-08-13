@@ -3,51 +3,23 @@ import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase/config';
 import { doc, getDoc, setDoc, updateDoc, onSnapshot } from 'firebase/firestore';
 
-// Configuración del programa (BiPuntos)
+// Las reglas del programa viven en un solo lugar: src/config/loyalty.js
+import {
+    TASA_PUNTOS,
+    BONO_BIENVENIDA,
+    PUNTOS_REFERIDO,
+    NIVELES,
+    nivelPorPuntos,
+    calcularPuntos
+} from '../config/loyalty';
+
 const POINTS_CONFIG = {
-    pointsPerColon: 0.02, // 2 puntos por cada ₡100 gastados (200k = 4,000 pts)
-    colonesPerPoint: 50,  // ₡50 = 1 punto
-    welcomeBonus: 500,     // 500 puntos de bienvenida
-    referralReward: 200,   // 200 puntos por referido
-    // pointValue y maxRedeemPercent ya no se usan directamente para pagar "cash", 
-    // se usan los puntos en la "Tienda de Recompensas" para canjear productos/cupones.
+    pointsPerColon: TASA_PUNTOS,
+    welcomeBonus: BONO_BIENVENIDA,
+    referralReward: PUNTOS_REFERIDO
 };
 
-// Niveles del programa
-const LOYALTY_LEVELS = [
-    { 
-        name: 'Bronce', 
-        minPoints: 0, 
-        icon: '🥉', 
-        color: 'from-amber-600 to-amber-700',
-        multiplier: 1,
-        benefits: ['Gana 2 BiPuntos por cada ₡100', 'Acceso a Tienda de Recompensas']
-    },
-    { 
-        name: 'Plata', 
-        minPoints: 1500, // ~₡75,000 en compras cumulativas (con tasa 2%)
-        icon: '🥈', 
-        color: 'from-gray-400 to-gray-500',
-        multiplier: 1.2, // 1.2x puntos
-        benefits: ['Gana 2.4 BiPuntos por cada ₡100 (1.2x)', 'Acceso a Tienda de Recompensas']
-    },
-    { 
-        name: 'Oro', 
-        minPoints: 5000, // ~₡250,000 en compras cumulativas
-        icon: '🥇', 
-        color: 'from-yellow-400 to-yellow-500',
-        multiplier: 1.5, // 1.5x puntos
-        benefits: ['Gana 3 BiPuntos por cada ₡100 (1.5x)', 'Acceso a Tienda de Recompensas']
-    },
-    { 
-        name: 'Platino', 
-        minPoints: 15000, // ~₡750,000 en compras cumulativas
-        icon: '💎', 
-        color: 'from-cyan-400 to-blue-500',
-        multiplier: 2, // 2x puntos
-        benefits: ['Gana 4 BiPuntos por cada ₡100 (2x)', 'Acceso a Tienda de Recompensas']
-    }
-];
+const LOYALTY_LEVELS = NIVELES;
 
 export default function useLoyaltyPoints() {
     const { currentUser } = useAuth() || {};
@@ -180,18 +152,7 @@ export default function useLoyaltyPoints() {
     };
 
     // Obtener nivel actual
-    const getCurrentLevel = () => {
-        const totalPoints = pointsData.totalEarned;
-        let currentLevel = LOYALTY_LEVELS[0];
-        
-        for (const level of LOYALTY_LEVELS) {
-            if (totalPoints >= level.minPoints) {
-                currentLevel = level;
-            }
-        }
-        
-        return currentLevel;
-    };
+    const getCurrentLevel = () => nivelPorPuntos(pointsData.totalEarned);
 
     // Obtener siguiente nivel
     const getNextLevel = () => {
@@ -206,12 +167,8 @@ export default function useLoyaltyPoints() {
         return null; // Ya está en el nivel máximo
     };
 
-    // Calcular puntos a ganar por una compra
-    const calculatePointsForPurchase = (amount) => {
-        const level = getCurrentLevel();
-        const basePoints = Math.floor(amount * POINTS_CONFIG.pointsPerColon);
-        return Math.floor(basePoints * level.multiplier);
-    };
+    // Calcular puntos a ganar por una compra (con el multiplicador del nivel)
+    const calculatePointsForPurchase = (amount) => calcularPuntos(amount, getCurrentLevel());
 
     // Agregar puntos (después de una compra)
     const addPoints = async (amount, orderNumber) => {

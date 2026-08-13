@@ -15,7 +15,9 @@ import { useAuth } from '../context/AuthContext';
 import { db } from '../firebase/config';
 import { doc, setDoc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 
-const REFERRAL_REWARD_POINTS = 1000; // 1000 BiPuntos
+import { PUNTOS_REFERIDO } from '../config/loyalty';
+
+const REFERRAL_REWARD_POINTS = PUNTOS_REFERIDO;
 const FRIEND_DISCOUNT = 5000;         // ₡5,000 para el amigo (Cupón directo)
 const MIN_PURCHASE = 50000;           // Compra mínima del amigo
 
