@@ -72,8 +72,18 @@ export const getScheduleFromOrder = (order) => {
     
     const validSched = savedSched.filter(Boolean);
 
-    // Si ya tenemos el número correcto de fechas guardadas, usarlas
-    if (validSched.length >= targetCount && targetCount > 1) {
+    // Las fechas GUARDADAS mandan siempre que haya más de una.
+    //
+    // Se calcularon al comprar, con el carrito completo delante, así que son la
+    // verdad. Lo que se deduce acá arriba trabaja con el pedido ya guardado, al
+    // que el checkout le quita el campo `plan` del ítem: si la etiqueta que queda
+    // no dice "quincenal" o "mensual", targetCount cae a 1 y las semanas 2, 3 y 4
+    // desaparecían de la hoja de producción aunque estuvieran guardadas.
+    //
+    // Antes esto pedía además targetCount > 1, que es justo lo que fallaba en ese
+    // caso. Nadie escribe fechas_entrega con varias fechas por accidente: solo lo
+    // hacen el checkout y el importador, y en los dos casos es a propósito.
+    if (validSched.length > 1 && validSched.length >= targetCount) {
         return validSched;
     }
 

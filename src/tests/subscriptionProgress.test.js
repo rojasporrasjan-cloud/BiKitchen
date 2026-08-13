@@ -88,9 +88,10 @@ describe('getSubscriptionProgress', () => {
         expect(p.semanaActual).toBe(3);
     });
 
-    it('detecta un pack cuyas semanas la cocina NO está viendo', () => {
-        // 4 fechas guardadas, pero sin nada que identifique el plan como mensual:
-        // getScheduleFromOrder devuelve 1 sola y la cocina se pierde 3 entregas.
+    it('un pack sin etiqueta de plan ya NO queda desincronizado', () => {
+        // Esto marcaba en rojo de verdad: dos packs quincenales cuyas semanas 2
+        // la cocina no veía. Se arregló en getScheduleFromOrder, que ahora le cree
+        // a las fechas guardadas. La alerta se queda como red de seguridad.
         const sinEtiquetaDePlan = {
             fecha_entrega: '2026-08-05',
             fechas_entrega: ['2026-08-05', '2026-08-12', '2026-08-19', '2026-08-26'],
@@ -99,8 +100,8 @@ describe('getSubscriptionProgress', () => {
         const p = getSubscriptionProgress(sinEtiquetaDePlan, el('2026-08-15'));
         expect(p.total).toBe(4);
         expect(p.semanaActual).toBe(3);
-        expect(p.entregasQueVeLaCocina).toBe(1);
-        expect(p.cocinaDesincronizada).toBe(true);
+        expect(p.entregasQueVeLaCocina).toBe(4);
+        expect(p.cocinaDesincronizada).toBe(false);
     });
 
     it('un pack bien etiquetado no marca desincronización', () => {

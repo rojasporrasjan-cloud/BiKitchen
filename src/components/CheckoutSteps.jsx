@@ -623,6 +623,12 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                     total: (Number(item.price) || 0) * (Number(item.quantity) || 1), // Añadido para admin
                     category: item.category ?? null,
                     categoryLabel: item.categoryLabel ?? null,
+                    // `plan` ('weekly' | 'biweekly' | 'monthly') es lo que usa
+                    // getScheduleFromOrder para saber cuántas entregas tocan. Antes no
+                    // se guardaba y quedaba solo planLabel, que es texto para mostrar:
+                    // si no decía "quincenal" o "mensual", la hoja de producción veía
+                    // una sola entrega y las demás semanas no se cocinaban.
+                    plan: item.plan ?? null,
                     planLabel: item.planLabel ?? null,
                     proteinas: Array.isArray(item.proteinas) ? item.proteinas : undefined,
                     carbos: Array.isArray(item.carbos) ? item.carbos : undefined,

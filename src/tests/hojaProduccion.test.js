@@ -236,20 +236,30 @@ describe('Packs de varias semanas en la hoja', () => {
         });
     });
 
-    it('DEJA CONSTANCIA: sin etiqueta de plan, la hoja solo ve la primera semana', () => {
-        // Mismo pedido pero sin nada que identifique el plan como mensual.
-        // getScheduleFromOrder devuelve UNA sola fecha aunque haya cuatro guardadas,
-        // y la cocina se pierde tres entregas. Por eso MonthlyPacksView lo marca
-        // en rojo. Si algún día esto cambia, este test avisa.
+    it('las fechas guardadas mandan aunque el ítem no diga de qué plan es', () => {
+        // Este caso era un bug real: el checkout guarda el ítem SIN el campo `plan`,
+        // así que si la etiqueta que queda no dice "quincenal" ni "mensual", antes
+        // se devolvía UNA sola fecha y la cocina se perdía las otras semanas.
+        // Pasó de verdad con dos packs quincenales.
         const sinEtiqueta = {
             cliente: 'Ana Ramírez',
             fecha_entrega: '2026-08-05',
             fechas_entrega: ['2026-08-05', '2026-08-12', '2026-08-19', '2026-08-26'],
             items: [{ nombre: 'Pack 5 Comidas', cantidad: 1 }]
         };
-        const schedule = getScheduleFromOrder(sinEtiqueta);
 
-        expect(schedule).toEqual(['2026-08-05']);
-        expect(schedule).not.toContain('2026-08-12');
+        expect(getScheduleFromOrder(sinEtiqueta)).toEqual([
+            '2026-08-05', '2026-08-12', '2026-08-19', '2026-08-26'
+        ]);
+    });
+
+    it('un pedido de una sola entrega sigue teniendo una sola fecha', () => {
+        const simple = {
+            cliente: 'Luis Mora',
+            fecha_entrega: '2026-08-05',
+            fechas_entrega: ['2026-08-05'],
+            items: [{ nombre: 'Almuerzo individual', cantidad: 1 }]
+        };
+        expect(getScheduleFromOrder(simple)).toEqual(['2026-08-05']);
     });
 });
