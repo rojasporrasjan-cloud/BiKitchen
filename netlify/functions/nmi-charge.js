@@ -301,10 +301,15 @@ export const handler = async (event) => {
                             updatedAt: now
                         });
 
+                        // `correoPuntos` es la cuenta del cliente logueado; si no viene,
+                        // se usa el correo del pedido. Sin esto, quien compra con un
+                        // correo de contacto distinto al de su cuenta nunca vería sus puntos.
+                        const correoDestino = (orderData.correoPuntos || orderData.correo || '').toLowerCase().trim();
+
                         // Otorgar puntos de fidelidad (nunca dos veces por el mismo pedido)
-                        if (orderData.correo && pointsToAward > 0 && !orderData.pointsAwarded) {
+                        if (correoDestino && pointsToAward > 0 && !orderData.pointsAwarded) {
                             try {
-                                const loyaltyRef = db.collection('loyalty').doc(orderData.correo.toLowerCase());
+                                const loyaltyRef = db.collection('loyalty').doc(correoDestino);
                                 const loyaltySnap = await loyaltyRef.get();
                                 if (loyaltySnap.exists) {
                                     await loyaltyRef.update({
@@ -314,7 +319,7 @@ export const handler = async (event) => {
                                     });
                                 } else {
                                     await loyaltyRef.set({
-                                        email: orderData.correo.toLowerCase(),
+                                        email: correoDestino,
                                         points: pointsToAward,
                                         totalEarned: pointsToAward,
                                         totalRedeemed: 0,
@@ -322,7 +327,7 @@ export const handler = async (event) => {
                                         lastUpdated: now.toISOString()
                                     });
                                 }
-                                console.log(`[NMI Function] 🎁 ${pointsToAward} puntos otorgados a ${orderData.correo}`);
+                                console.log(`[NMI Function] 🎁 ${pointsToAward} puntos otorgados a ${correoDestino}`);
                             } catch (loyaltyError) {
                                 console.error(`[NMI Function] Error otorgando puntos:`, loyaltyError.message);
                             }

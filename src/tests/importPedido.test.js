@@ -224,6 +224,36 @@ describe('buildPedidoFromImport', () => {
     });
 });
 
+describe('BiPuntos en un pedido metido a mano', () => {
+    const base = parseOrderBlock(PEDIDO_COMPLETO);
+
+    it('sin cuenta conocida usa la tasa base', () => {
+        const pedido = buildPedidoFromImport(base);
+        expect(pedido.pointsToAward).toBe(390); // 2% de 19.500
+    });
+
+    it('si el cliente ya tiene nivel, se le da lo que le corresponde', () => {
+        const oro = { name: 'Oro', minPoints: 5000, multiplier: 1.5 };
+        const pedido = buildPedidoFromImport(base, { nivelCliente: oro });
+        expect(pedido.pointsToAward).toBe(585); // 390 x 1.5
+    });
+
+    it('los puntos se acreditan al correo real del cliente', () => {
+        const pedido = buildPedidoFromImport(base);
+        expect(pedido.correoPuntos).toBe('jai.mv@hotmail.com');
+    });
+
+    it('con correo inventado NO se acredita a ninguna cuenta', () => {
+        // El correo armado con el teléfono no corresponde a ningún usuario:
+        // acreditarle puntos sería dejarlos en una cuenta fantasma.
+        const sinCorreo = buildPedidoFromImport({
+            ...base, correo: null, telefono: '8888-1111'
+        });
+        expect(sinCorreo.correoEsPlaceholder).toBe(true);
+        expect(sinCorreo.correoPuntos).toBeNull();
+    });
+});
+
 describe('validatePedidoForFirestore', () => {
     it('aprueba un pedido bien formado', () => {
         const ok = buildPedidoFromImport(parseOrderBlock(PEDIDO_COMPLETO));

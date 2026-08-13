@@ -603,10 +603,17 @@ export default function CheckoutSteps({ isOpen, onClose }) {
             //
             // Antes se guardaba 2% parejo: un cliente Oro veía "3 puntos por cada
             // ₡100" en el carrito y se le acreditaban 2.
+            //
+            // Los puntos se acreditan SIEMPRE al correo de la cuenta cuando el
+            // cliente está logueado, no al que escribió en el formulario. Si
+            // pusiera otro correo de contacto, los puntos irían a parar a un lugar
+            // que él nunca ve en su cuenta.
+            const correoPuntos = (currentUser?.email || formData.correo || '').toLowerCase().trim() || null;
+
             let nivelDelCliente = null;
-            if (formData.correo) {
+            if (correoPuntos) {
                 try {
-                    const loyaltySnap = await getDoc(doc(db, 'loyalty', formData.correo.toLowerCase().trim()));
+                    const loyaltySnap = await getDoc(doc(db, 'loyalty', correoPuntos));
                     nivelDelCliente = nivelPorPuntos(loyaltySnap.exists() ? loyaltySnap.data().totalEarned : 0);
                 } catch (nivelErr) {
                     // Sin nivel se cae a Bronce (1x): mejor dar de menos que romper la compra
@@ -669,6 +676,7 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                 paymentConfirmed: false, // Se marca true cuando admin confirma pago
                 pointsAwarded: false, // Se marca true cuando se dan los puntos
                 pointsToAward: puntosDelPedido, // Se acreditan al confirmar el pago
+                correoPuntos, // Cuenta a la que se le acreditan
                 fuente: getSourceLabel(),
                 createdAt: serverTimestamp()
             };

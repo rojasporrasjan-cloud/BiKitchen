@@ -306,11 +306,15 @@ export const OrdersProvider = ({ children }) => {
                 const pointsToAward = orderData.pointsToAward || calcularPuntos(orderData.total);
 
 
-                // Si el pedido tiene correo, guardar los puntos en Firestore
-                if (orderData.correo && pointsToAward > 0) {
+                // `correoPuntos` es la cuenta del cliente logueado; si no viene, se
+                // usa el correo del pedido. Sin esto, alguien que compra con un
+                // correo de contacto distinto al de su cuenta nunca vería sus puntos.
+                const correoDestino = (orderData.correoPuntos || orderData.correo || '').toLowerCase().trim();
+
+                if (correoDestino && pointsToAward > 0) {
                     try {
                         // Crear/actualizar documento de puntos del usuario
-                        const pointsRef = doc(db, "loyalty", orderData.correo.toLowerCase());
+                        const pointsRef = doc(db, "loyalty", correoDestino);
                         const pointsSnap = await getDoc(pointsRef);
 
                         if (pointsSnap.exists()) {
@@ -323,7 +327,7 @@ export const OrdersProvider = ({ children }) => {
                         } else {
                             // Crear nuevo documento de puntos
                             await setDoc(pointsRef, {
-                                email: orderData.correo.toLowerCase(),
+                                email: correoDestino,
                                 points: pointsToAward,
                                 totalEarned: pointsToAward,
                                 totalRedeemed: 0,

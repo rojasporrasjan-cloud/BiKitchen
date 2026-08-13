@@ -1,13 +1,14 @@
 import React, { useState, useMemo } from 'react';
 import { MessageCircle, Search, CheckCircle, AlertTriangle, Package, Lock } from 'lucide-react';
-import { collection, query, where, getDocs, limit, addDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, limit, addDoc, doc, getDoc } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { useAuth } from '../../context/AuthContext';
 import { useOrders } from '../../context/OrdersContext';
 import AdminPageHeader from '../../components/admin/AdminPageHeader';
 import ImportedOrderPreview from '../../components/admin/ImportedOrderPreview';
 import { extractOrderNumbers, parseOrderBlock } from '../../utils/parseOrderText';
-import { buildPedidoFromImport, validatePedidoForFirestore } from '../../utils/buildPedidoFromImport';
+import { buildPedidoFromImport, validatePedidoForFirestore, resolverCorreo } from '../../utils/buildPedidoFromImport';
+import { nivelPorPuntos } from '../../config/loyalty';
 import { upsertClient } from '../../services/clientService';
 import { formatPrice } from '../../utils/formatters';
 import { getOrderStatusLabel, CONFIRMABLE_STATUSES } from '../../config/orderStatus';
@@ -165,9 +166,30 @@ export default function WhatsAppImportView() {
      */
     const handleCreate = async (confirmar = false) => {
         if (!draftPedido || draftPedido.problems.length > 0) return;
-        const { pedido } = draftPedido;
         setCreating(true);
         try {
+            // Si el cliente ya tiene cuenta de BiPuntos, se usa SU nivel para
+            // calcular los puntos. Sin esto, un cliente Oro que pide por WhatsApp
+            // recibiría la tasa base y menos puntos que comprando en la web.
+            let nivelCliente = null;
+            const { correo, esPlaceholder } = resolverCorreo(
+                draftPedido.merged.correo,
+                draftPedido.merged.telefono
+            );
+            if (correo && !esPlaceholder) {
+                try {
+                    const snap = await getDoc(doc(db, 'loyalty', correo));
+                    nivelCliente = nivelPorPuntos(snap.exists() ? snap.data().totalEarned : 0);
+                } catch (nivelErr) {
+                    console.warn('[Importador] No se pudo leer el nivel de BiPuntos:', nivelErr.message);
+                }
+            }
+
+            const pedido = buildPedidoFromImport(draftPedido.merged, {
+                createdBy: currentUser?.email || 'admin',
+                nivelCliente
+            });
+
             const ref = await addDoc(collection(db, 'pedidos'), pedido);
 
             // Registrar al cliente en el CRM, igual que hace el checkout de la web.

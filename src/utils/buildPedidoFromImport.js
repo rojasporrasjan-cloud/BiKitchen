@@ -60,7 +60,7 @@ export const resolverCorreo = (correoCrudo, telefono) => {
  * @returns {object} documento listo para addDoc(collection(db,'pedidos'), ...)
  */
 export const buildPedidoFromImport = (parsed, options = {}) => {
-    const { createdBy = 'admin', orderNumber } = options;
+    const { createdBy = 'admin', orderNumber, nivelCliente = null } = options;
 
     const total = num(parsed?.total);
     const fechas = Array.isArray(parsed?.fechasEntrega) ? parsed.fechasEntrega.filter(Boolean) : [];
@@ -134,8 +134,11 @@ export const buildPedidoFromImport = (parsed, options = {}) => {
         status: 'pending_payment',
         paymentConfirmed: false,
         pointsAwarded: false,
-        // Tasa base: de un pedido metido a mano no se conoce el nivel del cliente
-        pointsToAward: calcularPuntos(total),
+        // Si el cliente ya tiene cuenta, se usa su nivel; si no, tasa base
+        pointsToAward: calcularPuntos(total, nivelCliente),
+        // Dónde se acreditan. Un correo inventado no corresponde a ninguna cuenta,
+        // así que en ese caso no hay a quién acreditarle.
+        correoPuntos: esPlaceholder ? null : correo,
 
         fuente: 'Importado de WhatsApp',
         source: 'whatsapp-import',
