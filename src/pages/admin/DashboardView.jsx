@@ -38,7 +38,6 @@ import { parseFirebaseDate } from '../../utils/dateUtils';
 export default function DashboardView() {
     const [loading, setLoading] = useState(true);
     const [totalClientes, setTotalClientes] = useState(0);
-    const [lowStockItems, setLowStockItems] = useState([]);
     
     const [timeRange, setTimeRange] = useState('all'); // 'all', 'month', 'week', 'custom'
     const [customStartDate, setCustomStartDate] = useState('');
@@ -66,7 +65,6 @@ export default function DashboardView() {
             setLoading(true);
             invalidateCache('dashboard_pedidos');
             invalidateCache('dashboard_clientes_count');
-            invalidateCache('dashboard_inventario');
         }
 
         try {
@@ -89,24 +87,7 @@ export default function DashboardView() {
                 }
             }, 'dashboard');
 
-            // Cargar inventario (cache 10 min)
-            const inventarioRaw = await cachedFetch('dashboard_inventario', async () => {
-                const snap = await getDocs(collection(db, 'inventario'));
-                return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-            }, 'dashboard');
-
-            const inventario = (inventarioRaw || []).map((item) => {
-                const data = item;
-                let status = 'good';
-                if (data.stock <= data.min * 0.25) status = 'critical';
-                else if (data.stock <= data.min) status = 'warning';
-                return { ...data, status };
-            });
-            const stockBajo = inventario.filter(i => i.status === 'critical' || i.status === 'warning').slice(0, 4);
-
-            // Actualizar estados que dependen puramente de histórico/inventario
             setTotalClientes(totalClientes);
-            setLowStockItems(stockBajo);
 
         } catch (error) {
             console.error('Error loading historical:', error);
@@ -637,54 +618,6 @@ export default function DashboardView() {
                     )}
                 </AdminCard>
 
-                {/* Low Stock Alert */}
-                <AdminCard
-                    title="Stock Bajo"
-                    icon={AlertTriangle}
-                    delay={0.7}
-                >
-                    {lowStockItems.length === 0 ? (
-                        <div className="text-center py-8 text-gray-400">
-                            <Package size={32} className="mx-auto mb-2 opacity-50" />
-                            <p className="text-sm">Sin alertas de stock</p>
-                        </div>
-                    ) : (
-                        <div className="space-y-3">
-                            {lowStockItems.map((item, idx) => (
-                                <div key={idx} className={`p-3 rounded-lg border-l-4 ${item.status === 'critical'
-                                    ? 'bg-red-50 border-red-500'
-                                    : 'bg-yellow-50 border-yellow-500'
-                                    }`}>
-                                    <div className="flex justify-between items-start mb-2">
-                                        <h3 className="font-semibold text-sm text-gray-900 truncate pr-2">{item.name}</h3>
-                                        <span className={`text-[10px] md:text-xs font-bold px-1.5 py-0.5 rounded shrink-0 ${item.status === 'critical'
-                                            ? 'bg-red-100 text-red-700'
-                                            : 'bg-yellow-100 text-yellow-700'
-                                            }`}>
-                                            {item.status === 'critical' ? 'Crítico' : 'Bajo'}
-                                        </span>
-                                    </div>
-                                    <div className="flex justify-between text-xs text-gray-600">
-                                        <span>Actual: {item.stock} {item.unit}</span>
-                                        <span>Mín: {item.min} {item.unit}</span>
-                                    </div>
-                                    <div className="mt-2 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                                        <div
-                                            className={`h-full ${item.status === 'critical' ? 'bg-red-500' : 'bg-yellow-500'}`}
-                                            style={{ width: `${Math.min((item.stock / item.min) * 100, 100)}%` }}
-                                        />
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                    <Link
-                        to="/admin/inventory"
-                        className="block w-full mt-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-colors text-center active:bg-gray-300"
-                    >
-                        Ver Inventario Completo
-                    </Link>
-                </AdminCard>
             </div>
 
             {/* Recent Orders */}

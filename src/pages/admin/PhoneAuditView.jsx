@@ -40,9 +40,12 @@ export default function PhoneAuditView() {
         setLoading(true);
         setError(null);
         try {
+            // 'pedidos' es donde viven los pedidos reales. Antes se leía 'orders',
+            // que es la colección vieja en la que ya nadie escribe: la auditoría
+            // no veía ni uno solo de los pedidos actuales.
             const [clientesSnap, ordersSnap] = await Promise.all([
                 getDocs(collection(db, 'clientes')),
-                getDocs(collection(db, 'orders'))
+                getDocs(collection(db, 'pedidos'))
             ]);
 
             const rows = [];
@@ -64,13 +67,14 @@ export default function PhoneAuditView() {
 
             ordersSnap.forEach((docSnap) => {
                 const data = docSnap.data();
-                const raw = data.telefono ?? data.details?.phone;
+                const raw = data.telefono ?? data.details?.phone ?? data.detalles_entrega?.telefono;
                 const status = classifyPhone(raw);
                 if (status === STATUS.OK) { okCount++; return; }
                 rows.push({
                     id: docSnap.id,
                     origen: 'Pedido',
-                    nombre: data.nombre || data.details?.name || '(sin nombre)',
+                    // En 'pedidos' el nombre va en `cliente`
+                    nombre: data.cliente || data.nombre || data.details?.name || '(sin nombre)',
                     telefono: raw,
                     status
                 });

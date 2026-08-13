@@ -208,12 +208,9 @@ export const NOTIFICATION_TYPES = {
         getBody: (name) => `${name} se ha registrado en BiKitchen`,
         url: '/admin/clients'
     },
-    LOW_INVENTORY: {
-        title: '⚠️ Inventario Bajo',
-        getBody: (item) => `${item} tiene stock bajo. Revisa el inventario.`,
-        url: '/admin/inventory'
-    },
-    
+    // LOW_INVENTORY se quitó junto con el módulo de Inventario: apuntaba a
+    // /admin/inventory, que ya no existe.
+
     // Notificación personalizada
     custom: {
         title: 'BiKitchen',
