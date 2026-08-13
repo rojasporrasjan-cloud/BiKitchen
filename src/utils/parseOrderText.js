@@ -57,6 +57,42 @@ const parseAmount = (raw) => {
  */
 const ES_RELLENO = /^(n\/a|no especificad[oa]s?|ningun[ao]|sin referencias|sin observaciones|sin descuento|sin cup[óo]n|sin datos|sin especificar)$/i;
 
+/** Etiquetas que el parser entiende. Se usan para no confundirlas con otra cosa. */
+const ETIQUETA_CONOCIDA = /^\s*(cliente|nombre|tel[ée]fono|tel|lugar|zona|direcci[óo]n|se[ñn]as|referencias|precio|subtotal|total|descuento|env[íi]os?|flete|entregas?|fecha de entrega|fecha del pedido|notas|observaciones|correo|email|e-mail|pago|m[ée]todo de pago|prote[íi]nas?|c[ée]dula|cup[óo]n|transacci[óo]n)\s*[:\s]/i;
+
+/**
+ * Quita el prefijo que agrega WhatsApp al copiar mensajes del chat:
+ *   "[10:50 p. m., 12/8/2026] Gina: two pack bajo calorías"
+ *   "12/8/2026, 10:50 p. m. - Gina: two pack bajo calorías"
+ *
+ * Es lo primero que se hace, y no es cosmético: el sello de hora trae una FECHA
+ * que si no se quita se puede colar como fecha de entrega. Un pedido quedaría
+ * programado para el día en que se escribió el mensaje.
+ *
+ * El nombre de quien escribe solo se quita si venía detrás de un sello de hora,
+ * y nunca si resulta ser una etiqueta que sí nos importa (por ejemplo un mensaje
+ * que arranque directo con "Cliente:").
+ */
+export const limpiarPrefijosDeChat = (text) => {
+    if (!text || typeof text !== 'string') return '';
+
+    return text.split('\n').map((lineaOriginal) => {
+        let linea = lineaOriginal;
+
+        // "[10:50 p. m., 12/8/2026] "
+        linea = linea.replace(/^\s*\[[^\]\n]{5,40}\]\s*/, '');
+        // "12/8/2026, 10:50 p. m. - "
+        linea = linea.replace(/^\s*\d{1,2}\/\d{1,2}\/\d{2,4},?\s*\d{1,2}:\d{2}(?:\s*[ap]\.?\s*m\.?)?\s*[-–]\s*/i, '');
+
+        // Solo si se quitó un sello de hora se quita también "Nombre: "
+        if (linea !== lineaOriginal && !ETIQUETA_CONOCIDA.test(linea)) {
+            linea = linea.replace(/^[^:\n]{1,40}:\s*/, '');
+        }
+
+        return linea;
+    }).join('\n');
+};
+
 /**
  * Captura el valor de una etiqueta.
  *
@@ -124,8 +160,11 @@ export const parseFechaEspanol = (texto, hoy = new Date()) => {
         return aISO(y, Number(m) - 1, Number(d));
     }
 
-    // "12 de agosto" (con o sin año, con o sin día de la semana adelante)
-    const conMes = sinTildes(texto).match(/\b(\d{1,2})\s+de\s+([a-z]+)(?:\s+(?:de\s+)?(\d{4}))?/);
+    // "12 de agosto", "15 agosto" (el "de" es opcional: a mano se omite seguido),
+    // con o sin año y con o sin día de la semana adelante.
+    // Si la palabra que sigue al número no es un mes, se descarta más abajo, así
+    // que "1 pack bajo calorías" no se confunde con una fecha.
+    const conMes = sinTildes(texto).match(/\b(\d{1,2})\s+(?:de\s+)?([a-z]+)(?:\s+(?:de\s+)?(\d{4}))?/);
     if (conMes) {
         const dia = Number(conMes[1]);
         const mes = MESES[conMes[2]];
@@ -190,24 +229,74 @@ const grabDeliveryDates = (text, hoy) => {
  * El nombre se conserva ENTERO (con el "(250g)") porque logisticsUtils saca los
  * gramos por porción justamente de ahí.
  */
+const ES_LINEA_PRECIO = /^\s*Precio\s*:?\s*₡?\s*[\d.,\s]+\s*$/i;
+const ES_SEPARADOR = /^[\s━─=*_·.-]*$/;
+const ES_MONTO_SUELTO = /^[\s₡$]*[\d.,\s]+$/;
+const PARECE_FECHA = /\b\d{1,2}\s+(?:de\s+)?(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\b/i;
+
+/** Encabezado de sección tipo "👤 INFORMACIÓN DEL CLIENTE": todo en mayúsculas. */
+const esEncabezado = (t) => {
+    const letras = t.replace(/[^\p{L}]/gu, '');
+    return letras.length > 3 && letras === letras.toUpperCase();
+};
+
+/**
+ * Corta la lectura de un ítem: separador, etiqueta, fecha, monto o detalle.
+ *
+ * NO incluye los encabezados en mayúsculas a propósito: una línea como
+ * "REGALIA DESAYUNOS" es parte de la descripción del pack, no un encabezado de
+ * sección, y si se cortara ahí el ítem no se detectaría.
+ */
+const esCorteDeItem = (linea) => {
+    const t = (linea || '').trim();
+    if (!t) return false;
+    return ES_SEPARADOR.test(t)
+        || ETIQUETA_CONOCIDA.test(t)
+        || PARECE_FECHA.test(t)
+        || ES_MONTO_SUELTO.test(t)
+        || /^[└│├]/.test(t)
+        || /#ORD-/i.test(t);
+};
+
+/** Una línea que no aporta nada por sí sola (encabezado, monto, fecha, etiqueta). */
+export const esLineaIgnorable = (linea) => {
+    const t = (linea || '').trim();
+    if (!t) return true;
+    if (esCorteDeItem(t)) return true;
+    if (esEncabezado(t)) return true;           // "👤 INFORMACIÓN DEL CLIENTE"
+    return false;
+};
+
+/**
+ * Extrae los ítems y devuelve además qué líneas consumió, para que
+ * parseOrderBlock pueda rescatar como observación lo que quedó suelto.
+ *
+ * Reconoce tres formas de escribir un ítem:
+ *   "1× Pack de Proteínas ... - ₡13.500"   (correo)
+ *   "• 1× Pack ..." + "   └ ₡13.500"       (WhatsApp)
+ *   "□ 1 pack 3 proteínas de 500g"         (a mano, sin ×)
+ *   "two pack bajo calorías Mensual"       (a mano, SIN número)
+ *
+ * El último caso es el delicado: una línea cualquiera podría pasar por ítem. Por
+ * eso solo se acepta si debajo viene una línea "Precio ...", que es lo que
+ * confirma que se está describiendo algo que se cobra.
+ *
+ * El nombre se conserva ENTERO (con el "(250g)") porque logisticsUtils saca los
+ * gramos por porción justamente de ahí.
+ */
 const grabItems = (text) => {
     const items = [];
+    const consumidas = new Set();
     const lines = text.split('\n');
 
-    for (const line of lines) {
-        // Tres formas de escribir un ítem:
-        //   "1× Pack ..."              (correo)
-        //   "• 1× Pack ..."            (WhatsApp)
-        //   "□ 1 pack 3 proteínas..."  (escrito a mano, sin la ×)
-        // La viñeta puede ser •, □, ▢, guion o asterisco.
-        let itemMatch = line.match(/^[\s•·*□▢▪◦-]*(\d+)\s*[×x]\s*(.+)$/i);
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
 
-        // Sin ×: número, espacio y texto. Se descarta si la línea es una fecha
-        // ("12 de agosto") o un monto suelto, que si no se colarían como ítems.
+        // --- Ítem que arranca con número ---
+        let itemMatch = line.match(/^[\s•·*□▢▪◦-]*(\d+)\s*[×x]\s*(.+)$/i);
         if (!itemMatch) {
             const suelto = line.match(/^[\s•·*□▢▪◦-]*(\d+)\s+(\p{L}.*)$/u);
-            const pareceFecha = /\bde\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\b/i.test(line);
-            if (suelto && !pareceFecha) itemMatch = suelto;
+            if (suelto && !PARECE_FECHA.test(line)) itemMatch = suelto;
         }
 
         if (itemMatch) {
@@ -225,16 +314,50 @@ const grabItems = (text) => {
             items.push({
                 cantidad: parseInt(itemMatch[1], 10) || 1,
                 nombre: rest.replace(/\*/g, '').trim(),
-                precio: precio,
+                precio,
                 proteinas: []
             });
+            consumidas.add(i);
             continue;
+        }
+
+        // --- Ítem SIN número, confirmado por un "Precio ..." debajo ---
+        const texto = line.trim();
+        if (texto && !esCorteDeItem(texto)) {
+            const extras = [];
+            let j = i + 1;
+            let idxPrecio = -1;
+
+            while (j < lines.length && extras.length < 2) {
+                const t = lines[j].trim();
+                if (!t) { j++; continue; }
+                if (ES_LINEA_PRECIO.test(t)) { idxPrecio = j; break; }
+                if (esCorteDeItem(t)) break;
+                extras.push({ idx: j, texto: t });
+                j++;
+            }
+
+            if (idxPrecio !== -1) {
+                items.push({
+                    cantidad: 1,
+                    nombre: [texto, ...extras.map(e => e.texto)].join(' - ').replace(/\*/g, '').trim(),
+                    precio: null,
+                    proteinas: []
+                });
+                consumidas.add(i);
+                extras.forEach(e => consumidas.add(e.idx));
+
+                // Saltar hasta la línea del precio. Sin esto, cada línea de la
+                // descripción se volvería a evaluar y entraría como ítem repetido.
+                i = idxPrecio - 1;
+                continue;
+            }
         }
 
         if (items.length === 0) continue;
         const ultimo = items[items.length - 1];
 
-        // Líneas de detalle del último ítem leído. El "└" lo pone el sistema;
+        // Líneas de detalle del último ítem. El "└" lo pone el sistema;
         // escrito a mano suele venir como "Proteínas: ..." pelado.
         const protMatch = line.match(/^[\s└│├•·*-]*Prote[íi]nas?\s*:\s*(.+)$/i);
         if (protMatch) {
@@ -242,20 +365,22 @@ const grabItems = (text) => {
                 .split(',')
                 .map(p => p.replace(/\*/g, '').trim())
                 .filter(Boolean);
+            consumidas.add(i);
             continue;
         }
 
         // El precio del ítem puede venir en su propia línea:
         //   "   └ ₡13.500"     (WhatsApp)
-        //   "Precio 25.850"    (escrito a mano)
+        //   "Precio 25.850"    (a mano)
         const precioSuelto = line.match(/└\s*₡\s*([\d.,\s]+)$/)
             || line.match(/^\s*Precio\s*:?\s*₡?\s*([\d.,\s]+)\s*$/i);
-        if (precioSuelto && ultimo.precio === null) {
-            ultimo.precio = parseAmount(precioSuelto[1]);
+        if (precioSuelto) {
+            if (ultimo.precio === null) ultimo.precio = parseAmount(precioSuelto[1]);
+            consumidas.add(i);
         }
     }
 
-    return items;
+    return { items, consumidas };
 };
 
 /**
@@ -268,11 +393,15 @@ const grabItems = (text) => {
  * @param {string} text
  * @returns {object} datos del pedido + warnings
  */
-export const parseOrderBlock = (text, hoy = new Date()) => {
+export const parseOrderBlock = (textoCrudo, hoy = new Date()) => {
     const warnings = [];
-    if (!text || typeof text !== 'string') {
+    if (!textoCrudo || typeof textoCrudo !== 'string') {
         return { warnings: ['El texto está vacío.'], items: [], fechasEntrega: [] };
     }
+
+    // Lo PRIMERO: quitar los sellos de hora del chat. Si no, la fecha del sello
+    // se puede colar como fecha de entrega y el pedido queda programado mal.
+    const text = limpiarPrefijosDeChat(textoCrudo);
 
     // Las etiquetas cubren los dos formatos: el del correo y el de WhatsApp
     const numeroOrden = extractOrderNumbers(text)[0] || null;
@@ -302,7 +431,7 @@ export const parseOrderBlock = (text, hoy = new Date()) => {
     const descuento = parseAmount(grab(text, ['Descuento'])) ?? 0;
 
     const fechasEntrega = grabDeliveryDates(text, hoy);
-    const items = grabItems(text);
+    const { items, consumidas } = grabItems(text);
 
     // WhatsApp lo trae como "💳 *PAGO*: SINPE"; el correo lo pone en la línea
     // siguiente al encabezado "MÉTODO DE PAGO".
@@ -310,6 +439,23 @@ export const parseOrderBlock = (text, hoy = new Date()) => {
     if (!metodoPago) {
         const payMatch = text.match(/M[ÉE]TODO DE PAGO[^\n]*\n[━\-=\s]*\n?\s*([^\n]+)/i);
         if (payMatch) metodoPago = payMatch[1].replace(/\*/g, '').trim();
+    }
+
+    // Líneas que no encajaron en nada: se rescatan como observación.
+    // Una restricción de comida ("Solo chayote y zanahoria") suele venir suelta,
+    // sin etiqueta, y perderla es de los errores más caros: nadie se entera hasta
+    // que el cliente recibe algo que no come.
+    if (!observaciones) {
+        const sueltas = text.split('\n')
+            .map((linea, i) => ({ linea: linea.trim(), i }))
+            .filter(({ linea, i }) => (
+                !consumidas.has(i) &&
+                !esLineaIgnorable(linea) &&
+                linea !== (metodoPago || '').trim()
+            ))
+            .map(({ linea }) => linea);
+
+        if (sueltas.length > 0) observaciones = sueltas.join(' · ');
     }
 
     // Lo que la cocina y las reglas de Firestore necesitan sí o sí
