@@ -886,10 +886,15 @@ const PackCard = memo(({ pack, shipping, category, categoryLabel: customCategory
 
                                         {/* Footer Actions - Redesigned for Maximum Prominence */}
                                         <div className="mt-8 space-y-4">
-                                            <SubstitutionPicker
-                                                value={substitutions}
-                                                onChange={setSubstitutions}
-                                            />
+                                            {/* Los packs familiares NO llevan cambios de ingredientes:
+                                                vienen con su menú fijo. Este modal lo comparten con los
+                                                packs de proteínas, que sí los permiten. */}
+                                            {!isFamiliarPack && (
+                                                <SubstitutionPicker
+                                                    value={substitutions}
+                                                    onChange={setSubstitutions}
+                                                />
+                                            )}
 
                                             <button
                                                 disabled={isProteinsPack && packEspecialData != null && proteinasSeleccionadas.length !== packEspecialData.cantidad}
@@ -947,7 +952,9 @@ const PackCard = memo(({ pack, shipping, category, categoryLabel: customCategory
                                                             image: packImage,
                                                             category,
                                                             categoryLabel: PACKS_DATA?.[category]?.title,
-                                                            customizations: substitutions,
+                                                            // Sin customizations: el familiar no permite cambios.
+                                                            // No se manda `substitutions` para que no se cuele algo
+                                                            // que haya quedado del modal de otro pack.
                                                             discountMetodos: hasDiscount ? (pack.metodosPermitidos || null) : undefined,
                                                         });
                                                         toast.success(`${packEspecialData.nombre} agregado`);
