@@ -16,6 +16,16 @@ describe('formatFechaCorta', () => {
         expect(formatFechaCorta('')).toBe('—');
         expect(formatFechaCorta('no es fecha')).toBe('no es fecha');
     });
+
+    it('NUNCA devuelve un objeto: React no puede pintarlo', () => {
+        // Un Timestamp de Firestore devuelto tal cual tumbó una pantalla en
+        // producción con el error #31 de React.
+        expect(formatFechaCorta({ seconds: 123, nanoseconds: 0 })).toBe('—');
+        expect(formatFechaCorta({})).toBe('—');
+        expect(formatFechaCorta([])).toBe('—');
+        expect(formatFechaCorta(12345)).toBe('—');
+        expect(formatFechaLarga({ seconds: 123, nanoseconds: 0 })).toBe('—');
+    });
 });
 
 describe('formatFechaLarga', () => {

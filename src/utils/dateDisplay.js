@@ -13,10 +13,17 @@ const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'o
 
 const MS_POR_DIA = 86400000;
 
-/** '2026-08-19' → 'mié 19 ago'. Si no se puede leer, devuelve lo que entró. */
+/**
+ * '2026-08-19' → 'mié 19 ago'.
+ *
+ * Si no se puede leer devuelve el texto original, pero SOLO si era texto: un
+ * Timestamp de Firestore ({seconds, nanoseconds}) devuelto tal cual termina
+ * renderizándose como hijo de React y tumba la pantalla con el error #31.
+ * Ya pasó en producción con las fechas de los cupones.
+ */
 export const formatFechaCorta = (iso) => {
     const d = parseDateStr(iso);
-    if (!d) return iso || '—';
+    if (!d) return typeof iso === 'string' && iso ? iso : '—';
     return `${DIAS[d.getDay()]} ${d.getDate()} ${MESES[d.getMonth()]}`;
 };
 
@@ -27,7 +34,7 @@ const MESES_LARGO = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'jul
 /** '2026-08-17' → 'lunes 17 de agosto'. Para encabezados, donde hay espacio. */
 export const formatFechaLarga = (iso) => {
     const d = parseDateStr(iso);
-    if (!d) return iso || '—';
+    if (!d) return typeof iso === 'string' && iso ? iso : '—';
     return `${DIAS_LARGO[d.getDay()]} ${d.getDate()} de ${MESES_LARGO[d.getMonth()]}`;
 };
 

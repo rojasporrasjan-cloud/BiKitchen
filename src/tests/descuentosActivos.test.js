@@ -146,6 +146,49 @@ describe('recolectarDescuentos', () => {
             .toEqual(new Set(['pack', 'plato', 'cupon', 'promocion', 'envio']));
     });
 
+    it('convierte los Timestamp de Firestore a texto', () => {
+        // Los cupones guardan las fechas como Timestamp ({seconds, nanoseconds}).
+        // Devolver ese objeto hacía que React lo intentara pintar como hijo y
+        // tumbaba la pantalla entera con el error #31. Pasó en producción.
+        // Mediodía local: sin la hora, el navegador lo lee como UTC y en Costa
+        // Rica (UTC-6) la fecha cae un día antes.
+        const comoTimestamp = (iso) => ({
+            seconds: Math.floor(new Date(`${iso}T12:00:00`).getTime() / 1000),
+            nanoseconds: 0,
+            toDate() { return new Date(this.seconds * 1000); }
+        });
+
+        const items = recolectarDescuentos({
+            cupones: [{
+                id: 'c1', code: 'CONFECHA', active: true, discountValue: 10,
+                startDate: comoTimestamp('2026-08-01'),
+                expirationDate: comoTimestamp('2026-08-31')
+            }]
+        }, HOY);
+
+        expect(typeof items[0].desde).toBe('string');
+        expect(typeof items[0].hasta).toBe('string');
+        expect(items[0].desde).toBe('2026-08-01');
+        expect(items[0].hasta).toBe('2026-08-31');
+        expect(items[0].vigente).toBe(true);
+    });
+
+    it('NINGUNA fecha sale como objeto, venga como venga', () => {
+        // Red de seguridad: si una fuente nueva trae otro formato de fecha, que
+        // no se cuele un objeto hasta el JSX.
+        const items = recolectarDescuentos({
+            packPrices: { 'P': { descuentoActivo: true, valorDescuento: 5, fechaInicio: { raro: true } } },
+            cupones: [{ id: 'c', code: 'X', active: true, discountValue: 5, startDate: { seconds: 1 } }],
+            promociones: [{ id: 'p', titulo: 'T', activa: true, fechaFin: new Date('2026-12-01') }]
+        }, HOY);
+
+        items.forEach(i => {
+            expect(['string', 'object']).toContain(typeof i.desde); // null es 'object'
+            expect(i.desde === null || typeof i.desde === 'string').toBe(true);
+            expect(i.hasta === null || typeof i.hasta === 'string').toBe(true);
+        });
+    });
+
     it('no revienta sin datos', () => {
         expect(recolectarDescuentos()).toEqual([]);
         expect(recolectarDescuentos({}, HOY)).toEqual([]);

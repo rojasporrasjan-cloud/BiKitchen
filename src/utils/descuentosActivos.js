@@ -32,6 +32,19 @@ const aFecha = (valor) => {
 };
 
 /**
+ * Normaliza cualquier fecha a 'AAAA-MM-DD'.
+ *
+ * Los cupones guardan las fechas como Timestamp de Firestore ({seconds,
+ * nanoseconds}). Si ese objeto sale de acá tal cual, termina renderizándose como
+ * hijo de React y tumba la pantalla entera con el error #31.
+ */
+const aISO = (valor) => {
+    const d = aFecha(valor);
+    if (!d) return null;
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+/**
  * ¿Está dentro de su ventana de fechas?
  * Sin fechas configuradas se considera vigente: es un descuento permanente.
  */
@@ -75,8 +88,8 @@ export const recolectarDescuentos = (fuentes = {}, hoy = new Date()) => {
             origen,
             nombre,
             descuento: formatearValor(config.tipoDescuento, config.valorDescuento),
-            desde: config.fechaInicio || null,
-            hasta: config.fechaFin || null,
+            desde: aISO(config.fechaInicio),
+            hasta: aISO(config.fechaFin),
             vigente: dentroDeVigencia(config.fechaInicio, config.fechaFin, hoy),
             nota: Array.isArray(config.metodosPermitidos) && config.metodosPermitidos.length < 4
                 ? `Solo con ${config.metodosPermitidos.join(', ')}`
@@ -103,8 +116,8 @@ export const recolectarDescuentos = (fuentes = {}, hoy = new Date()) => {
             origen: 'cupon',
             nombre: c.code || '(sin código)',
             descuento: formatearValor(c.discountType === 'fixed' ? 'fijo' : 'porcentaje', c.discountValue ?? c.discount),
-            desde: c.startDate || null,
-            hasta: c.expirationDate || null,
+            desde: aISO(c.startDate),
+            hasta: aISO(c.expirationDate),
             vigente: !agotado && dentroDeVigencia(c.startDate, c.expirationDate, hoy),
             nota: c.maxUses ? `${c.usedCount || 0} de ${c.maxUses} usos` : null
         });
@@ -118,8 +131,8 @@ export const recolectarDescuentos = (fuentes = {}, hoy = new Date()) => {
             origen: 'promocion',
             nombre: p.titulo || '(sin título)',
             descuento: p.descuentoTexto || p.badge || 'Ver promoción',
-            desde: p.fechaInicio || null,
-            hasta: p.fechaFin || null,
+            desde: aISO(p.fechaInicio),
+            hasta: aISO(p.fechaFin),
             vigente: dentroDeVigencia(p.fechaInicio, p.fechaFin, hoy),
             nota: null
         });
