@@ -6,16 +6,47 @@ import AdminPageHeader from '../../components/admin/AdminPageHeader';
 import { ClipboardList, Printer, Calendar, RefreshCw, FileText } from 'lucide-react';
 import { mapPedidosFromLegacy } from '../../utils/logisticsUtils';
 import { getScheduleFromOrder } from '../../utils/orderDates';
+import { useOrders } from '../../context/OrdersContext';
 
 /**
  * DispatchSheetView ("Hoja de Despacho / Reparto")
  * Displays a print-friendly, Excel-like table of daily production/dispatch totals.
  */
 export default function DispatchSheetView() {
+    const { orders: allOrders } = useOrders();
+    const [availableDates, setAvailableDates] = useState([]);
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(false);
     const [sheetData, setSheetData] = useState({ sections: [], totals: {} });
+
+    // Obtener fechas disponibles de pedidos activos
+    useEffect(() => {
+        if (!allOrders || allOrders.length === 0) return;
+        
+        const dates = [];
+        allOrders.forEach(o => {
+            if (o.status === 'cancelled') return;
+            getScheduleFromOrder(o).forEach(d => {
+                if (d) dates.push(d);
+            });
+        });
+
+        // Valores únicos, ordenados descendente
+        const uniqueDates = [...new Set(dates)].sort((a, b) => new Date(a) - new Date(b));
+        
+        // Filtramos solo fechas desde hace 3 días en adelante para no saturar el menú
+        const limitDate = new Date();
+        limitDate.setDate(limitDate.getDate() - 3);
+        const limitDateStr = limitDate.toISOString().split('T')[0];
+        
+        const futureDates = uniqueDates.filter(d => d >= limitDateStr);
+        setAvailableDates(futureDates);
+        
+        if (futureDates.length > 0 && !futureDates.includes(selectedDate)) {
+            setSelectedDate(futureDates[0]);
+        }
+    }, [allOrders]);
 
     // Load orders for selected date
     const loadOrders = async (force = false) => {
@@ -52,7 +83,9 @@ export default function DispatchSheetView() {
             // Normalize orders using shared utility
             const normalized = mapPedidosFromLegacy(rawOrders);
             setOrders(normalized);
-            processSheetData(normalized);
+            // PASAMOS rawOrders A processSheetData EN LUGAR DE normalized 
+            // PORQUE mapPedidosFromLegacy ELIMINA EL CARRITO Y LOS ITEMS ORIGINALES
+            processSheetData(rawOrders);
 
         } catch (error) {
             console.error("Error loading dispatch orders:", error);
@@ -64,77 +97,42 @@ export default function DispatchSheetView() {
         loadOrders();
     }, [selectedDate]);
 
-    // Process orders into "Matrix" format for the sheet
     const processSheetData = (orderList) => {
-        // Structure:
-        // Sections: [ { title: 'DESAYUNOS', rows: [ { name: 'Pinto con Huevo', qty: 15 } ] } ]
-
-        const sectionsMap = {
-            'desayuno': {},
-            'almuerzo': {},
-            'cena': {},
-            'snack': {},
-            'individuales': {},
-            'otros': {}
-        };
-
-        let grandTotal = 0;
+        const sectionsMap = {};
+        let grandTotal = 0; // Total de bolsas/entregas
 
         orderList.forEach(order => {
-            // Check "menu" items (from packs)
-            if (Array.isArray(order.menu)) {
-                order.menu.forEach(item => {
-                    // Determine category
-                    // item might have 'category' or we infer from 'tipoMenu' of the order?
-                    // In normalized data, item often has 'nombre', 'proteina', 'carbo', 'vegetal'
-
-                    // Logic: Aggregate by Dish Name (or Components)
-                    // Requirements say: "Group by 'category'... then by 'dish' name."
-
-                    // If item has category, use it. Else default to 'almuerzo' or generic.
-                    // normalize names:
-                    const rawCat = item.category || 'almuerzo'; // default
-                    const cat = rawCat.toLowerCase().includes('desayuno') ? 'desayuno' :
-                        rawCat.toLowerCase().includes('cena') ? 'cena' :
-                            rawCat.toLowerCase().includes('snack') ? 'snack' :
-                                'almuerzo'; // default bucket
-
-                    const dishName = item.nombre || 'Plato Genérico';
-                    const qty = parseInt(item.cantidad || 1);
-                    const key = dishName.trim();
-
-                    if (!sectionsMap[cat][key]) sectionsMap[cat][key] = 0;
-                    sectionsMap[cat][key] += qty;
-                    grandTotal += qty;
-                });
-            }
-
-            // Also check "items" (manual/individual items)
-            if (Array.isArray(order.items)) {
-                order.items.forEach(item => {
-                    const cat = 'individuales';
-                    const dishName = item.name || item.nombre || 'Item';
-                    const qty = parseInt(item.quantity || item.cantidad || 1);
-                    const key = dishName.trim();
-
-                    if (!sectionsMap[cat][key]) sectionsMap[cat][key] = 0;
-                    sectionsMap[cat][key] += qty;
-                    grandTotal += qty;
-                });
-            }
+            const zona = order.zona || order.detalles_entrega?.zona || 'Ruta General';
+            if (!sectionsMap[zona]) sectionsMap[zona] = [];
+            
+            sectionsMap[zona].push({
+                cliente: order.cliente || 'Sin nombre',
+                direccion: order.direccion || order.detalles_entrega?.direccion || order.details?.address || 'Sin dirección',
+                telefono: order.telefono || order.detalles_entrega?.telefono || order.details?.phone || '-',
+                plan: order.tipoMenu || order.plan || 'Pack',
+                observaciones: order.observaciones || ''
+            });
+            
+            grandTotal += 1;
         });
 
         // Convert map to array for rendering
-        const finalSections = Object.entries(sectionsMap).map(([key, items]) => {
-            const rows = Object.entries(items).map(([name, qty]) => ({ name, qty }));
-            // Sort alphabetically
-            rows.sort((a, b) => a.name.localeCompare(b.name));
+        const finalSections = Object.entries(sectionsMap).map(([zona, entregas]) => {
+            // Sort alphabetically by client name
+            entregas.sort((a, b) => a.cliente.localeCompare(b.cliente));
             return {
-                title: key.toUpperCase(),
-                rows,
-                total: rows.reduce((sum, r) => sum + r.qty, 0)
+                title: zona.toUpperCase(),
+                rows: entregas,
+                total: entregas.length
             };
-        }).filter(s => s.rows.length > 0); // Hide empty sections
+        });
+
+        // Sort sections alphabetically, but keep "RUTA GENERAL" at the end if there are other zones
+        finalSections.sort((a, b) => {
+            if (a.title === 'RUTA GENERAL') return 1;
+            if (b.title === 'RUTA GENERAL') return -1;
+            return a.title.localeCompare(b.title);
+        });
 
         setSheetData({ sections: finalSections, grandTotal });
     };
@@ -149,21 +147,26 @@ export default function DispatchSheetView() {
             <div className="no-print">
                 <AdminPageHeader
                     icon={ClipboardList}
-                    title="Hoja de Despacho"
-                    subtitle="Totales de platos para carga y despacho"
+                    title="Hoja de Despacho (Rutas)"
+                    subtitle="Manifiesto de entrega para repartidores"
                     stats={[
-                        { value: orders.length, label: 'Pedidos' },
-                        { value: sheetData.grandTotal, label: 'Total Platos' }
+                        { value: sheetData.grandTotal, label: 'Total Entregas' }
                     ]}
                     actions={[
                         <div key="date" className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border border-gray-200">
                             <Calendar size={18} className="text-gray-500" />
-                            <input
-                                type="date"
+                            <select
                                 value={selectedDate}
                                 onChange={(e) => setSelectedDate(e.target.value)}
-                                className="bg-transparent outline-none text-sm font-medium text-gray-700"
-                            />
+                                className="bg-transparent outline-none text-sm font-medium text-gray-700 appearance-none cursor-pointer pr-4"
+                            >
+                                {availableDates.length === 0 && <option value={selectedDate}>{selectedDate}</option>}
+                                {availableDates.map(date => (
+                                    <option key={date} value={date}>
+                                        {new Date(date + 'T12:00:00').toLocaleDateString('es-CR', { weekday: 'long', day: 'numeric', month: 'long' }).replace(/^\w/, c => c.toUpperCase())}
+                                    </option>
+                                ))}
+                            </select>
                         </div>,
                         <button
                             key="print"
@@ -196,7 +199,7 @@ export default function DispatchSheetView() {
                     </div>
                     <div className="text-right">
                         <div className="text-xl font-bold text-black">
-                            {new Date(selectedDate).toLocaleDateString('es-CR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                            {new Date(selectedDate + "T12:00:00").toLocaleDateString('es-CR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                         </div>
                         <div className="text-xs text-gray-500 mt-1">
                             Generado: {new Date().toLocaleTimeString()}
@@ -216,12 +219,8 @@ export default function DispatchSheetView() {
                             <div className="text-sm font-semibold uppercase text-gray-600">Resumen General</div>
                             <div className="flex gap-8">
                                 <div className="text-center">
-                                    <div className="text-2xl font-bold leading-none">{orders.length}</div>
-                                    <div className="text-[10px] uppercase tracking-wider">Pedidos</div>
-                                </div>
-                                <div className="text-center">
                                     <div className="text-2xl font-bold leading-none">{sheetData.grandTotal}</div>
-                                    <div className="text-[10px] uppercase tracking-wider">Platos Totales</div>
+                                    <div className="text-[10px] uppercase tracking-wider">Entregas Totales (Bolsas)</div>
                                 </div>
                             </div>
                         </div>
@@ -235,19 +234,29 @@ export default function DispatchSheetView() {
                                 </h3>
                                 <table className="w-full text-sm text-left border-collapse">
                                     <thead>
-                                        <tr className="border-b border-gray-300">
-                                            <th className="py-2 font-semibold text-gray-700 w-3/4">Plato / Ítem</th>
-                                            <th className="py-2 font-semibold text-black w-1/4 text-center">Cantidad</th>
-                                            <th className="py-2 font-semibold text-gray-400 w-16 text-right print:hidden">Check</th>
+                                        <tr className="border-b border-gray-300 bg-gray-100">
+                                            <th className="py-2 px-2 font-semibold text-gray-700 w-1/4">Cliente</th>
+                                            <th className="py-2 px-2 font-semibold text-gray-700 w-2/4">Dirección / Zona</th>
+                                            <th className="py-2 px-2 font-semibold text-gray-700 w-1/4">Contacto / Detalle</th>
+                                            <th className="py-2 px-2 font-semibold text-gray-400 w-16 text-right print:hidden">Check</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {section.rows.map((row, rIdx) => (
-                                            <tr key={rIdx} className="border-b border-gray-100 hover:bg-gray-50">
-                                                <td className="py-2 pr-4 align-top">{row.name}</td>
-                                                <td className="py-2 font-bold text-center align-top">{row.qty}</td>
-                                                <td className="py-2 text-right print:hidden">
-                                                    <input type="checkbox" className="w-4 h-4 rounded border-gray-300 text-black focus:ring-black" />
+                                            <tr key={rIdx} className="border-b border-gray-200 hover:bg-gray-50">
+                                                <td className="py-3 px-2 align-top font-bold text-gray-900">{row.cliente}</td>
+                                                <td className="py-3 px-2 align-top text-gray-700">
+                                                    {row.direccion}
+                                                    {row.observaciones && (
+                                                        <div className="text-xs text-orange-600 mt-1 font-semibold italic">⚠️ {row.observaciones}</div>
+                                                    )}
+                                                </td>
+                                                <td className="py-3 px-2 align-top text-gray-600">
+                                                    <div className="font-medium text-xs bg-gray-100 px-1 py-0.5 rounded inline-block mb-1">{row.plan}</div>
+                                                    <div className="text-xs">{row.telefono}</div>
+                                                </td>
+                                                <td className="py-3 px-2 text-right align-top print:hidden">
+                                                    <input type="checkbox" className="w-5 h-5 rounded border-gray-300 text-black focus:ring-black" />
                                                 </td>
                                             </tr>
                                         ))}

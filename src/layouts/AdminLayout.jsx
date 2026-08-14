@@ -98,40 +98,39 @@ export default function AdminLayout() {
         // 📊 General
         { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
 
-        // 🛒 Ventas
+        // 🛒 Operación Diaria (Más usados)
         { to: '/admin/orders', label: 'Pedidos', icon: ShoppingBag, badge: pendingOrdersCount },
-        { to: '/admin/clients', label: 'Clientes', icon: Users },
-
-        // 🍳 Operaciones
         { to: '/admin/sheets', label: 'Producción', icon: ClipboardList },
         { to: '/admin/dispatch-sheet', label: 'Hoja de Despacho', icon: FileText },
         { to: '/admin/delivery', label: 'Reparto', icon: Truck },
+        { to: '/admin/clients', label: 'Clientes', icon: Users },
 
-
-        // 🎁 Marketing
+        // 🍳 Catálogo y Productos
         { to: '/admin/menus', label: 'Menús', icon: UtensilsCrossed },
         { to: '/admin/pack-images', label: 'Imágenes Packs', icon: Image },
+
+        // 🎁 Marketing y Ventas
+        { to: '/admin/discounts', label: 'Descuentos', icon: BadgePercent },
         { to: '/admin/promotions', label: 'Promociones', icon: Gift },
         { to: '/admin/coupons', label: 'Cupones', icon: Tag },
         { to: '/admin/gift-cards', label: 'Tarjeta de Regalo', icon: Gift, badge: pendingGiftCardsCount },
-        // Tablero que junta las 5 pantallas de descuento; va antes que ellas
-        { to: '/admin/active-discounts', label: 'Descuentos Activos', icon: BadgePercent },
-        { to: '/admin/pack-discounts', label: 'Descuentos Packs', icon: BadgePercent },
-        { to: '/admin/individual-discounts', label: 'Descuentos Platos', icon: BadgePercent },
-        { to: '/admin/reports', label: 'Admin', icon: Target, highlight: true },
-        { to: '/admin/notifications', label: 'Notificaciones', icon: Bell },
-
-        // ⚙️ Configuración
         { to: '/admin/whatsapp-config', label: 'WhatsApp', icon: MessageCircle },
+
+        // ⚙️ Sistema y Reportes
+        { to: '/admin/reports', label: 'Admin (Reportes)', icon: Target, highlight: true },
+        { to: '/admin/notifications', label: 'Notificaciones', icon: Bell },
+        { to: '/admin/shipping', label: 'Costos de Envío', icon: Truck },
+        { to: '/admin/shipping-discount', label: 'Descuento Envío', icon: Truck },
+        
+        // 🔧 Configuración Técnica
+        { to: '/admin/substitutions-config', label: 'Sustituciones', icon: UtensilsCrossed },
         { to: '/admin/phone-audit', label: 'Revisar Teléfonos', icon: Phone },
         { to: '/admin/notifications-config', label: 'Config. Notificaciones', icon: Settings },
         { to: '/admin/policies-config', label: 'Políticas Legales', icon: FileText },
-        { to: '/admin/substitutions-config', label: 'Sustituciones', icon: UtensilsCrossed },
-        { to: '/admin/shipping', label: 'Costos de Envío', icon: Truck },
-        { to: '/admin/shipping-discount', label: 'Descuento Envío', icon: Truck },
 
         // 👑 Herramientas internas del dueño — marcar con superOnly: true.
         // Solo se renderizan para un super admin (ver filtro debajo).
+        { type: 'divider', label: 'Solo Dueño', superOnly: true },
         { to: '/admin/whatsapp-import', label: 'Importar WhatsApp', icon: MessageCircle, superOnly: true },
         { to: '/admin/monthly-packs', label: 'Packs Mensuales', icon: CalendarDays, superOnly: true },
     ].filter(item => !item.superOnly || isSuperAdmin());
@@ -141,7 +140,7 @@ export default function AdminLayout() {
         navigate('/');
     };
 
-    const SidebarContent = ({ mobile = false, collapsed = false }) => (
+    const renderSidebarContent = (mobile = false, collapsed = false) => (
         <>
             {/* Header del Sidebar */}
             <div className={`p-5 border-b border-white/10 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex justify-between items-center ${collapsed ? 'px-4' : ''}`}>
@@ -177,14 +176,35 @@ export default function AdminLayout() {
             </div>
 
             {/* Navegación con scroll - Fixed scroll issue */}
-            <nav className="flex-1 overflow-y-auto overscroll-contain p-3 space-y-1.5" style={{ scrollbarGutter: 'stable' }}>
-                {menuItems.map((item, index) => (
-                    <motion.div
-                        key={item.to}
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: index * 0.03 }}
-                    >
+            <nav data-scroll-persist="true" className="flex-1 overflow-y-auto overscroll-contain p-3 space-y-1.5" style={{ scrollbarGutter: 'stable' }}>
+                {menuItems.map((item, index) => {
+                    if (item.type === 'divider') {
+                        return (
+                            <motion.div
+                                key={`divider-${index}`}
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                transition={{ delay: index * 0.03 }}
+                                className="pt-4 pb-1"
+                            >
+                                {!collapsed ? (
+                                    <h3 className="px-4 text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+                                        {item.label}
+                                    </h3>
+                                ) : (
+                                    <div className="mx-4 border-t border-white/10" />
+                                )}
+                            </motion.div>
+                        );
+                    }
+
+                    return (
+                        <motion.div
+                            key={item.to}
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: index * 0.03 }}
+                        >
                         <NavLink
                             to={item.to}
                             end={item.end}
@@ -228,7 +248,8 @@ export default function AdminLayout() {
                             )}
                         </NavLink>
                     </motion.div>
-                ))}
+                    );
+                })}
             </nav>
 
             {/* Footer del Sidebar */}
@@ -265,7 +286,7 @@ export default function AdminLayout() {
                 transition={{ type: 'spring', damping: 25, stiffness: 200 }}
                 className="bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 hidden md:flex flex-col shadow-2xl border-r border-white/5 z-20 overflow-hidden print:hidden"
             >
-                <SidebarContent collapsed={isSidebarCollapsed} />
+                {renderSidebarContent(false, isSidebarCollapsed)}
             </motion.aside>
 
             {/* Mobile Sidebar Drawer */}
@@ -289,7 +310,7 @@ export default function AdminLayout() {
                             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
                             className="fixed left-0 top-0 bottom-0 w-72 bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 text-white flex flex-col shadow-2xl border-r border-white/5 z-50 md:hidden print:hidden"
                         >
-                            <SidebarContent mobile />
+                            {renderSidebarContent(true, false)}
                         </motion.aside>
                     </>
                 )}

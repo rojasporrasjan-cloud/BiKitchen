@@ -75,15 +75,14 @@ const GiftCardsView = lazyWithRetry(() => import('./pages/admin/GiftCardsView'))
 const ShippingView = lazyWithRetry(() => import('./pages/admin/ShippingView'));
 const Login = lazyWithRetry(() => import('./pages/admin/Login'));
 const ReportsView = lazyWithRetry(() => import('./pages/admin/ReportsView'));
-const PackDiscountsView = lazyWithRetry(() => import('./pages/admin/PackDiscountsView'));
-const IndividualDiscountsView = lazyWithRetry(() => import('./pages/admin/IndividualDiscountsView'));
+const DiscountsManagerView = lazyWithRetry(() => import('./pages/admin/DiscountsManagerView'));
 const NotificationsConfigView = lazyWithRetry(() => import('./pages/admin/NotificationsConfigView'));
 const PoliciesConfigView = lazyWithRetry(() => import('./pages/admin/PoliciesConfigView'));
 const SubstitutionsConfigView = lazyWithRetry(() => import('./pages/admin/SubstitutionsConfigView'));
 const PrintProductionView = lazyWithRetry(() => import('./pages/admin/PrintProductionView'));
 const WhatsAppImportView = lazyWithRetry(() => import('./pages/admin/WhatsAppImportView'));
 const MonthlyPacksView = lazyWithRetry(() => import('./pages/admin/MonthlyPacksView'));
-const ActiveDiscountsView = lazyWithRetry(() => import('./pages/admin/ActiveDiscountsView'));
+const DriverPortalView = lazyWithRetry(() => import('./pages/driver/DriverPortalView'));
 
 import SmoothScroll from './components/SmoothScroll';
 import ScrollToTop from './components/ScrollToTop';
@@ -216,7 +215,7 @@ function AnimatedRoutes() {
     <ErrorBoundary>
       <Suspense fallback={<PageLoader />}>
         <AnimatePresence mode="wait">
-          <Routes location={location} key={location.pathname}>
+          <Routes location={location} key={location.pathname.startsWith('/admin') ? 'admin' : location.pathname}>
             {/* Public Routes */}
             <Route path="/" element={<LandingPage />} />
             <Route path="/menu" element={<CatalogPage />} />
@@ -257,6 +256,13 @@ function AnimatedRoutes() {
             {/* Tilopay payment return */}
             <Route path="/tilopay/return" element={<TilopayReturnPage />} />
 
+            {/* Repartidores Route - Protected */}
+            <Route path="/repartidor" element={
+              <ProtectedRoute requireDriver={true}>
+                <DriverPortalView />
+              </ProtectedRoute>
+            } />
+
             {/* Admin Routes - Protected */}
             <Route path="/admin/login" element={<Login />} />
             <Route path="/admin" element={
@@ -275,6 +281,7 @@ function AnimatedRoutes() {
               <Route path="promotions" element={<PromotionsView />} />
               <Route path="coupons" element={<CouponsView />} />
               <Route path="notifications" element={<NotificationsView />} />
+              <Route path="discounts" element={<DiscountsManagerView />} />
               <Route path="gift-cards" element={<GiftCardsView />} />
               <Route path="whatsapp-config" element={<WhatsAppConfigView />} />
               <Route path="test-whatsapp" element={<TestWhatsAppPage />} />
@@ -282,8 +289,6 @@ function AnimatedRoutes() {
               <Route path="shipping-discount" element={<ShippingDiscountView />} />
               <Route path="shipping" element={<ShippingView />} />
               <Route path="reports" element={<ReportsView />} />
-              <Route path="pack-discounts" element={<PackDiscountsView />} />
-              <Route path="individual-discounts" element={<IndividualDiscountsView />} />
               <Route path="notifications-config" element={<NotificationsConfigView />} />
               <Route path="policies-config" element={<PoliciesConfigView />} />
               <Route path="substitutions-config" element={<SubstitutionsConfigView />} />
@@ -292,7 +297,6 @@ function AnimatedRoutes() {
                   para que esconder la opción del menú no sea la única barrera. */}
               <Route path="whatsapp-import" element={<WhatsAppImportView />} />
               <Route path="monthly-packs" element={<MonthlyPacksView />} />
-              <Route path="active-discounts" element={<ActiveDiscountsView />} />
             </Route>
 
             {/* 404 - Catch all */}

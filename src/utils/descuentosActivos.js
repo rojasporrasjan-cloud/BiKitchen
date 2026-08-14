@@ -13,8 +13,8 @@
 import { formatPrice } from './formatters';
 
 export const ORIGENES = {
-    pack: { etiqueta: 'Pack', ruta: '/admin/pack-discounts', pantalla: 'Descuentos Packs' },
-    plato: { etiqueta: 'Plato', ruta: '/admin/individual-discounts', pantalla: 'Descuentos Platos' },
+    pack: { etiqueta: 'Pack', ruta: '/admin/discounts?tab=packs', pantalla: 'Descuentos Packs' },
+    plato: { etiqueta: 'Plato', ruta: '/admin/discounts?tab=individuals', pantalla: 'Descuentos Platos' },
     cupon: { etiqueta: 'Cupón', ruta: '/admin/coupons', pantalla: 'Cupones' },
     envio: { etiqueta: 'Envío', ruta: '/admin/shipping-discount', pantalla: 'Descuento Envío' },
     promocion: { etiqueta: 'Promoción', ruta: '/admin/promotions', pantalla: 'Promociones' }

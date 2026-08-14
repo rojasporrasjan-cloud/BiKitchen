@@ -19,8 +19,8 @@ export default function ScrollToTop() {
         const main = document.querySelector('main');
         if (main) main.scrollTop = 0;
         
-        // Y cualquier contenedor con overflow
-        document.querySelectorAll('[class*="overflow"]').forEach(el => {
+        // Y cualquier contenedor con overflow que no tenga data-scroll-persist
+        document.querySelectorAll('[class*="overflow"]:not([data-scroll-persist])').forEach(el => {
             el.scrollTop = 0;
         });
     };

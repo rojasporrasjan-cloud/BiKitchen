@@ -7,6 +7,11 @@ import {
     buildKitchenSheetData,
     buildPackagingSheetData
 } from '../../utils/logisticsUtils';
+import {
+    mapPackNameToMenuKey,
+    isIndividualPack,
+    getDefaultGrams
+} from '../../utils/packClassification';
 import { getOfficialMenus } from '../../utils/firestoreMenus';
 import { getScheduleFromOrder } from '../../utils/orderDates';
 
@@ -97,6 +102,11 @@ export default function PrintProductionView() {
                 cantidad: cData.cantidadMenus || 1, 
                 observaciones: cData.observaciones || '',
                 platos: overridePlates !== null ? overridePlates : (cData.platos || []),
+                zona_envio: cData.zona_envio || cData.rawPedido?.zona_envio || '',
+                incluyeDesayuno: !!cData.incluyeDesayuno,
+                categoria: cData.categoria || '',
+                categoryLabel: cData.categoryLabel || '',
+                plan: cData.plan || cData.tipoMenu || '',
                 rawPedido: cData
             });
         }
@@ -110,53 +120,256 @@ export default function PrintProductionView() {
         const packName = c.plan || c.tipoMenu || 'Pack Estándar';
         addClientToPackMap(packName, c);
 
-        // Si el cliente tiene el add-on de desayunos, lo agregamos también al "Pack de Desayunos"
-        // para que se impriman sus etiquetas y se calculen sus ingredientes en la cocina.
-        if (c.incluyeDesayuno && !packName.toLowerCase().includes('desayuno')) {
+        // Si el cliente tiene el add-on de desayunos o es una promo con regalía de desayunos, 
+        // lo agregamos también al "Pack de Desayunos" para que se impriman sus etiquetas separadas.
+        const menuKey = mapPackNameToMenuKey(packName);
+        const nameLower = packName.toLowerCase();
+        const hasBreakfastGift = nameLower.includes('regalia de desayuno') || nameLower.includes('regalía de desayuno') || nameLower.includes('+ desayuno') || nameLower.includes('con desayuno');
+        
+        if ((c.incluyeDesayuno || hasBreakfastGift) && menuKey !== 'desayuno') {
             // Le pasamos overridePlates = [] para que NO use los platos de almuerzo/cena,
             // sino que caiga al fallback del menú oficial de desayunos.
             addClientToPackMap('Pack de Desayunos', c, []);
         }
     });
 
-    const mapPackNameToMenuKey = (name) => {
-        const n = name.toLowerCase();
-        if (n.includes('bajo calor')) return 'bajoCalorias';
-        if (n.includes('sin carbos')) return 'sinCarbos';
-        if (n.includes('keto')) return 'keto';
-        if (n.includes('vegetariano')) return 'vegetariano';
-        if (n.includes('casadito')) return 'casaditos';
-        if (n.includes('full pack')) return 'fullPack';
-        if (n.includes('desayuno')) return 'desayuno';
-        if (n.includes('regular') || n.includes('estandar') || n.includes('estándar')) return 'regular';
-        if ((n.includes('mensual') || n.includes('quincenal')) && !n.includes('proteína') && !n.includes('proteina')) return 'regular';
-        return null;
-    };
-
-    const isIndividualPack = (name) => {
-        const n = name.toLowerCase();
-        return n.includes('individual') || n.includes('proteína') || n.includes('proteina') || n.includes('granel');
-    };
-
-    const getDefaultGrams = (packName) => {
-        const n = (packName || '').toLowerCase();
-        if (n.includes('bajo calor') || n.includes('sin carbo')) return 120;
-        if (n.includes('keto')) return 200;
-        if (n.includes('regular') || n.includes('casadito')) return 100;
-        return 150; // Full pack y default
-    };
-
     const allPackNames = Object.keys(packsMap).sort();
-    const regularPackNames = allPackNames.filter(n => !isIndividualPack(n));
-    const individualPackNames = allPackNames.filter(n => isIndividualPack(n));
+    const isDesayunoPack = (n) => mapPackNameToMenuKey(n) === 'desayuno';
+
+    const isActuallyIndividual = (packName) => {
+        if (isIndividualPack(packName)) return true;
+        const packData = packsMap[packName];
+        if (!packData) return false;
+        return packData.clientes.some(c => {
+            const obs = String(c.observaciones || '').toLowerCase();
+            if (obs.includes('proteina') || obs.includes('proteína') || obs.includes('individual') || obs.includes('granel')) return true;
+            const cat = String(c.categoria || '').toLowerCase();
+            if (cat.includes('individual')) return true;
+            return false;
+        });
+    };
+
+    // ── Consolidar packs que comparten el mismo menú (mismos platos) ──
+    // "Pack Bajo Calorías Promo Almuerzo y Cena" y "Pack 2 Semanas Bajo Calorías"
+    // tienen los MISMOS platos → se fusionan en UNA sola hoja de empaque.
+    const MENU_LABELS = {
+        regular: 'PACK REGULAR',
+        fullPack: 'FULL PACK',
+        bajoCalorias: 'PACK BAJO EN CALORÍAS',
+        sinCarbos: 'PACK SIN CARBOS',
+        keto: 'PACK KETO',
+        vegetariano: 'PACK VEGETARIANO',
+        casaditos: 'PACK CASADITOS',
+    };
+    const MENU_ORDER = ['regular', 'fullPack', 'bajoCalorias', 'sinCarbos', 'keto', 'vegetariano', 'casaditos', null];
+
+    const consolidatedPacksMap = {};
+    const packNameToConsolidated = {}; // mapea nombre original → nombre consolidado
+    
+    allPackNames.forEach(packName => {
+        if (isActuallyIndividual(packName) || isDesayunoPack(packName)) return;
+        
+        const menuKey = mapPackNameToMenuKey(packName);
+        // Si tiene menuKey, consolidar bajo el label de la familia
+        const consolidatedName = (menuKey && MENU_LABELS[menuKey]) ? MENU_LABELS[menuKey] : packName;
+        
+        packNameToConsolidated[packName] = consolidatedName;
+        
+        if (!consolidatedPacksMap[consolidatedName]) {
+            consolidatedPacksMap[consolidatedName] = {
+                name: consolidatedName,
+                clientes: [],
+                platosBase: [],
+                totalPacks: 0,
+                sourcePackNames: [], // nombres originales de las promos fusionadas
+                menuKey: menuKey,
+            };
+        }
+        
+        const target = consolidatedPacksMap[consolidatedName];
+        const source = packsMap[packName];
+        
+        // Agregar cada cliente a la hoja consolidada
+        source.clientes.forEach(c => {
+            target.clientes.push({ ...c });
+        });
+        
+        target.totalPacks += source.totalPacks;
+        if (target.platosBase.length === 0 && source.platosBase.length > 0) {
+            target.platosBase = source.platosBase;
+        }
+        if (!target.sourcePackNames.includes(packName)) {
+            target.sourcePackNames.push(packName);
+        }
+    });
+
+    // Ordenar las hojas consolidadas por familia de menú
+    const getMenuIndex = (name) => {
+        const entry = consolidatedPacksMap[name];
+        const key = entry?.menuKey || mapPackNameToMenuKey(name);
+        const idx = MENU_ORDER.indexOf(key);
+        return idx === -1 ? MENU_ORDER.length : idx;
+    };
+
+    const regularPackNames = Object.keys(consolidatedPacksMap).sort((a, b) => {
+        const idxA = getMenuIndex(a);
+        const idxB = getMenuIndex(b);
+        if (idxA !== idxB) return idxA - idxB;
+        const countA = consolidatedPacksMap[a]?.totalPacks || 0;
+        const countB = consolidatedPacksMap[b]?.totalPacks || 0;
+        if (countA !== countB) return countB - countA;
+        return a.localeCompare(b);
+    });
+
+    const sortedIndividualNames = allPackNames.filter(n => isActuallyIndividual(n) && !isDesayunoPack(n));
+    const individualPackNames = sortedIndividualNames;
+    const desayunoPackNames = allPackNames.filter(n => isDesayunoPack(n));
+
+    const clientToOtherPacks = {};
+    Object.keys(packsMap).forEach(pName => {
+        // Usar nombres cortos y genéricos para no ensuciar la hoja de empaque
+        let shortName = pName;
+        if (isDesayunoPack(pName)) {
+            shortName = 'Desayunos';
+        } else if (isActuallyIndividual(pName)) {
+            shortName = 'Individuales';
+        } else {
+            const menuKey = mapPackNameToMenuKey(pName);
+            shortName = (menuKey && MENU_LABELS[menuKey]) ? MENU_LABELS[menuKey] : pName;
+        }
+
+        packsMap[pName].clientes.forEach(c => {
+            const cName = c.nombre.trim().toLowerCase();
+            if (!clientToOtherPacks[cName]) clientToOtherPacks[cName] = [];
+            if (!clientToOtherPacks[cName].includes(shortName)) {
+                clientToOtherPacks[cName].push(shortName);
+            }
+        });
+    });
+
+    const getOtherPacksTag = (cName, currentPackName) => {
+        if (!cName) return '';
+        
+        // Normalizar el pack actual para poder filtrarlo
+        let currentShortName = currentPackName;
+        if (isDesayunoPack(currentPackName)) {
+            currentShortName = 'Desayunos';
+        } else if (isActuallyIndividual(currentPackName)) {
+            currentShortName = 'Individuales';
+        } else {
+            const menuKey = mapPackNameToMenuKey(currentPackName);
+            currentShortName = (menuKey && MENU_LABELS[menuKey]) ? MENU_LABELS[menuKey] : currentPackName;
+        }
+
+        const nameLower = cName.trim().toLowerCase();
+        const otherPacks = (clientToOtherPacks[nameLower] || []).filter(p => p !== currentShortName);
+        if (otherPacks.length > 0) {
+            return `LLEVA TAMBIÉN: ${otherPacks.join(', ')}`;
+        }
+        return '';
+    };
+
+    const renderDesayunosTable = (packName, packData, currentDate) => {
+        const menuKey = mapPackNameToMenuKey(packName);
+        let rawPlatos = (officialMenus && menuKey && officialMenus[menuKey]) ? officialMenus[menuKey].platos || officialMenus[menuKey] : [];
+        if (!rawPlatos || rawPlatos.length === 0) rawPlatos = packData.platosBase || []; // fallback
+
+        // Flatten clients for table display
+        const clientsList = [];
+        packData.clientes.forEach(c => {
+            for (let i = 0; i < (c.cantidad || 1); i++) {
+                clientsList.push(c);
+            }
+        });
+
+        const maxRows = Math.max(rawPlatos.length, clientsList.length);
+        const rows = [];
+        for (let i = 0; i < maxRows; i++) {
+            const dish = rawPlatos[i];
+            const client = clientsList[i];
+            
+            let dishDesc = '';
+            if (dish) {
+                const original = packData.platosBase[i] || {};
+                const isOfficial = typeof dish.proteina === 'string';
+                dishDesc = isOfficial ? dish.proteina : (dish.proteina?.nombre || original.proteina?.nombre || '—');
+            }
+
+            let clientName = '';
+            let clientNote = '';
+            if (client) {
+                const zone = client.zona_envio || '';
+                const zoneStr = zone && zone !== 'No especificada' && zone.toLowerCase() !== 'recoge en tienda' ? `, ${zone}` : '';
+                
+                let displayName = client.nombre;
+                if (client.rawPedido) {
+                    const schedule = getScheduleFromOrder(client.rawPedido);
+                    const dateIdx = schedule.indexOf(currentDate);
+                    if (schedule.length > 1 && dateIdx !== -1) {
+                        displayName = `${client.nombre} (Semana ${dateIdx + 1})`;
+                    }
+                }
+                clientName = `${displayName}${zoneStr}`;
+                
+                const tags = [];
+                if (client.rawPedido?.plan && !client.rawPedido.plan.toLowerCase().includes('desayuno')) tags.push(client.rawPedido.plan);
+                const otherPacksTag = getOtherPacksTag(client.nombre, packName);
+                if (otherPacksTag) tags.push(otherPacksTag);
+                clientNote = tags.join(' | ');
+            }
+
+            rows.push(
+                <tr key={i} className="border border-black bg-white">
+                    <td className="border border-black p-2 text-center">{dish ? (i+1) : ''}</td>
+                    <td className="border border-black p-2 text-left">{dishDesc}</td>
+                    <td className="border border-black p-2 text-center">{dish ? packData.totalPacks : ''}</td>
+                    <td className="border border-black p-2 text-xs text-center">{clientNote}</td>
+                    <td className={`border border-black p-2 text-center ${client ? 'bg-[#e2f0d9]' : ''}`}>{clientName}</td>
+                </tr>
+            );
+        }
+
+        return (
+            <div key={`empaque-${packName}`} className="mb-12 print:mb-0 print:break-after-page print:[page-break-after:always]">
+                <table className="w-full border-collapse border border-black text-sm table-fixed">
+                    <thead>
+                        <tr>
+                            <th colSpan="5" className="bg-[#f4b084] text-black font-bold text-2xl p-2 border border-black text-center uppercase tracking-wide">
+                                DESAYUNOS
+                            </th>
+                        </tr>
+                        <tr className="bg-[#fce4d6]">
+                            <th className="border border-black p-2 w-16 text-center">Plato</th>
+                            <th className="border border-black p-2 text-center">Descripcion</th>
+                            <th className="border border-black p-2 w-24 text-center">Cantidad</th>
+                            <th className="border border-black p-2 w-48 text-center">NOTA</th>
+                            <th className="border border-black p-2 w-64 text-center">Cliente</th>
+                        </tr>
+                    </thead>
+                    <tbody className="break-inside-avoid print:break-inside-avoid">
+                        {rows}
+                    </tbody>
+                </table>
+            </div>
+        );
+    };
 
     const renderIndividuales = () => {
+        // ... (existing code)
         const clientsData = {};
         individualPackNames.forEach(packName => {
             const packData = packsMap[packName];
             packData.clientes.forEach(c => {
-                if (!clientsData[c.nombre]) {
-                    clientsData[c.nombre] = { nombre: c.nombre, items: [], observaciones: c.observaciones };
+                const zone = c.zona_envio || '';
+                const zoneStr = zone && zone !== 'No especificada' && zone.toLowerCase() !== 'recoge en tienda' ? `, ${zone}` : '';
+                const fullName = `${c.nombre}${zoneStr}`;
+
+                const otherPacksTag = getOtherPacksTag(c.nombre, packName);
+                const obs = c.observaciones ? `${c.observaciones}` : '';
+                const finalObs = [obs, otherPacksTag].filter(Boolean).join(' | ');
+
+                if (!clientsData[fullName]) {
+                    clientsData[fullName] = { nombre: fullName, items: [], observaciones: finalObs };
                 }
                 
                 if (c.platos && c.platos.length > 0) {
@@ -165,7 +378,7 @@ export default function PrintProductionView() {
                         const protName = p.proteina?.nombre || packName;
                         const qty = p.proteina?.gramosPorPorcion ? `${p.proteina.gramosPorPorcion}g` : '1 porción';
                         
-                        clientsData[c.nombre].items.push({
+                        clientsData[fullName].items.push({
                             name: protName,
                             qty: qty,
                             count: c.cantidad
@@ -173,7 +386,7 @@ export default function PrintProductionView() {
                     });
                 } else {
                     // Fallback
-                    clientsData[c.nombre].items.push({
+                    clientsData[fullName].items.push({
                         name: packName,
                         qty: `${c.cantidad} packs`
                     });
@@ -290,10 +503,10 @@ export default function PrintProductionView() {
 
         // 1. Process regular packs
         regularPackNames.forEach(packName => {
-            const packData = packsMap[packName];
-            if (packData.totalPacks === 0) return;
+            const packData = consolidatedPacksMap[packName];
+            if (!packData || packData.totalPacks === 0) return;
             
-            const menuKey = mapPackNameToMenuKey(packName);
+            const menuKey = packData.menuKey || mapPackNameToMenuKey(packName);
             const rawPlatos = (officialMenus && menuKey && Array.isArray(officialMenus[menuKey])) ? officialMenus[menuKey] : [];
             
             if (rawPlatos.length === 0) {
@@ -518,11 +731,15 @@ export default function PrintProductionView() {
                         >
                             Ver Packs Normales
                         </button>
-                        <button 
+                        <button
                             onClick={() => setEmpaqueTab('individuales')}
-                            className={`px-6 py-2 rounded-lg font-bold border-2 transition-all ${empaqueTab === 'individuales' ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-purple-600 border-purple-200 hover:border-purple-600'}`}
+                            className={`px-4 py-2 border rounded shadow transition-colors ${
+                                empaqueTab === 'individuales' 
+                                ? 'bg-purple-600 text-white font-bold border-purple-600' 
+                                : 'bg-white text-purple-600 font-bold border-purple-200 hover:bg-purple-50'
+                            }`}
                         >
-                            Ver Individuales y Proteínas
+                            Ver Individuales y Desayunos
                         </button>
                     </div>
                 )}
@@ -543,17 +760,18 @@ export default function PrintProductionView() {
                     </h1>
                     
                     {empaqueTab === 'individuales' ? (
-                        renderIndividuales()
+                        <>
+                            {desayunoPackNames.map(packName => renderDesayunosTable(packName, packsMap[packName], date))}
+                            {renderIndividuales(individualPackNames)}
+                        </>
                     ) : (
                         regularPackNames.map((packName) => {
-                            const packData = packsMap[packName];
-                            const kitchenMenuData = kitchenData.porMenu[packName];
+                            const packData = consolidatedPacksMap[packName];
+                            const kitchenMenuData = kitchenData.porMenu[packName] || (packData.sourcePackNames?.length > 0 ? kitchenData.porMenu[packData.sourcePackNames[0]] : null);
                 
-                const menuKey = mapPackNameToMenuKey(packName);
+                const menuKey = packData.menuKey || mapPackNameToMenuKey(packName);
                 let rawPlatos = (officialMenus && menuKey && officialMenus[menuKey]) ? officialMenus[menuKey].platos || officialMenus[menuKey] : [];
                 if (!rawPlatos || rawPlatos.length === 0) rawPlatos = packData.platosBase || []; // fallback
-                
-
                 
                 // Generar especificaciones
                 const specsList = packData.clientes.map(c => {
@@ -653,7 +871,7 @@ export default function PrintProductionView() {
                                                 
                                                 if (client) {
                                                     const tags = [];
-                                                    if (client.incluyeDesayuno) tags.push('Desayunos');
+                                                    if (client.incluyeDesayuno) tags.push('🌅 Desayunos');
                                                     
                                                     const isTwoPack = client.categoria === 'two_pack' || /two\s*pack/i.test(client.categoryLabel || '') || /two\s*pack/i.test(client.plan || '');
                                                     if (isTwoPack) tags.push('Two Pack');
@@ -661,18 +879,23 @@ export default function PrintProductionView() {
                                                     const isIndividuales = client.categoria === 'individuales' || /individual/i.test(client.categoryLabel || '') || /individual/i.test(client.plan || '');
                                                     if (isIndividuales) tags.push('Individuales');
 
+                                                    const otherPacksTag = getOtherPacksTag(client.nombre, packName);
+                                                    if (otherPacksTag) tags.push(otherPacksTag);
+
                                                     let notes = client.observaciones ? `** ${client.observaciones}` : '';
                                                     if (tags.length > 0) {
                                                         const tagsStr = `[${tags.join(', ')}]`;
                                                         notes = notes ? `${tagsStr}\n${notes}` : tagsStr;
                                                     }
 
-                                                    let clientDisplayName = `${client.nombre} (${client.cantidad})`;
+                                                    const zone = client.zona_envio || '';
+                                                    const zoneStr = zone && zone !== 'No especificada' && zone.toLowerCase() !== 'recoge en tienda' ? `, ${zone}` : '';
+                                                    let clientDisplayName = `${client.nombre} (${client.cantidad})${zoneStr}`;
                                                     if (client.rawPedido) {
                                                         const schedule = getScheduleFromOrder(client.rawPedido);
                                                         const dateIdx = schedule.indexOf(date);
                                                         if (schedule.length > 1 && dateIdx !== -1) {
-                                                            clientDisplayName = `${client.nombre} (${client.cantidad}) (Semana ${dateIdx + 1})`;
+                                                            clientDisplayName = `${client.nombre} (${client.cantidad}) (Semana ${dateIdx + 1})${zoneStr}`;
                                                         }
                                                     }
 

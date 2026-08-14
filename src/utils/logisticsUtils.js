@@ -223,7 +223,9 @@ export function mapPedidosFromLegacy(rawPedidos) {
       cliente: p.cliente,
       telefono: p.telefono,
       direccion: p.direccion,
+      zona_envio: p.zona_envio || p.zona_de_envio || p.zona || '',
       tipoMenu: p.tipoMenu || p.plan || 'Desconocido',
+      plan: p.plan || null,
       cantidadMenus: p.cantidadMenus || 1,
       fecha_entrega: p.fecha_entrega,
       observaciones: p.observaciones || '',
@@ -530,6 +532,7 @@ export function buildPackagingSheetData(pedidos, menus, workloadInfo) {
     empaquetador: empaquetadorPorCliente[p.cliente] || null,
     categoria: p.categoria || p.category || (p.platos && p.platos[0]?.category) || '',
     categoryLabel: p.categoryLabel || (p.platos && p.platos[0]?.categoryLabel) || '',
+    zona_envio: p.zona_envio || '',
     rawPedido: p
   }));
 

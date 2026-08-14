@@ -59,8 +59,28 @@ export const resolverCorreo = (correoCrudo, telefono) => {
  * @param {object} [options] - { createdBy, orderNumber }
  * @returns {object} documento listo para addDoc(collection(db,'pedidos'), ...)
  */
+/**
+ * ¿El pedido es de platos individuales y no de un pack?
+ *
+ * Importa para la hoja de cocina: los packs se buscan en el Menú Semanal, los
+ * individuales no. Si un plato suelto se guarda como pack, la hoja va a buscar
+ * un menú que no existe y sale el aviso rojo de "Falta configurar el Menú Semanal".
+ *
+ * La regla es simple a propósito: si el nombre no dice "pack", es un plato suelto.
+ * El usuario puede corregirlo en la vista previa.
+ */
+export const pareceIndividual = (items = []) => {
+    const nombres = items.map(i => String(i?.nombre || ''));
+    if (nombres.length === 0) return false;
+    return !nombres.some(n => /\bpacks?\b/i.test(n));
+};
+
+/** Nombre bajo el que la hoja de cocina agrupa los platos sueltos. */
+export const PLAN_INDIVIDUALES = 'Individuales';
+
 export const buildPedidoFromImport = (parsed, options = {}) => {
     const { createdBy = 'admin', orderNumber, nivelCliente = null } = options;
+    const esIndividual = options.esIndividual ?? pareceIndividual(parsed?.items);
 
     const total = num(parsed?.total);
     const fechas = Array.isArray(parsed?.fechasEntrega) ? parsed.fechasEntrega.filter(Boolean) : [];
@@ -89,8 +109,8 @@ export const buildPedidoFromImport = (parsed, options = {}) => {
             proteina: '',
             carbo: '',
             ensalada: '',
-            category: null,
-            categoryLabel: null,
+            category: esIndividual ? 'individuales' : null,
+            categoryLabel: esIndividual ? 'Individuales' : null,
             // Marca el plan para que la hoja de producción vea TODAS las entregas
             plan: planPorEntregas,
             planLabel: planPorEntregas === 'monthly' ? 'Mensual'
@@ -117,7 +137,10 @@ export const buildPedidoFromImport = (parsed, options = {}) => {
         costo_envio: num(parsed?.costoEnvio),
         envio_por_confirmar: false,
 
-        plan: items[0]?.nombre || 'Pedido WhatsApp',
+        // La hoja de cocina agrupa por este campo. Los platos sueltos van todos bajo
+        // "Individuales" para que NO se busque un Menú Semanal que no existe.
+        plan: esIndividual ? PLAN_INDIVIDUALES : (items[0]?.nombre || 'Pedido WhatsApp'),
+        esIndividual,
         fecha_entrega: fechas[0] || null,
         fechas_entrega: fechas,
         horario_preferido: '9:00 AM - 2:00 PM',

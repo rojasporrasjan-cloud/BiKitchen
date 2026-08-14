@@ -33,6 +33,14 @@ export function AuthProvider({ children }) {
     };
 
     /**
+     * Valida si el usuario es un repartidor.
+     * Los administradores también tienen acceso a las vistas de repartidor.
+     */
+    const isDriver = () => {
+        return userRole === 'repartidor' || userRole === 'REPARTIDOR' || isAdmin();
+    };
+
+    /**
      * Jerarquía por encima de admin — solo el dueño ve las herramientas internas.
      * Controla visibilidad en el panel, NO permisos de Firestore.
      */
@@ -47,18 +55,21 @@ export function AuthProvider({ children }) {
                 // Forzar rol admin si el email coincide
                 if (ADMIN_EMAILS.includes(cleanEmail)) {
                     setUserRole('admin');
-                }
-
-                try {
-                    const userDoc = await getDoc(doc(db, 'users', user.uid));
-                    if (userDoc.exists()) {
-                        const data = userDoc.data();
-                        if (data.role?.toLowerCase().trim() === 'admin') {
-                            setUserRole('admin');
+                } else {
+                    try {
+                        const userDoc = await getDoc(doc(db, 'users', user.uid));
+                        if (userDoc.exists()) {
+                            const data = userDoc.data();
+                            const role = data.role?.toLowerCase().trim();
+                            if (role === 'admin') {
+                                setUserRole('admin');
+                            } else if (role === 'repartidor') {
+                                setUserRole('repartidor');
+                            }
                         }
+                    } catch (error) {
+                        // Solo log de error genérico en desarrollo
                     }
-                } catch (error) {
-                    // Solo log de error genérico en desarrollo
                 }
             } else {
                 setCurrentUser(null);
@@ -123,6 +134,7 @@ export function AuthProvider({ children }) {
         currentUser,
         userRole,
         isAdmin,
+        isDriver,
         isSuperAdmin,
         login,
         register,

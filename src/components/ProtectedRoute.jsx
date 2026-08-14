@@ -8,8 +8,8 @@ import { useAuth } from '../context/AuthContext';
  * @param {React.ReactNode} props.children - Componentes hijos a renderizar si está autenticado
  * @param {boolean} props.requireAdmin - Si es true, requiere rol de admin
  */
-export default function ProtectedRoute({ children, requireAdmin = false }) {
-    const { currentUser, isAdmin, loading } = useAuth();
+export default function ProtectedRoute({ children, requireAdmin = false, requireDriver = false }) {
+    const { currentUser, isAdmin, isDriver, loading } = useAuth();
     const location = useLocation();
 
     // Mostrar loading mientras se verifica la autenticación
@@ -31,6 +31,11 @@ export default function ProtectedRoute({ children, requireAdmin = false }) {
 
     // Si requiere admin y no es admin, redirigir a acceso denegado
     if (requireAdmin && !isAdmin()) {
+        return <Navigate to="/acceso-denegado" state={{ from: location }} replace />;
+    }
+
+    // Si requiere repartidor y no es repartidor, redirigir a acceso denegado
+    if (requireDriver && !isDriver()) {
         return <Navigate to="/acceso-denegado" state={{ from: location }} replace />;
     }
 

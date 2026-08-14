@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 
 export default function Login() {
     const navigate = useNavigate();
-    const { login, resetPassword, currentUser, isAdmin } = useAuth();
+    const { login, resetPassword, currentUser, isAdmin, isDriver, userRole } = useAuth();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
@@ -13,12 +13,18 @@ export default function Login() {
     const [error, setError] = useState('');
     const [info, setInfo] = useState('');
 
-    // Si ya está logueado como admin, redirigir
+    // Si ya está logueado como admin o repartidor, redirigir
     useEffect(() => {
-        if (currentUser && isAdmin()) {
-            navigate('/admin');
+        if (currentUser) {
+            if (isAdmin()) {
+                navigate('/admin');
+            } else if (isDriver()) {
+                navigate('/repartidor');
+            } else if (userRole === 'user') { // It might be still loading the role, but if it's explicitly 'user' it's forbidden
+                // Only throw error if we are certain they are a normal user, wait for loading to finish otherwise.
+            }
         }
-    }, [currentUser, isAdmin, navigate]);
+    }, [currentUser, isAdmin, isDriver, userRole, navigate]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -29,16 +35,18 @@ export default function Login() {
         const result = await login(email, password);
 
         if (result.success) {
-            if (result.role === 'admin') {
-                navigate('/admin');
-            } else {
-                setError('No tienes permisos de administrador');
-            }
+            // Re-fetch role from context state or verify what was loaded
+            // Actually, `login` doesn't return the role in AuthContext.jsx currently.
+            // But wait, the AuthContext `login` just returns `{success: true}`.
+            // The `onAuthStateChanged` hook updates `userRole`.
+            // But we need to redirect immediately, or just rely on the effect.
+            // Let's rely on the effect below for automatic redirection.
+            // Wait, we need to let the useEffect handle the redirection once role is loaded.
+            // So we just don't do anything here on success except wait.
         } else {
             setError(result.error);
+            setLoading(false);
         }
-
-        setLoading(false);
     };
 
     return (

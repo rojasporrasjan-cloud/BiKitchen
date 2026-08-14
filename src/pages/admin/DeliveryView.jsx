@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Truck, MapPin, Phone, Check, Calendar, Navigation, Clock, Package, RefreshCw, CheckCircle, AlertCircle, TruckIcon, ChevronDown } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { Truck, MapPin, Phone, Check, Calendar, Navigation, Clock, Package, RefreshCw, CheckCircle, AlertCircle, ChevronDown, Map, Save, GripVertical } from 'lucide-react';
+import { motion, Reorder } from 'framer-motion';
 import { db } from '../../firebase/config';
 import { cachedFetch, invalidateCache } from '../../utils/firestoreCache';
 import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
@@ -17,6 +17,8 @@ export default function DeliveryView() {
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
     const [deliveries, setDeliveries] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [isEditingRoute, setIsEditingRoute] = useState(false);
+    const [savingRoute, setSavingRoute] = useState(false);
 
     // Cargar pedidos de Firebase por fecha
     useEffect(() => {
@@ -58,8 +60,22 @@ export default function DeliveryView() {
                     });
             }, 'dashboard');
 
-            // Ordenar por cliente
-            pedidos.sort((a, b) => (a.cliente || '').localeCompare(b.cliente || ''));
+            // Ordenar: primero por routeOrder, luego por zona (agrupación), luego alfabético
+            pedidos.sort((a, b) => {
+                if (a.routeOrder !== undefined && b.routeOrder !== undefined) {
+                    return a.routeOrder - b.routeOrder;
+                }
+                if (a.routeOrder !== undefined) return -1;
+                if (b.routeOrder !== undefined) return 1;
+
+                const zonaA = a.zona || a.detalles_entrega?.zona || 'Sin Zona';
+                const zonaB = b.zona || b.detalles_entrega?.zona || 'Sin Zona';
+                if (zonaA !== zonaB) {
+                    return zonaA.localeCompare(zonaB);
+                }
+
+                return (a.cliente || '').localeCompare(b.cliente || '');
+            });
 
             setDeliveries(pedidos);
         } catch (error) {
@@ -67,6 +83,23 @@ export default function DeliveryView() {
             setDeliveries([]);
         }
         setLoading(false);
+    };
+
+    // Guardar orden de ruta
+    const saveRouteOrder = async () => {
+        setSavingRoute(true);
+        try {
+            const batchPromises = deliveries.map((d, index) => {
+                const pedidoRef = doc(db, 'pedidos', d.id);
+                return updateDoc(pedidoRef, { routeOrder: index + 1 });
+            });
+            await Promise.all(batchPromises);
+            setIsEditingRoute(false);
+        } catch (error) {
+            console.error('Error guardando ruta:', error);
+            alert('Error al guardar el orden de la ruta');
+        }
+        setSavingRoute(false);
     };
 
     // Actualizar estado de entrega en Firebase
@@ -184,13 +217,31 @@ export default function DeliveryView() {
                         </select>
                         <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                     </div>,
-                    <button
-                        key="refresh"
-                        onClick={() => loadDeliveries(true)}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white/20 backdrop-blur-sm text-sm text-white hover:bg-white/30 transition-colors"
-                    >
-                        <RefreshCw size={16} className={loading ? 'animate-spin' : ''} /> Actualizar
-                    </button>
+                    <div key="actions" className="flex items-center gap-2">
+                        {isEditingRoute ? (
+                            <button
+                                onClick={saveRouteOrder}
+                                disabled={savingRoute}
+                                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-green-500 text-white hover:bg-green-600 transition-colors shadow-lg font-medium"
+                            >
+                                {savingRoute ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />}
+                                Guardar Ruta
+                            </button>
+                        ) : (
+                            <button
+                                onClick={() => setIsEditingRoute(true)}
+                                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white/20 backdrop-blur-sm text-sm text-white hover:bg-white/30 transition-colors"
+                            >
+                                <Map size={16} /> Organizar Ruta
+                            </button>
+                        )}
+                        <button
+                            onClick={() => loadDeliveries(true)}
+                            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white/20 backdrop-blur-sm text-sm text-white hover:bg-white/30 transition-colors"
+                        >
+                            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+                        </button>
+                    </div>
                 ]}
 
             />
@@ -274,22 +325,39 @@ export default function DeliveryView() {
                 </div>
             ) : (
                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                    <div className="divide-y divide-gray-100">
+                    <Reorder.Group 
+                        axis="y" 
+                        values={deliveries} 
+                        onReorder={setDeliveries} 
+                        className="divide-y divide-gray-100"
+                    >
                         {deliveries.map((delivery, index) => {
                             const StatusIcon = getStatusIcon(delivery.deliveryStatus);
+                            const zonaText = delivery.zona || delivery.detalles_entrega?.zona || 'Sin Zona';
                             return (
-                                <motion.div
+                                <Reorder.Item
                                     key={delivery.id}
+                                    value={delivery}
+                                    dragListener={isEditingRoute}
                                     initial={{ opacity: 0, y: 10 }}
                                     animate={{ opacity: 1, y: 0 }}
                                     transition={{ delay: index * 0.05 }}
-                                    className="p-4 hover:bg-gray-50 transition-colors"
+                                    className={`p-4 hover:bg-gray-50 transition-colors flex gap-4 ${isEditingRoute ? 'cursor-grab active:cursor-grabbing bg-orange-50/30' : ''}`}
                                 >
-                                    <div className="flex flex-col sm:flex-row gap-4 justify-between">
+                                    {isEditingRoute && (
+                                        <div className="flex items-center text-gray-400">
+                                            <GripVertical size={24} />
+                                        </div>
+                                    )}
+                                    <div className="flex flex-col sm:flex-row gap-4 justify-between flex-1">
                                         {/* Info del cliente */}
                                         <div className="flex-1">
-                                            <div className="flex items-center gap-2 mb-2">
+                                            <div className="flex items-center gap-2 mb-2 flex-wrap">
                                                 <span className="font-bold text-gray-900">{delivery.cliente || 'Sin nombre'}</span>
+                                                <span className="px-2 py-0.5 rounded text-xs font-bold bg-gray-900 text-white flex items-center gap-1">
+                                                    <Navigation size={12} />
+                                                    Parada {index + 1}
+                                                </span>
                                                 <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide flex items-center gap-1 ${getStatusColor(delivery.deliveryStatus)}`}>
                                                     <StatusIcon size={12} />
                                                     {getStatusLabel(delivery.deliveryStatus)}
@@ -297,10 +365,16 @@ export default function DeliveryView() {
                                             </div>
 
                                             <div className="space-y-1 text-sm text-gray-600">
-                                                {delivery.direccion && (
+                                                {zonaText !== 'Sin Zona' && (
+                                                    <div className="flex items-center gap-2 font-medium text-orange-700">
+                                                        <Map size={14} />
+                                                        <span>{zonaText}</span>
+                                                    </div>
+                                                )}
+                                                {(delivery.direccion || delivery.detalles_entrega?.direccion || delivery.details?.address) && (
                                                     <div className="flex items-center gap-2">
                                                         <MapPin size={14} className="text-gray-400" />
-                                                        <span>{delivery.direccion}</span>
+                                                        <span>{delivery.direccion || delivery.detalles_entrega?.direccion || delivery.details?.address}</span>
                                                     </div>
                                                 )}
                                                 {delivery.telefono && (
@@ -367,10 +441,10 @@ export default function DeliveryView() {
                                             )}
                                         </div>
                                     </div>
-                                </motion.div>
+                                </Reorder.Item>
                             );
                         })}
-                    </div>
+                    </Reorder.Group>
                 </div>
             )}
 
