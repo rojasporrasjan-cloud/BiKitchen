@@ -50,6 +50,7 @@ import ClientProfileModal from '../../components/admin/ClientProfileModal';
 import { parseFirebaseDate } from '../../utils/dateUtils';
 import { getClientWhatsAppUrl, getClientTelUrl } from '../../utils/phoneUtils';
 import { formatProteinList } from '../../utils/formatters';
+import { formatFechaCorta } from '../../utils/dateDisplay';
 
 // Generar próximas fechas de entrega disponibles (lógica mirror de Checkout)
 const getNextDeliveryDatesForZone = (zoneId) => {
@@ -883,6 +884,70 @@ export default function OrdersView() {
         });
         return counts;
     }, [orders]);
+
+    // --- Despachar un día completo a la ruta ---
+    const [despachando, setDespachando] = useState(null);
+
+    /**
+     * Fechas de entrega que todavía tienen pedidos confirmados sin despachar.
+     *
+     * Se usa getScheduleFromOrder y no `fecha_entrega` para que un pack mensual
+     * cuente en TODAS sus semanas: si no, la semana 2 de alguien nunca se podría
+     * despachar desde acá.
+     *
+     * Solo se ofrecen fechas de hoy en adelante y las de los últimos 3 días, para
+     * no llenar la pantalla con entregas viejas.
+     */
+    const fechasParaRuta = useMemo(() => {
+        const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+        const desde = new Date(hoy); desde.setDate(desde.getDate() - 3);
+        const conteo = new Map();
+
+        orders.forEach(o => {
+            if (o.status !== 'confirmed') return; // in_transit ya está despachado
+            getScheduleFromOrder(o).forEach(fecha => {
+                const d = parseDateStr(fecha);
+                if (!d || d < desde) return;
+                conteo.set(fecha, (conteo.get(fecha) || 0) + 1);
+            });
+        });
+
+        return [...conteo.entries()]
+            .map(([fecha, cantidad]) => ({ fecha, cantidad }))
+            .sort((a, b) => a.fecha.localeCompare(b.fecha))
+            .slice(0, 6);
+    }, [orders]);
+
+    const despacharDiaARuta = async (fecha) => {
+        const delDia = orders.filter(o =>
+            o.status === 'confirmed' && getScheduleFromOrder(o).includes(fecha)
+        );
+        if (delDia.length === 0) return;
+
+        const ok = window.confirm(
+            `¿Mandar a la ruta los ${delDia.length} pedidos del ${formatFechaCorta(fecha)}?\n\n` +
+            delDia.slice(0, 10).map(o => `• ${o.cliente || 'Sin nombre'}`).join('\n') +
+            (delDia.length > 10 ? `\n…y ${delDia.length - 10} más` : '') +
+            `\n\nQuedan marcados como "En Ruta". No se marcan como entregados.`
+        );
+        if (!ok) return;
+
+        setDespachando(fecha);
+        const fallaron = [];
+        for (const pedido of delDia) {
+            try {
+                await updateOrderStatus(pedido.id, 'in_transit');
+            } catch (error) {
+                console.error('[Pedidos] Error despachando:', pedido.id, error);
+                fallaron.push(pedido.cliente || pedido.id);
+            }
+        }
+        setDespachando(null);
+
+        if (fallaron.length > 0) {
+            alert(`No se pudieron despachar: ${fallaron.join(', ')}.\nRevisalos uno por uno.`);
+        }
+    };
 
     const handleClearFilters = () => {
         const reset = {
@@ -1768,6 +1833,34 @@ export default function OrdersView() {
                         )}
                     </button>
                 </div>
+
+                {/* Despachar el día completo a la ruta — solo en "En proceso" */}
+                {activeTab === 'processing' && fechasParaRuta.length > 0 && (
+                    <div className="mb-4 bg-purple-50 border border-purple-200 rounded-xl p-4">
+                        <p className="text-sm font-bold text-purple-900 flex items-center gap-2">
+                            <Truck size={16} aria-hidden="true" />
+                            Mandar un día completo a la ruta
+                        </p>
+                        <p className="text-xs text-purple-800 mt-1">
+                            Marca como “En Ruta” todos los pedidos confirmados de esa fecha, para
+                            que el repartidor los vea despachados.
+                        </p>
+                        <div className="flex flex-wrap gap-2 mt-3">
+                            {fechasParaRuta.map(({ fecha, cantidad }) => (
+                                <button
+                                    key={fecha}
+                                    onClick={() => despacharDiaARuta(fecha)}
+                                    disabled={despachando}
+                                    className="px-4 py-2 bg-purple-600 text-white text-sm font-bold rounded-lg hover:bg-purple-700 active:scale-95 transition-all disabled:opacity-50"
+                                >
+                                    {despachando === fecha
+                                        ? 'Despachando…'
+                                        : `${formatFechaCorta(fecha)} · ${cantidad} pedido${cantidad > 1 ? 's' : ''}`}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 {/* Search & Filters */}
                 <div className="flex flex-wrap gap-4 items-center mb-4">
