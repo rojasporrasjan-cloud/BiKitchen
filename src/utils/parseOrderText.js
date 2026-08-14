@@ -324,11 +324,17 @@ const grabItems = (text) => {
         // --- Ítem SIN número, confirmado por un "Precio ..." debajo ---
         const texto = line.trim();
         if (texto && !esCorteDeItem(texto)) {
+            // Un ítem que anuncia N proteínas viene seguido de la LISTA de esas
+            // proteínas, una por línea. Ahí se aceptan varias líneas; si no, solo
+            // dos, para que una descripción suelta no se trague media hoja.
+            const anunciaProteinas = texto.match(/(\d+)\s*prote[íi]nas?/i);
+            const maxExtras = anunciaProteinas ? 12 : 2;
+
             const extras = [];
             let j = i + 1;
             let idxPrecio = -1;
 
-            while (j < lines.length && extras.length < 2) {
+            while (j < lines.length && extras.length < maxExtras) {
                 const t = lines[j].trim();
                 if (!t) { j++; continue; }
                 if (ES_LINEA_PRECIO.test(t)) { idxPrecio = j; break; }
@@ -338,11 +344,18 @@ const grabItems = (text) => {
             }
 
             if (idxPrecio !== -1) {
+                // "Pack 5 proteínas de 500 g" + 5 líneas = el pack y sus proteínas.
+                // El nombre se deja intacto porque de ahí sale el gramaje ("500 g").
+                const esListaDeProteinas = anunciaProteinas && extras.length > 0;
+
                 items.push({
                     cantidad: 1,
-                    nombre: [texto, ...extras.map(e => e.texto)].join(' - ').replace(/\*/g, '').trim(),
+                    nombre: (esListaDeProteinas
+                        ? texto
+                        : [texto, ...extras.map(e => e.texto)].join(' - ')
+                    ).replace(/\*/g, '').trim(),
                     precio: null,
-                    proteinas: []
+                    proteinas: esListaDeProteinas ? extras.map(e => e.texto) : []
                 });
                 consumidas.add(i);
                 extras.forEach(e => consumidas.add(e.idx));
