@@ -6,6 +6,7 @@ import { cachedFetch, invalidateCache } from '../../utils/firestoreCache';
 import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
 import AdminPageHeader from '../../components/admin/AdminPageHeader';
 import { getClientWhatsAppUrl } from '../../utils/phoneUtils';
+import { getScheduleFromOrder } from '../../utils/orderDates';
 
 /**
  * DeliveryView - Vista de Reparto
@@ -29,16 +30,32 @@ export default function DeliveryView() {
             if (force) invalidateCache(cacheKey);
 
             const pedidos = await cachedFetch(cacheKey, async () => {
+                // Mismo criterio que Producción y la Hoja de Despacho. Antes se
+                // buscaba por fecha_entrega == selectedDate, y eso dejaba fuera las
+                // semanas 2, 3 y 4 de los packs mensuales: solo la primera entrega
+                // tiene esa fecha guardada, el resto vive en el calendario del pedido.
+                // El repartidor no los veía y esos clientes no recibían su comida.
+                const targetDate = new Date(selectedDate + 'T12:00:00');
+                const pastDate = new Date(targetDate);
+                pastDate.setDate(pastDate.getDate() - 40); // cubre packs de hasta 4 semanas
+                const pastDateStr = pastDate.toISOString().split('T')[0];
+
                 const q = query(
                     collection(db, 'pedidos'),
-                    where('fecha_entrega', '==', selectedDate)
+                    where('fecha_entrega', '>=', pastDateStr)
                 );
                 const snapshot = await getDocs(q);
-                return snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data(),
-                    deliveryStatus: doc.data().deliveryStatus || 'pending'
-                }));
+
+                return snapshot.docs
+                    .map(doc => ({
+                        id: doc.id,
+                        ...doc.data(),
+                        deliveryStatus: doc.data().deliveryStatus || 'pending'
+                    }))
+                    .filter(pedido => {
+                        if (pedido.status === 'cancelled') return false;
+                        return getScheduleFromOrder(pedido).includes(selectedDate);
+                    });
             }, 'dashboard');
 
             // Ordenar por cliente
