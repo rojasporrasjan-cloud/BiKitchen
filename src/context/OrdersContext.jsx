@@ -22,6 +22,21 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { ADMIN_EMAILS } from '../config/admins';
 import { PUNTOS_REFERIDO, calcularPuntos } from '../config/loyalty';
 
+/**
+ * Cuántos pedidos mantiene el panel en memoria, del más nuevo al más viejo.
+ *
+ * Importa subirlo a tiempo: al pasarse del tope, los pedidos MÁS VIEJOS dejan de
+ * aparecer en el panel sin ningún aviso. No se borran de Firestore, pero no se
+ * ven, no se buscan y no cuentan en las estadísticas.
+ *
+ * El costo de subirlo es que Firebase cobra por documento leído y el panel los
+ * mantiene abiertos en tiempo real. Por eso no es ilimitado: se sube por tramos
+ * conforme el negocio crece.
+ *
+ * Agosto 2026: ~330 pedidos acumulados. 3000 da varios años de margen.
+ */
+const MAX_PEDIDOS_EN_MEMORIA = 3000;
+
 const OrdersContext = createContext();
 
 export const useOrders = () => {
@@ -91,7 +106,7 @@ export const OrdersProvider = ({ children }) => {
             return;
         }
 
-        const q = query(collection(db, "pedidos"), orderBy("createdAt", "desc"), limit(500));
+        const q = query(collection(db, "pedidos"), orderBy("createdAt", "desc"), limit(MAX_PEDIDOS_EN_MEMORIA));
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const ordersData = snapshot.docs.map(doc => {

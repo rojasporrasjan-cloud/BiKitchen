@@ -886,25 +886,28 @@ export default function OrdersView() {
     }, [orders]);
 
     // --- Despachar un día completo a la ruta ---
+    // Cuántos días de entrega se ofrecen a la vez en las acciones por día
+    const MAX_FECHAS_SUGERIDAS = 8;
+
     const [despachando, setDespachando] = useState(null);
 
     /**
-     * Fechas de entrega que todavía tienen pedidos confirmados sin despachar.
+     * Agrupa por fecha de entrega los pedidos que están en cierto estado.
      *
      * Se usa getScheduleFromOrder y no `fecha_entrega` para que un pack mensual
      * cuente en TODAS sus semanas: si no, la semana 2 de alguien nunca se podría
-     * despachar desde acá.
+     * despachar ni cerrar desde acá.
      *
-     * Solo se ofrecen fechas de hoy en adelante y las de los últimos 3 días, para
+     * Solo se ofrecen fechas de hoy en adelante y las de los últimos días, para
      * no llenar la pantalla con entregas viejas.
      */
-    const fechasParaRuta = useMemo(() => {
+    const agruparPorFecha = (pedidos, estado, diasAtras) => {
         const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
-        const desde = new Date(hoy); desde.setDate(desde.getDate() - 3);
+        const desde = new Date(hoy); desde.setDate(desde.getDate() - diasAtras);
         const conteo = new Map();
 
-        orders.forEach(o => {
-            if (o.status !== 'confirmed') return; // in_transit ya está despachado
+        pedidos.forEach(o => {
+            if (o.status !== estado) return;
             getScheduleFromOrder(o).forEach(fecha => {
                 const d = parseDateStr(fecha);
                 if (!d || d < desde) return;
@@ -915,20 +918,39 @@ export default function OrdersView() {
         return [...conteo.entries()]
             .map(([fecha, cantidad]) => ({ fecha, cantidad }))
             .sort((a, b) => a.fecha.localeCompare(b.fecha))
-            .slice(0, 6);
-    }, [orders]);
+            .slice(0, MAX_FECHAS_SUGERIDAS);
+    };
 
-    const despacharDiaARuta = async (fecha) => {
+    // Pendientes de salir: confirmados que todavía no se despacharon
+    const fechasParaRuta = useMemo(
+        () => agruparPorFecha(orders, 'confirmed', 3),
+        [orders]
+    );
+
+    // Ya salieron y falta cerrarlos. Se miran más días atrás porque el cierre
+    // suele hacerse al final del día o al día siguiente, no en el momento.
+    const fechasParaEntregar = useMemo(
+        () => agruparPorFecha(orders, 'in_transit', 10),
+        [orders]
+    );
+
+    /**
+     * Cambia de estado, de una sola vez, todos los pedidos de una fecha.
+     *
+     * Va uno por uno en vez de un batch de Firestore a propósito: updateOrderStatus
+     * no es solo un write, también otorga BiPuntos y bono de referido. Un batch se
+     * saltaría todo eso. Si alguno falla, los demás igual pasan y se avisa cuáles no.
+     */
+    const cambiarEstadoDelDia = async (fecha, { desde, hacia, confirmacion }) => {
         const delDia = orders.filter(o =>
-            o.status === 'confirmed' && getScheduleFromOrder(o).includes(fecha)
+            o.status === desde && getScheduleFromOrder(o).includes(fecha)
         );
         if (delDia.length === 0) return;
 
         const ok = window.confirm(
-            `¿Mandar a la ruta los ${delDia.length} pedidos del ${formatFechaCorta(fecha)}?\n\n` +
+            confirmacion(delDia.length, formatFechaCorta(fecha)) + '\n\n' +
             delDia.slice(0, 10).map(o => `• ${o.cliente || 'Sin nombre'}`).join('\n') +
-            (delDia.length > 10 ? `\n…y ${delDia.length - 10} más` : '') +
-            `\n\nQuedan marcados como "En Ruta". No se marcan como entregados.`
+            (delDia.length > 10 ? `\n…y ${delDia.length - 10} más` : '')
         );
         if (!ok) return;
 
@@ -936,18 +958,36 @@ export default function OrdersView() {
         const fallaron = [];
         for (const pedido of delDia) {
             try {
-                await updateOrderStatus(pedido.id, 'in_transit');
+                await updateOrderStatus(pedido.id, hacia);
             } catch (error) {
-                console.error('[Pedidos] Error despachando:', pedido.id, error);
+                console.error('[Pedidos] Error cambiando estado:', pedido.id, error);
                 fallaron.push(pedido.cliente || pedido.id);
             }
         }
         setDespachando(null);
 
         if (fallaron.length > 0) {
-            alert(`No se pudieron despachar: ${fallaron.join(', ')}.\nRevisalos uno por uno.`);
+            alert(`No se pudieron actualizar: ${fallaron.join(', ')}.\nRevisalos uno por uno.`);
         }
     };
+
+    const despacharDiaARuta = (fecha) => cambiarEstadoDelDia(fecha, {
+        desde: 'confirmed',
+        hacia: 'in_transit',
+        confirmacion: (n, f) =>
+            `¿Mandar a la ruta los ${n} pedidos del ${f}?\n\n` +
+            'Quedan marcados como "En Ruta". No se marcan como entregados.'
+    });
+
+    const completarDiaEntero = (fecha) => cambiarEstadoDelDia(fecha, {
+        desde: 'in_transit',
+        hacia: 'delivered',
+        // Los BiPuntos NO se dan acá: se acreditan al confirmar el pedido, y uno
+        // que ya va en ruta hace rato que se confirmó. Esto solo lo cierra.
+        confirmacion: (n, f) =>
+            `¿Marcar como ENTREGADOS los ${n} pedidos en ruta del ${f}?\n\n` +
+            'Pasan al historial y salen de la pantalla de pedidos activos.'
+    });
 
     const handleClearFilters = () => {
         const reset = {
@@ -1855,6 +1895,34 @@ export default function OrdersView() {
                                 >
                                     {despachando === fecha
                                         ? 'Despachando…'
+                                        : `${formatFechaCorta(fecha)} · ${cantidad} pedido${cantidad > 1 ? 's' : ''}`}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Cerrar el día: los que ya salieron pasan a entregados */}
+                {activeTab === 'processing' && fechasParaEntregar.length > 0 && (
+                    <div className="mb-4 bg-green-50 border border-green-200 rounded-xl p-4">
+                        <p className="text-sm font-bold text-green-900 flex items-center gap-2">
+                            <CheckCircle size={16} aria-hidden="true" />
+                            Cerrar un día completo
+                        </p>
+                        <p className="text-xs text-green-800 mt-1">
+                            Marca como “Entregados” todos los pedidos que ya andan en ruta de esa
+                            fecha. Pasan al historial.
+                        </p>
+                        <div className="flex flex-wrap gap-2 mt-3">
+                            {fechasParaEntregar.map(({ fecha, cantidad }) => (
+                                <button
+                                    key={fecha}
+                                    onClick={() => completarDiaEntero(fecha)}
+                                    disabled={despachando}
+                                    className="px-4 py-2 bg-green-600 text-white text-sm font-bold rounded-lg hover:bg-green-700 active:scale-95 transition-all disabled:opacity-50"
+                                >
+                                    {despachando === fecha
+                                        ? 'Cerrando…'
                                         : `${formatFechaCorta(fecha)} · ${cantidad} pedido${cantidad > 1 ? 's' : ''}`}
                                 </button>
                             ))}
