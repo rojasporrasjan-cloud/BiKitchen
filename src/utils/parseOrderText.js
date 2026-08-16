@@ -104,21 +104,33 @@ export const limpiarPrefijosDeChat = (text) => {
  * y después de la etiqueta. `[^\p{L}\n]*` se queda dentro de la línea: sin
  * excluir el salto de línea se comería las líneas de arriba.
  */
-const grab = (text, labels, { sinDosPuntos = false } = {}) => {
-    for (const label of labels) {
-        // Por defecto se exigen los dos puntos. Sin ellos, un encabezado de varias
-        // palabras como "OBSERVACIONES DEL CLIENTE" devolvería "DEL CLIENTE".
-        // `sinDosPuntos` se usa solo donde se escribe a mano sin ellos ("Envíos 3000").
-        const separador = sinDosPuntos ? '[:\\s]' : ':';
-        const re = new RegExp(`^[^\\p{L}\\n]*\\*?\\s*${label}\\s*\\*?\\s*${separador}\\s*(.+)$`, 'imu');
-        const match = text.match(re);
-        if (match) {
-            const value = match[1].replace(/\*/g, '').trim();
-            if (value && !ES_RELLENO.test(value)) return value;
+const grab = (text, labels, { sinDosPuntos = false, validoSinDosPuntos } = {}) => {
+    const intentar = (separador, validar) => {
+        for (const label of labels) {
+            const re = new RegExp(`^[^\\p{L}\\n]*\\*?\\s*${label}\\s*\\*?\\s*${separador}\\s*(.+)$`, 'imu');
+            const match = text.match(re);
+            if (match) {
+                const value = match[1].replace(/\*/g, '').trim();
+                if (value && !ES_RELLENO.test(value) && (!validar || validar(value))) return value;
+            }
         }
-    }
-    return null;
+        return null;
+    };
+
+    // Primero se buscan los dos puntos, que es como lo escribe el sistema.
+    // Recién si no aparecen se acepta el espacio, porque escrito a mano se omiten
+    // ("Teléfono 8800-8668", "Envíos 3000"). Ese segundo intento es el peligroso:
+    // un encabezado de varias palabras como "OBSERVACIONES DEL CLIENTE" devolvería
+    // "DEL CLIENTE", así que quien lo use puede exigir que el valor tenga sentido.
+    return intentar(':') || (sinDosPuntos ? intentar('[:\\s]', validoSinDosPuntos) : null);
 };
+
+/**
+ * Sin dos puntos hay que asegurarse de que lo capturado sea el número y no el
+ * resto de la etiqueta: "Teléfono de contacto: 8800-8668" daría "de contacto:...".
+ */
+const PARECE_TELEFONO = (value) => /^[+(]?[\d\s\-()./]+$/.test(value)
+    && value.replace(/\D/g, '').length >= 8;
 
 const ISO_DATE_RE = /\d{4}-\d{2}-\d{2}/;
 
@@ -284,6 +296,41 @@ export const esLineaIgnorable = (linea) => {
  * El nombre se conserva ENTERO (con el "(250g)") porque logisticsUtils saca los
  * gramos por porción justamente de ahí.
  */
+/**
+ * Lee las líneas que van DEBAJO del nombre de un ítem, hasta su precio.
+ *
+ * Escrito a mano, debajo del ítem puede venir la lista de proteínas
+ * ("Pack 5 proteínas" + 5 líneas) o una descripción suelta ("REGALIA DESAYUNOS").
+ * Solo cuenta si termina en una línea de precio: sin eso no hay ítem que valga.
+ *
+ * Las líneas "Proteínas: a, b, c" cortan la búsqueda a propósito, porque ya las
+ * lee el manejador de detalles de más abajo.
+ */
+const DETALLE_PROTEINAS_RE = /^[\s└│├•·*-]*Prote[íi]nas?\s*:/i;
+
+const absorberDescripcion = (lines, i, texto) => {
+    // Un ítem que anuncia N proteínas viene seguido de la LISTA de esas proteínas,
+    // una por línea. Ahí se aceptan varias; si no, solo dos, para que una
+    // descripción suelta no se trague media hoja.
+    const anunciaProteinas = texto.match(/(\d+)\s*prote[íi]nas?/i);
+    const maxExtras = anunciaProteinas ? 12 : 2;
+
+    const extras = [];
+    let j = i + 1;
+    let idxPrecio = -1;
+
+    while (j < lines.length && extras.length < maxExtras) {
+        const t = lines[j].trim();
+        if (!t) { j++; continue; }
+        if (ES_LINEA_PRECIO.test(t)) { idxPrecio = j; break; }
+        if (esCorteDeItem(t) || DETALLE_PROTEINAS_RE.test(t)) break;
+        extras.push({ idx: j, texto: t });
+        j++;
+    }
+
+    return { esListaDeProteinas: !!anunciaProteinas && extras.length > 0, extras, idxPrecio };
+};
+
 const grabItems = (text) => {
     const items = [];
     const consumidas = new Set();
@@ -311,43 +358,42 @@ const grabItems = (text) => {
                 precio = parseAmount(priceMatch[2]);
             }
 
+            // Sin precio en la misma línea es formato escrito a mano: debajo puede
+            // venir la lista de proteínas o una descripción, y después el precio.
+            const desc = precio === null
+                ? absorberDescripcion(lines, i, rest)
+                : { esListaDeProteinas: false, extras: [], idxPrecio: -1 };
+
+            const tieneDescripcion = desc.idxPrecio !== -1 && desc.extras.length > 0;
+
             items.push({
                 cantidad: parseInt(itemMatch[1], 10) || 1,
-                nombre: rest.replace(/\*/g, '').trim(),
+                nombre: (tieneDescripcion && !desc.esListaDeProteinas
+                    ? [rest, ...desc.extras.map(e => e.texto)].join(' - ')
+                    : rest
+                ).replace(/\*/g, '').trim(),
                 precio,
-                proteinas: []
+                proteinas: desc.esListaDeProteinas ? desc.extras.map(e => e.texto) : []
             });
             consumidas.add(i);
+
+            if (tieneDescripcion) {
+                desc.extras.forEach(e => consumidas.add(e.idx));
+                // Saltar hasta el precio: si no, cada línea de la descripción se
+                // volvería a evaluar y entraría como un ítem repetido.
+                i = desc.idxPrecio - 1;
+            }
             continue;
         }
 
         // --- Ítem SIN número, confirmado por un "Precio ..." debajo ---
         const texto = line.trim();
         if (texto && !esCorteDeItem(texto)) {
-            // Un ítem que anuncia N proteínas viene seguido de la LISTA de esas
-            // proteínas, una por línea. Ahí se aceptan varias líneas; si no, solo
-            // dos, para que una descripción suelta no se trague media hoja.
-            const anunciaProteinas = texto.match(/(\d+)\s*prote[íi]nas?/i);
-            const maxExtras = anunciaProteinas ? 12 : 2;
-
-            const extras = [];
-            let j = i + 1;
-            let idxPrecio = -1;
-
-            while (j < lines.length && extras.length < maxExtras) {
-                const t = lines[j].trim();
-                if (!t) { j++; continue; }
-                if (ES_LINEA_PRECIO.test(t)) { idxPrecio = j; break; }
-                if (esCorteDeItem(t)) break;
-                extras.push({ idx: j, texto: t });
-                j++;
-            }
+            const { esListaDeProteinas, extras, idxPrecio } = absorberDescripcion(lines, i, texto);
 
             if (idxPrecio !== -1) {
                 // "Pack 5 proteínas de 500 g" + 5 líneas = el pack y sus proteínas.
                 // El nombre se deja intacto porque de ahí sale el gramaje ("500 g").
-                const esListaDeProteinas = anunciaProteinas && extras.length > 0;
-
                 items.push({
                     cantidad: 1,
                     nombre: (esListaDeProteinas
@@ -419,7 +465,11 @@ export const parseOrderBlock = (textoCrudo, hoy = new Date()) => {
     // Las etiquetas cubren los dos formatos: el del correo y el de WhatsApp
     const numeroOrden = extractOrderNumbers(text)[0] || null;
     const cliente = grab(text, ['Nombre', 'CLIENTE', 'Cliente']);
-    const telefono = grab(text, ['Tel[ée]fono', 'Tel']);
+    // La tercera etiqueta cubre "Teléfono de contacto:" y "Teléfono celular:"
+    const telefono = grab(text, ['Tel[ée]fono', 'Tel', 'Tel[ée]fono[^:\\n]{0,20}'], {
+        sinDosPuntos: true,
+        validoSinDosPuntos: PARECE_TELEFONO
+    });
     const correo = grab(text, ['Email', 'Correo', 'E-mail']);
     const cedula = grab(text, ['C[ée]dula']);
     // "Lugar" es como lo escribe la administración a mano

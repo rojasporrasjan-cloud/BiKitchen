@@ -1,6 +1,7 @@
-import React from 'react';
-import { AlertTriangle, CheckCircle, FilePlus } from 'lucide-react';
+import React, { useState } from 'react';
+import { AlertTriangle, CheckCircle, FilePlus, Search } from 'lucide-react';
 import { formatPrice } from '../../utils/formatters';
+import { searchClientByName } from '../../services/clientService';
 
 /**
  * Vista previa de un pedido leído del chat, antes de crearlo.
@@ -32,6 +33,32 @@ export default function ImportedOrderPreview({
     onEdit
 }) {
     const variasEntregas = parsed.fechasEntrega?.length > 1;
+
+    const [isSearchingClient, setIsSearchingClient] = useState(false);
+    const [clientResults, setClientResults] = useState([]);
+
+    const handleSearchClient = async () => {
+        if (!parsed.cliente || parsed.cliente.length < 3) {
+            alert('Digitá al menos 3 letras del nombre del cliente para buscar.');
+            return;
+        }
+        setIsSearchingClient(true);
+        const results = await searchClientByName(parsed.cliente);
+        setClientResults(results);
+        if (results.length === 0) {
+            alert('No se encontraron clientes con ese nombre.');
+        }
+        setIsSearchingClient(false);
+    };
+
+    const handleSelectClient = (client) => {
+        onEdit('cliente', client.nombre);
+        if (client.telefono) onEdit('telefono', client.telefono);
+        if (client.correo) onEdit('correo', client.correo);
+        if (client.zona) onEdit('zona', client.zona);
+        if (client.direccion) onEdit('direccion', client.direccion);
+        setClientResults([]);
+    };
 
     return (
         <div className="bg-white rounded-2xl shadow-xl shadow-gray-100 border border-gray-100 p-6">
@@ -83,19 +110,60 @@ export default function ImportedOrderPreview({
                     const valor = parsed[campo] || '';
                     const falta = !valor && !opcional;
                     return (
-                        <div key={campo}>
+                        <div key={campo} className="relative">
                             <label htmlFor={`imp-${campo}`} className="block text-xs font-medium text-gray-600 mb-1">
                                 {label}
                             </label>
-                            <input
-                                id={`imp-${campo}`}
-                                type={tipo}
-                                value={valor}
-                                placeholder={placeholder}
-                                onChange={(e) => onEdit(campo, e.target.value)}
-                                className={`w-full px-3 py-2 border rounded-lg text-sm outline-none transition-all focus:ring-4 focus:ring-orange-100 focus:border-bikitchen-orange ${falta ? 'border-red-300 bg-red-50' : 'border-gray-200'
-                                    }`}
-                            />
+                            <div className="flex gap-2">
+                                <input
+                                    id={`imp-${campo}`}
+                                    type={tipo}
+                                    value={valor}
+                                    placeholder={placeholder}
+                                    onChange={(e) => onEdit(campo, e.target.value)}
+                                    className={`w-full px-3 py-2 border rounded-lg text-sm outline-none transition-all focus:ring-4 focus:ring-orange-100 focus:border-bikitchen-orange ${falta ? 'border-red-300 bg-red-50' : 'border-gray-200'
+                                        }`}
+                                />
+                                {campo === 'cliente' && (
+                                    <button
+                                        type="button"
+                                        onClick={handleSearchClient}
+                                        disabled={isSearchingClient}
+                                        className="px-3 py-2 bg-gray-100 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-200 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center"
+                                        title="Buscar cliente por nombre"
+                                    >
+                                        {isSearchingClient ? (
+                                            <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+                                        ) : (
+                                            <Search size={18} />
+                                        )}
+                                    </button>
+                                )}
+                            </div>
+                            
+                            {/* Resultados de búsqueda (Solo debajo del campo cliente) */}
+                            {campo === 'cliente' && clientResults.length > 0 && (
+                                <div className="mt-2 absolute z-10 w-full sm:w-96 max-h-60 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-xl divide-y divide-gray-100">
+                                    <div className="px-3 py-2 bg-gray-50 flex justify-between items-center sticky top-0">
+                                        <span className="text-xs font-bold text-gray-500 uppercase">Seleccionar Cliente</span>
+                                        <button onClick={() => setClientResults([])} className="text-xs text-red-500 hover:text-red-700 font-bold">Cerrar</button>
+                                    </div>
+                                    {clientResults.map(client => (
+                                        <button
+                                            key={client.id}
+                                            type="button"
+                                            onClick={() => handleSelectClient(client)}
+                                            className="w-full text-left px-4 py-3 hover:bg-orange-50 transition-colors focus:bg-orange-50 outline-none"
+                                        >
+                                            <p className="font-bold text-sm text-gray-900">{client.nombre}</p>
+                                            <p className="text-xs text-gray-500 mt-0.5">
+                                                {client.telefono || 'Sin tel'} • {client.correo || 'Sin correo'}
+                                            </p>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+
                             {campo === 'correo' && pedido.correoEsPlaceholder && (
                                 <p className="mt-1 text-xs text-gray-500">
                                     Sin correo se guarda como <strong>{pedido.correo}</strong>, armado con el teléfono.

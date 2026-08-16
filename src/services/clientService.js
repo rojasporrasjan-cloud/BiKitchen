@@ -175,6 +175,37 @@ export const findClient = async (identifier) => {
 };
 
 /**
+ * Busca clientes cuyo nombre comience con el término de búsqueda
+ */
+export const searchClientByName = async (nameQuery) => {
+    try {
+        if (!nameQuery || nameQuery.trim().length < 3) return [];
+        
+        // Convert to typical case or just search directly.
+        // Firestore is case-sensitive, so we assume the name is capitalized exactly as typed, 
+        // or we can fetch a bit and filter in memory if the list is small.
+        // Given BiKitchen, let's fetch all clients and filter in memory for robust case-insensitive search.
+        const q = query(collection(db, 'clientes'), limit(500));
+        const snap = await getDocs(q);
+        
+        const searchLower = nameQuery.trim().toLowerCase();
+        const matches = [];
+        
+        snap.forEach(doc => {
+            const data = doc.data();
+            if (data.nombre && data.nombre.toLowerCase().includes(searchLower)) {
+                matches.push({ id: doc.id, ...data });
+            }
+        });
+        
+        return matches;
+    } catch (error) {
+        console.error('[CRM] Error al buscar cliente por nombre:', error);
+        return [];
+    }
+};
+
+/**
  * Envía una notificación personalizada a un cliente
  */
 export const sendClientNotification = async (clientId, notification) => {
