@@ -308,12 +308,28 @@ export const esLineaIgnorable = (linea) => {
  */
 const DETALLE_PROTEINAS_RE = /^[\s└│├•·*-]*Prote[íi]nas?\s*:/i;
 
+/**
+ * Cuántos platos anuncia el ítem: "5 proteínas", "6 por semana", "5 comidas".
+ * De acá sale cuántas veces se repite un plato cuando abajo viene uno solo.
+ */
+const CANTIDAD_ANUNCIADA = /(\d+)\s*(?:prote[íi]nas?|desayunos?|almuerzos?|comidas?|platos?|por\s+semana)/i;
+
+/**
+ * Líneas que son un ítem aunque no las siga una línea de "Precio".
+ *
+ * Cuando el pedido trae un solo ítem, se suele escribir el monto una única vez
+ * como "Total: 66.800" y nunca aparece un "Precio". Sin esto, ese pedido entra
+ * SIN ítems: ni platos, ni hoja de cocina, ni nada.
+ */
+const esItemEvidente = (t) => /\b(pack|paquete)\b/i.test(t) || CANTIDAD_ANUNCIADA.test(t);
+
 const absorberDescripcion = (lines, i, texto) => {
-    // Un ítem que anuncia N proteínas viene seguido de la LISTA de esas proteínas,
-    // una por línea. Ahí se aceptan varias; si no, solo dos, para que una
-    // descripción suelta no se trague media hoja.
-    const anunciaProteinas = texto.match(/(\d+)\s*prote[íi]nas?/i);
-    const maxExtras = anunciaProteinas ? 12 : 2;
+    // Un ítem que anuncia N platos viene seguido de la LISTA, una por línea. Ahí
+    // se aceptan varias; si no, solo dos, para que una descripción suelta no se
+    // trague media hoja.
+    const anuncio = texto.match(CANTIDAD_ANUNCIADA);
+    const cantidadAnunciada = anuncio ? parseInt(anuncio[1], 10) : 0;
+    const maxExtras = cantidadAnunciada > 0 ? Math.max(cantidadAnunciada, 12) : 2;
 
     const extras = [];
     let j = i + 1;
@@ -328,7 +344,16 @@ const absorberDescripcion = (lines, i, texto) => {
         j++;
     }
 
-    return { esListaDeProteinas: !!anunciaProteinas && extras.length > 0, extras, idxPrecio };
+    // "Paquete mensual desayunos (6 por semana)" + UN plato = ese plato seis veces.
+    // Es distinto de "Pack 5 proteínas" + 5 líneas, donde cada línea es un plato.
+    let platos = [];
+    if (cantidadAnunciada > 1 && extras.length === 1) {
+        platos = Array.from({ length: cantidadAnunciada }, () => extras[0].texto);
+    } else if (cantidadAnunciada > 0 && extras.length > 0) {
+        platos = extras.map(e => e.texto);
+    }
+
+    return { platos, extras, idxPrecio };
 };
 
 const grabItems = (text) => {
@@ -362,53 +387,62 @@ const grabItems = (text) => {
             // venir la lista de proteínas o una descripción, y después el precio.
             const desc = precio === null
                 ? absorberDescripcion(lines, i, rest)
-                : { esListaDeProteinas: false, extras: [], idxPrecio: -1 };
+                : { platos: [], extras: [], idxPrecio: -1 };
 
-            const tieneDescripcion = desc.idxPrecio !== -1 && desc.extras.length > 0;
+            // Se registra la descripción si hay precio abajo, o si la línea es un
+            // ítem de todas formas (ver esItemEvidente: puede que el monto solo
+            // aparezca como "Total:" más abajo).
+            const tieneDescripcion = desc.extras.length > 0
+                && (desc.idxPrecio !== -1 || esItemEvidente(rest));
 
             items.push({
                 cantidad: parseInt(itemMatch[1], 10) || 1,
-                nombre: (tieneDescripcion && !desc.esListaDeProteinas
+                nombre: (tieneDescripcion && desc.platos.length === 0
                     ? [rest, ...desc.extras.map(e => e.texto)].join(' - ')
                     : rest
                 ).replace(/\*/g, '').trim(),
                 precio,
-                proteinas: desc.esListaDeProteinas ? desc.extras.map(e => e.texto) : []
+                proteinas: tieneDescripcion ? desc.platos : []
             });
             consumidas.add(i);
 
             if (tieneDescripcion) {
                 desc.extras.forEach(e => consumidas.add(e.idx));
-                // Saltar hasta el precio: si no, cada línea de la descripción se
+                // Saltar lo ya leído: si no, cada línea de la descripción se
                 // volvería a evaluar y entraría como un ítem repetido.
-                i = desc.idxPrecio - 1;
+                i = desc.idxPrecio !== -1
+                    ? desc.idxPrecio - 1
+                    : desc.extras[desc.extras.length - 1].idx;
             }
             continue;
         }
 
-        // --- Ítem SIN número, confirmado por un "Precio ..." debajo ---
+        // --- Ítem SIN número: lo confirma un "Precio" debajo, o que sea un ítem
+        //     evidente cuyo monto aparece más abajo como "Total:" ---
         const texto = line.trim();
         if (texto && !esCorteDeItem(texto)) {
-            const { esListaDeProteinas, extras, idxPrecio } = absorberDescripcion(lines, i, texto);
+            const { platos, extras, idxPrecio } = absorberDescripcion(lines, i, texto);
 
-            if (idxPrecio !== -1) {
+            if (idxPrecio !== -1 || (esItemEvidente(texto) && extras.length > 0)) {
                 // "Pack 5 proteínas de 500 g" + 5 líneas = el pack y sus proteínas.
                 // El nombre se deja intacto porque de ahí sale el gramaje ("500 g").
                 items.push({
                     cantidad: 1,
-                    nombre: (esListaDeProteinas
+                    nombre: (platos.length > 0
                         ? texto
                         : [texto, ...extras.map(e => e.texto)].join(' - ')
                     ).replace(/\*/g, '').trim(),
                     precio: null,
-                    proteinas: esListaDeProteinas ? extras.map(e => e.texto) : []
+                    proteinas: platos
                 });
                 consumidas.add(i);
                 extras.forEach(e => consumidas.add(e.idx));
 
-                // Saltar hasta la línea del precio. Sin esto, cada línea de la
-                // descripción se volvería a evaluar y entraría como ítem repetido.
-                i = idxPrecio - 1;
+                // Saltar lo ya leído. Sin esto, cada línea de la descripción se
+                // volvería a evaluar y entraría como ítem repetido.
+                i = idxPrecio !== -1
+                    ? idxPrecio - 1
+                    : extras[extras.length - 1].idx;
                 continue;
             }
         }

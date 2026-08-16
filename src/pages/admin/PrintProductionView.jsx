@@ -565,9 +565,20 @@ export default function PrintProductionView() {
                 if (c.platos && c.platos.length > 0) {
                     c.platos.forEach(p => {
                         const name = p.proteina?.nombre || packName;
-                        const grams = (p.proteina?.gramosPorPorcion || getDefaultGrams(packName)) * c.cantidad;
-                        if (!itemsMap[name]) itemsMap[name] = { name, category: guessCategory(name), totalQty: 0, unit: 'g' };
-                        itemsMap[name].totalQty += grams;
+                        const gramos = p.proteina?.gramosPorPorcion || 0;
+                        // Un plato sin gramaje se cuenta por PORCIONES, no se le
+                        // inventa un peso: un desayuno pedido 6 veces por semana no
+                        // son "900 g de gallo pinto", son 6 porciones.
+                        if (!itemsMap[name]) {
+                            itemsMap[name] = {
+                                name,
+                                category: guessCategory(name),
+                                totalQty: 0,
+                                unit: gramos ? 'g' : 'porciones'
+                            };
+                        }
+                        const enGramos = itemsMap[name].unit === 'g';
+                        itemsMap[name].totalQty += (enGramos ? (gramos || getDefaultGrams(packName)) : 1) * c.cantidad;
                     });
                 } else {
                     const name = packName;
