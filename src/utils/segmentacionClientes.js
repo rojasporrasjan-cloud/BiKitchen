@@ -12,6 +12,7 @@
  */
 
 import { getScheduleFromOrder } from './orderDates';
+import { getSubscriptionProgress } from './subscriptionProgress';
 import { DOMINIO_SIN_CORREO } from './buildPedidoFromImport';
 
 /** Pedidos que no cuentan para saber qué le pasa a un cliente. */
@@ -77,6 +78,9 @@ export const construirClientes = (orders = [], hoy = new Date()) => {
                 primerPedido: creado,
                 ultimoPedido: creado,
                 ultimaEntrega,
+                // El pedido que manda para "en qué semana va": el que llega más
+                // lejos en el tiempo, o sea su pack todavía en curso.
+                pedidoVigente: o,
                 aceptaPromos: o?.aceptaPromos !== false
             });
             return;
@@ -95,19 +99,27 @@ export const construirClientes = (orders = [], hoy = new Date()) => {
         if (!previo.correo) previo.correo = correoReal(o?.correo);
         if (ultimaEntrega && (!previo.ultimaEntrega || ultimaEntrega > previo.ultimaEntrega)) {
             previo.ultimaEntrega = ultimaEntrega;
+            previo.pedidoVigente = o;
         }
         if (o?.aceptaPromos === false) previo.aceptaPromos = false;
     });
 
     return [...porTelefono.values()]
-        .map((c) => ({
-            ...c,
-            planes: [...c.planes],
-            diasDesdeUltimoPedido: c.ultimoPedido ? diasEntre(c.ultimoPedido, hoy) : null,
-            diasParaUltimaEntrega: c.ultimaEntrega
-                ? diasEntre(hoy, new Date(`${c.ultimaEntrega}T12:00:00`))
-                : null
-        }))
+        .map((c) => {
+            // Mismo cálculo que usa el módulo de Packs Mensuales, no una copia:
+            // así "Semana 2 de 4" dice lo mismo en las dos pantallas.
+            const suscripcion = getSubscriptionProgress(c.pedidoVigente || {}, hoy);
+            return {
+                ...c,
+                planes: [...c.planes],
+                suscripcion,
+                entregasRestantes: Math.max(suscripcion.total - suscripcion.completadas, 0),
+                diasDesdeUltimoPedido: c.ultimoPedido ? diasEntre(c.ultimoPedido, hoy) : null,
+                diasParaUltimaEntrega: c.ultimaEntrega
+                    ? diasEntre(hoy, new Date(`${c.ultimaEntrega}T12:00:00`))
+                    : null
+            };
+        })
         .sort((a, b) => (b.ultimoPedido || 0) - (a.ultimoPedido || 0));
 };
 
@@ -128,6 +140,17 @@ export const SEGMENTOS = [
             (c) => c.diasParaUltimaEntrega !== null
                 && c.diasParaUltimaEntrega >= 0
                 && c.diasParaUltimaEntrega <= dias
+        )
+    },
+    {
+        id: 'packEnCurso',
+        label: 'Packs en curso',
+        descripcion: 'Packs de varias entregas que todavía no terminan. Filtra por cuántas entregas les quedan.',
+        opcion: { campo: 'dias', label: 'Les quedan N entregas o menos', valor: 1 },
+        aplicar: (clientes, { dias = 1 } = {}) => clientes.filter(
+            (c) => c.suscripcion.total > 1
+                && !c.suscripcion.finalizado
+                && c.entregasRestantes <= dias
         )
     },
     {

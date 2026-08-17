@@ -102,3 +102,56 @@ describe('Plantillas de arranque', () => {
         });
     });
 });
+
+describe('Variables del avance del pack', () => {
+    const enCurso = {
+        nombre: 'Angie Navarro',
+        planes: ['Pack Desayunos Mensual'],
+        entregasRestantes: 2,
+        suscripcion: {
+            total: 4, semanaActual: 3, etiqueta: 'Semana 3 de 4',
+            proxima: '2026-08-17', finalizado: false
+        }
+    };
+
+    it('dice en qué semana va', () => {
+        expect(renderPlantilla('Vas en la semana {{semana}} de {{totalSemanas}}', enCurso))
+            .toBe('Vas en la semana 3 de 4');
+    });
+
+    it('la etiqueta completa también sirve', () => {
+        expect(renderPlantilla('{{avance}}', enCurso)).toBe('Semana 3 de 4');
+    });
+
+    it('cuántas entregas le quedan', () => {
+        expect(renderPlantilla('Te quedan {{entregasRestantes}} entregas', enCurso))
+            .toBe('Te quedan 2 entregas');
+    });
+
+    it('la próxima entrega sale escrita', () => {
+        const texto = renderPlantilla('Tu próxima entrega: {{proximaEntrega}}', enCurso);
+        expect(texto).not.toContain('2026-08-17');
+        expect(texto).toMatch(/agosto/i);
+    });
+
+    it('un pedido de entrega única no inventa "semana 1 de 1"', () => {
+        const unico = { nombre: 'Laura', suscripcion: { total: 1, semanaActual: 1, etiqueta: 'Semana 1 de 1' } };
+        expect(renderPlantilla('{{avance}}', unico)).toBe('');
+        expect(renderPlantilla('{{semana}}', unico)).toBe('');
+    });
+
+    it('a ese cliente se le avisa que le quedaría un hueco', () => {
+        const unico = { nombre: 'Laura', suscripcion: { total: 1, semanaActual: 1, etiqueta: 'x' } };
+        expect(clientesConHuecos('Vas en {{avance}}', [enCurso, unico])).toHaveLength(1);
+    });
+
+    it('cero entregas restantes es un valor válido, no un hueco', () => {
+        const terminado = { ...enCurso, entregasRestantes: 0 };
+        expect(renderPlantilla('{{entregasRestantes}}', terminado)).toBe('0');
+        expect(clientesConHuecos('{{entregasRestantes}}', [terminado])).toEqual([]);
+    });
+
+    it('un cliente sin suscripción no revienta', () => {
+        expect(renderPlantilla('{{avance}}{{semana}}{{proximaEntrega}}', { nombre: 'X' })).toBe('');
+    });
+});

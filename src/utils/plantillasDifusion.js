@@ -21,7 +21,13 @@ export const VARIABLES = [
     { clave: 'pack', descripcion: 'El último pack que pidió' },
     { clave: 'zona', descripcion: 'Su zona de entrega' },
     { clave: 'ultimaEntrega', descripcion: 'Fecha de su última entrega' },
-    { clave: 'diasRestantes', descripcion: 'Días que le faltan para esa entrega' }
+    { clave: 'diasRestantes', descripcion: 'Días que le faltan para esa entrega' },
+    // Vienen del mismo cálculo que muestra el módulo de Packs Mensuales
+    { clave: 'semana', descripcion: 'En qué semana del pack va (2)' },
+    { clave: 'totalSemanas', descripcion: 'De cuántas semanas es el pack (4)' },
+    { clave: 'avance', descripcion: 'Semana 2 de 4' },
+    { clave: 'entregasRestantes', descripcion: 'Cuántas entregas le quedan' },
+    { clave: 'proximaEntrega', descripcion: 'Fecha de su próxima entrega' }
 ];
 
 const primerNombre = (nombre) => String(nombre || '').trim().split(/\s+/)[0] || '';
@@ -35,7 +41,16 @@ export const valoresDe = (cliente = {}) => ({
     ultimaEntrega: cliente.ultimaEntrega ? formatFechaLarga(cliente.ultimaEntrega) : '',
     diasRestantes: cliente.diasParaUltimaEntrega === null || cliente.diasParaUltimaEntrega === undefined
         ? ''
-        : String(cliente.diasParaUltimaEntrega)
+        : String(cliente.diasParaUltimaEntrega),
+    // Un pack de una sola entrega no tiene "semana 1 de 1" que valga la pena
+    // decir, así que esas variables quedan vacías y el aviso de huecos lo marca.
+    semana: cliente.suscripcion?.total > 1 ? String(cliente.suscripcion.semanaActual) : '',
+    totalSemanas: cliente.suscripcion?.total > 1 ? String(cliente.suscripcion.total) : '',
+    avance: cliente.suscripcion?.total > 1 ? cliente.suscripcion.etiqueta : '',
+    entregasRestantes: cliente.entregasRestantes === undefined || cliente.entregasRestantes === null
+        ? ''
+        : String(cliente.entregasRestantes),
+    proximaEntrega: cliente.suscripcion?.proxima ? formatFechaLarga(cliente.suscripcion.proxima) : ''
 });
 
 /**

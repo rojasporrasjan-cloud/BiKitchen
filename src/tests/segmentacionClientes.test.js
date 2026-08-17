@@ -165,3 +165,75 @@ describe('Segmento desconocido', () => {
         expect(aplicarSegmento([], 'no-existe', {}, HOY)).toEqual([]);
     });
 });
+
+describe('Sincronizado con Packs Mensuales', () => {
+    const mensual = (over = {}) => pedido({
+        fecha_entrega: '2026-08-03',
+        fechas_entrega: ['2026-08-03', '2026-08-10', '2026-08-17', '2026-08-24'],
+        items: [{ nombre: 'Pack Keto Mensual', plan: 'monthly' }],
+        ...over
+    });
+
+    it('dice en qué semana va, igual que el otro módulo', () => {
+        // Hoy es 16 ago: ya pasaron las del 3 y 10 → va en la semana 3 de 4
+        const [c] = construirClientes([mensual()], HOY);
+        expect(c.suscripcion.etiqueta).toBe('Semana 3 de 4');
+        expect(c.suscripcion.semanaActual).toBe(3);
+        expect(c.suscripcion.total).toBe(4);
+        expect(c.suscripcion.proxima).toBe('2026-08-17');
+    });
+
+    it('cuenta bien cuántas entregas le quedan', () => {
+        const [c] = construirClientes([mensual()], HOY);
+        expect(c.entregasRestantes).toBe(2); // la del 17 y la del 24
+    });
+
+    it('el avance sale del pack que sigue en curso, no del más viejo', () => {
+        const clientes = construirClientes([
+            mensual({ createdAt: '2026-06-01T10:00:00', fechas_entrega: ['2026-06-01', '2026-06-08'], fecha_entrega: '2026-06-01' }),
+            mensual({ createdAt: '2026-08-01T10:00:00' })
+        ], HOY);
+        expect(clientes).toHaveLength(1);
+        expect(clientes[0].suscripcion.total).toBe(4);
+        expect(clientes[0].suscripcion.finalizado).toBe(false);
+    });
+
+    it('un pedido de una sola entrega no inventa semanas', () => {
+        const [c] = construirClientes([pedido()], HOY);
+        expect(c.suscripcion.total).toBe(1);
+    });
+});
+
+describe('Segmento: packs en curso', () => {
+    const conEntregas = (fechas, telefono) => pedido({
+        telefono,
+        fecha_entrega: fechas[0],
+        fechas_entrega: fechas,
+        items: [{ nombre: 'Pack Keto Mensual', plan: fechas.length >= 4 ? 'monthly' : 'biweekly' }]
+    });
+
+    it('toma solo a los que les queda poco', () => {
+        const clientes = construirClientes([
+            // Le queda 1 (la del 17)
+            conEntregas(['2026-08-03', '2026-08-10', '2026-08-17'], '8111-1111'),
+            // Le quedan 3
+            conEntregas(['2026-08-17', '2026-08-24', '2026-08-31'], '8222-2222')
+        ], HOY);
+
+        const alFinal = aplicarSegmento(clientes, 'packEnCurso', { dias: 1 }, HOY);
+        expect(alFinal).toHaveLength(1);
+        expect(alFinal[0].telefono).toBe('81111111');
+    });
+
+    it('no toma packs ya terminados', () => {
+        const clientes = construirClientes([
+            conEntregas(['2026-06-01', '2026-06-08'], '8333-3333')
+        ], HOY);
+        expect(aplicarSegmento(clientes, 'packEnCurso', { dias: 4 }, HOY)).toEqual([]);
+    });
+
+    it('no toma pedidos de una sola entrega', () => {
+        const clientes = construirClientes([pedido()], HOY);
+        expect(aplicarSegmento(clientes, 'packEnCurso', { dias: 4 }, HOY)).toEqual([]);
+    });
+});

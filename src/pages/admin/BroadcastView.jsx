@@ -1,7 +1,9 @@
-import React, { useState, useMemo } from 'react';
-import { Send, Users, Copy, Download, AlertTriangle, Check, MessageCircle } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { Send, Users, Copy, Download, Check } from 'lucide-react';
 import { useOrders } from '../../context/OrdersContext';
 import { useAuth } from '../../context/AuthContext';
+import PlantillaEditor from '../../components/admin/PlantillaEditor';
+import DestinatariosTabla from '../../components/admin/DestinatariosTabla';
 import {
     construirClientes,
     aplicarSegmento,
@@ -11,9 +13,9 @@ import {
     renderPlantilla,
     variablesDesconocidas,
     clientesConHuecos,
-    PLANTILLAS_BASE,
-    VARIABLES
+    PLANTILLAS_BASE
 } from '../../utils/plantillasDifusion';
+import { listarPlantillas } from '../../utils/firestoreDifusion';
 
 /**
  * Listas de difusión — solo para el dueño.
@@ -23,8 +25,9 @@ import {
  * de Kommo solo deja mandar por un canal que la propia integración aporte, y el
  * WhatsApp de Gina está conectado con la integración nativa de Kommo.
  *
- * Lo que sí ponemos es lo que Kommo no puede saber: en qué semana va cada pack,
- * quién está por quedarse sin comida, quién hace rato no pide.
+ * Lo que sí ponemos es lo que Kommo no puede saber: en qué semana va cada pack y
+ * a quién se le está por acabar. Ese dato sale de getSubscriptionProgress(), el
+ * mismo que usa Packs Mensuales, para que las dos pantallas no se contradigan.
  */
 export default function BroadcastView() {
     const { orders, loading } = useOrders();
@@ -33,14 +36,43 @@ export default function BroadcastView() {
     const [segmentoId, setSegmentoId] = useState('renovacion');
     const [opciones, setOpciones] = useState({ dias: 7, texto: '' });
     const [texto, setTexto] = useState(PLANTILLAS_BASE[0].texto);
+    const [plantillas, setPlantillas] = useState(PLANTILLAS_BASE);
+    const [excluidos, setExcluidos] = useState(() => new Set());
     const [copiado, setCopiado] = useState('');
+
+    const recargarPlantillas = useCallback(async () => {
+        try {
+            const guardadas = await listarPlantillas();
+            // Si todavía no hay ninguna guardada, se muestran las de arranque
+            setPlantillas(guardadas.length > 0 ? guardadas : PLANTILLAS_BASE);
+        } catch (error) {
+            console.error('[Difusión] Error cargando plantillas:', error);
+        }
+    }, []);
+
+    // `vivo` evita escribir estado si el usuario se va de la pantalla antes de
+    // que Firestore conteste
+    useEffect(() => {
+        let vivo = true;
+        listarPlantillas()
+            .then((guardadas) => {
+                if (vivo && guardadas.length > 0) setPlantillas(guardadas);
+            })
+            .catch((error) => console.error('[Difusión] Error cargando plantillas:', error));
+        return () => { vivo = false; };
+    }, []);
 
     const segmento = SEGMENTOS.find((s) => s.id === segmentoId);
 
     const clientes = useMemo(() => construirClientes(orders), [orders]);
-    const destinatarios = useMemo(
+    const candidatos = useMemo(
         () => aplicarSegmento(clientes, segmentoId, opciones),
         [clientes, segmentoId, opciones]
+    );
+    // Los que quedan después de destildar a mano
+    const destinatarios = useMemo(
+        () => candidatos.filter((c) => !excluidos.has(c.telefono)),
+        [candidatos, excluidos]
     );
 
     const desconocidas = useMemo(() => variablesDesconocidas(texto), [texto]);
@@ -56,8 +88,16 @@ export default function BroadcastView() {
     const elegirSegmento = (id) => {
         const s = SEGMENTOS.find((x) => x.id === id);
         setSegmentoId(id);
-        setOpciones({ dias: s?.opcion?.valor ?? 7, texto: s?.opcion?.campo === 'texto' ? '' : '' });
+        setOpciones({ dias: s?.opcion?.valor ?? 7, texto: '' });
+        setExcluidos(new Set()); // otro segmento, otras exclusiones
     };
+
+    const alternar = (telefono) => setExcluidos((prev) => {
+        const siguiente = new Set(prev);
+        if (siguiente.has(telefono)) siguiente.delete(telefono);
+        else siguiente.add(telefono);
+        return siguiente;
+    });
 
     const avisar = (que) => {
         setCopiado(que);
@@ -72,10 +112,11 @@ export default function BroadcastView() {
     const descargarCSV = () => {
         const escapar = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
         const filas = [
-            ['Nombre', 'Telefono', 'Correo', 'Zona', 'Ultimo pack', 'Mensaje'],
+            ['Nombre', 'Telefono', 'Correo', 'Zona', 'Ultimo pack', 'Avance', 'Proxima entrega', 'Mensaje'],
             ...destinatarios.map((c) => [
                 c.nombre, c.telefonoOriginal || c.telefono, c.correo, c.zona,
-                c.planes[0] || '', renderPlantilla(texto, c)
+                c.planes[0] || '', c.suscripcion.etiqueta, c.suscripcion.proxima || '',
+                renderPlantilla(texto, c)
             ])
         ];
         // BOM para que Excel abra las tildes bien
@@ -138,9 +179,9 @@ export default function BroadcastView() {
                             <input
                                 id="opcion-segmento"
                                 type="number"
-                                min="1"
+                                min="0"
                                 value={opciones.dias}
-                                onChange={(e) => setOpciones({ ...opciones, dias: Number(e.target.value) || 1 })}
+                                onChange={(e) => setOpciones({ ...opciones, dias: Number(e.target.value) || 0 })}
                                 className="w-24 px-3 py-1.5 rounded-lg border border-gray-200 text-sm"
                             />
                         ) : (
@@ -160,7 +201,8 @@ export default function BroadcastView() {
                     <span className="text-2xl font-black text-bikitchen-orange">{destinatarios.length}</span>
                     <span className="text-sm text-gray-700 ml-2">
                         {destinatarios.length === 1 ? 'cliente' : 'clientes'}
-                        {loading && ' (todavía cargando pedidos…)'}
+                        {excluidos.size > 0 && ` (${excluidos.size} destildado${excluidos.size > 1 ? 's' : ''})`}
+                        {loading && ' — todavía cargando pedidos…'}
                     </span>
                     <p className="text-[11px] text-gray-600 mt-1">
                         Los que pidieron no recibir promociones quedan fuera siempre.
@@ -169,84 +211,31 @@ export default function BroadcastView() {
             </section>
 
             {/* 2. Qué se les dice */}
-            <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 md:p-5 mb-4">
-                <h2 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
-                    <MessageCircle size={16} aria-hidden="true" /> 2. ¿Qué se les dice?
-                </h2>
-
-                <div className="flex flex-wrap gap-2 mb-3">
-                    {PLANTILLAS_BASE.map((p) => (
-                        <button
-                            key={p.id}
-                            onClick={() => setTexto(p.texto)}
-                            className="px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 text-xs font-semibold hover:bg-gray-200 transition-colors"
-                        >
-                            {p.nombre}
-                        </button>
-                    ))}
-                </div>
-
-                <label htmlFor="texto-mensaje" className="sr-only">Texto del mensaje</label>
-                <textarea
-                    id="texto-mensaje"
-                    value={texto}
-                    onChange={(e) => setTexto(e.target.value)}
-                    rows={6}
-                    className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm font-mono"
-                />
-
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                    {VARIABLES.map((v) => (
-                        <button
-                            key={v.clave}
-                            onClick={() => setTexto((t) => `${t}{{${v.clave}}}`)}
-                            title={v.descripcion}
-                            className="px-2 py-1 rounded bg-blue-50 text-blue-700 text-[11px] font-mono hover:bg-blue-100 transition-colors"
-                        >
-                            {`{{${v.clave}}}`}
-                        </button>
-                    ))}
-                </div>
-
-                {desconocidas.length > 0 && (
-                    <p className="mt-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2 flex items-start gap-2">
-                        <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
-                        <span>
-                            Estas variables no existen y se van a mandar tal cual:{' '}
-                            <strong>{desconocidas.map((d) => `{{${d}}}`).join(', ')}</strong>
-                        </span>
-                    </p>
-                )}
-
-                {conHuecos.length > 0 && (
-                    <p className="mt-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-start gap-2">
-                        <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
-                        <span>
-                            A <strong>{conHuecos.length}</strong> {conHuecos.length === 1 ? 'cliente le' : 'clientes les'}
-                            {' '}falta algún dato y el mensaje les llegaría con un espacio en blanco
-                            ({conHuecos.slice(0, 3).map((c) => c.nombre).join(', ')}
-                            {conHuecos.length > 3 ? '…' : ''}).
-                        </span>
-                    </p>
-                )}
-            </section>
+            <PlantillaEditor
+                plantillas={plantillas}
+                recargar={recargarPlantillas}
+                texto={texto}
+                onTextoChange={setTexto}
+                desconocidas={desconocidas}
+                conHuecos={conHuecos}
+            />
 
             {/* 3. Vista previa y salida */}
             <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 md:p-5">
                 <h2 className="text-sm font-bold text-gray-900 mb-3">3. Cómo queda</h2>
 
                 {ejemplo ? (
-                    <div className="bg-[#DCF8C6] rounded-xl px-4 py-3 text-sm text-gray-900 whitespace-pre-wrap max-w-md">
-                        {renderPlantilla(texto, ejemplo)}
-                    </div>
+                    <>
+                        <div className="bg-[#DCF8C6] rounded-xl px-4 py-3 text-sm text-gray-900 whitespace-pre-wrap max-w-md">
+                            {renderPlantilla(texto, ejemplo)}
+                        </div>
+                        <p className="text-[11px] text-gray-500 mt-1.5">
+                            Ejemplo con {ejemplo.nombre}. Cada quien recibe el suyo con sus datos.
+                        </p>
+                    </>
                 ) : (
                     <p className="text-sm text-gray-500">
-                        No hay clientes en este segmento, así que no hay nada que previsualizar.
-                    </p>
-                )}
-                {ejemplo && (
-                    <p className="text-[11px] text-gray-500 mt-1.5">
-                        Ejemplo con {ejemplo.nombre}. Cada quien recibe el suyo con sus datos.
+                        No hay clientes seleccionados, así que no hay nada que previsualizar.
                     </p>
                 )}
 
@@ -269,30 +258,11 @@ export default function BroadcastView() {
                     </button>
                 </div>
 
-                {destinatarios.length > 0 && (
-                    <div className="mt-4 max-h-72 overflow-y-auto border border-gray-100 rounded-xl">
-                        <table className="w-full text-xs">
-                            <thead className="bg-gray-50 sticky top-0">
-                                <tr>
-                                    <th className="text-left px-3 py-2 font-semibold text-gray-700">Cliente</th>
-                                    <th className="text-left px-3 py-2 font-semibold text-gray-700">Teléfono</th>
-                                    <th className="text-left px-3 py-2 font-semibold text-gray-700">Zona</th>
-                                    <th className="text-left px-3 py-2 font-semibold text-gray-700">Última entrega</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {destinatarios.map((c) => (
-                                    <tr key={c.telefono} className="border-t border-gray-100">
-                                        <td className="px-3 py-2 text-gray-900">{c.nombre}</td>
-                                        <td className="px-3 py-2 text-gray-600">{c.telefonoOriginal || c.telefono}</td>
-                                        <td className="px-3 py-2 text-gray-600">{c.zona || '—'}</td>
-                                        <td className="px-3 py-2 text-gray-600">{c.ultimaEntrega || '—'}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
+                <DestinatariosTabla
+                    candidatos={candidatos}
+                    excluidos={excluidos}
+                    onAlternar={alternar}
+                />
             </section>
         </div>
     );
