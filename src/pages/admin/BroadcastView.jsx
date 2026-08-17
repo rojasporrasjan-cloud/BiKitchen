@@ -4,6 +4,7 @@ import { useOrders } from '../../context/OrdersContext';
 import { useAuth } from '../../context/AuthContext';
 import PlantillaEditor from '../../components/admin/PlantillaEditor';
 import DestinatariosTabla from '../../components/admin/DestinatariosTabla';
+import EnvioKommo from '../../components/admin/EnvioKommo';
 import {
     construirClientes,
     aplicarSegmento,
@@ -264,6 +265,8 @@ export default function BroadcastView() {
                     onAlternar={alternar}
                 />
             </section>
+
+            <EnvioKommo destinatarios={destinatarios} segmentoId={segmentoId} />
         </div>
     );
 }
