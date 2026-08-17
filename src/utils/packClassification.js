@@ -17,12 +17,15 @@
 /** Menú oficial de la semana al que corresponde el pack. null = no hay menú. */
 export const mapPackNameToMenuKey = (name) => {
     const n = String(name || '').toLowerCase();
+    if (n.includes('familiar') && n.includes('deluxe')) return 'familiarDeluxe';
+    if (n.includes('familiar') && n.includes('premium')) return 'familiarPremium';
+    if (n.includes('familiar')) return 'familiarPremium';
     if ((n.includes('bajo') || n.includes('bajas')) && n.includes('calor')) return 'bajoCalorias';
     if (n.includes('sin carbos')) return 'sinCarbos';
     if (n.includes('keto')) return 'keto';
     if (n.includes('vegetariano')) return 'vegetariano';
     if (n.includes('casadito')) return 'casaditos';
-    if (n.includes('full pack')) return 'fullPack';
+    if (n.includes('full pack') || (n.includes('deluxe') && !n.includes('familiar'))) return 'fullPack';
     if (n.includes('desayuno')) return 'desayuno';
     if (n.includes('regular') || n.includes('estandar') || n.includes('estándar')) return 'regular';
     if ((n.includes('mensual') || n.includes('quincenal')) && !n.includes('proteína') && !n.includes('proteina')) return 'regular';
@@ -37,7 +40,10 @@ export const isIndividualPack = (name) => {
     const n = String(name || '').toLowerCase();
     return n.includes('individual')
         || n.includes('proteína') || n.includes('proteina')
-        || n.includes('granel');
+        || n.includes('granel')
+        || n.includes('torta')
+        || n.includes('empanada')
+        || n.includes('wrap');
 };
 
 /** Gramos de proteína por porción cuando el plato no trae el dato. */

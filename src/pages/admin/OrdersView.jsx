@@ -2806,7 +2806,7 @@ Somos de BiKitchen, te contactamos sobre tu pedido ${selectedOrder.displayId}.
                                                                         {effectiveCategoryLabel && (
                                                                             <div className="text-xs text-purple-600 font-semibold">{effectiveCategoryLabel}</div>
                                                                         )}
-                                                                        {desc && (
+                                                                        {desc && !(planLbl && desc.includes('/')) && (
                                                                             <div className="text-sm text-gray-500 mt-1">{desc}</div>
                                                                         )}
                                                                         {Array.isArray(item.proteinas) && item.proteinas.length > 0 && (

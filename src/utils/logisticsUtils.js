@@ -179,7 +179,7 @@ export function mapPedidosFromLegacy(rawPedidos) {
               unidad: 'g',
               cantidadPorPorcion: 0
             },
-            descripcion: item.desc || item.descripcion || ''
+            descripcion: item.planLabel || item.categoryLabel || item.desc || item.descripcion || ''
           });
         });
       } else {
@@ -213,10 +213,35 @@ export function mapPedidosFromLegacy(rawPedidos) {
             unidad: ensaladaInfo.unidad,
             cantidadPorPorcion: ensaladaInfo.cantidad
           },
-          descripcion: item.desc || item.descripcion || ''
+          descripcion: item.planLabel || item.categoryLabel || item.desc || item.descripcion || ''
         });
       }
     });
+
+    const extractSubstitutionsSummary = (order) => {
+      const itemsList = order.items || order.menu || order.details?.cart || order.cart || [];
+      const subs = [];
+      itemsList.forEach(item => {
+        const c = item.customizations || {};
+        (c.proteinChanges || []).forEach(d => subs.push(`Plato ${d.dishNumber} (${d.dishName || 'Proteína'}) → ${d.newValue}`));
+        (c.vegeChanges || []).forEach(d => subs.push(`Plato ${d.dishNumber} (${d.dishName || 'Vegetal'}) → ${d.newValue}`));
+        (c.carboChanges || []).forEach(d => subs.push(`Plato ${d.dishNumber} (${d.dishName || 'Carbo'}) → ${d.newValue}`));
+        (c.dishChanges || []).forEach(d => subs.push(`Plato ${d.dishNumber} (${d.dishName || 'Plato'}) → ${d.newProtein || d.newValue}`));
+        if (c.protein) subs.push(`Proteína → ${c.protein}`);
+        if (c.vegetal) subs.push(`Vegetal → ${c.vegetal}`);
+        if (c.carbo) subs.push(`Carbo → ${c.carbo}`);
+        if (item.notas || item.notes || c.notes) {
+          subs.push(`Notas: ${item.notas || item.notes || c.notes}`);
+        }
+      });
+      return subs.join(' · ');
+    };
+
+    const subsText = extractSubstitutionsSummary(p);
+    let rawObs = p.observaciones || p.details?.notes || '';
+    if (subsText && !rawObs.includes(subsText)) {
+      rawObs = rawObs ? `${rawObs} · ${subsText}` : subsText;
+    }
 
     return {
       id: p.id,
@@ -228,7 +253,7 @@ export function mapPedidosFromLegacy(rawPedidos) {
       plan: p.plan || null,
       cantidadMenus: p.cantidadMenus || 1,
       fecha_entrega: p.fecha_entrega,
-      observaciones: p.observaciones || '',
+      observaciones: rawObs,
       incluyeDesayuno: !!p.incluyeDesayuno,
       platos: platosNormalizados.length > 0 ? platosNormalizados : (p.platos || [])
     };

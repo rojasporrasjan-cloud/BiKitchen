@@ -41,3 +41,10 @@ testOrder.js
 
 # Carpeta de backups locales
 .backups/
+
+# Dumps and debug data
+orders_dump.json
+dumpServer.js
+readOrders.js
+*.dump
+

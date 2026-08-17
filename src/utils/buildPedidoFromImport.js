@@ -104,7 +104,7 @@ export const buildPedidoFromImport = (parsed, options = {}) => {
             nombre: item?.nombre || '',
             cantidad,
             precio,
-            total: precio * cantidad,
+            total: num(item?.total) || (precio * cantidad),
             proteinas,
             proteina: '',
             carbo: '',

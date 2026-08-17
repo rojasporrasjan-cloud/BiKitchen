@@ -7,7 +7,6 @@ import { useOrders } from '../context/OrdersContext';
 import { getAllCoupons } from '../utils/firestoreCoupons';
 import '../utils/deleteAllData'; // Importar script de eliminación (disponible en consola)
 
-
 // Hook para detectar si es móvil
 function useIsMobile() {
     const [isMobile, setIsMobile] = useState(false);

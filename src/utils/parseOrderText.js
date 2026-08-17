@@ -241,9 +241,9 @@ const grabDeliveryDates = (text, hoy) => {
  * El nombre se conserva ENTERO (con el "(250g)") porque logisticsUtils saca los
  * gramos por porción justamente de ahí.
  */
-const ES_LINEA_PRECIO = /^\s*Precio\s*:?\s*₡?\s*[\d.,\s]+\s*$/i;
+const ES_LINEA_PRECIO = /^\s*Precio\s*:?\s*[₡¢$]?\s*[\d.,\s]+\s*$/i;
 const ES_SEPARADOR = /^[\s━─=*_·.-]*$/;
-const ES_MONTO_SUELTO = /^[\s₡$]*[\d.,\s]+$/;
+const ES_MONTO_SUELTO = /^[\s₡¢$]*[\d.,\s]+$/;
 const PARECE_FECHA = /\b\d{1,2}\s+(?:de\s+)?(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\b/i;
 
 /** Encabezado de sección tipo "👤 INFORMACIÓN DEL CLIENTE": todo en mayúsculas. */
@@ -279,6 +279,46 @@ export const esLineaIgnorable = (linea) => {
     return false;
 };
 
+/** Extrae promo/instrucciones del texto del ítem */
+const processItemNameAndInstructions = (mainText, extrasArray, tieneDescripcion) => {
+    const instruccionFuerte = /^(cambiar|con\s|sin\s|nota|ojo|\+)/i;
+    let nameExtras = [];
+    let instructionExtras = [];
+    let _extras = tieneDescripcion ? [...extrasArray] : [];
+    let currentMainText = mainText;
+
+    const formatInstruction = (t) => {
+        return t.replace(/^[\s•·*□▢▪◦◽◾-]+/, '').trim();
+    };
+
+    if (instruccionFuerte.test(currentMainText) && _extras.length > 0) {
+        instructionExtras.push(formatInstruction(currentMainText));
+        currentMainText = _extras[0].texto;
+        _extras = _extras.slice(1);
+    }
+
+    _extras.forEach(e => {
+        const txt = e.texto;
+        if (/\bregal[ií]a\b/i.test(txt) || /\bpack\b/i.test(txt)) {
+            nameExtras.push(txt);
+        } else if (instruccionFuerte.test(txt) || (/\b(?:desayunos?|cenas?)\b/i.test(txt) && !/\bregal[ií]a\b/i.test(txt))) {
+            instructionExtras.push(formatInstruction(txt));
+        } else {
+            nameExtras.push(txt);
+        }
+    });
+
+    const nombreFinal = (nameExtras.length > 0 
+        ? [currentMainText, ...nameExtras].join(' - ')
+        : currentMainText
+    ).replace(/^[\s•·*□▢▪◦◽◾-]+/, '').replace(/\*/g, '').trim();
+
+    return {
+        nombre: nombreFinal,
+        instruccionesSuelta: instructionExtras.filter(Boolean)
+    };
+};
+
 /**
  * Extrae los ítems y devuelve además qué líneas consumió, para que
  * parseOrderBlock pueda rescatar como observación lo que quedó suelto.
@@ -306,7 +346,7 @@ export const esLineaIgnorable = (linea) => {
  * Las líneas "Proteínas: a, b, c" cortan la búsqueda a propósito, porque ya las
  * lee el manejador de detalles de más abajo.
  */
-const DETALLE_PROTEINAS_RE = /^[\s└│├•·*-]*Prote[íi]nas?\s*:/i;
+const DETALLE_PROTEINAS_RE = /^[\s└│├•·*◽◾-]*Prote[íi]nas?\s*:/i;
 
 /**
  * Cuántos platos anuncia el ítem: "5 proteínas", "6 por semana", "5 comidas".
@@ -365,9 +405,9 @@ const grabItems = (text) => {
         const line = lines[i];
 
         // --- Ítem que arranca con número ---
-        let itemMatch = line.match(/^[\s•·*□▢▪◦-]*(\d+)\s*[×x]\s*(.+)$/i);
+        let itemMatch = line.match(/^[\s•·*□▢▪◦◽◾-]*(\d+)\s*[×x]\s*(.+)$/i);
         if (!itemMatch) {
-            const suelto = line.match(/^[\s•·*□▢▪◦-]*(\d+)\s+(\p{L}.*)$/u);
+            const suelto = line.match(/^[\s•·*□▢▪◦◽◾-]*(\d+)\s+(\p{L}.*)$/u);
             if (suelto && !PARECE_FECHA.test(line)) itemMatch = suelto;
         }
 
@@ -376,8 +416,8 @@ const grabItems = (text) => {
             let precio = null;
 
             // Formato correo: el precio va al final de la misma línea. Es el ÚLTIMO
-            // " - ₡..." porque el nombre del pack también trae guiones.
-            const priceMatch = rest.match(/^(.*)\s-\s*₡\s*([\d.,\s]+)$/);
+            // " - ₡..." porque el nombre del pack también trae guiones. Ocasionalmente viene con ":" en vez de "-".
+            const priceMatch = rest.match(/^(.*?)\s*[-:]\s*[₡¢$]\s*([\d.,\s]+)$/);
             if (priceMatch) {
                 rest = priceMatch[1].trim();
                 precio = parseAmount(priceMatch[2]);
@@ -395,14 +435,19 @@ const grabItems = (text) => {
             const tieneDescripcion = desc.extras.length > 0
                 && (desc.idxPrecio !== -1 || esItemEvidente(rest));
 
+            // Filtrar y limpiar el nombre
+            const { nombre, instruccionesSuelta } = processItemNameAndInstructions(
+                rest, 
+                desc.extras, 
+                tieneDescripcion && desc.platos.length === 0
+            );
+
             items.push({
                 cantidad: parseInt(itemMatch[1], 10) || 1,
-                nombre: (tieneDescripcion && desc.platos.length === 0
-                    ? [rest, ...desc.extras.map(e => e.texto)].join(' - ')
-                    : rest
-                ).replace(/\*/g, '').trim(),
+                nombre,
                 precio,
-                proteinas: tieneDescripcion ? desc.platos : []
+                proteinas: tieneDescripcion ? desc.platos : [],
+                instruccionesSuelta
             });
             consumidas.add(i);
 
@@ -419,21 +464,32 @@ const grabItems = (text) => {
 
         // --- Ítem SIN número: lo confirma un "Precio" debajo, o que sea un ítem
         //     evidente cuyo monto aparece más abajo como "Total:" ---
-        const texto = line.trim();
+        let texto = line.trim();
+        let precioInline = null;
+
         if (texto && !esCorteDeItem(texto)) {
+            const inlineMatch = texto.match(/^(.*?)\s*[-:]\s*[₡¢$]\s*([\d.,\s]+)$/);
+            if (inlineMatch) {
+                texto = inlineMatch[1].trim();
+                precioInline = parseAmount(inlineMatch[2]);
+            }
+
             const { platos, extras, idxPrecio } = absorberDescripcion(lines, i, texto);
 
             if (idxPrecio !== -1 || (esItemEvidente(texto) && extras.length > 0)) {
-                // "Pack 5 proteínas de 500 g" + 5 líneas = el pack y sus proteínas.
-                // El nombre se deja intacto porque de ahí sale el gramaje ("500 g").
+                
+                const { nombre, instruccionesSuelta } = processItemNameAndInstructions(
+                    texto, 
+                    extras, 
+                    platos.length === 0
+                );
+
                 items.push({
                     cantidad: 1,
-                    nombre: (platos.length > 0
-                        ? texto
-                        : [texto, ...extras.map(e => e.texto)].join(' - ')
-                    ).replace(/\*/g, '').trim(),
-                    precio: null,
-                    proteinas: platos
+                    nombre,
+                    precio: precioInline,
+                    proteinas: platos,
+                    instruccionesSuelta
                 });
                 consumidas.add(i);
                 extras.forEach(e => consumidas.add(e.idx));
@@ -465,8 +521,8 @@ const grabItems = (text) => {
         // El precio del ítem puede venir en su propia línea:
         //   "   └ ₡13.500"     (WhatsApp)
         //   "Precio 25.850"    (a mano)
-        const precioSuelto = line.match(/└\s*₡\s*([\d.,\s]+)$/)
-            || line.match(/^\s*Precio\s*:?\s*₡?\s*([\d.,\s]+)\s*$/i);
+        const precioSuelto = line.match(/└\s*[₡¢$]\s*([\d.,\s]+)$/)
+            || line.match(/^\s*Precio\s*:?\s*[₡¢$]?\s*([\d.,\s]+)\s*$/i);
         if (precioSuelto) {
             if (ultimo.precio === null) ultimo.precio = parseAmount(precioSuelto[1]);
             consumidas.add(i);
@@ -507,7 +563,7 @@ export const parseOrderBlock = (textoCrudo, hoy = new Date()) => {
     const correo = grab(text, ['Email', 'Correo', 'E-mail']);
     const cedula = grab(text, ['C[ée]dula']);
     // "Lugar" es como lo escribe la administración a mano
-    const zona = grab(text, ['Zona', 'Lugar']);
+    const zona = grab(text, ['Zona(?: de entrega)?', 'Lugar']);
     const direccion = grab(text, ['Direcci[óo]n', 'Se[ñn]as']);
     const referencias = grab(text, ['Referencias']);
 
@@ -548,7 +604,8 @@ export const parseOrderBlock = (textoCrudo, hoy = new Date()) => {
             .filter(({ linea, i }) => (
                 !consumidas.has(i) &&
                 !esLineaIgnorable(linea) &&
-                linea !== (metodoPago || '').trim()
+                linea !== (metodoPago || '').trim() &&
+                !/^entregas?$/i.test(linea)
             ))
             .map(({ linea }) => linea);
 
@@ -572,6 +629,15 @@ export const parseOrderBlock = (textoCrudo, hoy = new Date()) => {
         }
     });
     if (fechasEntrega.length === 0) warnings.push('Falta la fecha de entrega en formato AAAA-MM-DD — sin ella el pedido no sale en la hoja de producción.');
+
+    // Mover las instrucciones sueltas detectadas en los ítems a las observaciones globales
+    items.forEach(item => {
+        if (item.instruccionesSuelta && item.instruccionesSuelta.length > 0) {
+            const extraNotas = item.instruccionesSuelta.join(' · ');
+            observaciones = observaciones ? `${observaciones} · ${extraNotas}` : extraNotas;
+            delete item.instruccionesSuelta;
+        }
+    });
 
     return {
         numeroOrden, cliente, telefono, correo, cedula,

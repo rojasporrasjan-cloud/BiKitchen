@@ -55,16 +55,34 @@ export default function SheetsView() {
             });
         });
 
-        // Valores únicos, ordenados descendente
-        const uniqueDates = [...new Set(dates)].sort((a, b) => new Date(b) - new Date(a));
+        const uniqueDates = [...new Set(dates)].sort();
         
-        setAvailableDates(uniqueDates);
+        // Filtrar fechas desde el inicio del mes actual (agosto) para que el dropdown no empiece con enero
+        const today = new Date();
+        const startOfCurrentMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
+        const currentAndFutureDates = uniqueDates.filter(d => d >= startOfCurrentMonth);
         
-        // Auto-seleccionar la primera fecha disponible si es la primera carga
-        if (uniqueDates.length > 0 && !uniqueDates.includes(selectedDate)) {
-            setSelectedDate(uniqueDates[0]);
+        const datesToShow = currentAndFutureDates.length > 0 ? currentAndFutureDates : uniqueDates;
+        setAvailableDates(datesToShow);
+        
+        if (datesToShow.length > 0) {
+            const todayStr = today.toISOString().split('T')[0];
+            let nextDate = datesToShow.find(d => d >= todayStr);
+            if (!nextDate) nextDate = datesToShow[datesToShow.length - 1];
+            
+            const savedDate = localStorage.getItem('bikitchen_last_sheet_date');
+            if (savedDate && datesToShow.includes(savedDate)) {
+                setSelectedDate(savedDate);
+            } else if (!datesToShow.includes(selectedDate)) {
+                setSelectedDate(nextDate);
+            }
         }
     }, [allOrders]);
+
+    // Guardar en localStorage cada vez que cambie
+    useEffect(() => {
+        if (selectedDate) localStorage.setItem('bikitchen_last_sheet_date', selectedDate);
+    }, [selectedDate]);
 
     const loadOrdersForDate = async (date, force = false) => {
         setLoading(true);
@@ -121,6 +139,8 @@ export default function SheetsView() {
     useEffect(() => {
         loadOrdersForDate(selectedDate);
     }, [selectedDate]);
+
+
 
     /**
      * Confirma de una todos los pedidos de esta fecha que no iban a imprimirse.
