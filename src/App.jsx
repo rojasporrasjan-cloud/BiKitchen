@@ -82,6 +82,7 @@ const SubstitutionsConfigView = lazyWithRetry(() => import('./pages/admin/Substi
 const PrintProductionView = lazyWithRetry(() => import('./pages/admin/PrintProductionView'));
 const WhatsAppImportView = lazyWithRetry(() => import('./pages/admin/WhatsAppImportView'));
 const MonthlyPacksView = lazyWithRetry(() => import('./pages/admin/MonthlyPacksView'));
+const BroadcastView = lazyWithRetry(() => import('./pages/admin/BroadcastView'));
 const DriverPortalView = lazyWithRetry(() => import('./pages/driver/DriverPortalView'));
 
 import SmoothScroll from './components/SmoothScroll';
@@ -297,6 +298,7 @@ function AnimatedRoutes() {
                   para que esconder la opción del menú no sea la única barrera. */}
               <Route path="whatsapp-import" element={<WhatsAppImportView />} />
               <Route path="monthly-packs" element={<MonthlyPacksView />} />
+              <Route path="broadcast" element={<BroadcastView />} />
             </Route>
 
             {/* 404 - Catch all */}
