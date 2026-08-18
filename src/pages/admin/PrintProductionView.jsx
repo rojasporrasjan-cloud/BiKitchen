@@ -16,6 +16,7 @@ import { getOfficialMenus } from '../../utils/firestoreMenus';
 import { getScheduleFromOrder } from '../../utils/orderDates';
 import { ESTADOS_QUE_IMPRIMEN } from '../../utils/estadosPedido';
 import { revisarHoja } from '../../utils/revisarHoja';
+import { sumarAGranel } from '../../utils/granelKitchen';
 import RevisionHoja from '../../components/admin/RevisionHoja';
 import { cargarPedidosExcel19Agosto } from '../../data/customExcelOrders19Aug';
 import { individualesData, getProductUnits } from '../../data/individualesData';
@@ -708,23 +709,17 @@ export default function PrintProductionView() {
             const totalPlatos = packData.totalPacks || 0;
             platosEmpaque.forEach(p => {
                 if (p.proteina?.nombre && p.proteina.nombre !== '—') {
-                    const name = p.proteina.nombre;
                     const grams = (p.proteina.gramosPorPorcion || getDefaultGrams(packName)) * totalPlatos;
-                    if (!bulkItemsMap[name]) bulkItemsMap[name] = { name, category: guessCategory(name), totalQty: 0, unit: 'g', isBulk: true };
-                    bulkItemsMap[name].totalQty += grams;
+                    sumarAGranel(bulkItemsMap, p.proteina.nombre, grams, 'g', guessCategory);
                 }
                 if (p.vegetal?.nombre && p.vegetal.nombre !== '—') {
-                    const name = p.vegetal.nombre;
                     const units = (p.vegetal.cantidadPorPorcion || 1) * totalPlatos;
-                    if (!bulkItemsMap[name]) bulkItemsMap[name] = { name, category: guessCategory(name), totalQty: 0, unit: 'taza(s)', isBulk: true };
-                    bulkItemsMap[name].totalQty += units;
+                    sumarAGranel(bulkItemsMap, p.vegetal.nombre, units, 'taza(s)', guessCategory);
                 }
                 const showCarbo = menuKey !== 'keto' && menuKey !== 'sinCarbos' && p.carbo?.nombre && p.carbo.nombre !== '—';
                 if (showCarbo) {
-                    const name = p.carbo.nombre;
                     const units = (p.carbo.cantidadPorPorcion || 0.5) * totalPlatos;
-                    if (!bulkItemsMap[name]) bulkItemsMap[name] = { name, category: guessCategory(name), totalQty: 0, unit: 'taza(s)', isBulk: true };
-                    bulkItemsMap[name].totalQty += units;
+                    sumarAGranel(bulkItemsMap, p.carbo.nombre, units, 'taza(s)', guessCategory);
                 }
             });
         });
