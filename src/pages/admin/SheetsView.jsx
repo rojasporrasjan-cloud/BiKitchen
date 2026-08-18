@@ -15,6 +15,7 @@ import { db } from '../../firebase/config';
 import { cachedFetch, invalidateCache } from '../../utils/firestoreCache';
 import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
 import { getScheduleFromOrder } from '../../utils/orderDates';
+import { imprimeEnHoja } from '../../utils/estadosPedido';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import AdminPageHeader from '../../components/admin/AdminPageHeader';
@@ -38,6 +39,7 @@ export default function SheetsView() {
     // pero la hoja que se imprime para cocina y empaque solo incluye confirmados,
     // así que hay que avisarlo o se cocina de menos.
     const [sinConfirmar, setSinConfirmar] = useState([]);
+    const [marginPercent, setMarginPercent] = useState(30);
 
     // Obtener fechas disponibles de pedidos activos
     useEffect(() => {
@@ -121,11 +123,9 @@ export default function SheetsView() {
                 return results;
             }, 'dashboard');
 
-            // Mismos estados que acepta PrintProductionView para la hoja impresa
-            const ESTADOS_QUE_SI_IMPRIMEN = ['confirmed', 'confirmado', 'pagado', 'preparing', 'preparando', 'making', 'ready', 'listo'];
-            setSinConfirmar(
-                rawOrders.filter(o => !ESTADOS_QUE_SI_IMPRIMEN.includes((o.status || o.estado || '').toLowerCase()))
-            );
+            // La MISMA lista que usa PrintProductionView, importada, no copiada:
+            // si cada pantalla tuviera la suya se contradirían tarde o temprano.
+            setSinConfirmar(rawOrders.filter(o => !imprimeEnHoja(o)));
 
             const normalized = mapPedidosFromLegacy(rawOrders);
 
@@ -195,8 +195,8 @@ export default function SheetsView() {
             { align: 'center' }
         );
 
-        // Construir estructura consolidada por menú/plato usando el modelo normalizado
-        const kitchenData = buildKitchenSheetData(orders, {});
+        // Construir estructura consolidada por menú/plato usando el modelo normalizado (con margen de producción)
+        const kitchenData = buildKitchenSheetData(orders, {}, { marginPercent: marginPercent });
 
         let currentY = 40;
 
@@ -223,24 +223,26 @@ export default function SheetsView() {
             // Preparar las observaciones de este menú para la columna de specs
             // Formato: "Juan: Sin cebolla\nMaria: Poca sal"
             const obsList = kitchenData.observacionesPorMenu[menuBlock.tipoMenu] || [];
-            // Filtrar duplicados si es necesario o agrupar
             let specsTexto = '';
             if (obsList.length > 0) {
                 specsTexto = obsList.map(o => `${o.cliente}: ${o.observaciones}`).join('\n');
             }
 
-            const head = [['# de Plato', 'Descripción', 'Cantidad', 'Platos', 'Especificaciones']];
+            const head = [['# de Plato', 'Descripción', 'Cantidad', 'Platos a Preparar', 'Especificaciones']];
             const body = [];
 
             platos.forEach((p) => {
-                const totalPlatos = p.totalPlatos || 0;
+                const totalPlatosNeto = p.totalPlatosNeto || p.totalPlatos || 0;
+                const totalPlatosCocina = p.totalPlatosCocina || Math.ceil(totalPlatosNeto * (1 + marginPercent / 100));
+
+                const gramText = p.proteina?.gramosPorPorcion ? `${p.proteina.gramosPorPorcion} g` : '-';
 
                 // Proteína
                 const cells1 = [
                     { content: `Plato ${p.numero}`, rowSpan: 3, styles: { valign: 'middle', halign: 'center', fontStyle: 'bold' } },
-                    p.proteina.nombre || '-',
-                    `${p.proteina.gramosPorPorcion || 0} g`,
-                    { content: String(totalPlatos), rowSpan: 3, styles: { valign: 'middle', halign: 'center', fontStyle: 'bold', fontSize: 11 } }
+                    p.proteina?.nombre || '-',
+                    gramText,
+                    { content: String(totalPlatosCocina), rowSpan: 3, styles: { valign: 'middle', halign: 'center', fontStyle: 'bold', fontSize: 12 } }
                 ];
 
                 // Si es el PRIMER plato de la lista, añadimos la celda de specs con rowspan gigante
@@ -625,6 +627,22 @@ export default function SheetsView() {
                     { value: selectedDate, label: 'Fecha' }
                 ]}
                 actions={[
+                    <div key="margin" className="flex items-center gap-2 bg-white/20 backdrop-blur-sm px-3 py-2 rounded-xl text-white text-xs font-semibold">
+                        <span>🔥 Merma Cocina:</span>
+                        <select
+                            value={marginPercent}
+                            onChange={(e) => setMarginPercent(Number(e.target.value))}
+                            className="bg-purple-900 text-white outline-none rounded px-2 py-1 text-xs font-bold cursor-pointer"
+                        >
+                            <option value={0}>0% (Neto)</option>
+                            <option value={10}>+10%</option>
+                            <option value={15}>+15%</option>
+                            <option value={20}>+20%</option>
+                            <option value={25}>+25%</option>
+                            <option value={30}>+30% (Gina Buffer)</option>
+                            <option value={35}>+35%</option>
+                        </select>
+                    </div>,
                     <div key="date" className="flex items-center gap-2 bg-white/20 backdrop-blur-sm px-4 py-2 rounded-xl">
                         <Calendar size={18} className="text-white" />
                         <select

@@ -14,6 +14,11 @@ import {
 } from '../../utils/packClassification';
 import { getOfficialMenus } from '../../utils/firestoreMenus';
 import { getScheduleFromOrder } from '../../utils/orderDates';
+import { ESTADOS_QUE_IMPRIMEN } from '../../utils/estadosPedido';
+import { revisarHoja } from '../../utils/revisarHoja';
+import RevisionHoja from '../../components/admin/RevisionHoja';
+import { cargarPedidosExcel19Agosto } from '../../data/customExcelOrders19Aug';
+import { individualesData, getProductUnits } from '../../data/individualesData';
 
 const MENU_LABELS = {
     regular: 'PACK REGULAR',
@@ -37,9 +42,25 @@ export default function PrintProductionView() {
     const [categoryCookInputs, setCategoryCookInputs] = useState({});
     const [selectedKitchenItems, setSelectedKitchenItems] = useState([]);
     const [bulkSelectedCook, setBulkSelectedCook] = useState('');
+    const [importingExcel, setImportingExcel] = useState(false);
+
+    const handleCargarMenuExcel19Agosto = async () => {
+        if (!window.confirm('¿Deseas cargar los 6 pedidos personalizados del Excel (Carolina Laurito, Christian Vargas, Beatriz González, Mariana Salas, Sonia Oreamuno, Bryan Ocampo) directamente para el 19 de Agosto en la Hoja de Producción?')) return;
+        setImportingExcel(true);
+        try {
+            await cargarPedidosExcel19Agosto(db);
+            alert('¡Los 6 pedidos personalizados del Excel han sido creados e ingresados exitosamente a la Hoja de Producción!');
+            window.location.reload();
+        } catch (err) {
+            console.error('Error al cargar pedidos del Excel:', err);
+            alert('Ocurrió un error al guardar los pedidos en Firestore: ' + err.message);
+        } finally {
+            setImportingExcel(false);
+        }
+    };
 
     // ... useEffect code ...
-    
+
     useEffect(() => {
         if (!date) return;
         const loadOrders = async () => {
@@ -54,24 +75,25 @@ export default function PrintProductionView() {
                     collection(db, "pedidos"),
                     where("fecha_entrega", ">=", pastDateStr)
                 );
-                
+
                 const snapshot = await getDocs(q);
                 let rawOrders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-                // Filtrar localmente usando el schedule real (Solo pedidos confirmados)
+                // Filtrar localmente usando el schedule real (Excluir sólo cancelados / archivados)
+                // Solo se imprime lo confirmado. `in_transit` entra a propósito:
+                // un pack mensual se despacha la semana 1 y queda "en ruta", pero
+                // sus semanas 2, 3 y 4 todavía hay que cocinarlas.
                 rawOrders = rawOrders.filter(order => {
                     const status = (order.status || order.estado || '').toLowerCase();
-                    const isConfirmed = ['confirmed', 'confirmado', 'pagado', 'preparing', 'preparando', 'making', 'ready', 'listo'].includes(status);
-                    
-                    if (!isConfirmed) return false;
-                    
+                    if (!ESTADOS_QUE_IMPRIMEN.includes(status)) return false;
+
                     const schedule = getScheduleFromOrder(order);
                     return schedule.includes(date);
                 });
 
                 // Ordenar por cliente
                 rawOrders.sort((a, b) => (a.cliente || '').localeCompare(b.cliente || ''));
-                
+
                 setOrders(mapPedidosFromLegacy(rawOrders));
                 const menus = await getOfficialMenus();
                 setOfficialMenus(menus);
@@ -86,14 +108,30 @@ export default function PrintProductionView() {
 
     if (!date) return <div className="p-8 text-center text-xl">Falta la fecha en la URL</div>;
     if (loading) return <div className="p-8 text-center text-xl">Cargando datos para impresión...</div>;
-    if (orders.length === 0) return <div className="p-8 text-center text-xl">No hay pedidos para esta fecha.</div>;
+    if (orders.length === 0) return (
+        <div className="p-8 text-center text-xl space-y-6 max-w-2xl mx-auto mt-12 bg-white p-6 rounded-2xl shadow-xl border border-gray-100">
+            <div className="text-gray-700 font-semibold">No se encontraron pedidos registrados para el: <span className="text-purple-600 font-black">{date}</span></div>
+            {date === '2026-08-19' && (
+                <div className="pt-4 border-t border-gray-100">
+                    <p className="text-sm text-gray-500 mb-4">¿Querés ingresar automáticamente los 6 menús personalizados del Excel a la producción de esta fecha?</p>
+                    <button
+                        onClick={handleCargarMenuExcel19Agosto}
+                        disabled={importingExcel}
+                        className="w-full py-4 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-base rounded-xl font-bold transition shadow-lg flex items-center justify-center gap-3 cursor-pointer"
+                    >
+                        {importingExcel ? '⏳ Cargando pedidos a la base de datos...' : '⚡ Cargar Automáticamente 6 Menús Personalizados Excel (19 Agosto)'}
+                    </button>
+                </div>
+            )}
+        </div>
+    );
 
     const kitchenData = buildKitchenSheetData(orders, {});
     const packagingData = buildPackagingSheetData(orders, {}, null);
-    
+
     // Group packaging data by Pack
     const packsMap = {};
-    
+
     const addClientToPackMap = (pName, cData, overridePlates = null) => {
         if (!packsMap[pName]) {
             packsMap[pName] = { name: pName, clientes: [], platosBase: [], totalPacks: 0 };
@@ -103,9 +141,9 @@ export default function PrintProductionView() {
             existingClient.cantidad += (cData.cantidadMenus || 1);
             if (cData.observaciones) existingClient.observaciones += ` | ${cData.observaciones}`;
         } else {
-            packsMap[pName].clientes.push({ 
-                nombre: cData.cliente, 
-                cantidad: cData.cantidadMenus || 1, 
+            packsMap[pName].clientes.push({
+                nombre: cData.cliente,
+                cantidad: cData.cantidadMenus || 1,
                 observaciones: cData.observaciones || '',
                 platos: overridePlates !== null ? overridePlates : (cData.platos || []),
                 zona_envio: cData.zona_envio || cData.rawPedido?.zona_envio || '',
@@ -124,9 +162,9 @@ export default function PrintProductionView() {
 
     packagingData.clientes.forEach((c) => {
         const isIndividual = c.categoria === 'individuales' || String(c.plan || c.tipoMenu || '').toLowerCase().includes('individual');
-        
+
         let packsInOrder = [];
-        
+
         if (isIndividual) {
             packsInOrder.push({ name: c.plan || c.tipoMenu || 'Pack Individuales', qty: c.cantidadMenus || 1, forceIndividual: true });
         } else {
@@ -163,42 +201,42 @@ export default function PrintProductionView() {
             text = text.replace(/\bLleva\s+cena\b/gi, '');
             text = text.replace(/\bLleva\s+desayunos?\b/gi, '');
             text = text.replace(/\bLleva\s+también:[^\n·]+/gi, '');
-            
+
             return text.split(/[·|\n]+/)
-                       .map(s => s.trim())
-                       .filter(s => s.length > 0 && !/^(lleva|promo|regal[ií]a)/i.test(s))
-                       .join(' · ');
+                .map(s => s.trim())
+                .filter(s => s.length > 0 && !/^(lleva|promo|regal[ií]a)/i.test(s))
+                .join(' · ');
         };
 
         Object.entries(aggregatedPacks).forEach(([packName, totalQty]) => {
             const nameLower = packName.toLowerCase();
             const obsLower = String(c.observaciones || '').toLowerCase();
             const obsHasCena = /\bcenas?\b/.test(obsLower);
-            
+
             const hasBreakfastGift = nameLower.includes('regalia de desayuno') || nameLower.includes('regalía de desayuno') || nameLower.includes('+ desayuno') || nameLower.includes('con desayuno') || nameLower.includes('desayuno gratis');
             const obsHasBreakfast = obsLower.includes('desayunos') && (obsLower.includes('regalía') || obsLower.includes('regalia') || obsLower.includes('lleva') || obsLower.includes('con desayunos'));
-            
+
             // La promo se detecta SOLO por lo que dice el pedido, nunca por el monto.
             // Un umbral de precio falla en silencio en las dos direcciones: un pack
             // con descuento se queda sin cenas, y un pedido grande sin promo las
             // recibe de más. La cocina no tiene cómo darse cuenta.
             const isCenaPromo = nameLower.includes('almuerzo y cena')
-                           || nameLower.includes('dos semanas con desayuno')
-                           || ( (nameLower.includes('quincenal') || nameLower.includes('dos semanas') || nameLower.includes('2 semanas')) && (nameLower.includes('desayuno') || nameLower.includes('regalia') || nameLower.includes('regalía') || nameLower.includes('gratis')) )
-                           || obsHasCena;
+                || nameLower.includes('dos semanas con desayuno')
+                || ((nameLower.includes('quincenal') || nameLower.includes('dos semanas') || nameLower.includes('2 semanas')) && (nameLower.includes('desayuno') || nameLower.includes('regalia') || nameLower.includes('regalía') || nameLower.includes('gratis')))
+                || obsHasCena;
 
 
 
             const filteredPlates = isIndividual ? c.platos : (c.platos || []).filter(p => p.proteina?.nombre === packName);
             const clientForPack = { ...c, cantidadMenus: totalQty };
             const cleanObs = cleanCustomerNotes(c.observaciones);
-            
+
             if (isCenaPromo) {
                 // Copia para la tabla de ALMUERZOS → decir que también lleva cena
                 const almuerzoClient = { ...clientForPack };
                 almuerzoClient.observaciones = cleanObs ? `${cleanObs} · Lleva cena` : 'Lleva cena';
                 addClientToPackMap(packName, almuerzoClient, filteredPlates.length > 0 ? filteredPlates : null);
-                
+
                 // Copia para la tabla de CENAS → decir qué pack de almuerzo lleva
                 const menuKey = mapPackNameToMenuKey(packName);
                 const packLabel = (menuKey && MENU_LABELS[menuKey]) ? MENU_LABELS[menuKey] : packName;
@@ -211,7 +249,7 @@ export default function PrintProductionView() {
             }
 
             const menuKey = mapPackNameToMenuKey(packName);
-            
+
             if ((c.incluyeDesayuno || hasBreakfastGift || obsHasBreakfast) && menuKey !== 'desayuno') {
                 const desClient = { ...clientForPack, observaciones: cleanObs };
                 addClientToPackMap('Pack de Desayunos', { ...desClient, cantidadMenus: totalQty }, []);
@@ -243,21 +281,21 @@ export default function PrintProductionView() {
 
     const consolidatedPacksMap = {};
     const packNameToConsolidated = {}; // mapea nombre original → nombre consolidado
-    
+
     allPackNames.forEach(packName => {
         if (isActuallyIndividual(packName) || isDesayunoPack(packName)) return;
-        
+
         const menuKey = mapPackNameToMenuKey(packName);
         // Si tiene menuKey, consolidar bajo el label de la familia
         let consolidatedName = (menuKey && MENU_LABELS[menuKey]) ? MENU_LABELS[menuKey] : packName;
-        
+
         // Si es una hoja de cenas, agregar el prefijo al nombre consolidado
         if (packName.startsWith('CENAS -')) {
             consolidatedName = `CENAS - ${consolidatedName.replace('CENAS - ', '')}`;
         }
-        
+
         packNameToConsolidated[packName] = consolidatedName;
-        
+
         if (!consolidatedPacksMap[consolidatedName]) {
             consolidatedPacksMap[consolidatedName] = {
                 name: consolidatedName,
@@ -268,15 +306,15 @@ export default function PrintProductionView() {
                 menuKey: menuKey,
             };
         }
-        
+
         const target = consolidatedPacksMap[consolidatedName];
         const source = packsMap[packName];
-        
+
         // Agregar cada cliente a la hoja consolidada
         source.clientes.forEach(c => {
             target.clientes.push({ ...c });
         });
-        
+
         target.totalPacks += source.totalPacks;
         if (target.platosBase.length === 0 && source.platosBase.length > 0) {
             target.platosBase = source.platosBase;
@@ -332,7 +370,7 @@ export default function PrintProductionView() {
 
     const getOtherPacksTag = (cName, currentPackName) => {
         if (!cName) return '';
-        
+
         // Normalizar el pack actual para poder filtrarlo
         let currentShortName = currentPackName;
         if (isDesayunoPack(currentPackName)) {
@@ -346,7 +384,7 @@ export default function PrintProductionView() {
 
         const nameLower = cName.trim().toLowerCase();
         let otherPacks = (clientToOtherPacks[nameLower] || []).filter(p => p !== currentShortName);
-        
+
         // No imprimir 'Desayunos' en 'Lleva también' si las observaciones ya dicen que lleva desayuno
         const clientObj = packsMap[currentPackName]?.clientes?.find(c => c.nombre.trim().toLowerCase() === nameLower);
         if (clientObj && clientObj.observaciones && clientObj.observaciones.toLowerCase().includes('desayun')) {
@@ -377,10 +415,10 @@ export default function PrintProductionView() {
             // Si rawPlatos tiene 5, y chunkClients tiene 10, maxRows = 10.
             const maxRows = Math.max(rawPlatos.length > 0 ? rawPlatos.length : 5, chunkClients.length);
             const rows = [];
-            
+
             for (let i = 0; i < maxRows; i++) {
                 const dish = rawPlatos[i];
-                
+
                 let dishDesc = '';
                 if (dish) {
                     const original = packData.platosBase[i] || {};
@@ -395,7 +433,7 @@ export default function PrintProductionView() {
                     const zone = client.zona_envio || '';
                     const zoneStr = zone && zone !== 'No especificada' && zone.toLowerCase() !== 'recoge en tienda' ? `, ${zone}` : '';
                     const qty = client.cantidad || 1;
-                    
+
                     let displayName = client.nombre;
                     if (client.rawPedido) {
                         const schedule = getScheduleFromOrder(client.rawPedido);
@@ -405,7 +443,7 @@ export default function PrintProductionView() {
                         }
                     }
                     clientName = qty > 1 ? `${displayName} (${qty})${zoneStr}` : `${displayName}${zoneStr}`;
-                    
+
                     const tags = [];
                     if (client.rawPedido?.plan && !client.rawPedido.plan.toLowerCase().includes('desayuno')) tags.push(client.rawPedido.plan);
                     const otherPacksTag = getOtherPacksTag(client.nombre, packName);
@@ -415,7 +453,7 @@ export default function PrintProductionView() {
 
                 rows.push(
                     <tr key={i} className="border border-black bg-white break-inside-avoid print:break-inside-avoid">
-                        <td className="border border-black p-2 text-center">{dish ? (i+1) : ''}</td>
+                        <td className="border border-black p-2 text-center">{dish ? (i + 1) : ''}</td>
                         <td className="border border-black p-2 text-left">{dishDesc}</td>
                         <td className="border border-black p-2 text-center font-bold">{dish ? packData.totalPacks : ''}</td>
                         <td className="border border-black p-2 text-xs text-center">{clientNote}</td>
@@ -473,18 +511,36 @@ export default function PrintProductionView() {
                 if (!clientsData[fullName]) {
                     clientsData[fullName] = { nombre: fullName, items: [], observaciones: finalObs };
                 }
-                
+
+                const formatQty = (nameStr, count, gramsVal) => {
+                    const n = String(nameStr || '').toLowerCase();
+                    if (gramsVal && gramsVal > 0) return `${gramsVal * count}g`;
+                    const kgMatch = n.match(/(\d+(?:\.\d+)?)\s*kg/i);
+                    if (kgMatch) {
+                        const val = parseFloat(kgMatch[1]) * count;
+                        return `${val} kg`;
+                    }
+                    if (n.includes('(kg)') || n.includes(' kg') || n.includes('/kg') || n.includes(' kilo')) {
+                        return `${count} kg`;
+                    }
+                    const gMatch = n.match(/(\d+)\s*g/i);
+                    if (gMatch) {
+                        const val = parseInt(gMatch[1], 10) * count;
+                        return `${val}g`;
+                    }
+                    return `${count} porción${count > 1 ? 'es' : ''}`;
+                };
+
                 if (c.platos && c.platos.length > 0) {
                     c.platos.forEach(p => {
-                        // Como es solo la proteína a granel, sacamos el nombre y los gramos
                         let protName = p.proteina?.nombre || packName;
                         if (p.descripcion && p.descripcion.trim() !== '') {
                             protName += ` (${p.descripcion})`;
                         }
                         const grams = p.proteina?.gramosPorPorcion;
-                        const itemCount = c.cantidad || 1;
-                        let qty = grams ? `${grams}g` : `${itemCount} porción${itemCount > 1 ? 'es' : ''}`;
-                        
+                        const itemCount = p.cantidad || c.cantidad || 1;
+                        let qty = formatQty(protName, itemCount, grams);
+
                         clientsData[fullName].items.push({
                             name: protName,
                             qty: qty,
@@ -493,10 +549,10 @@ export default function PrintProductionView() {
                     });
                 } else {
                     const itemCount = c.cantidad || 1;
-                    // Fallback
+                    let qty = formatQty(packName, itemCount, null);
                     clientsData[fullName].items.push({
                         name: packName,
-                        qty: `${itemCount} porción${itemCount > 1 ? 'es' : ''}`,
+                        qty: qty,
                         count: itemCount
                     });
                 }
@@ -516,32 +572,32 @@ export default function PrintProductionView() {
                             </th>
                         </tr>
                     </thead>
-                        {clientNames.map((clientName, idx) => {
-                            const client = clientsData[clientName];
-                            const items = client.items;
-                            
-                            return (
-                                <tbody key={clientName} className="break-inside-avoid print:break-inside-avoid">
-                                    {items.map((item, itemIdx) => (
-                                        <tr key={itemIdx}>
-                                            <td className="border border-black p-3 font-medium text-gray-800">{item.name}</td>
-                                            <td className="border border-black p-3 text-center font-semibold">{item.qty}</td>
-                                            {itemIdx === 0 && (
-                                                <td className="border border-black p-3 bg-[#e2f0d9] align-middle font-bold text-gray-900" rowSpan={items.length}>
-                                                    {clientName} {client.observaciones ? <span className="text-red-600 block text-xs mt-1">({client.observaciones})</span> : ''}
-                                                </td>
-                                            )}
-                                        </tr>
-                                    ))}
-                                    {/* Fila en blanco separadora */}
-                                    {idx < clientNames.length - 1 && (
-                                        <tr>
-                                            <td colSpan="3" className="h-4 border border-black bg-white"></td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            );
-                        })}
+                    {clientNames.map((clientName, idx) => {
+                        const client = clientsData[clientName];
+                        const items = client.items;
+
+                        return (
+                            <tbody key={clientName} className="break-inside-avoid print:break-inside-avoid">
+                                {items.map((item, itemIdx) => (
+                                    <tr key={itemIdx}>
+                                        <td className="border border-black p-3 font-medium text-gray-800">{item.name}</td>
+                                        <td className="border border-black p-3 text-center font-semibold">{item.qty}</td>
+                                        {itemIdx === 0 && (
+                                            <td className="border border-black p-3 bg-[#e2f0d9] align-middle font-bold text-gray-900" rowSpan={items.length}>
+                                                {clientName} {client.observaciones ? <span className="text-red-600 block text-xs mt-1">({client.observaciones})</span> : ''}
+                                            </td>
+                                        )}
+                                    </tr>
+                                ))}
+                                {/* Fila en blanco separadora */}
+                                {idx < clientNames.length - 1 && (
+                                    <tr>
+                                        <td colSpan="3" className="h-4 border border-black bg-white"></td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        );
+                    })}
                 </table>
             </div>
         );
@@ -613,13 +669,13 @@ export default function PrintProductionView() {
         regularPackNames.forEach(packName => {
             const packData = consolidatedPacksMap[packName];
             if (!packData || packData.totalPacks === 0) return;
-            
+
             const menuKey = packData.menuKey || mapPackNameToMenuKey(packName);
-            const rawPlatos = (officialMenus && menuKey && Array.isArray(officialMenus[menuKey])) ? officialMenus[menuKey] : [];
-            
+            let rawPlatos = officialMenus && menuKey ? (Array.isArray(officialMenus[menuKey]) ? officialMenus[menuKey] : (officialMenus[menuKey]?.platos || [])) : [];
+            if (!rawPlatos || rawPlatos.length === 0) rawPlatos = packData.platosBase || [];
+
             if (rawPlatos.length === 0) {
                 missingMenus.push(packName);
-                return;
             }
 
             const platosEmpaque = rawPlatos.map((p, idx) => {
@@ -672,20 +728,24 @@ export default function PrintProductionView() {
                     c.platos.forEach(p => {
                         const name = p.proteina?.nombre || packName;
                         const spec = p.descripcion || c.plan || c.tipoMenu || c.categoryLabel || '';
-                        
-                        if (!individualItemsMap[name]) {
-                            individualItemsMap[name] = {
+                        const portionGrams = p.proteina?.gramosPorPorcion || null;
+
+                        const key = portionGrams ? `${name} (${portionGrams}g)` : name;
+
+                        if (!individualItemsMap[key]) {
+                            individualItemsMap[key] = {
                                 name,
                                 category: guessCategory(name),
                                 totalQty: 0,
                                 unit: 'unidades',
                                 portionSpec: spec,
+                                portionGrams: portionGrams,
                                 isIndividual: true
                             };
                         }
-                        individualItemsMap[name].totalQty += c.cantidad;
-                        if (spec && !individualItemsMap[name].portionSpec) {
-                            individualItemsMap[name].portionSpec = spec;
+                        individualItemsMap[key].totalQty += c.cantidad;
+                        if (spec && !individualItemsMap[key].portionSpec) {
+                            individualItemsMap[key].portionSpec = spec;
                         }
                     });
                 } else {
@@ -756,7 +816,7 @@ export default function PrintProductionView() {
     };
 
     const toggleSelectItem = (itemName) => {
-        setSelectedKitchenItems(prev => 
+        setSelectedKitchenItems(prev =>
             prev.includes(itemName) ? prev.filter(i => i !== itemName) : [...prev, itemName]
         );
     };
@@ -773,7 +833,7 @@ export default function PrintProductionView() {
 
     const renderKitchenConfig = () => {
         const categories = ['Aves y Pescados', 'Res y Cerdo', 'Arroces y Vegetales', 'Guarniciones y Tubérculos', 'Otros'];
-        
+
         return (
             <div className="mb-8 print:hidden">
                 {missingMenus.length > 0 && (
@@ -789,7 +849,7 @@ export default function PrintProductionView() {
                         <p className="text-sm italic">Ve a la pestaña <b>Menú Semanal</b> y guarda los platillos para esta fecha. Si estos packs son individuales o a granel, por favor revisa que contengan la palabra "Individual" o "Proteína" en el nombre para que el sistema no intente buscarles un menú semanal.</p>
                     </div>
                 )}
-                
+
                 <div className="p-6 bg-blue-50 rounded-lg border border-blue-200 shadow-sm">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-4 border-b border-blue-200">
                         <div>
@@ -826,7 +886,7 @@ export default function PrintProductionView() {
                             </div>
                         )}
                     </div>
-                    
+
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {categories.map(cat => {
                             const itemsInCat = bulkItems.filter(item => item.category === cat);
@@ -876,11 +936,10 @@ export default function PrintProductionView() {
                                                 const currentCook = kitchenAssignments[item.name] || '';
 
                                                 return (
-                                                    <div 
-                                                        key={item.name} 
-                                                        className={`flex items-center justify-between p-2 rounded border transition-all text-xs ${
-                                                            isSelected ? 'bg-blue-50 border-blue-400' : 'bg-gray-50/60 border-gray-200 hover:bg-gray-50'
-                                                        }`}
+                                                    <div
+                                                        key={item.name}
+                                                        className={`flex items-center justify-between p-2 rounded border transition-all text-xs ${isSelected ? 'bg-blue-50 border-blue-400' : 'bg-gray-50/60 border-gray-200 hover:bg-gray-50'
+                                                            }`}
                                                     >
                                                         <div className="flex items-center gap-2 overflow-hidden mr-2">
                                                             <input
@@ -893,9 +952,9 @@ export default function PrintProductionView() {
                                                                 {item.name}
                                                             </span>
                                                         </div>
-                                                        <input 
-                                                            type="text" 
-                                                            placeholder="Cocinera" 
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Cocinera"
                                                             value={currentCook}
                                                             onChange={(e) => handleAssignCook(item.name, e.target.value.toUpperCase())}
                                                             className="border border-gray-300 rounded p-1 w-24 text-right uppercase text-[11px] font-bold text-blue-900 focus:ring-1 focus:ring-blue-500 flex-shrink-0"
@@ -932,11 +991,11 @@ export default function PrintProductionView() {
             <div className="mt-12 print:mt-0">
                 <h1 className="text-4xl font-black text-center mb-2 text-gray-900 uppercase tracking-wider print:text-3xl">Hoja de Cocina</h1>
                 <p className="text-center text-sm font-semibold text-gray-600 mb-8 print:mb-4">
-                    Resumen de cocción a granel para ollas y lista de productos individuales pre-empacados directamente en cocina.
+                    Resumen de cocción a granel para ollas (Cantidades totales a preparar).
                 </p>
 
                 {renderKitchenConfig()}
-                
+
                 {/* SECCIÓN 1: PRODUCCIÓN A GRANEL PARA PACKS */}
                 <div className="mb-12">
                     <div className="bg-gray-900 text-white p-3 font-bold text-base uppercase tracking-wide rounded-t border-2 border-black flex justify-between items-center">
@@ -954,31 +1013,18 @@ export default function PrintProductionView() {
                                     <table className="w-full text-sm border-collapse border-2 border-black mb-2">
                                         <thead>
                                             <tr>
-                                                <th colSpan="3" className="border-2 border-black p-2.5 font-bold text-center text-xl uppercase tracking-widest bg-gray-100 text-gray-900">
+                                                <th colSpan="2" className="border-2 border-black p-2.5 font-bold text-center text-xl uppercase tracking-widest bg-gray-100 text-gray-900">
                                                     {cook}
                                                 </th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {items.map((item, idx) => {
-                                                let empaqueNote = '';
-                                                if (item.unit === 'g') {
-                                                    const tazas500 = Math.ceil(item.totalQty / 500);
-                                                    if (tazas500 <= 1) {
-                                                        empaqueNote = 'empacar 1 taza de 500 g';
-                                                    } else {
-                                                        empaqueNote = `empacar ${tazas500} tazas de 500 g`;
-                                                    }
-                                                }
-
                                                 return (
                                                     <tr key={idx} className="border-b border-black last:border-b-0 bg-white">
-                                                        <td className="border-r border-black p-2.5 font-medium text-gray-900 w-1/2">{item.name}</td>
-                                                        <td className="border-r border-black p-2.5 text-center font-bold text-base w-1/4">
-                                                            {item.totalQty} {item.unit === 'g' ? 'g' : item.unit.toUpperCase()}
-                                                        </td>
-                                                        <td className="p-2.5 text-gray-800 w-1/4 italic text-xs font-semibold">
-                                                            {empaqueNote}
+                                                        <td className="border-r border-black p-2.5 font-medium text-gray-900 w-2/3">{item.name}</td>
+                                                        <td className="p-2.5 text-center font-extrabold text-lg text-gray-900 w-1/3">
+                                                            {Math.round(item.totalQty * 1.30)} {item.unit === 'g' ? 'g' : item.unit.toUpperCase()}
                                                         </td>
                                                     </tr>
                                                 );
@@ -998,7 +1044,7 @@ export default function PrintProductionView() {
                             <span>📦 2. PRODUCTOS INDIVIDUALES Y MOLDES (Empacados Directamente en Cocina)</span>
                             <span className="text-xs font-bold bg-black text-white px-3 py-1 rounded">Se cocinan, dividen y empacan en cocina</span>
                         </div>
-                        
+
                         <table className="w-full text-sm border-collapse border-2 border-black border-t-0">
                             <thead>
                                 <tr className="bg-yellow-100">
@@ -1009,20 +1055,32 @@ export default function PrintProductionView() {
                             </thead>
                             <tbody>
                                 {individualItems.map((item, idx) => {
-                                    let packInstruction = 'Empacar directamente en moldes/contenedores individuales';
-                                    if (item.portionSpec) {
-                                        const portionMatch = item.portionSpec.match(/(\d+)\s*porciones?/i);
-                                        const gramsMatch = item.portionSpec.match(/(\d+)\s*g/i);
-                                        const kgMatch = item.portionSpec.match(/(\d+)\s*kg/i);
-                                        
-                                        if (portionMatch) {
-                                            packInstruction = `empacar en porciones de ${portionMatch[1]}`;
-                                        } else if (gramsMatch) {
-                                            packInstruction = `empacar 1 taza de ${gramsMatch[1]}g`;
-                                        } else if (kgMatch) {
-                                            packInstruction = `empacar 1 taza de ${kgMatch[1]} kg`;
+                                    let packInstruction = '';
+                                    const isDesayunoOrPlatoUnico = /burrito|omelet|pinto|desayuno|molde|casado|pastel/i.test(item.name);
+
+                                    if (isDesayunoOrPlatoUnico) {
+                                        packInstruction = `Cocinar y empacar ENTERO (${item.totalQty} ${item.totalQty === 1 ? 'unidad' : 'unidades'})`;
+                                    } else if (item.portionGrams) {
+                                        packInstruction = `Empacar porción individual de ${item.portionGrams} g`;
+                                    } else {
+                                        const gramsMatch = item.name.match(/(\d+)\s*(g|gr|gramos|kg)/i) || (item.portionSpec && item.portionSpec.match(/(\d+)\s*(g|gr|gramos|kg)/i));
+                                        const tazasMatch = item.name.match(/(\d+)\s*tazas?/i) || (item.portionSpec && item.portionSpec.match(/(\d+)\s*tazas?/i));
+
+                                        if (gramsMatch) {
+                                            const val = gramsMatch[1];
+                                            const unit = gramsMatch[2].toLowerCase() === 'kg' ? 'kg' : 'g';
+                                            packInstruction = `Empacar porción individual de ${val} ${unit}`;
+                                        } else if (tazasMatch) {
+                                            packInstruction = `Empacar porción de ${tazasMatch[1]} tazas`;
                                         } else {
-                                            packInstruction = `empacar según: ${item.portionSpec}`;
+                                            const cleanName = item.name.toLowerCase().trim();
+                                            const catalogItem = individualesData.find(d => d.nombre && d.nombre.toLowerCase().trim() === cleanName);
+                                            if (catalogItem && catalogItem.categoria) {
+                                                const units = getProductUnits(catalogItem.categoria);
+                                                packInstruction = `Empacar porción de ${units.labelPequeno || 'porción de pedido'}`;
+                                            } else {
+                                                packInstruction = `Empacar porción según etiqueta del cliente`;
+                                            }
                                         }
                                     }
 
@@ -1032,7 +1090,7 @@ export default function PrintProductionView() {
                                             <td className="border-r border-black p-3 text-center font-bold text-lg text-blue-900">
                                                 {item.totalQty} {item.totalQty === 1 ? 'UNIDAD / PEDIDO' : 'UNIDADES / PEDIDOS'}
                                             </td>
-                                            <td className="p-3 text-gray-900 font-semibold italic bg-amber-50">
+                                            <td className="p-3 text-gray-900 font-bold italic bg-amber-50">
                                                 👉 {packInstruction}
                                             </td>
                                         </tr>
@@ -1333,7 +1391,7 @@ export default function PrintProductionView() {
                 const zone = c.zona_envio || '';
                 const zoneStr = zone && zone !== 'No especificada' && zone.toLowerCase() !== 'recoge en tienda' ? `, ${zone}` : '';
                 const obs = c.observaciones ? ` [${c.observaciones}]` : '';
-                
+
                 xml += `
    <Row>
     <Cell><Data ss:Type="String">${escapeXml(pName)}</Data></Cell>
@@ -1369,10 +1427,12 @@ export default function PrintProductionView() {
                     {viewMode === 'empaque' && 'Mostrando solo Hoja de Empaque'}
                     {viewMode === 'cocina' && 'Mostrando solo Hoja de Cocina'}
                 </div>
-                
+
+                <RevisionHoja revision={revisarHoja(orders, officialMenus, date)} />
+
                 {viewMode !== 'cocina' && (
                     <div className="mt-4 flex justify-center gap-4">
-                        <button 
+                        <button
                             onClick={() => setEmpaqueTab('packs')}
                             className={`px-6 py-2 rounded-lg font-bold border-2 transition-all ${empaqueTab === 'packs' ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-purple-600 border-purple-200 hover:border-purple-600'}`}
                         >
@@ -1380,11 +1440,10 @@ export default function PrintProductionView() {
                         </button>
                         <button
                             onClick={() => setEmpaqueTab('individuales')}
-                            className={`px-4 py-2 border rounded shadow transition-colors ${
-                                empaqueTab === 'individuales' 
-                                ? 'bg-purple-600 text-white font-bold border-purple-600' 
-                                : 'bg-white text-purple-600 font-bold border-purple-200 hover:bg-purple-50'
-                            }`}
+                            className={`px-4 py-2 border rounded shadow transition-colors ${empaqueTab === 'individuales'
+                                    ? 'bg-purple-600 text-white font-bold border-purple-600'
+                                    : 'bg-white text-purple-600 font-bold border-purple-200 hover:bg-purple-50'
+                                }`}
                         >
                             Ver Individuales y Desayunos
                         </button>
@@ -1392,18 +1451,27 @@ export default function PrintProductionView() {
                 )}
 
                 <div className="mt-6 flex justify-center gap-4">
-                    <button 
-                        onClick={() => window.print()} 
+                    <button
+                        onClick={() => window.print()}
                         className="px-8 py-3 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition shadow-lg flex items-center gap-2"
                     >
                         🖨️ Imprimir Documento
                     </button>
-                    <button 
-                        onClick={handleExportToExcel} 
+                    <button
+                        onClick={handleExportToExcel}
                         className="px-8 py-3 bg-emerald-600 text-white rounded-lg font-bold hover:bg-emerald-700 transition shadow-lg flex items-center gap-2"
                     >
                         📊 Descargar Excel Completo (.xls)
                     </button>
+                    {date === '2026-08-19' && (
+                        <button
+                            onClick={handleCargarMenuExcel19Agosto}
+                            disabled={importingExcel}
+                            className="px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold transition shadow-lg flex items-center gap-2 cursor-pointer"
+                        >
+                            {importingExcel ? '⏳ Cargando...' : '⚡ Cargar 6 Menús Excel (19 Ago)'}
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -1413,7 +1481,7 @@ export default function PrintProductionView() {
                     <h1 className="text-4xl font-black text-center mb-8 text-gray-900 uppercase tracking-wider print:hidden">
                         {empaqueTab === 'packs' ? 'Hoja de Empaque - Packs' : 'Hoja de Empaque - Individuales'}
                     </h1>
-                    
+
                     {empaqueTab === 'individuales' ? (
                         <>
                             {desayunoPackNames.map(packName => renderDesayunosTable(packName, packsMap[packName], date))}
@@ -1423,236 +1491,244 @@ export default function PrintProductionView() {
                         regularPackNames.map((packName) => {
                             const packData = consolidatedPacksMap[packName];
                             const kitchenMenuData = kitchenData.porMenu[packName] || (packData.sourcePackNames?.length > 0 ? kitchenData.porMenu[packData.sourcePackNames[0]] : null);
-                
-                const menuKey = packData.menuKey || mapPackNameToMenuKey(packName);
-                let rawPlatos = (officialMenus && menuKey && officialMenus[menuKey]) ? officialMenus[menuKey].platos || officialMenus[menuKey] : [];
-                if (!rawPlatos || rawPlatos.length === 0) rawPlatos = packData.platosBase || []; // fallback
-                
-                // Generar especificaciones
-                const specsList = packData.clientes.map(c => {
-                    const note = c.observaciones ? ` ** ${c.observaciones}` : '';
-                    return `${c.nombre} (${c.cantidad})${note}`;
-                });
-                
-                // Resumen de cocina (si existe)
-                let resumenCocina = null;
-                if (kitchenMenuData) {
-                    const platesCocina = Object.values(kitchenMenuData.platos).sort((a, b) => (a.numero || 0) - (b.numero || 0));
-                    // Consolidar ingredientes
-                    const ingreds = {};
-                    platesCocina.forEach(p => {
-                        const protName = p.proteina?.nombre || 'Proteína';
-                        const vegName = p.vegetal?.nombre || 'Vegetales';
-                        const carbName = p.carbo?.nombre || 'Carbohidratos';
-                        
-                        ingreds[protName] = (ingreds[protName] || 0) + (p.proteina.totalGramos || 0);
-                        
-                        // Para vegetales y carbos, sumamos cantidadBase si unidad es igual. 
-                        // Simplificación: sumamos "unidades" si hay mezcla
-                        ingreds[vegName] = (ingreds[vegName] || 0) + (p.vegetal.cantidadBase || 0) * (p.totalPlatos || 0);
-                        ingreds[carbName] = (ingreds[carbName] || 0) + (p.carbo.cantidadBase || 0) * (p.totalPlatos || 0);
-                    });
-                    
-                    resumenCocina = Object.entries(ingreds).filter(([, qty]) => qty > 0).map(([name, qty]) => ({ name, qty }));
-                }
-                const platosEmpaque = (rawPlatos.length > 0 ? rawPlatos : packData.platosBase).map((p, idx) => {
-                    const original = packData.platosBase[idx] || {};
-                    const isOfficial = typeof p.proteina === 'string';
-                    return {
-                        numero: p.numero || idx + 1,
-                        proteina: {
-                            nombre: isOfficial ? p.proteina : (p.proteina?.nombre || original.proteina?.nombre || '—'),
-                            gramosPorPorcion: isOfficial ? getDefaultGrams(packName) : (p.proteina?.gramosPorPorcion || original.proteina?.gramosPorPorcion || getDefaultGrams(packName))
-                        },
-                        vegetal: {
-                            nombre: isOfficial ? p.vegetal : (p.vegetal?.nombre || original.vegetal?.nombre || '—'),
-                            cantidadPorPorcion: isOfficial ? 1 : (p.vegetal?.cantidadPorPorcion || original.vegetal?.cantidadPorPorcion || 1)
-                        },
-                        carbo: {
-                            nombre: isOfficial ? p.carbo : (p.carbo?.nombre || original.carbo?.nombre || '—'),
-                            cantidadPorPorcion: isOfficial ? 0.5 : (p.carbo?.cantidadPorPorcion || original.carbo?.cantidadPorPorcion || 0.5)
-                        }
-                    };
-                });
 
-                const showCarbos = menuKey !== 'keto' && menuKey !== 'sinCarbos';
-                const rowsPerPlate = showCarbos ? 3 : 2;
+                            const menuKey = packData.menuKey || mapPackNameToMenuKey(packName);
+                            let rawPlatos = (officialMenus && menuKey && officialMenus[menuKey]) ? officialMenus[menuKey].platos || officialMenus[menuKey] : [];
+                            if (!rawPlatos || rawPlatos.length === 0) rawPlatos = packData.platosBase || []; // fallback
 
-                return (
-                        <div key={`empaque-${packName}`} className="pack-table-container mb-12 print:mb-0 print:break-after-page print:[page-break-after:always] break-inside-avoid print:break-inside-avoid">
-                            {/* ESTILO EXCEL */}
-                            <div className="w-full">
-                                {/* Cabecera Tipo Excel (Amarillo) */}
-                                <div className="bg-yellow-400 text-black font-bold text-lg p-1.5 print:py-1 print:text-base border border-black text-center uppercase tracking-wide">
-                                    {packName.replace(/\s*\d{1,3}(?:[.,]\d{3})*\s*(?:colones|col|¢)/i, '')} <span className="text-gray-800 text-base print:text-sm">({packData.totalPacks} Packs)</span>
-                                </div>
-                                
-                                {/* CANTIDAD POR PLATO (Estilo Excel) */}
-                                <div className="border-x border-black bg-white flex flex-col text-xs print:text-[10px] font-bold w-full uppercase">
-                                    <div className="flex border-b border-black">
-                                        <div className="w-48 p-0.5 px-1 border-r border-black">CANTIDAD POR PLATO</div>
-                                        <div className="flex-1 p-0.5 px-1">{platosEmpaque[0]?.proteina?.gramosPorPorcion ? `${platosEmpaque[0].proteina.gramosPorPorcion} GRAMOS DE PROTEINA` : `${getDefaultGrams(packName)} GRAMOS DE PROTEINA`}</div>
-                                    </div>
-                                    <div className="flex border-b border-black">
-                                        <div className="w-48 p-0.5 px-1 border-r border-black">CANTIDAD POR PLATO</div>
-                                        <div className="flex-1 p-0.5 px-1">{platosEmpaque[0]?.vegetal?.cantidadPorPorcion ? `${platosEmpaque[0].vegetal.cantidadPorPorcion} TAZA(S) DE VEGETALES` : '1 TAZA DE VEGETALES'}</div>
-                                    </div>
-                                    {showCarbos && (
-                                        <div className="flex border-b border-black">
-                                            <div className="w-48 p-0.5 px-1 border-r border-black">CANTIDAD POR PLATO</div>
-                                            <div className="flex-1 p-0.5 px-1">{platosEmpaque[0]?.carbo?.cantidadPorPorcion ? `${platosEmpaque[0].carbo.cantidadPorPorcion} TAZA(S) DE HARINA` : '1/2 TAZA DE HARINA'}</div>
+                            // Generar especificaciones
+                            const specsList = packData.clientes.map(c => {
+                                const note = c.observaciones ? ` ** ${c.observaciones}` : '';
+                                return `${c.nombre} (${c.cantidad})${note}`;
+                            });
+
+                            // Resumen de cocina (si existe)
+                            let resumenCocina = null;
+                            if (kitchenMenuData) {
+                                const platesCocina = Object.values(kitchenMenuData.platos).sort((a, b) => (a.numero || 0) - (b.numero || 0));
+                                // Consolidar ingredientes
+                                const ingreds = {};
+                                platesCocina.forEach(p => {
+                                    const protName = p.proteina?.nombre || 'Proteína';
+                                    const vegName = p.vegetal?.nombre || 'Vegetales';
+                                    const carbName = p.carbo?.nombre || 'Carbohidratos';
+
+                                    ingreds[protName] = (ingreds[protName] || 0) + (p.proteina.totalGramos || 0);
+
+                                    // Para vegetales y carbos, sumamos cantidadBase si unidad es igual. 
+                                    // Simplificación: sumamos "unidades" si hay mezcla
+                                    ingreds[vegName] = (ingreds[vegName] || 0) + (p.vegetal.cantidadBase || 0) * (p.totalPlatos || 0);
+                                    ingreds[carbName] = (ingreds[carbName] || 0) + (p.carbo.cantidadBase || 0) * (p.totalPlatos || 0);
+                                });
+
+                                resumenCocina = Object.entries(ingreds).filter(([, qty]) => qty > 0).map(([name, qty]) => ({ name, qty }));
+                            }
+                            let effectivePlatos = rawPlatos.length > 0 ? rawPlatos : (packData.platosBase.length > 0 ? packData.platosBase : [
+                                { numero: 1, proteina: { nombre: 'Proteína' }, vegetal: { nombre: 'Vegetales' }, carbo: { nombre: 'Harinas' } },
+                                { numero: 2, proteina: { nombre: 'Proteína' }, vegetal: { nombre: 'Vegetales' }, carbo: { nombre: 'Harinas' } },
+                                { numero: 3, proteina: { nombre: 'Proteína' }, vegetal: { nombre: 'Vegetales' }, carbo: { nombre: 'Harinas' } },
+                                { numero: 4, proteina: { nombre: 'Proteína' }, vegetal: { nombre: 'Vegetales' }, carbo: { nombre: 'Harinas' } },
+                                { numero: 5, proteina: { nombre: 'Proteína' }, vegetal: { nombre: 'Vegetales' }, carbo: { nombre: 'Harinas' } }
+                            ]);
+
+                            const platosEmpaque = effectivePlatos.map((p, idx) => {
+                                const original = packData.platosBase[idx] || {};
+                                const isOfficial = typeof p.proteina === 'string';
+                                return {
+                                    numero: p.numero || idx + 1,
+                                    proteina: {
+                                        nombre: isOfficial ? p.proteina : (p.proteina?.nombre || original.proteina?.nombre || '—'),
+                                        gramosPorPorcion: isOfficial ? getDefaultGrams(packName) : (p.proteina?.gramosPorPorcion || original.proteina?.gramosPorPorcion || getDefaultGrams(packName))
+                                    },
+                                    vegetal: {
+                                        nombre: isOfficial ? p.vegetal : (p.vegetal?.nombre || original.vegetal?.nombre || '—'),
+                                        cantidadPorPorcion: isOfficial ? 1 : (p.vegetal?.cantidadPorPorcion || original.vegetal?.cantidadPorPorcion || 1)
+                                    },
+                                    carbo: {
+                                        nombre: isOfficial ? p.carbo : (p.carbo?.nombre || original.carbo?.nombre || '—'),
+                                        cantidadPorPorcion: isOfficial ? 0.5 : (p.carbo?.cantidadPorPorcion || original.carbo?.cantidadPorPorcion || 0.5)
+                                    }
+                                };
+                            });
+
+                            const showCarbos = menuKey !== 'keto' && menuKey !== 'sinCarbos';
+                            const rowsPerPlate = showCarbos ? 3 : 2;
+
+                            return (
+                                <div key={`empaque-${packName}`} className="pack-table-container mb-12 print:mb-0 print:break-after-page print:[page-break-after:always] break-inside-avoid print:break-inside-avoid">
+                                    {/* ESTILO EXCEL */}
+                                    <div className="w-full">
+                                        {/* Cabecera Tipo Excel (Amarillo) */}
+                                        <div className="bg-yellow-400 text-black font-bold text-lg p-1.5 print:py-1 print:text-base border border-black text-center uppercase tracking-wide">
+                                            {packName.replace(/\s*\d{1,3}(?:[.,]\d{3})*\s*(?:colones|col|¢)/i, '')} <span className="text-gray-800 text-base print:text-sm">({packData.totalPacks} Packs)</span>
                                         </div>
-                                    )}
-                                </div>
 
-                                <table className="w-full border-collapse border border-black text-xs print:text-[11px] table-fixed">
-                                    <thead>
-                                        <tr className="bg-white">
-                                            <th className="border border-black p-1 print:py-0.5 print:px-1 w-20 text-center"># de Plato</th>
-                                            <th className="border border-black p-1 print:py-0.5 print:px-1 w-64 text-left">Descripcion</th>
-                                            <th className="border border-black p-1 print:py-0.5 print:px-1 w-24 text-center">Cantidad</th>
-                                            <th className="border border-black p-1 print:py-0.5 print:px-1 w-20 text-center">Platos</th>
-                                            <th className="border border-black p-1 print:py-0.5 print:px-1 text-left">Especificaciones</th>
-                                            <th className="border border-black p-1 print:py-0.5 print:px-1 text-left">Cliente</th>
-                                        </tr>
-                                    </thead>
-                                        {platosEmpaque.map((p, idx) => {
-                                            const totalPlatos = packData.totalPacks || 0;
+                                        {/* CANTIDAD POR PLATO (Estilo Excel) */}
+                                        <div className="border-x border-black bg-white flex flex-col text-xs print:text-[10px] font-bold w-full uppercase">
+                                            <div className="flex border-b border-black">
+                                                <div className="w-48 p-0.5 px-1 border-r border-black">CANTIDAD POR PLATO</div>
+                                                <div className="flex-1 p-0.5 px-1">{platosEmpaque[0]?.proteina?.gramosPorPorcion ? `${platosEmpaque[0].proteina.gramosPorPorcion} GRAMOS DE PROTEINA` : `${getDefaultGrams(packName)} GRAMOS DE PROTEINA`}</div>
+                                            </div>
+                                            <div className="flex border-b border-black">
+                                                <div className="w-48 p-0.5 px-1 border-r border-black">CANTIDAD POR PLATO</div>
+                                                <div className="flex-1 p-0.5 px-1">{platosEmpaque[0]?.vegetal?.cantidadPorPorcion ? `${platosEmpaque[0].vegetal.cantidadPorPorcion} TAZA(S) DE VEGETALES` : '1 TAZA DE VEGETALES'}</div>
+                                            </div>
+                                            {showCarbos && (
+                                                <div className="flex border-b border-black">
+                                                    <div className="w-48 p-0.5 px-1 border-r border-black">CANTIDAD POR PLATO</div>
+                                                    <div className="flex-1 p-0.5 px-1">{platosEmpaque[0]?.carbo?.cantidadPorPorcion ? `${platosEmpaque[0].carbo.cantidadPorPorcion} TAZA(S) DE HARINA` : '1/2 TAZA DE HARINA'}</div>
+                                                </div>
+                                            )}
+                                        </div>
 
-                                            // Función para obtener la celda del cliente en base al índice absoluto de la fila
-                                            const renderClientCells = (subRowIndex) => {
-                                                const absoluteRowIndex = idx * rowsPerPlate + subRowIndex;
-                                                const client = packData.clientes[absoluteRowIndex];
-                                                
-                                                if (client) {
-                                                    const tags = [];
-                                                    const hasDesayunoAlready = client.incluyeDesayuno || (client.observaciones && client.observaciones.toLowerCase().includes('desayun'));
-                                                    if (client.incluyeDesayuno) tags.push('🌅 Desayunos');
-                                                    
-                                                    const isTwoPack = client.categoria === 'two_pack' || /two\s*pack/i.test(client.categoryLabel || '') || /two\s*pack/i.test(client.plan || '');
-                                                    if (isTwoPack) tags.push('Two Pack');
+                                        <table className="w-full border-collapse border border-black text-xs print:text-[11px] table-fixed">
+                                            <thead>
+                                                <tr className="bg-white">
+                                                    <th className="border border-black p-1 print:py-0.5 print:px-1 w-20 text-center"># de Plato</th>
+                                                    <th className="border border-black p-1 print:py-0.5 print:px-1 w-64 text-left">Descripcion</th>
+                                                    <th className="border border-black p-1 print:py-0.5 print:px-1 w-24 text-center">Cantidad</th>
+                                                    <th className="border border-black p-1 print:py-0.5 print:px-1 w-20 text-center">Platos</th>
+                                                    <th className="border border-black p-1 print:py-0.5 print:px-1 text-left">Especificaciones</th>
+                                                    <th className="border border-black p-1 print:py-0.5 print:px-1 text-left">Cliente</th>
+                                                </tr>
+                                            </thead>
+                                            {platosEmpaque.map((p, idx) => {
+                                                const totalPlatos = packData.totalPacks || 0;
 
-                                                    const isIndividuales = client.categoria === 'individuales' || /individual/i.test(client.categoryLabel || '') || /individual/i.test(client.plan || '');
-                                                    if (isIndividuales) tags.push('Individuales');
+                                                // Función para obtener la celda del cliente en base al índice absoluto de la fila
+                                                const renderClientCells = (subRowIndex) => {
+                                                    const absoluteRowIndex = idx * rowsPerPlate + subRowIndex;
+                                                    const client = packData.clientes[absoluteRowIndex];
 
-                                                    let otherPacksTag = getOtherPacksTag(client.nombre, packName);
-                                                    // Quitar "Desayunos" del tag si ya se mostró arriba o en observaciones
-                                                    if (hasDesayunoAlready && otherPacksTag) {
-                                                        const cleaned = otherPacksTag.replace('Lleva también: ', '').split(', ').filter(p => p !== 'Desayunos').join(', ');
-                                                        otherPacksTag = cleaned ? `Lleva también: ${cleaned}` : '';
-                                                    }
-                                                    if (otherPacksTag) tags.push(otherPacksTag);
-
-                                                    let notes = client.observaciones ? `** ${client.observaciones}` : '';
-                                                    if (tags.length > 0) {
-                                                        const tagsStr = tags.map(t => `** ${t}`).join('\n');
-                                                        notes = notes ? `${tagsStr}\n${notes}` : tagsStr;
-                                                    }
-
-                                                    const zone = client.zona_envio || '';
-                                                    const zoneStr = zone && zone !== 'No especificada' && zone.toLowerCase() !== 'recoge en tienda' ? `, ${zone}` : '';
-                                                    let clientDisplayName = `${client.nombre} (${client.cantidad})${zoneStr}`;
-                                                    if (client.rawPedido) {
-                                                        const schedule = getScheduleFromOrder(client.rawPedido);
-                                                        const dateIdx = schedule.indexOf(date);
-                                                        if (schedule.length > 1 && dateIdx !== -1) {
-                                                            clientDisplayName = `${client.nombre} (${client.cantidad}) (Semana ${dateIdx + 1})${zoneStr}`;
-                                                        }
-                                                    }
-
-                                                    return (
-                                                        <>
-                                                            <td className="border border-black p-1 print:py-0.5 print:px-1 align-middle whitespace-pre-wrap text-xs print:text-[10px] leading-tight print:leading-tight">{notes}</td>
-                                                            <td className="border border-black p-1 print:py-0.5 print:px-1 align-middle text-xs print:text-[11px] font-medium">{clientDisplayName}</td>
-                                                        </>
-                                                    );
-                                                } else {
-                                                    return (
-                                                        <>
-                                                            <td className="border border-black p-1 print:py-0.5 print:px-1"></td>
-                                                            <td className="border border-black p-1 print:py-0.5 print:px-1"></td>
-                                                        </>
-                                                    );
-                                                }
-                                            };
-
-                                            return (
-                                                <tbody key={idx} className="break-inside-avoid print:break-inside-avoid">
-                                                    {/* FILA 1: PROTEÍNA */}
-                                                    <tr>
-                                                        <td className="border border-black p-1 print:py-0.5 print:px-1 text-center font-bold align-middle" rowSpan={rowsPerPlate}>Plato {p.numero}</td>
-                                                        <td className="border border-black p-1 print:py-0.5 print:px-1 font-medium bg-gray-50">{p.proteina?.nombre || ''}</td>
-                                                        <td className="border border-black p-1 print:py-0.5 print:px-1 text-center bg-gray-50">{p.proteina?.gramosPorPorcion ? `${p.proteina.gramosPorPorcion}` : ''}</td>
-                                                        <td className="border border-black p-1 print:py-0.5 print:px-1 text-center font-bold text-base print:text-sm align-middle" rowSpan={rowsPerPlate}>{totalPlatos}</td>
-                                                        {renderClientCells(0)}
-                                                    </tr>
-                                                    {/* FILA 2: VEGETALES */}
-                                                    <tr>
-                                                        <td className="border border-black p-1 print:py-0.5 print:px-1">{p.vegetal?.nombre || ''}</td>
-                                                        <td className="border border-black p-1 print:py-0.5 print:px-1 text-center">{p.vegetal?.cantidadPorPorcion ? `${p.vegetal.cantidadPorPorcion}` : ''}</td>
-                                                        {renderClientCells(1)}
-                                                    </tr>
-                                                    {/* FILA 3: CARBOS (si aplica) */}
-                                                    {showCarbos && (
-                                                        <tr className="break-inside-avoid">
-                                                            <td className="border border-black p-1 print:py-0.5 print:px-1">{p.carbo?.nombre || ''}</td>
-                                                            <td className="border border-black p-1 print:py-0.5 print:px-1 text-center">{p.carbo?.cantidadPorPorcion ? `${p.carbo.cantidadPorPorcion}` : ''}</td>
-                                                            {renderClientCells(2)}
-                                                        </tr>
-                                                    )}
-                                                </tbody>
-                                            );
-                                        })}
-                                        {/* Filas adicionales si hay más clientes que filas de platos disponbles */}
-                                        {(() => {
-                                            const totalAvailableRows = platosEmpaque.length * rowsPerPlate;
-                                            if (packData.clientes.length <= totalAvailableRows) return null;
-                                            const extraClients = packData.clientes.slice(totalAvailableRows);
-                                            return (
-                                                <tbody className="break-inside-avoid print:break-inside-avoid">
-                                                    {extraClients.map((client, extraIdx) => {
+                                                    if (client) {
                                                         const tags = [];
                                                         const hasDesayunoAlready = client.incluyeDesayuno || (client.observaciones && client.observaciones.toLowerCase().includes('desayun'));
                                                         if (client.incluyeDesayuno) tags.push('🌅 Desayunos');
+
                                                         const isTwoPack = client.categoria === 'two_pack' || /two\s*pack/i.test(client.categoryLabel || '') || /two\s*pack/i.test(client.plan || '');
                                                         if (isTwoPack) tags.push('Two Pack');
+
                                                         const isIndividuales = client.categoria === 'individuales' || /individual/i.test(client.categoryLabel || '') || /individual/i.test(client.plan || '');
                                                         if (isIndividuales) tags.push('Individuales');
+
                                                         let otherPacksTag = getOtherPacksTag(client.nombre, packName);
+                                                        // Quitar "Desayunos" del tag si ya se mostró arriba o en observaciones
                                                         if (hasDesayunoAlready && otherPacksTag) {
                                                             const cleaned = otherPacksTag.replace('Lleva también: ', '').split(', ').filter(p => p !== 'Desayunos').join(', ');
                                                             otherPacksTag = cleaned ? `Lleva también: ${cleaned}` : '';
                                                         }
                                                         if (otherPacksTag) tags.push(otherPacksTag);
+
                                                         let notes = client.observaciones ? `** ${client.observaciones}` : '';
                                                         if (tags.length > 0) {
                                                             const tagsStr = tags.map(t => `** ${t}`).join('\n');
                                                             notes = notes ? `${tagsStr}\n${notes}` : tagsStr;
                                                         }
+
                                                         const zone = client.zona_envio || '';
                                                         const zoneStr = zone && zone !== 'No especificada' && zone.toLowerCase() !== 'recoge en tienda' ? `, ${zone}` : '';
                                                         let clientDisplayName = `${client.nombre} (${client.cantidad})${zoneStr}`;
+                                                        if (client.rawPedido) {
+                                                            const schedule = getScheduleFromOrder(client.rawPedido);
+                                                            const dateIdx = schedule.indexOf(date);
+                                                            if (schedule.length > 1 && dateIdx !== -1) {
+                                                                clientDisplayName = `${client.nombre} (${client.cantidad}) (Semana ${dateIdx + 1})${zoneStr}`;
+                                                            }
+                                                        }
 
                                                         return (
-                                                            <tr key={`extra-${extraIdx}`}>
-                                                                <td className="border border-black p-1 print:py-0.5 print:px-1"></td>
-                                                                <td className="border border-black p-1 print:py-0.5 print:px-1 font-medium bg-gray-50 text-gray-400">—</td>
-                                                                <td className="border border-black p-1 print:py-0.5 print:px-1"></td>
-                                                                <td className="border border-black p-1 print:py-0.5 print:px-1"></td>
+                                                            <>
                                                                 <td className="border border-black p-1 print:py-0.5 print:px-1 align-middle whitespace-pre-wrap text-xs print:text-[10px] leading-tight print:leading-tight">{notes}</td>
                                                                 <td className="border border-black p-1 print:py-0.5 print:px-1 align-middle text-xs print:text-[11px] font-medium">{clientDisplayName}</td>
-                                                            </tr>
+                                                            </>
                                                         );
-                                                    })}
-                                                </tbody>
-                                            );
-                                        })()}
-                                </table>
-                            </div>
-                        </div>
-                    );
-                })
-            )}
+                                                    } else {
+                                                        return (
+                                                            <>
+                                                                <td className="border border-black p-1 print:py-0.5 print:px-1"></td>
+                                                                <td className="border border-black p-1 print:py-0.5 print:px-1"></td>
+                                                            </>
+                                                        );
+                                                    }
+                                                };
+
+                                                return (
+                                                    <tbody key={idx} className="break-inside-avoid print:break-inside-avoid">
+                                                        {/* FILA 1: PROTEÍNA */}
+                                                        <tr>
+                                                            <td className="border border-black p-1 print:py-0.5 print:px-1 text-center font-bold align-middle" rowSpan={rowsPerPlate}>Plato {p.numero}</td>
+                                                            <td className="border border-black p-1 print:py-0.5 print:px-1 font-medium bg-gray-50">{p.proteina?.nombre || ''}</td>
+                                                            <td className="border border-black p-1 print:py-0.5 print:px-1 text-center bg-gray-50">{p.proteina?.gramosPorPorcion ? `${p.proteina.gramosPorPorcion}` : ''}</td>
+                                                            <td className="border border-black p-1 print:py-0.5 print:px-1 text-center font-bold text-base print:text-sm align-middle" rowSpan={rowsPerPlate}>{totalPlatos}</td>
+                                                            {renderClientCells(0)}
+                                                        </tr>
+                                                        {/* FILA 2: VEGETALES */}
+                                                        <tr>
+                                                            <td className="border border-black p-1 print:py-0.5 print:px-1">{p.vegetal?.nombre || ''}</td>
+                                                            <td className="border border-black p-1 print:py-0.5 print:px-1 text-center">{p.vegetal?.cantidadPorPorcion ? `${p.vegetal.cantidadPorPorcion}` : ''}</td>
+                                                            {renderClientCells(1)}
+                                                        </tr>
+                                                        {/* FILA 3: CARBOS (si aplica) */}
+                                                        {showCarbos && (
+                                                            <tr className="break-inside-avoid">
+                                                                <td className="border border-black p-1 print:py-0.5 print:px-1">{p.carbo?.nombre || ''}</td>
+                                                                <td className="border border-black p-1 print:py-0.5 print:px-1 text-center">{p.carbo?.cantidadPorPorcion ? `${p.carbo.cantidadPorPorcion}` : ''}</td>
+                                                                {renderClientCells(2)}
+                                                            </tr>
+                                                        )}
+                                                    </tbody>
+                                                );
+                                            })}
+                                            {/* Filas adicionales si hay más clientes que filas de platos disponbles */}
+                                            {(() => {
+                                                const totalAvailableRows = platosEmpaque.length * rowsPerPlate;
+                                                if (packData.clientes.length <= totalAvailableRows) return null;
+                                                const extraClients = packData.clientes.slice(totalAvailableRows);
+                                                return (
+                                                    <tbody className="break-inside-avoid print:break-inside-avoid">
+                                                        {extraClients.map((client, extraIdx) => {
+                                                            const tags = [];
+                                                            const hasDesayunoAlready = client.incluyeDesayuno || (client.observaciones && client.observaciones.toLowerCase().includes('desayun'));
+                                                            if (client.incluyeDesayuno) tags.push('🌅 Desayunos');
+                                                            const isTwoPack = client.categoria === 'two_pack' || /two\s*pack/i.test(client.categoryLabel || '') || /two\s*pack/i.test(client.plan || '');
+                                                            if (isTwoPack) tags.push('Two Pack');
+                                                            const isIndividuales = client.categoria === 'individuales' || /individual/i.test(client.categoryLabel || '') || /individual/i.test(client.plan || '');
+                                                            if (isIndividuales) tags.push('Individuales');
+                                                            let otherPacksTag = getOtherPacksTag(client.nombre, packName);
+                                                            if (hasDesayunoAlready && otherPacksTag) {
+                                                                const cleaned = otherPacksTag.replace('Lleva también: ', '').split(', ').filter(p => p !== 'Desayunos').join(', ');
+                                                                otherPacksTag = cleaned ? `Lleva también: ${cleaned}` : '';
+                                                            }
+                                                            if (otherPacksTag) tags.push(otherPacksTag);
+                                                            let notes = client.observaciones ? `** ${client.observaciones}` : '';
+                                                            if (tags.length > 0) {
+                                                                const tagsStr = tags.map(t => `** ${t}`).join('\n');
+                                                                notes = notes ? `${tagsStr}\n${notes}` : tagsStr;
+                                                            }
+                                                            const zone = client.zona_envio || '';
+                                                            const zoneStr = zone && zone !== 'No especificada' && zone.toLowerCase() !== 'recoge en tienda' ? `, ${zone}` : '';
+                                                            let clientDisplayName = `${client.nombre} (${client.cantidad})${zoneStr}`;
+
+                                                            return (
+                                                                <tr key={`extra-${extraIdx}`}>
+                                                                    <td className="border border-black p-1 print:py-0.5 print:px-1"></td>
+                                                                    <td className="border border-black p-1 print:py-0.5 print:px-1 font-medium bg-gray-50 text-gray-400">—</td>
+                                                                    <td className="border border-black p-1 print:py-0.5 print:px-1"></td>
+                                                                    <td className="border border-black p-1 print:py-0.5 print:px-1"></td>
+                                                                    <td className="border border-black p-1 print:py-0.5 print:px-1 align-middle whitespace-pre-wrap text-xs print:text-[10px] leading-tight print:leading-tight">{notes}</td>
+                                                                    <td className="border border-black p-1 print:py-0.5 print:px-1 align-middle text-xs print:text-[11px] font-medium">{clientDisplayName}</td>
+                                                                </tr>
+                                                            );
+                                                        })}
+                                                    </tbody>
+                                                );
+                                            })()}
+                                        </table>
+                                    </div>
+                                </div>
+                            );
+                        })
+                    )}
                 </div>
             )}
 

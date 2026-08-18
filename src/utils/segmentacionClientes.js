@@ -27,6 +27,17 @@ export const normalizarTelefono = (telefono) => {
     return digitos.length > 8 ? digitos.slice(-8) : digitos;
 };
 
+/**
+ * Teléfonos de relleno que se pusieron para meter un pedido a la hoja sin tener
+ * el número real (por ejemplo los del Excel: 8000-0001 … 8000-0006).
+ *
+ * Sirven para producción, pero NO son de nadie: si entraran a una difusión se
+ * crearían contactos falsos en Kommo y se intentaría escribirle a números que
+ * no existen. En Costa Rica los celulares arrancan en 6, 7 u 8, y el bloque
+ * 8000-XXXX no está asignado, así que es seguro descartarlo.
+ */
+export const esTelefonoDeRelleno = (telefono) => /^8000\d{4}$/.test(normalizarTelefono(telefono));
+
 const aFecha = (valor) => {
     if (!valor) return null;
     const d = valor?.toDate ? valor.toDate() : new Date(valor);
@@ -57,6 +68,7 @@ export const construirClientes = (orders = [], hoy = new Date()) => {
 
         const telefono = normalizarTelefono(o?.telefono);
         if (!telefono) return; // sin teléfono no hay a quién escribirle
+        if (esTelefonoDeRelleno(telefono)) return; // número inventado, no es de nadie
 
         const creado = aFecha(o?.createdAt);
         const entregas = getScheduleFromOrder(o).filter(Boolean).sort();
