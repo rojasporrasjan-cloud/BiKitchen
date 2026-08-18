@@ -19,7 +19,9 @@ const CAMPOS_EDITABLES = [
     // El correo es opcional: si no viene, se arma a partir del teléfono
     { campo: 'correo', label: 'Correo (opcional)', tipo: 'email', placeholder: 'Si no tiene, dejalo vacío', opcional: true },
     { campo: 'zona', label: 'Zona', tipo: 'text', placeholder: 'Moravia, Escazú…', opcional: true },
-    { campo: 'direccion', label: 'Dirección', tipo: 'text', placeholder: 'Señas exactas', opcional: true }
+    { campo: 'direccion', label: 'Dirección', tipo: 'text', placeholder: 'Señas exactas', opcional: true },
+    { campo: 'total', label: 'Monto Total (₡)', tipo: 'number', placeholder: 'Ej: 4500', opcional: true },
+    { campo: 'costoEnvio', label: 'Costo Envío (₡)', tipo: 'number', placeholder: 'Ej: 3000', opcional: true }
 ];
 
 export default function ImportedOrderPreview({
@@ -222,19 +224,34 @@ export default function ImportedOrderPreview({
                                     <span className="font-medium">{item.cantidad}× {item.nombre}</span>
                                     <span className="text-gray-500"> — {formatPrice(item.total)}</span>
 
-                                    <div className="mt-1.5 pl-4">
-                                        <label htmlFor={`imp-prot-${i}`} className="block text-xs text-gray-500 mb-1">
-                                            Proteínas {anuncia ? `(deberían ser ${anuncia[1]})` : ''} — separalas con coma
-                                        </label>
-                                        <input
-                                            id={`imp-prot-${i}`}
-                                            type="text"
-                                            value={(item.proteinas || []).join(', ')}
-                                            placeholder="Carne mechada, Pollo al pesto, Pollo mediterráneo"
-                                            onChange={(e) => onEdit(`proteinas_${i}`, e.target.value)}
-                                            className={`w-full px-3 py-2 border rounded-lg text-sm outline-none transition-all focus:ring-4 focus:ring-orange-100 focus:border-bikitchen-orange ${faltanProteinas ? 'border-red-300 bg-red-50' : 'border-gray-200'
-                                                }`}
-                                        />
+                                    <div className="mt-1.5 pl-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div>
+                                            <label htmlFor={`imp-precio-${i}`} className="block text-xs text-gray-500 mb-1">
+                                                Precio del ítem (₡)
+                                            </label>
+                                            <input
+                                                id={`imp-precio-${i}`}
+                                                type="number"
+                                                value={item.precio || ''}
+                                                placeholder="Ej: 4500"
+                                                onChange={(e) => onEdit(`precio_${i}`, e.target.value)}
+                                                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none transition-all focus:ring-4 focus:ring-orange-100 focus:border-bikitchen-orange"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label htmlFor={`imp-prot-${i}`} className="block text-xs text-gray-500 mb-1">
+                                                Proteínas {anuncia ? `(deberían ser ${anuncia[1]})` : ''} — separalas con coma
+                                            </label>
+                                            <input
+                                                id={`imp-prot-${i}`}
+                                                type="text"
+                                                value={(item.proteinas || []).join(', ')}
+                                                placeholder="Carne mechada, Pollo al pesto, Pollo mediterráneo"
+                                                onChange={(e) => onEdit(`proteinas_${i}`, e.target.value)}
+                                                className={`w-full px-3 py-2 border rounded-lg text-sm outline-none transition-all focus:ring-4 focus:ring-orange-100 focus:border-bikitchen-orange ${faltanProteinas ? 'border-red-300 bg-red-50' : 'border-gray-200'
+                                                    }`}
+                                            />
+                                        </div>
                                     </div>
                                 </li>
                             );

@@ -34,9 +34,10 @@ describe('Un pedido completo no genera avisos', () => {
 });
 
 describe('Packs que saldrían vacíos', () => {
-    it('avisa cuando el pack no corresponde a ningún menú', () => {
-        const avisos = problemasDe(pedido({ plan: 'Pack Inventado' }));
-        expect(avisos.join(' ')).toMatch(/no corresponde a ning[úu]n Men[úu] Semanal/i);
+    it('un nombre sin menú NO es un error: la hoja lo imprime como individual', () => {
+        // Antes esto avisaba, pero era falsa alarma: la hoja ya lo manda a
+        // individuales sola. Un aviso que no corresponde se termina ignorando.
+        expect(problemasDe(pedido({ plan: 'Picadillo chayote con maíz dulce' }))).toEqual([]);
     });
 
     it('avisa cuando el menú existe pero está sin cargar', () => {

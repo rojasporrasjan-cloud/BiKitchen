@@ -416,7 +416,7 @@ export function assignWorkload(pedidos, menus, workers) {
  * Devuelve una estructura consolidada para hoja de cocina.
  * No genera el PDF directamente: sólo calcula los totales por plato/ingrediente y observaciones.
  */
-export function buildKitchenSheetData(pedidos, menus) {
+export function buildKitchenSheetData(pedidos, menus, options = {}) {
   const porMenu = {};
   const observacionesPorMenu = {};
   const desayunos = [];
@@ -520,10 +520,39 @@ export function buildKitchenSheetData(pedidos, menus) {
     });
   });
 
+  const marginPercent = typeof options === 'number' ? options : (options?.marginPercent ?? 30);
+  const factorMargen = 1 + (marginPercent / 100);
+
+  // Post-procesar con el margen de producción (merma de cocina Gina)
+  Object.values(porMenu).forEach(group => {
+    Object.values(group.platos).forEach(plato => {
+      plato.totalPlatosNeto = plato.totalPlatos;
+      plato.totalPlatosCocina = Math.ceil(plato.totalPlatos * factorMargen);
+
+      if (plato.proteina) {
+        plato.proteina.totalGramosNeto = plato.proteina.totalGramos;
+        plato.proteina.totalGramosCocina = Math.round((plato.proteina.totalGramos || 0) * factorMargen);
+      }
+      if (plato.carbo) {
+        plato.carbo.totalGramosNeto = plato.carbo.totalGramos;
+        plato.carbo.totalGramosCocina = Math.round((plato.carbo.totalGramos || 0) * factorMargen);
+        plato.carbo.totalTazasNeto = plato.carbo.totalTazas;
+        plato.carbo.totalTazasCocina = Math.round((plato.carbo.totalTazas || 0) * factorMargen * 10) / 10;
+      }
+      if (plato.vegetal) {
+        plato.vegetal.totalGramosNeto = plato.vegetal.totalGramos;
+        plato.vegetal.totalGramosCocina = Math.round((plato.vegetal.totalGramos || 0) * factorMargen);
+        plato.vegetal.totalTazasNeto = plato.vegetal.totalTazas;
+        plato.vegetal.totalTazasCocina = Math.round((plato.vegetal.totalTazas || 0) * factorMargen * 10) / 10;
+      }
+    });
+  });
+
   return {
     porMenu,
     observacionesPorMenu,
-    desayunos
+    desayunos,
+    marginPercent
   };
 }
 

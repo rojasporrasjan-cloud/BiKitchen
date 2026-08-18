@@ -18,6 +18,10 @@
  */
 
 import { calcularPuntos } from '../config/loyalty';
+import { individualesData } from '../data/individualesData';
+import { SHIPPING_ZONES } from '../data/shippingZones';
+
+const sinTildes = (str) => String(str || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
 /** Mismo formato que generateOrderNumber() en CheckoutSteps.jsx (ahí es privada). */
 export const generateImportOrderNumber = () => {
@@ -44,14 +48,18 @@ export const DOMINIO_SIN_CORREO = 'sin-correo.bikitchen.cr';
  *
  * @returns {{ correo: string, esPlaceholder: boolean }}
  */
-export const resolverCorreo = (correoCrudo, telefono) => {
+export const resolverCorreo = (correoCrudo, telefono, cliente = '', numeroOrden = '') => {
     const correo = String(correoCrudo || '').toLowerCase().trim();
     if (correo.length > 4) return { correo, esPlaceholder: false };
 
     const digitos = String(telefono || '').replace(/\D/g, '');
-    if (!digitos) return { correo: '', esPlaceholder: false };
+    if (digitos.length >= 7) return { correo: `${digitos}@${DOMINIO_SIN_CORREO}`, esPlaceholder: true };
 
-    return { correo: `${digitos}@${DOMINIO_SIN_CORREO}`, esPlaceholder: true };
+    const nameSlug = sinTildes(String(cliente || 'cliente')).toLowerCase().replace(/[^a-z0-9]/g, '');
+    const idSlug = String(numeroOrden || Date.now()).replace(/[^a-z0-9]/gi, '').toLowerCase().slice(-6);
+    const fallback = `${nameSlug || 'cliente'}.${idSlug || 'order'}@${DOMINIO_SIN_CORREO}`;
+
+    return { correo: fallback, esPlaceholder: true };
 };
 
 /**
@@ -82,7 +90,6 @@ export const buildPedidoFromImport = (parsed, options = {}) => {
     const { createdBy = 'admin', orderNumber, nivelCliente = null } = options;
     const esIndividual = options.esIndividual ?? pareceIndividual(parsed?.items);
 
-    const total = num(parsed?.total);
     const fechas = Array.isArray(parsed?.fechasEntrega) ? parsed.fechasEntrega.filter(Boolean) : [];
     const rawItems = Array.isArray(parsed?.items) ? parsed.items : [];
 
@@ -93,9 +100,45 @@ export const buildPedidoFromImport = (parsed, options = {}) => {
         : fechas.length === 2 ? 'biweekly'
             : null;
 
+    let costoEnvio = num(parsed?.costoEnvio);
+    const zonaEnvio = parsed?.zona || 'No especificada';
+
+    // Si no viene costo de envío pero sí la zona, auto-completar desde SHIPPING_ZONES
+    if (!costoEnvio && zonaEnvio && zonaEnvio !== 'No especificada') {
+        const cleanZone = sinTildes(zonaEnvio.toLowerCase());
+        const zoneMatch = SHIPPING_ZONES.find(z => {
+            const zName = sinTildes(z.name.toLowerCase());
+            const hasArea = z.areas.some(a => cleanZone.includes(sinTildes(a.toLowerCase())));
+            return zName.includes(cleanZone) || hasArea;
+        });
+        if (zoneMatch) {
+            costoEnvio = zoneMatch.cost;
+        }
+    }
+
     const items = rawItems.map((item) => {
         const cantidad = num(item?.cantidad, 1) || 1;
-        const precio = num(item?.precio);
+        let precio = num(item?.precio);
+
+        // Si el precio del ítem viene en 0 o null, auto-completar desde el catálogo individualesData
+        if (!precio && item?.nombre) {
+            const cleanName = sinTildes(String(item.nombre).toLowerCase());
+            const match = individualesData.find(prod => {
+                const prodName = sinTildes(prod.nombre.toLowerCase());
+                const cleanItemName = cleanName.replace(/\([^)]*\)/g, '').trim();
+                return cleanName.includes(prodName) || prodName.includes(cleanItemName);
+            });
+            if (match) {
+                if (cleanName.includes('kg') || cleanName.includes('kilo') || cleanName.includes('1 kg')) {
+                    precio = match.precio1kg || match.precio500 || 0;
+                } else if (cleanName.includes('500') || cleanName.includes('500g')) {
+                    precio = match.precio500 || match.precio1kg || 0;
+                } else {
+                    precio = match.precio1kg || match.precio500 || 0;
+                }
+            }
+        }
+
         const proteinas = Array.isArray(item?.proteinas) && item.proteinas.length > 0
             ? item.proteinas
             : null; // null y no undefined: Firestore rechaza undefined
@@ -119,7 +162,12 @@ export const buildPedidoFromImport = (parsed, options = {}) => {
         };
     });
 
-    const { correo, esPlaceholder } = resolverCorreo(parsed?.correo, parsed?.telefono);
+    const subtotalCalculado = items.reduce((acc, i) => acc + (i.total || 0), 0);
+    const subtotal = num(parsed?.subtotal) || num(parsed?.total) || subtotalCalculado;
+    const totalCalculado = subtotalCalculado > 0 ? (subtotalCalculado + costoEnvio - num(parsed?.descuento)) : 0;
+    const total = num(parsed?.total) || totalCalculado || subtotal;
+    const numeroOrdenFinal = orderNumber || parsed?.numeroOrden || generateImportOrderNumber();
+    const { correo, esPlaceholder } = resolverCorreo(parsed?.correo, parsed?.telefono, parsed?.cliente, numeroOrdenFinal);
 
     return {
         numeroOrden: orderNumber || parsed?.numeroOrden || generateImportOrderNumber(),
@@ -132,9 +180,9 @@ export const buildPedidoFromImport = (parsed, options = {}) => {
         direccion: parsed?.direccion || '',
         referencias: parsed?.referencias || '',
 
-        zona_envio: parsed?.zona || 'No especificada',
+        zona_envio: zonaEnvio,
         zona_id: null,
-        costo_envio: num(parsed?.costoEnvio),
+        costo_envio: costoEnvio,
         envio_por_confirmar: false,
 
         // La hoja de cocina agrupa por este campo. Los platos sueltos van todos bajo
@@ -147,7 +195,7 @@ export const buildPedidoFromImport = (parsed, options = {}) => {
         observaciones: parsed?.observaciones || '',
 
         items,
-        subtotal: num(parsed?.subtotal) || total,
+        subtotal,
         descuento: num(parsed?.descuento),
         cupon: null,
         metodo_pago: parsed?.metodoPago || 'WhatsApp',

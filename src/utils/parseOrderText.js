@@ -158,28 +158,34 @@ const aISO = (y, m, d) => `${y}-${String(m + 1).padStart(2, '0')}-${String(d).pa
  * @param {Date} [hoy] - inyectable para poder testear
  * @returns {string|null}
  */
-export const parseFechaEspanol = (texto, hoy = new Date()) => {
+export const parseFechaEspanol = (texto, hoy = new Date(), defaultMonth = null) => {
     if (!texto || typeof texto !== 'string') return null;
 
-    const iso = texto.match(ISO_DATE_RE);
+    // Limpiar notas entre paréntesis como "(entregar 5 comidas)" para no ensuciar la fecha
+    const limpio = texto.replace(/\([^)]*\)/g, '').trim();
+
+    const iso = limpio.match(ISO_DATE_RE);
     if (iso) return iso[0];
 
     // 12/08/2026 o 12-08-2026
-    const numerica = texto.match(/\b(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})\b/);
+    const numerica = limpio.match(/\b(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})\b/);
     if (numerica) {
         const [, d, m, yRaw] = numerica;
         const y = yRaw.length === 2 ? 2000 + Number(yRaw) : Number(yRaw);
         return aISO(y, Number(m) - 1, Number(d));
     }
 
-    // "12 de agosto", "15 agosto" (el "de" es opcional: a mano se omite seguido),
-    // con o sin año y con o sin día de la semana adelante.
-    // Si la palabra que sigue al número no es un mes, se descarta más abajo, así
-    // que "1 pack bajo calorías" no se confunde con una fecha.
-    const conMes = sinTildes(texto).match(/\b(\d{1,2})\s+(?:de\s+)?([a-z]+)(?:\s+(?:de\s+)?(\d{4}))?/);
+    // "12 de agosto", "15 agosto"
+    const sinT = sinTildes(limpio);
+    const conMes = sinT.match(/\b(\d{1,2})\s+(?:de\s+)?([a-z]+)(?:\s+(?:de\s+)?(\d{4}))?/);
     if (conMes) {
         const dia = Number(conMes[1]);
-        const mes = MESES[conMes[2]];
+        let mes = MESES[conMes[2]];
+
+        if (mes === undefined && defaultMonth !== null) {
+            mes = defaultMonth;
+        }
+
         if (mes === undefined || dia < 1 || dia > 31) return null;
 
         if (conMes[3]) return aISO(Number(conMes[3]), mes, dia);
@@ -192,6 +198,18 @@ export const parseFechaEspanol = (texto, hoy = new Date()) => {
         const treintaDias = 30 * 86400000;
         if (base - candidata > treintaDias) anio += 1;
         return aISO(anio, mes, dia);
+    }
+
+    // "Miércoles 26" (sin mes explícito, hereda el mes del bloque)
+    const sinNombreMes = sinT.match(/\b(\d{1,2})\b/);
+    if (sinNombreMes && defaultMonth !== null) {
+        const dia = Number(sinNombreMes[1]);
+        if (dia >= 1 && dia <= 31) {
+            const base = new Date(hoy);
+            base.setHours(0, 0, 0, 0);
+            let anio = base.getFullYear();
+            return aISO(anio, defaultMonth, dia);
+        }
     }
 
     return null;
@@ -210,18 +228,22 @@ const grabDeliveryDates = (text, hoy) => {
     if (multi.length > 0) return multi;
 
     // Encabezado "Entregas" solo, con las fechas en las líneas siguientes.
-    // Va ANTES del grab de etiqueta: ese permite cruzar el salto de línea y se
-    // quedaría solo con la primera fecha, perdiendo las semanas de un mensual.
     const lineas = text.split('\n');
     const idx = lineas.findIndex(l => /^\s*Entregas?\s*:?\s*$/i.test(l));
     if (idx !== -1) {
         const fechas = [];
+        let lastMonth = null;
+
         for (let i = idx + 1; i < lineas.length; i++) {
             const linea = lineas[i].trim();
             if (!linea) continue;
-            const fecha = parseFechaEspanol(linea, hoy);
-            if (!fecha) break;
-            fechas.push(fecha);
+
+            const fecha = parseFechaEspanol(linea, hoy, lastMonth);
+            if (fecha) {
+                fechas.push(fecha);
+                const m = Number(fecha.split('-')[1]) - 1;
+                lastMonth = m;
+            }
         }
         if (fechas.length > 0) return fechas;
     }
@@ -259,11 +281,14 @@ const esEncabezado = (t) => {
  * "REGALIA DESAYUNOS" es parte de la descripción del pack, no un encabezado de
  * sección, y si se cortara ahí el ítem no se detectaría.
  */
+const ES_HEADER_SECCION = /^(?:👤|🛒|🚚|📝|💳|📦)?\s*(?:INFORMACI[ÓO]N|PRODUCTOS|DETALLES|RESUMEN|M[ÉE]TODO)\b/i;
+
 const esCorteDeItem = (linea) => {
     const t = (linea || '').trim();
     if (!t) return false;
     return ES_SEPARADOR.test(t)
         || ETIQUETA_CONOCIDA.test(t)
+        || ES_HEADER_SECCION.test(t)
         || PARECE_FECHA.test(t)
         || ES_MONTO_SUELTO.test(t)
         || /^[└│├]/.test(t)
@@ -281,7 +306,7 @@ export const esLineaIgnorable = (linea) => {
 
 /** Extrae promo/instrucciones del texto del ítem */
 const processItemNameAndInstructions = (mainText, extrasArray, tieneDescripcion) => {
-    const instruccionFuerte = /^(cambiar|con\s|sin\s|nota|ojo|\+)/i;
+    const instruccionFuerte = /^(cambiar|con\s|sin\s|nota|ojo|\+|mandar|enviar|pidio|pidió)/i;
     let nameExtras = [];
     let instructionExtras = [];
     let _extras = tieneDescripcion ? [...extrasArray] : [];
@@ -290,6 +315,18 @@ const processItemNameAndInstructions = (mainText, extrasArray, tieneDescripcion)
     const formatInstruction = (t) => {
         return t.replace(/^[\s•·*□▢▪◦◽◾-]+/, '').trim();
     };
+
+    if (/^\s*(?:kg|kilos?|g|gramos?)\b/i.test(currentMainText)) {
+        const kgMatch = currentMainText.match(/^\s*(kg|kilos?|g|gramos?)\s+(.+)$/i);
+        if (kgMatch) {
+            currentMainText = `${kgMatch[2]} (${kgMatch[1].toLowerCase()})`;
+        }
+    }
+
+    if (/^\s*unidades?\s+de\s+(?:desayunos?|almuerzos?|comidas?|cenas?)\s*$/i.test(currentMainText) && _extras.length > 0) {
+        currentMainText = _extras[0].texto;
+        _extras = _extras.slice(1);
+    }
 
     if (instruccionFuerte.test(currentMainText) && _extras.length > 0) {
         instructionExtras.push(formatInstruction(currentMainText));
@@ -361,7 +398,7 @@ const CANTIDAD_ANUNCIADA = /(\d+)\s*(?:prote[íi]nas?|desayunos?|almuerzos?|comi
  * como "Total: 66.800" y nunca aparece un "Precio". Sin esto, ese pedido entra
  * SIN ítems: ni platos, ni hoja de cocina, ni nada.
  */
-const esItemEvidente = (t) => /\b(pack|paquete)\b/i.test(t) || CANTIDAD_ANUNCIADA.test(t);
+const esItemEvidente = (t) => /\b(pack|paquete|desayunos?|almuerzos?|comidas?|cenas?|unidades?)\b/i.test(t) || CANTIDAD_ANUNCIADA.test(t);
 
 const absorberDescripcion = (lines, i, texto) => {
     // Un ítem que anuncia N platos viene seguido de la LISTA, una por línea. Ahí
@@ -369,7 +406,7 @@ const absorberDescripcion = (lines, i, texto) => {
     // trague media hoja.
     const anuncio = texto.match(CANTIDAD_ANUNCIADA);
     const cantidadAnunciada = anuncio ? parseInt(anuncio[1], 10) : 0;
-    const maxExtras = cantidadAnunciada > 0 ? Math.max(cantidadAnunciada, 12) : 2;
+    const maxExtras = cantidadAnunciada > 0 ? Math.max(cantidadAnunciada, 12) : 6;
 
     const extras = [];
     let j = i + 1;
@@ -378,7 +415,15 @@ const absorberDescripcion = (lines, i, texto) => {
     while (j < lines.length && extras.length < maxExtras) {
         const t = lines[j].trim();
         if (!t) { j++; continue; }
-        if (ES_LINEA_PRECIO.test(t)) { idxPrecio = j; break; }
+        if (ES_LINEA_PRECIO.test(t)) {
+            if (idxPrecio === -1) idxPrecio = j;
+            if (cantidadAnunciada > 0 && extras.length < cantidadAnunciada) {
+                j++;
+                continue;
+            } else {
+                break;
+            }
+        }
         if (esCorteDeItem(t) || DETALLE_PROTEINAS_RE.test(t)) break;
         extras.push({ idx: j, texto: t });
         j++;
@@ -563,7 +608,7 @@ export const parseOrderBlock = (textoCrudo, hoy = new Date()) => {
     const correo = grab(text, ['Email', 'Correo', 'E-mail']);
     const cedula = grab(text, ['C[ée]dula']);
     // "Lugar" es como lo escribe la administración a mano
-    const zona = grab(text, ['Zona(?: de entrega)?', 'Lugar']);
+    const zona = grab(text, ['Zona(?: de entrega)?', 'Lugar', 'Ubicaci[óo]n'], { sinDosPuntos: true });
     const direccion = grab(text, ['Direcci[óo]n', 'Se[ñn]as']);
     const referencias = grab(text, ['Referencias']);
 
@@ -571,9 +616,14 @@ export const parseOrderBlock = (textoCrudo, hoy = new Date()) => {
     // encabezado "📝 OBSERVACIONES DEL CLIENTE" (ver generateStyledSummary).
     let observaciones = grab(text, ['Observaciones', 'NOTAS', 'Notas']);
     if (!observaciones) {
-        const obsMatch = text.match(/OBSERVACIONES[^\n]*\n\s*([^\n]+)/i);
-        const value = obsMatch && obsMatch[1].trim();
-        if (value && !/^(ninguna|sin observaciones|n\/a)$/i.test(value)) observaciones = value;
+        const headerNoteMatch = text.match(/^\s*NOTAS?\s*:?\s*\n([\s\S]*?)(?=👤|INFORMACI[ÓO]N|CLIENTE\s*:|$)/i);
+        if (headerNoteMatch && headerNoteMatch[1].trim()) {
+            observaciones = headerNoteMatch[1].trim();
+        } else {
+            const obsMatch = text.match(/OBSERVACIONES[^\n]*\n\s*([^\n]+)/i);
+            const value = obsMatch && obsMatch[1].trim();
+            if (value && !/^(ninguna|sin observaciones|n\/a)$/i.test(value)) observaciones = value;
+        }
     }
 
     const total = parseAmount(grab(text, ['TOTAL', 'Total']));
@@ -584,7 +634,15 @@ export const parseOrderBlock = (textoCrudo, hoy = new Date()) => {
     const descuento = parseAmount(grab(text, ['Descuento'])) ?? 0;
 
     const fechasEntrega = grabDeliveryDates(text, hoy);
-    const { items, consumidas } = grabItems(text);
+    
+    // Si hay una nota de cabecera antes del cliente, se escanean los ítems después de la nota
+    let textItemsScan = text;
+    const headerMatch = text.match(/^\s*NOTAS?\s*:?\s*\n[\s\S]*?(?=👤|INFORMACI[ÓO]N|CLIENTE\s*:)/i);
+    if (headerMatch) {
+        textItemsScan = text.slice(headerMatch[0].length);
+    }
+    
+    const { items, consumidas } = grabItems(textItemsScan);
 
     // WhatsApp lo trae como "💳 *PAGO*: SINPE"; el correo lo pone en la línea
     // siguiente al encabezado "MÉTODO DE PAGO".
@@ -611,10 +669,23 @@ export const parseOrderBlock = (textoCrudo, hoy = new Date()) => {
 
         if (sueltas.length > 0) observaciones = sueltas.join(' · ');
     }
+    let finalTelefono = telefono;
+    let finalZona = zona;
+
+    // Si la administración invirtió los campos al escribir en WhatsApp
+    // (ej: Teléfono: Tibas / Lugar: 8345-2491), los intercambiamos automáticamente
+    if (finalTelefono && !PARECE_TELEFONO(finalTelefono) && finalZona && PARECE_TELEFONO(finalZona)) {
+        const temp = finalTelefono;
+        finalTelefono = finalZona;
+        finalZona = temp;
+    } else if (!finalTelefono && finalZona && PARECE_TELEFONO(finalZona)) {
+        finalTelefono = finalZona;
+        finalZona = null;
+    }
 
     // Lo que la cocina y las reglas de Firestore necesitan sí o sí
     if (!cliente) warnings.push('Falta el nombre del cliente.');
-    if (!telefono) warnings.push('Falta el teléfono.');
+    if (!finalTelefono) warnings.push('Falta el teléfono.');
     // El correo NO se avisa: si no viene, se arma a partir del teléfono
     // (ver resolverCorreo en buildPedidoFromImport.js).
     if (!total || total <= 0) warnings.push('Falta el TOTAL o quedó en cero.');
@@ -640,8 +711,8 @@ export const parseOrderBlock = (textoCrudo, hoy = new Date()) => {
     });
 
     return {
-        numeroOrden, cliente, telefono, correo, cedula,
-        zona, direccion, referencias, observaciones,
+        numeroOrden, cliente, telefono: finalTelefono, correo, cedula,
+        zona: finalZona, direccion, referencias, observaciones,
         items, subtotal, descuento, costoEnvio, total,
         fechasEntrega, metodoPago,
         warnings

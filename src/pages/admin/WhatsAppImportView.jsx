@@ -58,18 +58,24 @@ export default function WhatsAppImportView() {
             ...(edits.correo !== undefined && { correo: edits.correo }),
             ...(edits.zona !== undefined && { zona: edits.zona }),
             ...(edits.direccion !== undefined && { direccion: edits.direccion }),
+            ...(edits.total !== undefined && { total: edits.total !== '' ? Number(edits.total) : null }),
+            ...(edits.costoEnvio !== undefined && { costoEnvio: edits.costoEnvio !== '' ? Number(edits.costoEnvio) : 0 }),
             ...(edits.fecha && { fechasEntrega: [edits.fecha] }),
-            // Las proteínas se escriben separadas por coma; sin ellas la cocina
-            // no sabe qué preparar en un pack que solo dice "3 proteínas".
-            items: (draft.parsed.items || []).map((item, i) => (
-                edits[`proteinas_${i}`] === undefined ? item : {
+            // Permite corregir precios de ítems e instrucciones/proteínas
+            items: (draft.parsed.items || []).map((item, i) => {
+                const customPrice = edits[`precio_${i}`];
+                const customProt = edits[`proteinas_${i}`];
+                return {
                     ...item,
-                    proteinas: edits[`proteinas_${i}`]
-                        .split(',')
-                        .map(s => s.trim())
-                        .filter(Boolean)
-                }
-            ))
+                    ...(customPrice !== undefined && { precio: customPrice !== '' ? Number(customPrice) : item.precio }),
+                    ...(customProt !== undefined && {
+                        proteinas: customProt
+                            .split(',')
+                            .map(s => s.trim())
+                            .filter(Boolean)
+                    })
+                };
+            })
         };
 
         const pedido = buildPedidoFromImport(merged, {

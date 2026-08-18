@@ -9,7 +9,7 @@
  * sale la lista de problemas. Sin Firebase, sin React.
  */
 
-import { mapPackNameToMenuKey, isIndividualPack } from './packClassification';
+import { mapPackNameToMenuKey, esIndividualEnLaHoja } from './packClassification';
 import { getScheduleFromOrder } from './orderDates';
 
 const nombrePlan = (pedido) => pedido?.plan || pedido?.tipoMenu || '';
@@ -27,23 +27,14 @@ export const revisarHoja = (pedidos = [], menus = null, fecha = '') => {
         const plan = nombrePlan(p);
         const cliente = p.cliente || 'Sin nombre';
         const platos = p.platos || [];
-        const esIndividual = isIndividualPack(plan);
+        // El MISMO criterio que usa la hoja al imprimir, no uno propio
+        const esIndividual = esIndividualEnLaHoja(plan);
         const menuKey = mapPackNameToMenuKey(plan);
 
         resumen.platos += platos.length;
         if (esIndividual) resumen.individuales += 1;
         else resumen.packs += 1;
         if (menuKey === 'desayuno') resumen.desayunos += 1;
-
-        // --- Un pack sin menú imprime una tabla vacía ---
-        if (!esIndividual && !menuKey) {
-            problemas.push({
-                gravedad: 'alta',
-                cliente,
-                que: `El pack "${plan}" no corresponde a ningún Menú Semanal.`,
-                comoSeArregla: 'Corregí el nombre del pack en el pedido, o marcalo como individuales.'
-            });
-        }
 
         // --- Un pack cuyo menú existe pero está vacío ---
         if (!esIndividual && menuKey) {

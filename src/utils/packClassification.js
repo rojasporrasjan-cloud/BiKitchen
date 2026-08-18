@@ -43,6 +43,15 @@ export const mapPackNameToMenuKey = (name) => {
  */
 export const isIndividualPack = (name) => {
     const n = String(name || '').toLowerCase();
+
+    // Si el nombre corresponde a un pack oficial, MANDA eso.
+    //
+    // El nombre del pack suele arrastrar la nota del cambio que pidió el cliente:
+    // "pack vegetariano cambiar tortas de espinaca por pollo en salsa hongos".
+    // Sin esta línea, la palabra "tortas" saca ese pack de su menú y la cocina
+    // prepara 1 porción suelta en vez de los 5 platos del Pack Vegetariano.
+    if (mapPackNameToMenuKey(n)) return false;
+
     return n.includes('individual')
         || n.includes('proteína') || n.includes('proteina')
         || n.includes('granel')
@@ -50,6 +59,17 @@ export const isIndividualPack = (name) => {
         || n.includes('empanada')
         || n.includes('wrap');
 };
+
+/**
+ * Cómo lo clasifica la hoja de verdad.
+ *
+ * Un nombre que no cuadra con ningún Menú Semanal se imprime como platos
+ * sueltos: es lo que hace `isActuallyIndividual` en PrintProductionView. La
+ * revisión previa tiene que usar el MISMO criterio, o avisa de problemas que no
+ * existen y se termina ignorando.
+ */
+export const esIndividualEnLaHoja = (name) =>
+    isIndividualPack(name) || !mapPackNameToMenuKey(name);
 
 /** Gramos de proteína por porción cuando el plato no trae el dato. */
 export const getDefaultGrams = (packName) => {
