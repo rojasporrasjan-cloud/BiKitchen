@@ -891,6 +891,39 @@ export default function OrdersView() {
 
     const [despachando, setDespachando] = useState(null);
 
+    // Edición de observaciones. `null` = no se ha tocado nada todavía, que es
+    // distinto de '' (se borraron a propósito).
+    const [obsEditada, setObsEditada] = useState(null);
+    const [guardandoObs, setGuardandoObs] = useState(false);
+
+    /**
+     * Guarda las observaciones del pedido.
+     *
+     * Es el único campo que la hoja de cocina imprime como especificación —
+     * alergias, cambios de plato, horarios de entrega. Antes solo se podían
+     * escribir al crear el pedido: si la nota llegaba después por WhatsApp,
+     * había que entrar a Firebase o rehacer el pedido entero.
+     *
+     * Escribe SOLO `observaciones`: no toca estado, fechas, montos ni puntos.
+     */
+    /** Abre/cierra el detalle limpiando el borrador de observaciones: si no, el
+     *  siguiente pedido se abriría con la nota a medio escribir del anterior. */
+    const abrirPedido = (pedido) => { setObsEditada(null); setSelectedOrder(pedido); };
+
+    const guardarObservaciones = async (pedido) => {
+        if (obsEditada === null) return;
+        setGuardandoObs(true);
+        try {
+            await updateDoc(doc(db, 'pedidos', pedido.id), { observaciones: obsEditada.trim() });
+            setSelectedOrder(prev => prev ? { ...prev, observaciones: obsEditada.trim() } : prev);
+            setObsEditada(null);
+        } catch (error) {
+            console.error('[Pedidos] Error guardando observaciones:', error);
+            alert('No se pudieron guardar las observaciones. Revisá la conexión e intentá de nuevo.');
+        }
+        setGuardandoObs(false);
+    };
+
     /**
      * Agrupa por fecha de entrega los pedidos que están en cierto estado.
      *
@@ -2154,7 +2187,7 @@ export default function OrdersView() {
                                         <tr
                                             key={order.id}
                                             className="hover:bg-gray-50/50 cursor-pointer transition-colors"
-                                            onClick={() => setSelectedOrder(order)}
+                                            onClick={() => abrirPedido(order)}
                                         >
                                             <td className="py-4 px-6">
                                                 <span className="font-bold text-gray-800 block">{order.displayId}</span>
@@ -2250,7 +2283,7 @@ export default function OrdersView() {
                                                     <button
                                                         onClick={(e) => {
                                                             e.stopPropagation();
-                                                            setSelectedOrder(order);
+                                                            abrirPedido(order);
                                                         }}
                                                         className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-500 hover:text-orange-500"
                                                         title="Ver Detalles"
@@ -2311,7 +2344,7 @@ export default function OrdersView() {
                                     animate={{ opacity: 1, y: 0 }}
                                     exit={{ opacity: 0, y: -10 }}
                                     className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex flex-col gap-4 active:scale-[0.98] transition-transform"
-                                    onClick={() => setSelectedOrder(order)}
+                                    onClick={() => abrirPedido(order)}
                                 >
                                     <div className="flex items-start justify-between gap-4">
                                         <div>
@@ -2451,7 +2484,7 @@ export default function OrdersView() {
                         exit={{ opacity: 0 }}
                         transition={{ duration: 0.2 }}
                         className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end md:items-center justify-center z-50"
-                        onClick={() => setSelectedOrder(null)}
+                        onClick={() => abrirPedido(null)}
                     >
                         <motion.div
                             initial={{ y: '100%' }}
@@ -2472,7 +2505,7 @@ export default function OrdersView() {
                                     </p>
                                 </div>
                                 <button
-                                    onClick={() => setSelectedOrder(null)}
+                                    onClick={() => abrirPedido(null)}
                                     className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                                 >
                                     <X size={20} />
@@ -2883,14 +2916,49 @@ Somos de BiKitchen, te contactamos sobre tu pedido ${selectedOrder.displayId}.
                                     </div>
                                 </div>
 
-                                {/* Notes */}
+                                {/* Observaciones — editables.
+                                    Es lo ÚNICO que la hoja de cocina imprime como
+                                    especificación, así que tiene que poderse corregir
+                                    sin entrar a Firebase. Antes solo se mostraban. */}
+                                <div className="mb-6">
+                                    <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                                        Observaciones — esto es lo que ve cocina
+                                    </h3>
+                                    <label htmlFor="obs-pedido" className="sr-only">Observaciones del pedido</label>
+                                    <textarea
+                                        id="obs-pedido"
+                                        rows={3}
+                                        value={obsEditada ?? (selectedOrder.observaciones || '')}
+                                        onChange={(e) => setObsEditada(e.target.value)}
+                                        placeholder="Ej: Sin cebolla · Cambiar papas por arroz · Entregar después de mediodía"
+                                        className="w-full px-3 py-2 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 text-sm"
+                                    />
+                                    <div className="flex items-center gap-2 mt-2">
+                                        <button
+                                            onClick={() => guardarObservaciones(selectedOrder)}
+                                            disabled={obsEditada === null || guardandoObs}
+                                            className="px-4 py-2 rounded-xl bg-bikitchen-orange text-white text-sm font-bold hover:bg-bikitchen-orange-dark active:scale-95 transition-all disabled:opacity-40"
+                                        >
+                                            {guardandoObs ? 'Guardando…' : 'Guardar observaciones'}
+                                        </button>
+                                        {obsEditada !== null && !guardandoObs && (
+                                            <button
+                                                onClick={() => setObsEditada(null)}
+                                                className="px-3 py-2 rounded-xl bg-gray-100 text-gray-700 text-sm font-semibold hover:bg-gray-200 transition-colors"
+                                            >
+                                                Descartar
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+
                                 {selectedOrder.details?.notes && (
                                     <div className="mb-6">
                                         <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
-                                            Notas del Pedido
+                                            Notas del cliente al comprar
                                         </h3>
-                                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-                                            <p className="text-amber-800">{selectedOrder.details.notes}</p>
+                                        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                                            <p className="text-gray-700">{selectedOrder.details.notes}</p>
                                         </div>
                                     </div>
                                 )}
@@ -3011,7 +3079,7 @@ Somos de BiKitchen, te contactamos sobre tu pedido ${selectedOrder.displayId}.
                                         </button>
                                     )}
                                     <button
-                                        onClick={() => setSelectedOrder(null)}
+                                        onClick={() => abrirPedido(null)}
                                         className="px-6 py-2 bg-gray-800 text-white font-medium rounded-lg hover:bg-gray-900 transition-colors"
                                     >
                                         Cerrar
