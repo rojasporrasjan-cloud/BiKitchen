@@ -21,6 +21,24 @@ import RevisionHoja from '../../components/admin/RevisionHoja';
 import { cargarPedidosExcel19Agosto } from '../../data/customExcelOrders19Aug';
 import { individualesData, getProductUnits } from '../../data/individualesData';
 
+/**
+ * Margen de merma de cocina.
+ *
+ * La hoja a granel muestra un 30% MÁS de lo que se empaca, porque cocinando se
+ * pierde producto. Es el margen que pidió Gina.
+ *
+ * Estaba escrito a mano como `* 1.30` en la pantalla, pero el Excel exportaba el
+ * neto: la misma hoja daba dos números distintos para el mismo plato (1430 g en
+ * pantalla, 1100 g en el archivo). Y la cuenta de envases se hacía sobre el neto,
+ * así que mandaba a empacar 1235 g en 2 tazas de 500 g.
+ *
+ * Ahora hay un solo lugar donde vive el margen y todos lo usan.
+ */
+export const MARGEN_COCINA = 1.30;
+
+/** Cantidad a cocinar, con la merma ya sumada. */
+export const conMargen = (cantidad) => Math.round((Number(cantidad) || 0) * MARGEN_COCINA);
+
 const MENU_LABELS = {
     regular: 'PACK REGULAR',
     fullPack: 'FULL PACK',
@@ -1003,7 +1021,7 @@ export default function PrintProductionView() {
                 {/* SECCIÓN 1: PRODUCCIÓN A GRANEL PARA PACKS */}
                 <div className="mb-12">
                     <div className="bg-gray-900 text-white p-3 font-bold text-base uppercase tracking-wide rounded-t border-2 border-black flex justify-between items-center">
-                        <span>🥘 1. PRODUCCIÓN A GRANEL PARA PACKS (Ollas / Contenedores de Empaque)</span>
+                        <span>🥘 1. PRODUCCIÓN A GRANEL PARA PACKS (Ollas / Contenedores de Empaque) — CANTIDADES CON 30% DE MERMA YA INCLUIDO</span>
                         <span className="text-xs font-normal bg-gray-800 px-3 py-1 rounded">Se cocina a granel para que Empaque pese las porciones</span>
                     </div>
 
@@ -1028,7 +1046,7 @@ export default function PrintProductionView() {
                                                     <tr key={idx} className="border-b border-black last:border-b-0 bg-white">
                                                         <td className="border-r border-black p-2.5 font-medium text-gray-900 w-2/3">{item.name}</td>
                                                         <td className="p-2.5 text-center font-extrabold text-lg text-gray-900 w-1/3">
-                                                            {Math.round(item.totalQty * 1.30)} {item.unit === 'g' ? 'g' : item.unit.toUpperCase()}
+                                                            {conMargen(item.totalQty)} {item.unit === 'g' ? 'g' : item.unit.toUpperCase()}
                                                         </td>
                                                     </tr>
                                                 );
@@ -1189,7 +1207,7 @@ export default function PrintProductionView() {
    </Row>
    <Row/>
    <Row ss:Height="24">
-    <Cell ss:MergeAcross="3" ss:StyleID="Header"><Data ss:Type="String">1. PRODUCCIÓN A GRANEL PARA PACKS (OLLAS)</Data></Cell>
+    <Cell ss:MergeAcross="3" ss:StyleID="Header"><Data ss:Type="String">1. PRODUCCIÓN A GRANEL PARA PACKS (OLLAS) — CANTIDADES CON 30% DE MERMA YA INCLUIDO</Data></Cell>
    </Row>`;
 
         const groupedByCook = {};
@@ -1217,13 +1235,14 @@ export default function PrintProductionView() {
             items.forEach(item => {
                 let empaqueNote = '';
                 if (item.unit === 'g') {
-                    const tazas500 = Math.ceil(item.totalQty / 500);
+                    // Sobre la cantidad CON merma: es la que se va a cocinar
+                    const tazas500 = Math.ceil(conMargen(item.totalQty) / 500);
                     empaqueNote = tazas500 <= 1 ? 'empacar 1 taza de 500 g' : `empacar ${tazas500} tazas de 500 g`;
                 }
                 xml += `
    <Row>
     <Cell><Data ss:Type="String">${escapeXml(item.name)}</Data></Cell>
-    <Cell ss:StyleID="CenterBold"><Data ss:Type="Number">${item.totalQty}</Data></Cell>
+    <Cell ss:StyleID="CenterBold"><Data ss:Type="Number">${conMargen(item.totalQty)}</Data></Cell>
     <Cell ss:StyleID="CenterBold"><Data ss:Type="String">${item.unit === 'g' ? 'g' : item.unit.toUpperCase()}</Data></Cell>
     <Cell><Data ss:Type="String">${escapeXml(empaqueNote)}</Data></Cell>
    </Row>`;
