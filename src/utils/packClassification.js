@@ -26,8 +26,13 @@ export const mapPackNameToMenuKey = (name) => {
     if (n.includes('vegetariano')) return 'vegetariano';
     if (n.includes('casadito')) return 'casaditos';
     if (n.includes('full pack') || (n.includes('deluxe') && !n.includes('familiar'))) return 'fullPack';
+    // Los desayunos van ANTES del comodín de abajo. Si se dejan después,
+    // "Pack Desayunos Mensual" cae en la regla de "mensual" y la cocina recibe
+    // el menú de almuerzos: gallo pinto convertido en carne mechada.
     if (n.includes('desayuno')) return 'desayuno';
-    if (n.includes('regular') || n.includes('estandar') || n.includes('estándar')) return 'regular';
+    if ((n.includes('regular') || n.includes('estandar') || n.includes('estándar'))) return 'regular';
+    // Comodín: un pack que solo dice cada cuánto viene se asume regular. Tiene
+    // que quedar de último, después de todos los tipos con nombre propio.
     if ((n.includes('mensual') || n.includes('quincenal')) && !n.includes('proteína') && !n.includes('proteina')) return 'regular';
     return null;
 };
