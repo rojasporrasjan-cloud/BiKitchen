@@ -448,7 +448,16 @@ export default function PrintProductionView() {
                     if (client.rawPedido?.plan && !client.rawPedido.plan.toLowerCase().includes('desayuno')) tags.push(client.rawPedido.plan);
                     const otherPacksTag = getOtherPacksTag(client.nombre, packName);
                     if (otherPacksTag) tags.push(otherPacksTag);
-                    clientNote = tags.join(' | ');
+
+                    // Las observaciones TIENEN que salir acá.
+                    //
+                    // Esta tabla solo imprimía las etiquetas (el pack, otros packs
+                    // del cliente) y se comía las observaciones. En el pedido de
+                    // Beatriz González eso significaba que "No queso ni lactosa"
+                    // nunca llegaba a cocina: una intolerancia invisible en la
+                    // hoja de la que se preparan sus desayunos.
+                    clientNote = [client.observaciones, tags.join(' | ')]
+                        .filter(Boolean).join(' — ');
                 }
 
                 rows.push(
