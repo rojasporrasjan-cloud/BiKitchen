@@ -708,6 +708,23 @@ export const parseOrderBlock = (textoCrudo, hoy = new Date()) => {
             observaciones = observaciones ? `${observaciones} · ${extraNotas}` : extraNotas;
             delete item.instruccionesSuelta;
         }
+
+        // El cambio escrito DENTRO del nombre del pack también tiene que llegar
+        // a observaciones: es la única columna que cocina lee en la hoja.
+        //
+        // "1 pack vegetariano cambiar tortas de espinaca por pollo en salsa
+        // hongos" se guardaba entero como nombre del pack, y en la hoja la
+        // columna de Especificaciones salía vacía: la cocina preparaba el plato
+        // del menú y nadie se enteraba del cambio.
+        //
+        // Solo se busca "cambiar X por Y", que es inequívoco. Un "sin" suelto no
+        // sirve como señal: "Pack Sin Carbos" es el nombre de un pack.
+        const cambioInterno = String(item.nombre || '').match(/\bcambi(?:ar|o de)\s+.+?\s+por\s+.+/i);
+        if (cambioInterno) {
+            const nota = cambioInterno[0].trim();
+            const yaEsta = String(observaciones || '').toLowerCase().includes(nota.toLowerCase());
+            if (!yaEsta) observaciones = observaciones ? `${observaciones} · ${nota}` : nota;
+        }
     });
 
     return {
