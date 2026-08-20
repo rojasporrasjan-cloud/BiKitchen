@@ -325,13 +325,22 @@ export default function OrdersView() {
             const deliveredOrders = related.filter(o => o.status === 'delivered' || o.deliveryStatus === 'delivered').length;
             const coupons = Array.from(new Set(related.map(o => o.cupon || o.coupon || o.details?.coupon).filter(Boolean)));
 
+            // Los BiPuntos viven en `loyalty`, con el correo EN MINÚSCULAS como id.
+            //
+            // Acá se leían de `loyalty_points`, una colección que no existe: nadie
+            // en todo el proyecto la escribe. Por eso el perfil del cliente en el
+            // admin siempre salía sin puntos, aunque el cliente sí los tuviera.
+            // Y sin `toLowerCase()` un correo escrito con mayúsculas tampoco
+            // encontraba su documento.
             let puntos = null;
-            if (correo) {
+            const correoPuntos = String(correo || '').toLowerCase().trim();
+            if (correoPuntos) {
                 try {
-                    const lpRef = doc(db, 'loyalty_points', correo);
-                    const lpSnap = await getDoc(lpRef);
+                    const lpSnap = await getDoc(doc(db, 'loyalty', correoPuntos));
                     if (lpSnap.exists()) puntos = lpSnap.data();
-                } catch { }
+                } catch (error) {
+                    console.error('[Pedidos] Error leyendo los puntos del cliente:', error);
+                }
             }
 
             let clienteDb = null;
