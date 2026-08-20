@@ -48,3 +48,8 @@ dumpServer.js
 readOrders.js
 *.dump
 
+
+# Archivos de depuracion y volcados de datos — nunca al repo
+scratch_*
+scratch/
+*_dump.json
