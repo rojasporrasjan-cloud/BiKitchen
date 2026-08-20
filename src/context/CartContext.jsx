@@ -407,7 +407,7 @@ export function CartProvider({ children }) {
 
     // Aplicar cupón
     // userId es opcional - si se proporciona, se verifica si el usuario ya usó el cupón
-    const applyCoupon = async (code, userId = null) => {
+    const applyCoupon = async (code, userId = null, correo = null) => {
         setCouponLoading(true);
         setCouponError(null);
 
@@ -419,7 +419,12 @@ export function CartProvider({ children }) {
         }
 
         try {
-            const result = await validateCouponAPI(code, getSubtotal(), userId);
+            // Se mandan los ítems y el correo: sin ellos no se puede saber si el
+            // cupón aplica a estos packs ni si es la primera compra del cliente.
+            const result = await validateCouponAPI(code, getSubtotal(), userId, {
+                items: cart,
+                correo
+            });
 
             if (result.valid) {
                 setAppliedCoupon({
@@ -430,7 +435,9 @@ export function CartProvider({ children }) {
                     maxDiscount: result.coupon.maxDiscount,
                     discountText: result.discountText,
                     discount: result.discount,
-                    singleUsePerUser: result.coupon.singleUsePerUser || false
+                    singleUsePerUser: result.coupon.singleUsePerUser || false,
+                    soloPrimeraCompra: result.coupon.soloPrimeraCompra || false,
+                    aplicaA: result.coupon.aplicaA || []
                 });
                 showNotification(`¡Cupón "${code}" aplicado! ${result.discountText}`, 'success');
                 return { success: true, message: result.discountText };

@@ -1,3 +1,4 @@
+import { CATEGORIAS_CUPON } from '../../utils/cuponRestricciones';
 import React, { useState, useEffect } from 'react';
 import {
     Tag, Plus, Search, Edit2, Trash2, ToggleLeft, ToggleRight,
@@ -43,6 +44,8 @@ export default function CouponsView() {
         active: true,
         isWelcomeCoupon: false,      // Cupón de bienvenida (se muestra a nuevos usuarios)
         singleUsePerUser: false,     // Solo un uso por usuario
+        soloPrimeraCompra: false,    // Solo en la primera compra de la cuenta
+        aplicaA: [],                 // Ids de CATEGORIAS_CUPON; vacío = todo
         // Configuración del banner promocional
         showInBanner: false,         // Mostrar en banner de inicio
         bannerBgColor: '#f97316',    // Color de fondo del banner (naranja por defecto)
@@ -108,6 +111,8 @@ export default function CouponsView() {
             active: true,
             isWelcomeCoupon: false,
             singleUsePerUser: false,
+            soloPrimeraCompra: false,
+            aplicaA: [],
             showInBanner: false,
             bannerBgColor: '#f97316',
             bannerTextColor: '#ffffff',
@@ -137,6 +142,8 @@ export default function CouponsView() {
             active: coupon.active,
             isWelcomeCoupon: coupon.isWelcomeCoupon || false,
             singleUsePerUser: coupon.singleUsePerUser || false,
+            soloPrimeraCompra: coupon.soloPrimeraCompra || false,
+            aplicaA: coupon.aplicaA || [],
             showInBanner: coupon.showInBanner || false,
             bannerBgColor: coupon.bannerBgColor || '#f97316',
             bannerTextColor: coupon.bannerTextColor || '#ffffff',
@@ -857,6 +864,62 @@ export default function CouponsView() {
                                         <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${formData.singleUsePerUser ? 'left-7' : 'left-1'
                                             }`} />
                                     </button>
+                                </div>
+
+                                {/* Solo primera compra — distinto de "uso único":
+                                    uso único deja que un cliente viejo lo use una vez;
+                                    esto exige que NUNCA haya comprado antes. */}
+                                <div className="flex items-center justify-between pt-3 border-t border-gray-200">
+                                    <div className="flex items-center gap-2">
+                                        <Gift size={16} className="text-green-600" />
+                                        <div>
+                                            <span className="text-sm font-medium text-gray-700">Solo Primera Compra</span>
+                                            <p className="text-xs text-gray-500">
+                                                Solo para cuentas nuevas: se rechaza si el cliente ya tiene algún pedido
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFormData({ ...formData, soloPrimeraCompra: !formData.soloPrimeraCompra })}
+                                        className={`relative w-12 h-6 rounded-full transition-colors ${formData.soloPrimeraCompra ? 'bg-green-500' : 'bg-gray-300'
+                                            }`}
+                                    >
+                                        <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${formData.soloPrimeraCompra ? 'left-7' : 'left-1'
+                                            }`} />
+                                    </button>
+                                </div>
+
+                                {/* A qué packs aplica */}
+                                <div className="pt-3 border-t border-gray-200">
+                                    <span className="text-sm font-medium text-gray-700">¿A qué packs aplica?</span>
+                                    <p className="text-xs text-gray-500 mb-2">
+                                        Si no marcás ninguno, aplica a todo el carrito. Si marcás alguno, el
+                                        descuento sale SOLO de esos packs.
+                                    </p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {CATEGORIAS_CUPON.map((cat) => {
+                                            const activo = (formData.aplicaA || []).includes(cat.id);
+                                            return (
+                                                <button
+                                                    key={cat.id}
+                                                    type="button"
+                                                    onClick={() => setFormData({
+                                                        ...formData,
+                                                        aplicaA: activo
+                                                            ? formData.aplicaA.filter((x) => x !== cat.id)
+                                                            : [...(formData.aplicaA || []), cat.id]
+                                                    })}
+                                                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${activo
+                                                        ? 'bg-green-600 text-white'
+                                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                                        }`}
+                                                >
+                                                    {cat.label}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
                                 </div>
                             </div>
 

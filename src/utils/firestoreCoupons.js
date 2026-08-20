@@ -1,5 +1,6 @@
 import { db } from '../firebase/config';
 import { cachedFetch, invalidateCacheByType } from './firestoreCache';
+import { descuentoConRestricciones, motivoNoAplica, etiquetasDe } from './cuponRestricciones';
 import {
     collection,
     doc,
@@ -70,7 +71,42 @@ export const getCouponByCode = async (code) => {
 
 // Validar cupón
 // userId es opcional - si se proporciona, se verifica si el usuario ya usó el cupón
-export const validateCoupon = async (code, cartTotal, userId = null) => {
+/**
+ * ¿Este cliente nunca ha comprado?
+ *
+ * Se busca por correo y no por uid: el mismo cliente puede tener pedidos hechos
+ * como invitado antes de abrir la cuenta, y esos cuentan como compra previa. Un
+ * pedido cancelado no cuenta — nunca llegó a ser una compra.
+ */
+export const esPrimeraCompra = async (correo) => {
+    const limpio = String(correo || '').toLowerCase().trim();
+    if (!limpio) return false; // sin correo no se puede afirmar que es nuevo
+
+    try {
+        const snap = await getDocs(query(
+            collection(db, 'pedidos'),
+            where('correo', '==', limpio)
+        ));
+        const reales = snap.docs.filter((d) => {
+            const st = String(d.data().status || '').toLowerCase();
+            return st !== 'cancelled' && st !== 'cancelado' && st !== 'pending_payment';
+        });
+        return reales.length === 0;
+    } catch (error) {
+        console.error('[Cupones] Error revisando si es primera compra:', error);
+        // Ante la duda NO se regala el descuento
+        return false;
+    }
+};
+
+/**
+ * @param {string} code
+ * @param {number} cartTotal
+ * @param {string} [userId]
+ * @param {object} [opciones] - { items, correo } para restricciones por pack y
+ *        para el cupón de primera compra. Sin ellas se comporta como antes.
+ */
+export const validateCoupon = async (code, cartTotal, userId = null, opciones = {}) => {
     try {
         const coupon = await getCouponByCode(code);
 
@@ -122,6 +158,23 @@ export const validateCoupon = async (code, cartTotal, userId = null) => {
             }
         }
 
+        // Solo para la primera compra de la cuenta
+        if (coupon.soloPrimeraCompra) {
+            const correo = String(opciones.correo || '').toLowerCase().trim();
+            if (!correo) {
+                return { valid: false, error: 'Iniciá sesión para usar este cupón de bienvenida' };
+            }
+            if (!(await esPrimeraCompra(correo))) {
+                return { valid: false, error: 'Este cupón es solo para tu primera compra' };
+            }
+        }
+
+        // Solo aplica a ciertos packs
+        const noAplica = motivoNoAplica(coupon, opciones.items || []);
+        if (noAplica && (opciones.items || []).length > 0) {
+            return { valid: false, error: noAplica };
+        }
+
         // Verificar mínimo de compra
         if (coupon.minPurchase && cartTotal < coupon.minPurchase) {
             return {
@@ -134,18 +187,29 @@ export const validateCoupon = async (code, cartTotal, userId = null) => {
         let discount = 0;
         let discountText = '';
 
+        // Con restricciones por pack, el descuento sale SOLO de lo que califica.
+        // Si el carrito lleva un pack semanal y un postre, el 20% es del pack.
+        const conRestricciones = (coupon.aplicaA || []).length > 0
+            && (opciones.items || []).length > 0;
+
         switch (coupon.type) {
             case 'percentage':
-                discount = Math.round(cartTotal * (coupon.value / 100));
-                // Aplicar máximo de descuento si existe
-                if (coupon.maxDiscount && discount > coupon.maxDiscount) {
-                    discount = coupon.maxDiscount;
+                if (conRestricciones) {
+                    discount = descuentoConRestricciones(coupon, opciones.items).descuento;
+                } else {
+                    discount = Math.round(cartTotal * (coupon.value / 100));
+                    if (coupon.maxDiscount && discount > coupon.maxDiscount) {
+                        discount = coupon.maxDiscount;
+                    }
                 }
-                discountText = `${coupon.value}% de descuento`;
+                discountText = `${coupon.value}% de descuento`
+                    + (conRestricciones ? ` en ${etiquetasDe(coupon.aplicaA).join(', ')}` : '');
                 break;
             case 'fixed':
-                discount = coupon.value;
-                discountText = `₡${coupon.value.toLocaleString('es-CR')} de descuento`;
+                discount = conRestricciones
+                    ? descuentoConRestricciones(coupon, opciones.items).descuento
+                    : coupon.value;
+                discountText = `₡${discount.toLocaleString('es-CR')} de descuento`;
                 break;
             case 'free_shipping':
                 discount = 0; // El envío se maneja aparte
@@ -238,6 +302,10 @@ export const createCoupon = async (couponData) => {
             minPurchase: Number(couponData.minPurchase) || 0,
             maxDiscount: Number(couponData.maxDiscount) || null,
             maxUses: Number(couponData.maxUses) || null,
+            // Solo la primera compra de la cuenta (ver esPrimeraCompra)
+            soloPrimeraCompra: couponData.soloPrimeraCompra === true,
+            // Ids de CATEGORIAS_CUPON. Vacío = aplica a todo el carrito.
+            aplicaA: Array.isArray(couponData.aplicaA) ? couponData.aplicaA : [],
             usedCount: 0,
             usedBy: [], // Array de userIds que han usado este cupón
             startDate: couponData.startDate ? Timestamp.fromDate(new Date(couponData.startDate)) : null,
@@ -297,6 +365,8 @@ export const updateCoupon = async (couponId, couponData) => {
         if (couponData.description !== undefined) updates.description = couponData.description;
         if (couponData.active !== undefined) updates.active = couponData.active;
         if (couponData.minPurchase !== undefined) updates.minPurchase = Number(couponData.minPurchase);
+        if (couponData.soloPrimeraCompra !== undefined) updates.soloPrimeraCompra = couponData.soloPrimeraCompra === true;
+        if (couponData.aplicaA !== undefined) updates.aplicaA = Array.isArray(couponData.aplicaA) ? couponData.aplicaA : [];
         if (couponData.maxDiscount !== undefined) updates.maxDiscount = couponData.maxDiscount ? Number(couponData.maxDiscount) : null;
         if (couponData.maxUses !== undefined) updates.maxUses = couponData.maxUses ? Number(couponData.maxUses) : null;
         if (couponData.startDate !== undefined) {
