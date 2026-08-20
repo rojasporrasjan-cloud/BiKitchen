@@ -268,8 +268,14 @@ export default function useLoyaltyPoints() {
         try {
             const normalizedEmail = currentUser.email?.toLowerCase().trim();
             const docRef = doc(db, 'loyalty', normalizedEmail);
+            // `points` se descuenta también: es el espejo que escriben el
+            // otorgamiento (OrdersContext, nmi-charge) y la auditoría. Si solo
+            // bajara `currentPoints`, el espejo iría quedando alto y cualquiera
+            // que lo mire —o cualquier respaldo que caiga en él— vería un saldo
+            // que el cliente ya gastó.
             await updateDoc(docRef, {
                 currentPoints: increment(-pointsCost),
+                points: increment(-pointsCost),
                 totalRedeemed: increment(pointsCost),
                 history: newHistory.slice(0, 50),
                 updatedAt: new Date().toISOString()
