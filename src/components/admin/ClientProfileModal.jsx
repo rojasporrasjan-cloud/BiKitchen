@@ -1,4 +1,5 @@
 import React from 'react';
+import { nivelPorPuntos } from '../../config/loyalty';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     X,
@@ -44,8 +45,22 @@ export default function ClientProfileModal({ isOpen, onClose, clientProfile, cli
 
     const { nombre, telefono, correo, direccion, totalOrders, totalSpent, deliveredOrders, coupons, clienteDb, tieneCuenta } = clientProfile;
     
-    // Si no vienen puntos por prop (legacy), los sacamos de clienteDb
-    const puntosActuales = clienteDb?.totalPuntos || clientPoints?.puntos_actuales || 0;
+    // El saldo REAL vive en la colección `loyalty`, en el campo `points`.
+    //
+    // Acá se leía `clientPoints?.puntos_actuales`, un nombre de campo que ese
+    // documento no tiene, así que siempre caía al respaldo `clienteDb.totalPuntos`
+    // — una copia paralela en `clientes` que se desincroniza. En el caso de
+    // Alexandra Mora el admin mostraba 2289 pts (los de UN pedido) mientras su
+    // saldo real era 0, y ella veía Bronce sin puntos. La clienta tenía razón.
+    const puntosActuales = clientPoints?.points
+        ?? clientPoints?.puntos_actuales
+        ?? clienteDb?.totalPuntos
+        ?? 0;
+
+    // El nivel sale de la tabla oficial del proyecto, no de umbrales propios.
+    // Acá decía "Oro" con más de 1000 puntos, cuando Oro arranca en 5000: el
+    // admin le prometía a Gina un nivel que el cliente no tenía.
+    const nivelCliente = nivelPorPuntos(clientPoints?.totalEarned ?? puntosActuales);
 
     // Helper to format currency
     const formatCurrency = (amount) => {
@@ -211,7 +226,7 @@ export default function ClientProfileModal({ isOpen, onClose, clientProfile, cli
                                         {puntosActuales} pts
                                     </div>
                                     <div className="text-xs text-amber-600/80">
-                                        {puntosActuales > 1000 ? 'Nivel: Oro' : puntosActuales > 500 ? 'Nivel: Plata' : 'Nivel: Bronce'}
+                                        Nivel: {nivelCliente?.name || 'Bronce'}
                                     </div>
                                 </div>
 
