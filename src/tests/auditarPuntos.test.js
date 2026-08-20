@@ -144,3 +144,42 @@ describe('Resumen', () => {
         expect(auditarPuntos([], {})).toEqual([]);
     });
 });
+
+describe('El duplicado no vuelve a entrar como "otros puntos"', () => {
+    // Caso real: Gennie Carrillo. Un pedido de ₡502.320 metido dos veces.
+    // totalEarned quedó en 20.092 porque los DOS otorgaron. Si solo se resta lo
+    // contado, la diferencia (10.046) reaparece como bono y se paga doble.
+    const suyo = () => pedido({
+        cliente: 'Gennie Carrillo',
+        correo: 'genn002@gmail.com',
+        total: 502320,
+        pointsToAward: 10046,
+        fechas_entrega: ['2026-05-11', '2026-05-18', '2026-05-25', '2026-06-01']
+    });
+
+    it('le corresponden 10046, no 20092', () => {
+        const doc = { currentPoints: 0, totalEarned: 20092, totalRedeemed: 0 };
+        const [c] = auditarPuntos([suyo(), suyo()], { 'genn002@gmail.com': doc });
+        expect(c.duplicadosIgnorados).toBe(1);
+        expect(c.otrosPuntos).toBe(0);
+        expect(c.saldoCorrecto).toBe(10046);
+        expect(c.faltante).toBe(10046);
+    });
+
+    it('el bono de bienvenida SÍ sobrevive junto a un duplicado', () => {
+        // totalEarned = 500 (bienvenida) + 10046 + 10046 (el duplicado)
+        const doc = { currentPoints: 500, totalEarned: 20592, totalRedeemed: 0 };
+        const [c] = auditarPuntos([suyo(), suyo()], { 'genn002@gmail.com': doc });
+        expect(c.otrosPuntos).toBe(500);
+        expect(c.saldoCorrecto).toBe(10546);
+    });
+});
+
+describe('Los pedidos viejos se acreditan a su tasa de entonces', () => {
+    it('usa pointsToAward guardado, no recalcula sobre el total', () => {
+        // Tasa vieja: 1 punto por cada ₡1.000. Recalcular daría 20x de más.
+        const viejo = pedido({ total: 153000, pointsToAward: 153 });
+        const [c] = auditarPuntos([viejo], {});
+        expect(c.puntosPorPedidos).toBe(153);
+    });
+});

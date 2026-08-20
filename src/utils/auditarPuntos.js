@@ -14,6 +14,15 @@
  * No escribe nada.
  */
 
+/**
+ * Correos inventados a partir del telefono por el importador. No existen: nadie
+ * puede entrar con ellos, asi que acreditarles puntos crea documentos huerfanos.
+ * Se marcan para poder dejarlos fuera de la correccion.
+ */
+export const DOMINIO_INVENTADO = '@sin-correo.bikitchen.cr';
+export const esCorreoInventado = (correo) =>
+    String(correo || '').toLowerCase().endsWith(DOMINIO_INVENTADO);
+
 /** Un pedido solo cuenta para puntos si el sistema los dio por otorgados. */
 const otorgo = (pedido) => pedido?.pointsAwarded === true;
 
@@ -111,10 +120,17 @@ export const auditarPuntos = (pedidos = [], loyaltyPorCorreo = {}) => {
         const doc = loyaltyPorCorreo[c.correo] || null;
 
         // Lo ganado que NO viene de pedidos (bono de bienvenida, referidos,
-        // ajustes manuales) se conserva: es la diferencia entre totalEarned y
-        // lo que suman los pedidos.
+        // ajustes manuales) se conserva: es lo que queda de totalEarned después
+        // de descontar TODO lo que vino de pedidos.
+        //
+        // OJO: hay que restar también los duplicados. `totalEarned` se fue
+        // sumando cuando cada pedido otorgó, incluidos los repetidos, así que si
+        // solo se resta lo contado el duplicado vuelve a entrar disfrazado de
+        // "otros puntos". A Gennie Carrillo eso le daba 20.092 en vez de 10.046:
+        // su pedido duplicado, cobrado dos veces por la puerta de atrás.
         const totalEarned = Number(doc?.totalEarned) || 0;
-        const otrosPuntos = Math.max(totalEarned - c.puntosPorPedidos, 0);
+        const vinoDePedidos = c.puntosPorPedidos + c.puntosIgnorados;
+        const otrosPuntos = Math.max(totalEarned - vinoDePedidos, 0);
         const canjeado = Number(doc?.totalRedeemed) || 0;
 
         const saldoActual = Number(doc?.currentPoints) || 0;
@@ -127,7 +143,8 @@ export const auditarPuntos = (pedidos = [], loyaltyPorCorreo = {}) => {
             saldoCorrecto,
             faltante: saldoCorrecto - saldoActual,
             otrosPuntos,
-            canjeado
+            canjeado,
+            correoInventado: esCorreoInventado(c.correo)
         };
     }).sort((a, b) => b.faltante - a.faltante);
 };

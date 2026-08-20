@@ -60,7 +60,9 @@ export default function PointsAuditView() {
     };
 
     const aplicar = async () => {
-        const pendientes = soloDescuadrados(informe).filter(c => c.faltante > 0);
+        // Los correos inventados quedan fuera: crear saldos en cuentas que no existen
+        // no le sirve a nadie y ensucia la coleccion.
+        const pendientes = soloDescuadrados(informe).filter(c => c.faltante > 0 && !c.correoInventado);
         if (pendientes.length === 0) return;
 
         const total = pendientes.reduce((s, c) => s + c.faltante, 0);
