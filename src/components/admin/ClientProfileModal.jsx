@@ -52,8 +52,9 @@ export default function ClientProfileModal({ isOpen, onClose, clientProfile, cli
     // — una copia paralela en `clientes` que se desincroniza. En el caso de
     // Alexandra Mora el admin mostraba 2289 pts (los de UN pedido) mientras su
     // saldo real era 0, y ella veía Bronce sin puntos. La clienta tenía razón.
-    const puntosActuales = clientPoints?.points
-        ?? clientPoints?.puntos_actuales
+    // `currentPoints` primero: es el campo canonico, el que ve el cliente.
+    const puntosActuales = clientPoints?.currentPoints
+        ?? clientPoints?.points
         ?? clienteDb?.totalPuntos
         ?? 0;
 

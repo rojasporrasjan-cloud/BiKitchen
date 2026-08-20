@@ -332,17 +332,29 @@ export const OrdersProvider = ({ children }) => {
                         const pointsRef = doc(db, "loyalty", correoDestino);
                         const pointsSnap = await getDoc(pointsRef);
 
+                        // OJO CON EL NOMBRE DEL CAMPO: el saldo que ve el cliente
+                        // es `currentPoints`. Es el que lee useLoyaltyPoints, el
+                        // que escribe loyaltySync y el que usa clientService.
+                        //
+                        // Acá se escribía solo `points`, un campo que NADIE lee. Los
+                        // puntos se guardaban de verdad, el pedido quedaba marcado
+                        // como "otorgados", y el cliente seguía viendo cero. Le pasó
+                        // a Alexandra Mora con sus 3 pedidos: 6.867 puntos escritos
+                        // en el campo equivocado.
+                        //
+                        // Se sigue escribiendo `points` en espejo para no romper
+                        // nada que todavía lo lea.
                         if (pointsSnap.exists()) {
-                            // Actualizar puntos existentes
                             await updateDoc(pointsRef, {
+                                currentPoints: increment(pointsToAward),
                                 points: increment(pointsToAward),
                                 totalEarned: increment(pointsToAward),
                                 lastUpdated: new Date().toISOString()
                             });
                         } else {
-                            // Crear nuevo documento de puntos
                             await setDoc(pointsRef, {
                                 email: correoDestino,
+                                currentPoints: pointsToAward,
                                 points: pointsToAward,
                                 totalEarned: pointsToAward,
                                 totalRedeemed: 0,

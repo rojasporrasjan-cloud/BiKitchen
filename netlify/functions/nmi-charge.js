@@ -311,8 +311,14 @@ export const handler = async (event) => {
                             try {
                                 const loyaltyRef = db.collection('loyalty').doc(correoDestino);
                                 const loyaltySnap = await loyaltyRef.get();
+                                // El saldo que ve el cliente es `currentPoints`, no
+                                // `points`. Acá se escribía solo `points`, que no lo
+                                // lee nadie: el pago entraba, el pedido quedaba
+                                // marcado con los puntos otorgados, y el cliente
+                                // seguía viendo cero. `points` se mantiene en espejo.
                                 if (loyaltySnap.exists) {
                                     await loyaltyRef.update({
+                                        currentPoints: FieldValue.increment(pointsToAward),
                                         points: FieldValue.increment(pointsToAward),
                                         totalEarned: FieldValue.increment(pointsToAward),
                                         lastUpdated: now.toISOString()
@@ -320,6 +326,7 @@ export const handler = async (event) => {
                                 } else {
                                     await loyaltyRef.set({
                                         email: correoDestino,
+                                        currentPoints: pointsToAward,
                                         points: pointsToAward,
                                         totalEarned: pointsToAward,
                                         totalRedeemed: 0,
