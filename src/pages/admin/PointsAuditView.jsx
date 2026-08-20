@@ -28,6 +28,14 @@ export default function PointsAuditView() {
     const [estado, setEstado] = useState('');
     const [ocupado, setOcupado] = useState(false);
 
+    // Confirmación DENTRO de la página, no con window.prompt.
+    //
+    // El prompt nativo no aparece en paneles de vista previa ni en navegadores
+    // que bloquean diálogos, y cuando eso pasa la función sale sin hacer nada:
+    // el botón parece roto. Acá se ve siempre y queda claro qué se va a escribir.
+    const [confirmando, setConfirmando] = useState(null);
+    const [textoConfirma, setTextoConfirma] = useState('');
+
     if (!isSuperAdmin()) {
         return <div className="p-8 text-center text-gray-600">Esta sección es solo para el dueño.</div>;
     }
@@ -52,32 +60,41 @@ export default function PointsAuditView() {
             setInforme(audit);
             setEstado(`Listo: ${pedidos.length} pedidos y ${loyaltySnap.size} saldos revisados.`);
         } catch (error) {
+            // Igual que el prompt: un alert no aparece en algunos navegadores y
+            // el error se pierde. Se muestra en la página.
             console.error('[Puntos] Error auditando:', error);
-            setEstado('');
-            alert('No se pudo leer la información: ' + error.message);
+            setEstado('No se pudo leer la información: ' + error.message);
         }
         setOcupado(false);
     };
 
-    const aplicar = async () => {
-        // Los correos inventados quedan fuera: crear saldos en cuentas que no existen
-        // no le sirve a nadie y ensucia la coleccion.
-        const pendientes = soloDescuadrados(informe).filter(c => c.faltante > 0 && !c.correoInventado);
-        if (pendientes.length === 0) return;
+    /** Quiénes se van a corregir. Los correos inventados quedan fuera. */
+    const aCorregir = () => (informe || [])
+        .filter(c => c.faltante > 0 && !c.correoInventado);
 
-        const total = pendientes.reduce((s, c) => s + c.faltante, 0);
-        const escrito = window.prompt(
-            `Vas a corregirle el saldo a ${pendientes.length} clientes.\n\n` +
-            `Se van a acreditar ${total.toLocaleString('es-CR')} puntos en total.\n` +
-            'Los pedidos duplicados ya quedaron descontados.\n\n' +
-            `Escribí ${pendientes.length} para confirmar:`
-        );
-        if (escrito === null) return;
-        if (escrito.trim() !== String(pendientes.length)) {
-            alert('El número no coincide. No se cambió nada.');
+    const pedirConfirmacion = () => {
+        const pendientes = aCorregir();
+        if (pendientes.length === 0) {
+            setEstado('No hay nada que corregir.');
+            return;
+        }
+        setTextoConfirma('');
+        setConfirmando({
+            pendientes,
+            cantidad: pendientes.length,
+            puntos: pendientes.reduce((s, c) => s + c.faltante, 0),
+            excluidos: (informe || []).filter(c => c.faltante > 0 && c.correoInventado).length
+        });
+    };
+
+    const aplicar = async () => {
+        const { pendientes, cantidad } = confirmando;
+        if (textoConfirma.trim() !== String(cantidad)) {
+            setEstado(`Escribí ${cantidad} exacto para confirmar. No se cambió nada.`);
             return;
         }
 
+        setConfirmando(null);
         setOcupado(true);
         const fallaron = [];
         for (let i = 0; i < pendientes.length; i++) {
@@ -99,8 +116,9 @@ export default function PointsAuditView() {
             }
         }
         setOcupado(false);
-        setEstado(`Corregidos ${pendientes.length - fallaron.length} de ${pendientes.length}.`);
-        if (fallaron.length) alert('No se pudieron corregir: ' + fallaron.join(', '));
+        setEstado(fallaron.length
+            ? `Corregidos ${pendientes.length - fallaron.length} de ${pendientes.length}. Fallaron: ${fallaron.join(', ')}`
+            : `Listo: ${pendientes.length} saldos corregidos.`);
         await revisar();
     };
 
@@ -226,13 +244,56 @@ export default function PointsAuditView() {
                                     Solo se corrige a quien le FALTA saldo. A nadie se le quita nada.
                                     Revisá la lista de arriba antes de darle.
                                 </p>
-                                <button
-                                    onClick={aplicar}
-                                    disabled={ocupado}
-                                    className="px-5 py-2.5 rounded-xl bg-red-600 text-white text-sm font-black hover:bg-red-700 active:scale-95 transition-all disabled:opacity-40"
-                                >
-                                    Corregir los saldos
-                                </button>
+                                {!confirmando ? (
+                                    <button
+                                        onClick={pedirConfirmacion}
+                                        disabled={ocupado}
+                                        className="px-5 py-2.5 rounded-xl bg-red-600 text-white text-sm font-black hover:bg-red-700 active:scale-95 transition-all disabled:opacity-40"
+                                    >
+                                        Corregir los saldos
+                                    </button>
+                                ) : (
+                                    <div className="bg-white border-2 border-red-300 rounded-xl p-4">
+                                        <p className="text-sm text-gray-900 mb-1">
+                                            Vas a corregirle el saldo a{' '}
+                                            <strong>{confirmando.cantidad} clientes</strong> y acreditar{' '}
+                                            <strong>{confirmando.puntos.toLocaleString('es-CR')} puntos</strong> en total.
+                                        </p>
+                                        <p className="text-xs text-gray-600 mb-3">
+                                            Los pedidos duplicados ya están descontados.
+                                            {confirmando.excluidos > 0 && (
+                                                <> Quedan fuera {confirmando.excluidos} con correo inventado.</>
+                                            )}
+                                        </p>
+                                        <label htmlFor="confirmar-cantidad" className="block text-xs font-bold text-gray-800 mb-1">
+                                            Escribí {confirmando.cantidad} para confirmar:
+                                        </label>
+                                        <div className="flex flex-wrap gap-2">
+                                            <input
+                                                id="confirmar-cantidad"
+                                                type="text"
+                                                inputMode="numeric"
+                                                value={textoConfirma}
+                                                onChange={(e) => setTextoConfirma(e.target.value)}
+                                                placeholder={String(confirmando.cantidad)}
+                                                className="w-28 px-3 py-2 rounded-lg border border-gray-300 text-sm font-mono"
+                                            />
+                                            <button
+                                                onClick={aplicar}
+                                                disabled={ocupado || textoConfirma.trim() !== String(confirmando.cantidad)}
+                                                className="px-5 py-2 rounded-xl bg-red-600 text-white text-sm font-black hover:bg-red-700 active:scale-95 transition-all disabled:opacity-40"
+                                            >
+                                                Sí, corregir
+                                            </button>
+                                            <button
+                                                onClick={() => { setConfirmando(null); setTextoConfirma(''); }}
+                                                className="px-4 py-2 rounded-xl bg-gray-100 text-gray-700 text-sm font-semibold hover:bg-gray-200 transition-colors"
+                                            >
+                                                Cancelar
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </>
                     )}
