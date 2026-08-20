@@ -40,11 +40,14 @@ describe('calcularPuntos', () => {
     });
 
     it('aplica DE VERDAD el multiplicador de cada nivel', () => {
+        // Oro bajó de 1.5x a 1.3x y Platino de 2x a 1.5x, a propósito: con los
+        // valores viejos el programa devolvía 6% y 8%, insostenible en comida.
+        // Ver economiaPuntos.test.js, que fija el retorno en porcentaje.
         const monto = 50000; // 1000 puntos base
         expect(calcularPuntos(monto, nivelPorPuntos(0))).toBe(1000);      // Bronce 1x
         expect(calcularPuntos(monto, nivelPorPuntos(1500))).toBe(1200);   // Plata 1.2x
-        expect(calcularPuntos(monto, nivelPorPuntos(5000))).toBe(1500);   // Oro 1.5x
-        expect(calcularPuntos(monto, nivelPorPuntos(15000))).toBe(2000);  // Platino 2x
+        expect(calcularPuntos(monto, nivelPorPuntos(5000))).toBe(1300);   // Oro 1.3x
+        expect(calcularPuntos(monto, nivelPorPuntos(15000))).toBe(1500);  // Platino 1.5x
     });
 
     it('sin nivel asume Bronce', () => {

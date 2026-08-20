@@ -29,6 +29,23 @@ import BackButton from '../components/BackButton';
 import SEOHead from '../components/SEOHead';
 import toast from 'react-hot-toast';
 
+/**
+ * Catalogo de premios.
+ *
+ * REGLA: cada punto vale ₡2 (VALOR_PUNTO_CRC en config/loyalty.js). El precio en
+ * puntos de un premio tiene que ser su valor en colones dividido entre 2, o el
+ * programa paga de mas sin que se note.
+ *
+ * Los dos cupones cumplen exacto. Los otros dos tienen valor VARIABLE en colones
+ * y precio fijo en puntos, asi que se calibran contra el caso mas caro — que es
+ * justamente el que la gente va a canjear:
+ *
+ *   Envio Gratis      → el envio mas caro es ₡7.000 → 3.500 puntos
+ *   Pack Semanal      → los packs llegan a ₡30.000 → 15.000 puntos
+ *
+ * Antes costaban 1.500 y 10.000: en la zona cara el envio salia a ₡4,67 por
+ * punto y el pack grande a ₡4, mas del doble de lo que valen.
+ */
 const REWARDS = [
     {
         id: 'coupon_2000',
@@ -45,7 +62,7 @@ const REWARDS = [
         id: 'free_shipping',
         title: 'Envío Gratis',
         description: 'Válido para GAM o zona de cobertura',
-        points: 1500,
+        points: 3500,
         type: 'shipping',
         value: 0,
         icon: <Truck className="text-blue-500" />,
@@ -68,7 +85,7 @@ const REWARDS = [
         id: 'free_pack_week',
         title: 'Pack Semanal Gratis',
         description: 'Te contactamos para coordinar tu pack de 5 comidas',
-        points: 10000,
+        points: 15000,
         type: 'product',
         value: 'weekly_pack',
         icon: <ShoppingBag className="text-green-500" />,

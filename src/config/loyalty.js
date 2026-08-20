@@ -26,6 +26,22 @@ export const VALOR_PUNTO_CRC = 2;
 /**
  * Niveles por puntos ACUMULADOS en total (no por los disponibles).
  * El multiplicador se aplica de verdad al otorgar: ver calcularPuntos().
+ *
+ * CUÁNTO CUESTA CADA NIVEL, en plata:
+ *
+ * La tasa base son 2 puntos por cada ₡100, y cada punto vale ₡2 al canjearlo.
+ * O sea que sin multiplicador el cliente recibe de vuelta un 4% de lo que gasta.
+ * El multiplicador va directo sobre ese 4%:
+ *
+ *   Bronce  1x    → 4%
+ *   Plata   1.2x  → 4.8%
+ *   Oro     1.3x  → 5.2%
+ *   Platino 1.5x  → 6%
+ *
+ * Oro estaba en 1.5x (6%) y Platino en 2x (8%). Un 8% de devolución en comida es
+ * insostenible: los programas del rubro andan entre 2% y 5%, y acá el nivel se
+ * gana con puntos acumulados que NUNCA bajan, así que quien llega a Platino
+ * cobra ese 8% para siempre aunque no vuelva a comprar.
  */
 export const NIVELES = [
     {
@@ -49,16 +65,16 @@ export const NIVELES = [
         minPoints: 5000,
         icon: '🥇',
         color: 'from-yellow-400 to-yellow-500',
-        multiplier: 1.5,
-        benefits: ['Gana 3 BiPuntos por cada ₡100 (1.5x)', 'Acceso a Tienda de Recompensas']
+        multiplier: 1.3,
+        benefits: ['Gana 2.6 BiPuntos por cada ₡100 (1.3x)', 'Acceso a Tienda de Recompensas']
     },
     {
         name: 'Platino',
         minPoints: 15000,
         icon: '💎',
         color: 'from-cyan-400 to-blue-500',
-        multiplier: 2,
-        benefits: ['Gana 4 BiPuntos por cada ₡100 (2x)', 'Acceso a Tienda de Recompensas']
+        multiplier: 1.5,
+        benefits: ['Gana 3 BiPuntos por cada ₡100 (1.5x)', 'Acceso a Tienda de Recompensas']
     }
 ];
 
