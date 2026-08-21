@@ -558,7 +558,14 @@ export default function PacksPage() {
                     getBreadcrumbSchema([{ name: 'Planes Semanales', url: 'https://bikitchencr.com/packs' }])
                 ]}
             />
-            <div className="min-h-screen bg-gradient-to-b from-bikitchen-beige to-white pt-[76px] md:pt-24">
+            <div 
+                className="min-h-screen bg-gradient-to-b from-bikitchen-beige to-white"
+                style={{
+                    paddingTop: showPromoBanner
+                        ? 'calc(var(--promo-banner-height, 36px) + 76px)'
+                        : '76px'
+                }}
+            >
                 <Navbar />
 
                 <style>{`
@@ -573,7 +580,17 @@ export default function PacksPage() {
                 <div className="flex flex-col lg:flex-row min-h-[calc(100vh-96px)]">
 
                     {/* ── SIDEBAR DESKTOP — llena desde el navbar hacia abajo ── */}
-                    <aside className="hidden lg:flex flex-col w-64 xl:w-72 flex-shrink-0 sticky top-24 h-[calc(100vh-96px)] z-20 overflow-y-auto hide-scrollbar bg-white border-r border-gray-100 shadow-xl shadow-gray-200/20">
+                    <aside 
+                        className="hidden lg:flex flex-col w-64 xl:w-72 flex-shrink-0 sticky z-20 overflow-y-auto hide-scrollbar bg-white border-r border-gray-100 shadow-xl shadow-gray-200/20"
+                        style={{
+                            top: showPromoBanner
+                                ? 'calc(var(--promo-banner-height, 36px) + 96px)'
+                                : '96px',
+                            height: showPromoBanner
+                                ? 'calc(100vh - var(--promo-banner-height, 36px) - 96px)'
+                                : 'calc(100vh - 96px)'
+                        }}
+                    >
                         <div className="flex flex-col h-full">
                             {/* Título del sidebar — usa p, no h1 (el h1 ya está sr-only arriba) */}
                             <div className="px-4 pt-5 pb-3 border-b border-gray-100">

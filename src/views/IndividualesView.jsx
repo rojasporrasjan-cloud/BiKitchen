@@ -25,6 +25,7 @@ import { useWhatsApp } from '../hooks/useWhatsApp';
 import { WHATSAPP_MESSAGES } from '../config/whatsappMessages';
 import { formatPrice } from '../utils/formatters';
 import UrgencyBanner from '../components/UrgencyBanner';
+import { usePromoBanner } from '../hooks/usePromoBanner';
 
 const CATEGORY_HIGHLIGHTS = {
   Pollo:       [{ icon: '🥩', label: 'Alto en proteínas' }],
@@ -100,6 +101,8 @@ export default function IndividualesView() {
   const [individualDiscounts, setIndividualDiscounts] = useState({});
   const [isSticky, setIsSticky] = useState(false);
   const [activeGroup, setActiveGroup] = useState('Proteínas');
+
+  const showPromoBanner = usePromoBanner();
 
   // Bloquear scroll del body cuando el modal está abierto
   useEffect(() => {
@@ -389,7 +392,14 @@ export default function IndividualesView() {
       <div className="min-h-screen bg-gradient-to-b from-gray-50 via-white to-gray-50 text-gray-900 flex flex-col">
         <Navbar />
 
-        <main className="flex-1 pt-[76px]">
+        <main 
+          className="flex-1"
+          style={{
+            paddingTop: showPromoBanner
+              ? 'calc(var(--promo-banner-height, 36px) + 76px)'
+              : '76px'
+          }}
+        >
           {/* Banner cuenta regresiva — encima de los filtros, igual que packs */}
           <UrgencyBanner className="shadow-sm" />
 
@@ -445,7 +455,17 @@ export default function IndividualesView() {
 
           <div className="flex flex-col lg:flex-row min-h-screen relative">
             {/* ── SIDEBAR DESKTOP ── */}
-            <aside className="hidden lg:flex flex-col gap-3 w-64 xl:w-72 flex-shrink-0 sticky top-[84px] h-[calc(100vh-84px)] z-20 overflow-y-auto hide-scrollbar bg-white border-r border-gray-100 shadow-xl shadow-gray-200/20">
+            <aside 
+              className="hidden lg:flex flex-col gap-3 w-64 xl:w-72 flex-shrink-0 sticky z-20 overflow-y-auto hide-scrollbar bg-white border-r border-gray-100 shadow-xl shadow-gray-200/20"
+              style={{
+                top: showPromoBanner
+                  ? 'calc(var(--promo-banner-height, 36px) + 84px)'
+                  : '84px',
+                height: showPromoBanner
+                  ? 'calc(100vh - var(--promo-banner-height, 36px) - 84px)'
+                  : 'calc(100vh - 84px)'
+              }}
+            >
               <div className="flex flex-col h-full">
                 {/* Buscador Integrado en Sidebar */}
                 <div className="p-4 border-b border-gray-50 bg-gray-50/50">

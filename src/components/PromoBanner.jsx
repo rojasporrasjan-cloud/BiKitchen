@@ -24,10 +24,12 @@ export default function PromoBanner() {
             if (bannerCoupon) {
                 const isDismissed = sessionStorage.getItem(`promo_dismissed_${bannerCoupon.id}`) === 'true';
                 setDismissed(isDismissed);
+                const isVisible = bannerCoupon.showInBanner && !isDismissed;
+                window.__PROMO_BANNER_VISIBLE__ = isVisible;
 
                 // Emitir evento
                 window.dispatchEvent(new CustomEvent('promoBannerChange', {
-                    detail: { visible: bannerCoupon.showInBanner && !isDismissed }
+                    detail: { visible: isVisible }
                 }));
             }
         };
@@ -40,6 +42,7 @@ export default function PromoBanner() {
     // Emitir evento cuando cambia el estado del banner
     useEffect(() => {
         const isVisible = !!coupon && coupon.showInBanner && !dismissed;
+        window.__PROMO_BANNER_VISIBLE__ = isVisible;
         window.dispatchEvent(new CustomEvent('promoBannerChange', {
             detail: { visible: isVisible }
         }));
@@ -128,7 +131,7 @@ export default function PromoBanner() {
             initial={{ y: -100, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ duration: 0.3 }}
-            className="fixed top-0 left-0 right-0 z-50 py-1.5 px-3 text-center shadow-lg"
+            className="fixed top-0 left-0 right-0 z-[110] py-1.5 px-3 text-center shadow-lg"
             style={{
                 backgroundColor: bgColor,
                 color: coupon.bannerTextColor || '#ffffff'
