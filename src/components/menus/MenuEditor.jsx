@@ -57,10 +57,12 @@ export default function MenuEditor({ platos, onChange, menuType = 'regular' }) {
     onChange(renumbered);
   };
 
+  const isSingleField = isFamiliar || isDesayuno;
+
   // Calcular progreso de completitud
   const getCompleteness = (plato) => {
-    // Para menús familiares, solo verificar que tenga proteína (nombre del platillo)
-    if (isFamiliar) {
+    // Para menús familiares o desayunos, solo verificar que tenga el nombre del platillo
+    if (isSingleField) {
       return plato.proteina?.trim() ? 1 : 0;
     }
     let filled = 0;
@@ -79,7 +81,7 @@ export default function MenuEditor({ platos, onChange, menuType = 'regular' }) {
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-gray-700">Progreso del menú</span>
             <span className="text-sm font-bold text-orange-600">
-              {platos.filter(p => isFamiliar ? getCompleteness(p) === 1 : getCompleteness(p) === 3).length} / {platos.length} platos completos
+              {platos.filter(p => isSingleField ? getCompleteness(p) === 1 : (isSinCarbos ? getCompleteness(p) === 2 : getCompleteness(p) === 3)).length} / {platos.length} platos completos
             </span>
           </div>
           <div className="h-2 bg-white rounded-full overflow-hidden">
@@ -87,7 +89,7 @@ export default function MenuEditor({ platos, onChange, menuType = 'regular' }) {
               className="h-full bg-gradient-to-r from-orange-400 to-orange-500 rounded-full"
               initial={{ width: 0 }}
               animate={{ 
-                width: `${(platos.filter(p => isFamiliar ? getCompleteness(p) === 1 : getCompleteness(p) === 3).length / Math.max(platos.length, 1)) * 100}%` 
+                width: `${(platos.filter(p => isSingleField ? getCompleteness(p) === 1 : (isSinCarbos ? getCompleteness(p) === 2 : getCompleteness(p) === 3)).length / Math.max(platos.length, 1)) * 100}%` 
               }}
               transition={{ duration: 0.5 }}
             />
@@ -100,7 +102,7 @@ export default function MenuEditor({ platos, onChange, menuType = 'regular' }) {
         <AnimatePresence mode="popLayout">
           {platos.map((plato, index) => {
             const completeness = getCompleteness(plato);
-            const isComplete = isFamiliar ? completeness === 1 : (isSinCarbos ? completeness === 2 : completeness === 3);
+            const isComplete = isSingleField ? completeness === 1 : (isSinCarbos ? completeness === 2 : completeness === 3);
             
             return (
               <motion.div
@@ -129,8 +131,10 @@ export default function MenuEditor({ platos, onChange, menuType = 'regular' }) {
                       {plato.numero}
                     </div>
                     <div>
-                      <h3 className="text-sm font-semibold text-gray-800">Plato {plato.numero}</h3>
-                      {!isFamiliar && (
+                      <h3 className="text-sm font-semibold text-gray-800">
+                        {isDesayuno ? `Opción ${plato.numero}` : `Plato ${plato.numero}`}
+                      </h3>
+                      {!isSingleField && (
                         <div className="flex gap-1 mt-0.5">
                           {[0, 1, 2].map((i) => (
                             <div 
@@ -156,25 +160,27 @@ export default function MenuEditor({ platos, onChange, menuType = 'regular' }) {
 
                 {/* Campos del plato */}
                 <div className="p-4 space-y-3">
-                  {isFamiliar ? (
-                    /* Formato especial para menús familiares: solo un campo */
+                  {isSingleField ? (
+                    /* Formato de 1 solo campo para Desayunos o Menús Familiares */
                     <div>
                       <label className="flex items-center gap-1.5 text-xs font-medium text-gray-500 mb-1">
-                        <span className="text-base">👨‍👩‍👧‍👦</span>
-                        Platillo completo
+                        <span className="text-base">{isDesayuno ? '🍳' : '👨‍👩‍👧‍👦'}</span>
+                        {isDesayuno ? 'Opción de Desayuno' : 'Platillo completo'}
                       </label>
-                      <textarea
+                      <input
+                        type="text"
                         value={plato.proteina || ''}
                         onChange={(e) => handleFieldChange(index, 'proteina', e.target.value)}
-                        rows={3}
-                        className={`w-full px-3 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 transition-all resize-none ${
+                        className={`w-full px-3 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 transition-all ${
                           plato.proteina?.trim() 
                             ? 'border-green-200 bg-green-50/30 focus:ring-green-100 focus:border-green-400' 
                             : 'border-gray-200 focus:ring-orange-100 focus:border-orange-400'
                         }`}
-                        placeholder="Ej: Spaguettis en salsa pomodoro con pollo (4 porciones)"
+                        placeholder={isDesayuno ? "Ej: Gallo pinto con salchichas, Pancakes con miel de maple..." : "Ej: Spaguettis en salsa pomodoro con pollo (4 porciones)"}
                       />
-                      <p className="text-xs text-gray-500 mt-1.5">💡 Incluye el nombre completo del platillo y las porciones</p>
+                      <p className="text-xs text-gray-500 mt-1.5">
+                        {isDesayuno ? '💡 Escribe el plato completo de desayuno' : '💡 Incluye el nombre completo del platillo y las porciones'}
+                      </p>
                     </div>
                   ) : (
                     /* Formato normal para otros menús (incluyendo desayunos ahora): 3 campos */

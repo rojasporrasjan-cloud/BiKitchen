@@ -6,12 +6,13 @@
  */
 
 import React, { useEffect, useState, useMemo } from 'react';
-import { Eye, Save, RotateCcw, Sparkles, DollarSign, X, ChefHat, Utensils, Calendar, Coffee, Sun, Moon, Trash2, Plus, Package } from 'lucide-react';
+import { Eye, Save, RotateCcw, Sparkles, DollarSign, X, ChefHat, Utensils, Calendar, Coffee, Sun, Moon, Trash2, Plus, Package, FileSpreadsheet } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast, { Toaster } from 'react-hot-toast';
 
 import MenuTabs from '../components/menus/MenuTabs';
 import MenuEditor from '../components/menus/MenuEditor';
+import ExcelImportModal from '../components/menus/ExcelImportModal';
 import {
   getOfficialMenus,
   saveOfficialMenus,
@@ -134,6 +135,7 @@ export default function MenusView() {
   const [loading, setLoading] = useState(true); // Start loading true
   const [previewOpen, setPreviewOpen] = useState(false);
   const [pricesOpen, setPricesOpen] = useState(false);
+  const [excelImportOpen, setExcelImportOpen] = useState(false);
   const [prices, setPrices] = useState(DEFAULT_PRICES);
   const [currentMealType, setCurrentMealType] = useState('almuerzo'); // desayuno, almuerzo, cena
   const [currentType, setCurrentType] = useState('fullPack');
@@ -440,6 +442,16 @@ export default function MenusView() {
 
         {/* Botones de acción */}
         <div className="flex gap-2 flex-wrap mt-4 pt-4 border-t border-white/20">
+          <button
+            type="button"
+            onClick={() => setExcelImportOpen(true)}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-green-500 text-sm font-semibold text-white hover:bg-green-600 transition-all shadow-md hover:shadow-lg"
+            title="Cargar menú semanal completo desde archivo Excel (.xlsx)"
+          >
+            <FileSpreadsheet size={16} />
+            Importar Excel
+          </button>
+
           <button
             type="button"
             onClick={() => setPricesOpen(true)}
@@ -1017,6 +1029,23 @@ export default function MenusView() {
           )}
         </div>
       )}
+
+      {/* Modal Importar Excel */}
+      <ExcelImportModal
+        isOpen={excelImportOpen}
+        onClose={() => setExcelImportOpen(false)}
+        onImport={(parsedData) => {
+          if (!parsedData) return;
+          setMenus(prev => ({
+            ...prev,
+            ...parsedData,
+            cena: {
+              ...(prev?.cena || {}),
+              ...(parsedData.cena || {})
+            }
+          }));
+        }}
+      />
 
       {/* Modal de vista previa */}
       <AnimatePresence>
