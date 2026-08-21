@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { db } from '../../firebase/config';
-import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, onSnapshot, orderBy } from 'firebase/firestore';
 import {
     mapPedidosFromLegacy,
     buildKitchenSheetData,
@@ -12,14 +12,21 @@ import {
     isIndividualPack,
     getDefaultGrams
 } from '../../utils/packClassification';
-import { getOfficialMenus } from '../../utils/firestoreMenus';
+import { getOfficialMenus, DEFAULT_MENUS } from '../../utils/firestoreMenus';
 import { getScheduleFromOrder } from '../../utils/orderDates';
 import { ESTADOS_QUE_IMPRIMEN } from '../../utils/estadosPedido';
 import { revisarHoja } from '../../utils/revisarHoja';
-import { sumarAGranel } from '../../utils/granelKitchen';
+import {
+    sumarAGranel,
+    claveGranel,
+    cleanIndividualDishName,
+    isMoldOrSpecialDish,
+    isBulkDishCandidate,
+    parseQuantityAndUnit
+} from '../../utils/granelKitchen';
 import RevisionHoja from '../../components/admin/RevisionHoja';
-import { cargarPedidosExcel19Agosto } from '../../data/customExcelOrders19Aug';
 import { individualesData, getProductUnits } from '../../data/individualesData';
+import ExcelJS from 'exceljs';
 
 /**
  * Margen de merma de cocina.
@@ -38,6 +45,54 @@ export const MARGEN_COCINA = 1.30;
 
 /** Cantidad a cocinar, con la merma ya sumada. */
 export const conMargen = (cantidad) => Math.round((Number(cantidad) || 0) * MARGEN_COCINA);
+
+export const filterNoteForDish = (obs, currentDish, allDishes) => {
+    if (!obs) return '';
+    const currentProt = (currentDish?.proteina?.nombre || (typeof currentDish?.proteina === 'string' ? currentDish.proteina : '') || '').toLowerCase();
+
+    const clauses = String(obs).split(/\s*[\·\|—]\s*/).map(c => c.trim()).filter(Boolean);
+
+    const filteredClauses = clauses.filter(clause => {
+        const lowerClause = clause.toLowerCase();
+
+        if (lowerClause.includes('cambiar ')) {
+            const match = lowerClause.match(/cambiar\s+(.*?)(?:\s+por\s+|$)/i);
+            if (match && match[1]) {
+                const sourceDishText = match[1].trim();
+                const currentKeywords = currentProt.split(/\s+/).filter(k => k.length > 3 && !['salsa', 'con', 'para', 'de', 'el', 'la'].includes(k));
+                const matchesCurrentDish = currentKeywords.some(kw => sourceDishText.includes(kw));
+
+                if (matchesCurrentDish) {
+                    return true; // Keep this change instruction on its home dish!
+                }
+
+                const matchesOtherDish = (allDishes || []).some(d => {
+                    const dishProt = (d.proteina?.nombre || (typeof d.proteina === 'string' ? d.proteina : '') || '').toLowerCase();
+                    if (!dishProt || dishProt === currentProt) return false;
+                    const keywords = dishProt.split(/\s+/).filter(k => k.length > 3 && !['salsa', 'con', 'para', 'de', 'el', 'la'].includes(k));
+                    return keywords.some(kw => sourceDishText.includes(kw));
+                });
+
+                if (matchesOtherDish) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    });
+
+    return filteredClauses.join(' · ');
+};
+
+export const normalizeClientKey = (name) => {
+    if (!name) return '';
+    return String(name)
+        .toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9\s]/g, '')
+        .trim();
+};
 
 const MENU_LABELS = {
     regular: 'PACK REGULAR',
@@ -63,6 +118,45 @@ export default function PrintProductionView() {
     const [bulkSelectedCook, setBulkSelectedCook] = useState('');
     const [importingExcel, setImportingExcel] = useState(false);
 
+    const resolvePlatosForPack = (packName, packData) => {
+        const isCenaSheet = packName.startsWith('CENAS -');
+        const basePackName = isCenaSheet ? packName.replace(/^CENAS\s*-\s*/i, '') : packName;
+        const menuKey = packData?.menuKey || mapPackNameToMenuKey(basePackName);
+
+        let rawPlatos = [];
+        if (officialMenus && menuKey) {
+            if (isCenaSheet) {
+                const cenaKeyCap = menuKey.charAt(0).toUpperCase() + menuKey.slice(1);
+                const cenaMenuObj = officialMenus.cena?.[menuKey]
+                    || officialMenus[`cena_${menuKey}`]
+                    || officialMenus[`cena${cenaKeyCap}`]
+                    || officialMenus[`cena${menuKey}`];
+
+                if (cenaMenuObj) {
+                    rawPlatos = Array.isArray(cenaMenuObj) ? cenaMenuObj : (cenaMenuObj.platos || []);
+                }
+            } else {
+                const menuObj = officialMenus[menuKey];
+                if (menuObj) {
+                    rawPlatos = Array.isArray(menuObj) ? menuObj : (menuObj.platos || []);
+                }
+            }
+        }
+
+        if (isCenaSheet && (!rawPlatos || rawPlatos.length === 0)) {
+            const defCenaObj = DEFAULT_MENUS.cena?.[menuKey] || DEFAULT_MENUS.cena?.bajoCalorias || DEFAULT_MENUS.cena?.regular || [];
+            rawPlatos = Array.isArray(defCenaObj) ? defCenaObj : (defCenaObj.platos || []);
+        }
+
+        if (!isCenaSheet && (!rawPlatos || rawPlatos.length === 0)) {
+            const defMenuObj = DEFAULT_MENUS[menuKey] || [];
+            rawPlatos = Array.isArray(defMenuObj) ? defMenuObj : (defMenuObj.platos || []);
+            if (!rawPlatos || rawPlatos.length === 0) rawPlatos = packData?.platosBase || [];
+        }
+
+        return rawPlatos || [];
+    };
+
     const handleCargarMenuExcel19Agosto = async () => {
         if (!window.confirm('¿Deseas cargar los 6 pedidos personalizados del Excel (Carolina Laurito, Christian Vargas, Beatriz González, Mariana Salas, Sonia Oreamuno, Bryan Ocampo) directamente para el 19 de Agosto en la Hoja de Producción?')) return;
         setImportingExcel(true);
@@ -78,50 +172,44 @@ export default function PrintProductionView() {
         }
     };
 
-    // ... useEffect code ...
-
     useEffect(() => {
         if (!date) return;
-        const loadOrders = async () => {
-            setLoading(true);
-            try {
-                const targetDate = new Date(date + "T12:00:00");
-                const pastDate = new Date(targetDate);
-                pastDate.setDate(pastDate.getDate() - 40); // Buscar hasta 40 días atrás para mensualidades
-                const pastDateStr = pastDate.toISOString().split('T')[0];
+        setLoading(true);
+        const targetDate = new Date(date + "T12:00:00");
+        const pastDate = new Date(targetDate);
+        pastDate.setDate(pastDate.getDate() - 40); // Buscar hasta 40 días atrás para mensualidades
+        const pastDateStr = pastDate.toISOString().split('T')[0];
 
-                const q = query(
-                    collection(db, "pedidos"),
-                    where("fecha_entrega", ">=", pastDateStr)
-                );
+        const q = query(
+            collection(db, "pedidos"),
+            where("fecha_entrega", ">=", pastDateStr)
+        );
 
-                const snapshot = await getDocs(q);
-                let rawOrders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        // Cargar menús oficiales
+        getOfficialMenus().then(menus => setOfficialMenus(menus)).catch(console.error);
 
-                // Filtrar localmente usando el schedule real (Excluir sólo cancelados / archivados)
-                // Solo se imprime lo confirmado. `in_transit` entra a propósito:
-                // un pack mensual se despacha la semana 1 y queda "en ruta", pero
-                // sus semanas 2, 3 y 4 todavía hay que cocinarlas.
-                rawOrders = rawOrders.filter(order => {
-                    const status = (order.status || order.estado || '').toLowerCase();
-                    if (!ESTADOS_QUE_IMPRIMEN.includes(status)) return false;
+        // Listener en tiempo real: cualquier cambio en observaciones o pedidos se refleja al instante
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            let rawOrders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-                    const schedule = getScheduleFromOrder(order);
-                    return schedule.includes(date);
-                });
+            rawOrders = rawOrders.filter(order => {
+                const status = (order.status || order.estado || '').toLowerCase();
+                if (!ESTADOS_QUE_IMPRIMEN.includes(status)) return false;
 
-                // Ordenar por cliente
-                rawOrders.sort((a, b) => (a.cliente || '').localeCompare(b.cliente || ''));
+                const schedule = getScheduleFromOrder(order);
+                return schedule.includes(date);
+            });
 
-                setOrders(mapPedidosFromLegacy(rawOrders));
-                const menus = await getOfficialMenus();
-                setOfficialMenus(menus);
-            } catch (error) {
-                console.error("Error loading data:", error);
-            }
+            rawOrders.sort((a, b) => (a.cliente || '').localeCompare(b.cliente || ''));
+
+            setOrders(mapPedidosFromLegacy(rawOrders));
             setLoading(false);
-        };
-        loadOrders();
+        }, (error) => {
+            console.error("Error in real-time orders listener:", error);
+            setLoading(false);
+        });
+
+        return () => unsubscribe();
     }, [date]);
 
 
@@ -145,8 +233,77 @@ export default function PrintProductionView() {
         </div>
     );
 
-    const kitchenData = buildKitchenSheetData(orders, {});
-    const packagingData = buildPackagingSheetData(orders, {}, null);
+    const deduplicateOrdersByClient = (ordersList) => {
+        if (!ordersList || ordersList.length === 0) return [];
+        const seen = new Map();
+        const result = [];
+        const fusionados = [];
+
+        ordersList.forEach(order => {
+            const clientName = order.cliente || order.nombre || '';
+            const normKey = normalizeClientKey(clientName);
+            const tokens = normKey.split(/\s+/).filter(t => t.length > 2);
+
+            let existingKey = null;
+            for (const [key, val] of seen.entries()) {
+                const keyTokens = key.split(/\s+/).filter(t => t.length > 2);
+                const samePhone = order.telefono && val.telefono && String(order.telefono).replace(/\D/g, '') === String(val.telefono).replace(/\D/g, '') && String(order.telefono).replace(/\D/g, '').length >= 8;
+                const isMatch = key === normKey ||
+                    samePhone ||
+                    (tokens.length >= 2 && tokens.every(t => key.includes(t))) ||
+                    (keyTokens.length >= 2 && keyTokens.every(t => normKey.includes(t)));
+
+                if (isMatch) {
+                    existingKey = key;
+                    break;
+                }
+            }
+
+            if (existingKey) {
+                const existingOrder = seen.get(existingKey);
+                // Queda constancia de la fusion: solo se conservan observaciones
+                // y zona; los ITEMS del segundo pedido se descartan. Si eran dos
+                // pedidos distintos del mismo cliente, uno se pierde y nadie se
+                // entera. Por eso se reporta en pantalla.
+                // El número de orden vive en `rawPedido`: el pedido ya mapeado
+                // solo trae el id interno de Firestore, que no le dice nada a
+                // nadie cuando hay que ir a buscarlo en Pedidos.
+                const numeroDe = (o) => o.rawPedido?.numeroOrden || o.numeroOrden || o.id;
+                fusionados.push({
+                    cliente: order.cliente || existingOrder.cliente || '',
+                    absorbido: numeroDe(order),
+                    absorbidoPlan: order.plan || order.tipoMenu || '',
+                    conserva: numeroDe(existingOrder),
+                    conservaPlan: existingOrder.plan || existingOrder.tipoMenu || ''
+                });
+                const newObs = order.observaciones || order.details?.notes || '';
+                if (newObs) {
+                    if (!existingOrder.observaciones) {
+                        existingOrder.observaciones = newObs;
+                    } else if (!existingOrder.observaciones.toLowerCase().includes(newObs.toLowerCase())) {
+                        existingOrder.observaciones += ` · ${newObs}`;
+                    }
+                }
+                if (order.zona_envio && !existingOrder.zona_envio) {
+                    existingOrder.zona_envio = order.zona_envio;
+                }
+            } else {
+                const orderCopy = { ...order };
+                seen.set(normKey, orderCopy);
+                result.push(orderCopy);
+            }
+        });
+
+        return { pedidos: result, fusionados };
+    };
+
+    // `cleanOrders` es lo que REALMENTE se cocina; `fusionados` son los pedidos
+    // que se descartaron por parecerse a otro. La revision tiene que mirar lo
+    // que se cocina, no lo que entro: antes contaba `orders` y el panel decia
+    // "21 pedidos" cuando a la cocina llegaban 18.
+    const { pedidos: cleanOrders, fusionados } = deduplicateOrdersByClient(orders);
+    const kitchenData = buildKitchenSheetData(cleanOrders, {});
+    const packagingData = buildPackagingSheetData(cleanOrders, {}, null);
 
     // Group packaging data by Pack
     const packsMap = {};
@@ -155,10 +312,26 @@ export default function PrintProductionView() {
         if (!packsMap[pName]) {
             packsMap[pName] = { name: pName, clientes: [], platosBase: [], totalPacks: 0 };
         }
-        const existingClient = packsMap[pName].clientes.find(existing => existing.nombre === cData.cliente);
+        const cKey = normalizeClientKey(cData.cliente);
+        const nameTokens = cKey.split(/\s+/).filter(t => t.length > 2);
+
+        const existingClient = packsMap[pName].clientes.find(existing => {
+            const exKey = normalizeClientKey(existing.nombre);
+            if (exKey === cKey) return true;
+            const exTokens = exKey.split(/\s+/).filter(t => t.length > 2);
+            return (nameTokens.length >= 2 && nameTokens.every(t => exKey.includes(t))) ||
+                   (exTokens.length >= 2 && exTokens.every(t => cKey.includes(t)));
+        });
+
         if (existingClient) {
             existingClient.cantidad += (cData.cantidadMenus || 1);
-            if (cData.observaciones) existingClient.observaciones += ` | ${cData.observaciones}`;
+            if (cData.observaciones) {
+                if (!existingClient.observaciones) {
+                    existingClient.observaciones = cData.observaciones;
+                } else if (!existingClient.observaciones.toLowerCase().includes(cData.observaciones.toLowerCase())) {
+                    existingClient.observaciones += ` · ${cData.observaciones}`;
+                }
+            }
         } else {
             packsMap[pName].clientes.push({
                 nombre: cData.cliente,
@@ -187,20 +360,8 @@ export default function PrintProductionView() {
         if (isIndividual) {
             packsInOrder.push({ name: c.plan || c.tipoMenu || 'Pack Individuales', qty: c.cantidadMenus || 1, forceIndividual: true });
         } else {
-            if (c.platos && c.platos.length > 0) {
-                c.platos.forEach(p => {
-                    let pName = p.proteina?.nombre;
-                    if (!pName || pName === 'Proteína' || pName === '—') {
-                        pName = c.plan || c.tipoMenu || 'Pack Estándar';
-                    }
-                    // Si el nombre del plato es un producto individual (tortas, empanadas, etc),
-                    // enviarlo a la tabla de Individuales, no crear un pack fantasma
-                    const isItemIndividual = isIndividualPack(pName);
-                    packsInOrder.push({ name: pName, qty: (p.cantidad || 1), forceIndividual: isItemIndividual });
-                });
-            } else {
-                packsInOrder.push({ name: c.plan || c.tipoMenu || 'Pack Estándar', qty: c.cantidadMenus || 1 });
-            }
+            const mainPackName = c.plan || c.tipoMenu || 'Pack Estándar';
+            packsInOrder.push({ name: mainPackName, qty: c.cantidadMenus || 1 });
         }
 
         const aggregatedPacks = {};
@@ -211,20 +372,7 @@ export default function PrintProductionView() {
 
         const cleanCustomerNotes = (rawObs) => {
             if (!rawObs) return '';
-            let text = String(rawObs);
-            text = text.replace(/promoci[oó]n\s+almuerzo\s+y\s+cena\s+con\s+regal[ií]a\s+desayunos?\s+en\s+ambos\s+packs/gi, '');
-            text = text.replace(/promoci[oó]n\s+almuerzo\s+y\s+cena\s+con\s+regal[ií]a\s+de\s+desayunos?/gi, '');
-            text = text.replace(/promoci[oó]n\s+almuerzo\s+y\s+cena/gi, '');
-            text = text.replace(/regal[ií]a\s+de\s+desayunos?/gi, '');
-            text = text.replace(/regal[ií]a\s+desayunos?/gi, '');
-            text = text.replace(/\bLleva\s+cena\b/gi, '');
-            text = text.replace(/\bLleva\s+desayunos?\b/gi, '');
-            text = text.replace(/\bLleva\s+también:[^\n·]+/gi, '');
-
-            return text.split(/[·|\n]+/)
-                .map(s => s.trim())
-                .filter(s => s.length > 0 && !/^(lleva|promo|regal[ií]a)/i.test(s))
-                .join(' · ');
+            return String(rawObs).trim();
         };
 
         Object.entries(aggregatedPacks).forEach(([packName, totalQty]) => {
@@ -232,36 +380,62 @@ export default function PrintProductionView() {
             const obsLower = String(c.observaciones || '').toLowerCase();
             const obsHasCena = /\bcenas?\b/.test(obsLower);
 
-            const hasBreakfastGift = nameLower.includes('regalia de desayuno') || nameLower.includes('regalía de desayuno') || nameLower.includes('+ desayuno') || nameLower.includes('con desayuno') || nameLower.includes('desayuno gratis');
-            const obsHasBreakfast = obsLower.includes('desayunos') && (obsLower.includes('regalía') || obsLower.includes('regalia') || obsLower.includes('lleva') || obsLower.includes('con desayunos'));
+            const hasBreakfastGift = nameLower.includes('regalia') && nameLower.includes('desayun')
+                || nameLower.includes('+ desayuno')
+                || nameLower.includes('con desayuno')
+                || nameLower.includes('desayuno gratis');
+            const obsHasBreakfast = obsLower.includes('desayun') && (obsLower.includes('regalía') || obsLower.includes('regalia') || obsLower.includes('lleva') || obsLower.includes('con desayunos'));
 
-            // La promo se detecta SOLO por lo que dice el pedido, nunca por el monto.
-            // Un umbral de precio falla en silencio en las dos direcciones: un pack
-            // con descuento se queda sin cenas, y un pedido grande sin promo las
-            // recibe de más. La cocina no tiene cómo darse cuenta.
-            const isCenaPromo = nameLower.includes('almuerzo y cena')
-                || nameLower.includes('dos semanas con desayuno')
-                || ((nameLower.includes('quincenal') || nameLower.includes('dos semanas') || nameLower.includes('2 semanas')) && (nameLower.includes('desayuno') || nameLower.includes('regalia') || nameLower.includes('regalía') || nameLower.includes('gratis')))
-                || obsHasCena;
-
-
+            const orderPlanText = `${c.plan || ''} ${c.tipoMenu || ''} ${c.categoryLabel || ''} ${c.categoria || ''} ${c.rawPedido?.plan || ''} ${c.rawPedido?.tipoMenu || ''}`;
+            const combinedText = `${nameLower} ${obsLower} ${orderPlanText.toLowerCase()}`;
+            const isCenaPromo =
+                /almuerzo[s]?\s*y\s*cena[s]?/i.test(combinedText) ||
+                /\bcenas?\b/i.test(combinedText) ||
+                /two\s*pack/i.test(combinedText) ||
+                /2\s*pack/i.test(combinedText) ||
+                /dos\s*semanas/i.test(combinedText) ||
+                /promo\s*2\s*semanas/i.test(combinedText) ||
+                (/quincenal/i.test(combinedText) && /desayuno/i.test(combinedText));
 
             const filteredPlates = isIndividual ? c.platos : (c.platos || []).filter(p => p.proteina?.nombre === packName);
             const clientForPack = { ...c, cantidadMenus: totalQty };
             const cleanObs = cleanCustomerNotes(c.observaciones);
 
+            const appendTagUnique = (existing, tag) => {
+                if (!existing) return tag;
+                if (existing.toLowerCase().includes(tag.toLowerCase())) return existing;
+                return `${existing} · ${tag}`;
+            };
+
+            const filterObsForCenas = (obs) => {
+                if (!obs) return '';
+                return String(obs)
+                    .replace(/cambiar\s+almuercitos[^·|—]*/gi, '')
+                    .replace(/cambiar\s+cochinita[^·|—]*/gi, '')
+                    .replace(/cambiar\s+fajitas[^·|—]*/gi, '')
+                    .replace(/cambiar\s+relish[^·|—]*/gi, '')
+                    .replace(/cambiar\s+gajos[^·|—]*/gi, '')
+                    .replace(/cambiar\s+pastel[^·|—]*/gi, '')
+                    .replace(/cambiar\s+arroz[^·|—]*/gi, '')
+                    .replace(/^\s*[\·\|—]+\s*/, '')
+                    .replace(/\s*[\·\|—]+\s*$/, '')
+                    .replace(/\s+/g, ' ')
+                    .trim();
+            };
+
             if (isCenaPromo) {
                 // Copia para la tabla de ALMUERZOS → decir que también lleva cena
                 const almuerzoClient = { ...clientForPack };
-                almuerzoClient.observaciones = cleanObs ? `${cleanObs} · Lleva cena` : 'Lleva cena';
+                almuerzoClient.observaciones = appendTagUnique(cleanObs, 'Lleva cena');
                 addClientToPackMap(packName, almuerzoClient, filteredPlates.length > 0 ? filteredPlates : null);
 
-                // Copia para la tabla de CENAS → decir qué pack de almuerzo lleva
+                // Copia para la tabla de CENAS → decir qué pack de almuerzo lleva (SIN los cambios específicos del menú de almuerzo)
                 const menuKey = mapPackNameToMenuKey(packName);
                 const packLabel = (menuKey && MENU_LABELS[menuKey]) ? MENU_LABELS[menuKey] : packName;
                 const cenaClient = { ...clientForPack };
-                cenaClient.observaciones = cleanObs ? `${cleanObs} · Lleva ${packLabel}` : `Lleva ${packLabel}`;
-                addClientToPackMap(`CENAS - ${packName}`, cenaClient, filteredPlates.length > 0 ? filteredPlates : null);
+                const cleanCenaObs = filterObsForCenas(cleanObs);
+                cenaClient.observaciones = appendTagUnique(cleanCenaObs, `Lleva ${packLabel}`);
+                addClientToPackMap(`CENAS - ${packName}`, cenaClient, null);
             } else {
                 const normClient = { ...clientForPack, observaciones: cleanObs };
                 addClientToPackMap(packName, normClient, filteredPlates.length > 0 ? filteredPlates : null);
@@ -281,16 +455,10 @@ export default function PrintProductionView() {
 
     const isActuallyIndividual = (packName) => {
         if (isIndividualPack(packName)) return true;
-        if (!mapPackNameToMenuKey(packName)) return true; // Si no pertenece a las 7 familias de packs oficiales, es un platillo individual/a la carta!
-        const packData = packsMap[packName];
-        if (!packData) return false;
-        return packData.clientes.some(c => {
-            const obs = String(c.observaciones || '').toLowerCase();
-            if (obs.includes('proteina') || obs.includes('proteína') || obs.includes('individual') || obs.includes('granel')) return true;
-            const cat = String(c.categoria || '').toLowerCase();
-            if (cat.includes('individual')) return true;
-            return false;
-        });
+        // Si pertenece a una de las 7 familias de packs oficiales (Bajo Calorías, Full Pack, Keto, etc),
+        // NUNCA es individual, sin importar si en las notas dice "120g proteína"
+        if (mapPackNameToMenuKey(packName)) return false;
+        return true;
     };
 
     // ── Consolidar packs que comparten el mismo menú (mismos platos) ──
@@ -401,11 +569,27 @@ export default function PrintProductionView() {
             currentShortName = (menuKey && MENU_LABELS[menuKey]) ? MENU_LABELS[menuKey] : currentPackName;
         }
 
-        const nameLower = cName.trim().toLowerCase();
-        let otherPacks = (clientToOtherPacks[nameLower] || []).filter(p => p !== currentShortName);
+        const nameKey = normalizeClientKey(cName);
+        const nameTokens = nameKey.split(/\s+/).filter(t => t.length > 2);
+
+        let matchedPacks = [];
+        Object.keys(clientToOtherPacks).forEach(registeredName => {
+            const regKey = normalizeClientKey(registeredName);
+            const regTokens = regKey.split(/\s+/).filter(t => t.length > 2);
+
+            const isMatch = regKey === nameKey ||
+                (nameTokens.length >= 2 && nameTokens.every(token => regKey.includes(token))) ||
+                (regTokens.length >= 2 && regTokens.every(token => nameKey.includes(token)));
+
+            if (isMatch) {
+                matchedPacks.push(...clientToOtherPacks[registeredName]);
+            }
+        });
+
+        let otherPacks = [...new Set(matchedPacks)].filter(p => p !== currentShortName);
 
         // No imprimir 'Desayunos' en 'Lleva también' si las observaciones ya dicen que lleva desayuno
-        const clientObj = packsMap[currentPackName]?.clientes?.find(c => c.nombre.trim().toLowerCase() === nameLower);
+        const clientObj = packsMap[currentPackName]?.clientes?.find(c => normalizeClientKey(c.nombre) === nameKey);
         if (clientObj && clientObj.observaciones && clientObj.observaciones.toLowerCase().includes('desayun')) {
             otherPacks = otherPacks.filter(p => p !== 'Desayunos');
         }
@@ -417,9 +601,7 @@ export default function PrintProductionView() {
     };
 
     const renderDesayunosTable = (packName, packData, currentDate) => {
-        const menuKey = mapPackNameToMenuKey(packName);
-        let rawPlatos = (officialMenus && menuKey && officialMenus[menuKey]) ? officialMenus[menuKey].platos || officialMenus[menuKey] : [];
-        if (!rawPlatos || rawPlatos.length === 0) rawPlatos = packData.platosBase || []; // fallback
+        const rawPlatos = resolvePlatosForPack(packName, packData);
 
         // No expandir clientes — usar una fila por cliente con (N) al lado del nombre
         const clientsList = [...packData.clientes];
@@ -541,22 +723,24 @@ export default function PrintProductionView() {
                 }
 
                 const formatQty = (nameStr, count, gramsVal) => {
-                    const n = String(nameStr || '').toLowerCase();
-                    if (gramsVal && gramsVal > 0) return `${gramsVal * count}g`;
-                    const kgMatch = n.match(/(\d+(?:\.\d+)?)\s*kg/i);
-                    if (kgMatch) {
-                        const val = parseFloat(kgMatch[1]) * count;
-                        return `${val} kg`;
+                    const parsed = parseQuantityAndUnit(nameStr, '', count, gramsVal);
+                    if (parsed.unit === 'g' && parsed.portionGrams) {
+                        const tazas = Math.round(parsed.totalQty / parsed.portionGrams);
+                        if (tazas > 1) {
+                            return `${parsed.totalQty}g (${tazas} porciones de ${parsed.portionGrams}g)`;
+                        }
+                        return `${parsed.totalQty}g (${parsed.portionGrams}g)`;
                     }
-                    if (n.includes('(kg)') || n.includes(' kg') || n.includes('/kg') || n.includes(' kilo')) {
-                        return `${count} kg`;
+                    if (parsed.unit === 'g') {
+                        return `${parsed.totalQty}g`;
                     }
-                    const gMatch = n.match(/(\d+)\s*g/i);
-                    if (gMatch) {
-                        const val = parseInt(gMatch[1], 10) * count;
-                        return `${val}g`;
+                    if (parsed.unit === 'taza(s)') {
+                        return `${parsed.totalQty} taza${parsed.totalQty > 1 ? 's' : ''}`;
                     }
-                    return `${count} porción${count > 1 ? 'es' : ''}`;
+                    if (parsed.unit === 'kg') {
+                        return `${parsed.totalQty} kg`;
+                    }
+                    return `${parsed.totalQty} unidad${parsed.totalQty > 1 ? 'es' : ''}`;
                 };
 
                 if (c.platos && c.platos.length > 0) {
@@ -698,9 +882,11 @@ export default function PrintProductionView() {
             const packData = consolidatedPacksMap[packName];
             if (!packData || packData.totalPacks === 0) return;
 
-            const menuKey = packData.menuKey || mapPackNameToMenuKey(packName);
-            let rawPlatos = officialMenus && menuKey ? (Array.isArray(officialMenus[menuKey]) ? officialMenus[menuKey] : (officialMenus[menuKey]?.platos || [])) : [];
-            if (!rawPlatos || rawPlatos.length === 0) rawPlatos = packData.platosBase || [];
+            const isCenaSheet = packName.startsWith('CENAS -');
+            const basePackName = isCenaSheet ? packName.replace(/^CENAS\s*-\s*/i, '') : packName;
+            const menuKey = packData.menuKey || mapPackNameToMenuKey(basePackName);
+
+            const rawPlatos = resolvePlatosForPack(packName, packData);
 
             if (rawPlatos.length === 0) {
                 missingMenus.push(packName);
@@ -745,47 +931,139 @@ export default function PrintProductionView() {
         // 2. Process Individuales (Pre-empacados directamente en cocina)
         individualPackNames.forEach(packName => {
             const packData = packsMap[packName];
-            packData.clientes.forEach(c => {
-                if (c.platos && c.platos.length > 0) {
-                    c.platos.forEach(p => {
-                        const name = p.proteina?.nombre || packName;
-                        const spec = p.descripcion || c.plan || c.tipoMenu || c.categoryLabel || '';
-                        const portionGrams = p.proteina?.gramosPorPorcion || null;
+            if (!packData || !packData.clientes) return;
 
-                        const key = portionGrams ? `${name} (${portionGrams}g)` : name;
+            packData.clientes.forEach(c => {
+                const processItem = (rawName, pGrams, pDesc, pCount = null) => {
+                    const itemCount = pCount || c.cantidad || 1;
+                    const specStr = pDesc || c.plan || c.tipoMenu || c.categoryLabel || c.observaciones || '';
+                    const cleanName = cleanIndividualDishName(rawName);
+
+                    const parsed = parseQuantityAndUnit(rawName, specStr, itemCount, pGrams);
+                    const portionGrams = pGrams || parsed.portionGrams;
+                    const nameLower = cleanName.toLowerCase();
+
+                    const existsInBulk = !!bulkItemsMap[claveGranel(cleanName, parsed.unit)]
+                        || !!bulkItemsMap[claveGranel(cleanName, 'g')]
+                        || !!bulkItemsMap[claveGranel(cleanName, 'taza(s)')];
+
+                    const isBulkCandidate = isBulkDishCandidate(nameLower, existsInBulk);
+
+                    if (isBulkCandidate) {
+                        // UNIFY INTO SECTION 1 (BULK POT COOKING)
+                        sumarAGranel(bulkItemsMap, cleanName, parsed.totalQty, parsed.unit, guessCategory);
+
+                        // Track individual entries for clean consolidated kitchen notes
+                        const clave = claveGranel(cleanName, parsed.unit);
+                        if (bulkItemsMap[clave]) {
+                            if (!bulkItemsMap[clave].individualEntries) bulkItemsMap[clave].individualEntries = [];
+                            bulkItemsMap[clave].individualEntries.push({
+                                qty: parsed.totalQty,
+                                unit: parsed.unit,
+                                portionGrams: portionGrams
+                            });
+                        }
+                    } else {
+                        // KEEP IN SECTION 2 (SPECIAL INDIVIDUALS & MOLDS)
+                        const key = cleanName;
 
                         if (!individualItemsMap[key]) {
                             individualItemsMap[key] = {
-                                name,
-                                category: guessCategory(name),
+                                name: cleanName,
+                                category: guessCategory(cleanName),
                                 totalQty: 0,
-                                unit: 'unidades',
-                                portionSpec: spec,
+                                unit: parsed.unit,
                                 portionGrams: portionGrams,
+                                portionSpec: specStr,
                                 isIndividual: true
                             };
+                        } else if (parsed.unit === 'g' && individualItemsMap[key].unit !== 'g') {
+                            individualItemsMap[key].unit = 'g';
+                            if (portionGrams) individualItemsMap[key].portionGrams = portionGrams;
                         }
-                        individualItemsMap[key].totalQty += c.cantidad;
-                        if (spec && !individualItemsMap[key].portionSpec) {
-                            individualItemsMap[key].portionSpec = spec;
-                        }
+
+                        individualItemsMap[key].totalQty += parsed.totalQty;
+                    }
+                };
+
+                const itemsToProcess = [];
+                if (c.platos && c.platos.length > 0) {
+                    c.platos.forEach(p => {
+                        const rawName = p.proteina?.nombre || p.nombre || packName;
+                        itemsToProcess.push({
+                            name: rawName,
+                            grams: p.proteina?.gramosPorPorcion || p.gramos,
+                            desc: p.descripcion || '',
+                            count: p.cantidad || 1
+                        });
+                    });
+                } else if (c.rawPedido && c.rawPedido.items && c.rawPedido.items.length > 0) {
+                    c.rawPedido.items.forEach(it => {
+                        itemsToProcess.push({
+                            name: it.nombre || it.name || packName,
+                            grams: it.gramos || it.proteinaGramos,
+                            desc: it.desc || it.planLabel || '',
+                            count: it.cantidad || 1
+                        });
+                    });
+                } else if (c.items && c.items.length > 0) {
+                    c.items.forEach(it => {
+                        itemsToProcess.push({
+                            name: it.nombre || it.name || packName,
+                            grams: it.gramos,
+                            desc: it.desc || '',
+                            count: it.cantidad || 1
+                        });
                     });
                 } else {
-                    const name = packName;
-                    const spec = c.plan || c.tipoMenu || c.categoryLabel || '';
-                    if (!individualItemsMap[name]) {
-                        individualItemsMap[name] = {
-                            name,
-                            category: guessCategory(name),
-                            totalQty: 0,
-                            unit: 'unidades',
-                            portionSpec: spec,
-                            isIndividual: true
-                        };
-                    }
-                    individualItemsMap[name].totalQty += c.cantidad;
+                    itemsToProcess.push({ name: packName, grams: null, desc: '', count: c.cantidad || 1 });
+                }
+
+                itemsToProcess.forEach(it => {
+                    processItem(it.name, it.grams, it.desc, it.count);
+                });
+            });
+        });
+
+        // Format consolidated kitchen notes for bulk items
+        Object.values(bulkItemsMap).forEach(item => {
+            if (!item.individualEntries || item.individualEntries.length === 0) return;
+
+            const gramsMap = {};
+            let tazasCount = 0;
+            let unidadesCount = 0;
+
+            item.individualEntries.forEach(e => {
+                if (e.unit === 'g' && e.portionGrams && e.portionGrams > 0) {
+                    const tazas = Math.max(1, Math.round(e.qty / e.portionGrams));
+                    gramsMap[e.portionGrams] = (gramsMap[e.portionGrams] || 0) + tazas;
+                } else if (e.unit === 'g') {
+                    gramsMap['g_raw'] = (gramsMap['g_raw'] || 0) + e.qty;
+                } else if (e.unit === 'taza(s)') {
+                    tazasCount += e.qty;
+                } else {
+                    unidadesCount += e.qty;
                 }
             });
+
+            const parts = [];
+            Object.entries(gramsMap).forEach(([gStr, count]) => {
+                if (gStr === 'g_raw') {
+                    parts.push(`${count}g`);
+                } else {
+                    parts.push(count > 1 ? `${count} tazas de ${gStr}g` : `1 taza de ${gStr}g`);
+                }
+            });
+            if (tazasCount > 0) {
+                parts.push(tazasCount > 1 ? `${tazasCount} tazas` : `1 taza`);
+            }
+            if (unidadesCount > 0) {
+                parts.push(unidadesCount > 1 ? `${unidadesCount} unidades` : `1 unidad`);
+            }
+
+            if (parts.length > 0) {
+                item.kitchenNotes = [`Empacar en cocina: ${parts.join(' + ')} para Individuales`];
+            }
         });
 
         const bulkItems = Object.values(bulkItemsMap).sort((a, b) => a.name.localeCompare(b.name));
@@ -797,6 +1075,39 @@ export default function PrintProductionView() {
             items: [...bulkItems, ...individualItems],
             missingMenus
         };
+    };
+
+    const getKitchenPackingInstruction = (item) => {
+        const pGrams = item.portionGrams;
+        const qty = item.totalQty;
+
+        if (pGrams && pGrams > 0) {
+            const numTazas = Math.round(qty / pGrams);
+            if (numTazas > 1) {
+                return `Empacar ${numTazas} tazas/porciones de ${pGrams}g`;
+            }
+            return `Empacar 1 taza/porción de ${pGrams}g`;
+        }
+
+        if (item.unit === 'kg') {
+            return `Empacar en contenedor de ${qty} kg`;
+        }
+        if (item.unit === 'taza(s)') {
+            return `Empacar en ${qty} taza(s)`;
+        }
+        if (item.unit === 'unidades') {
+            if (qty > 1) return `Empacar ${qty} unidades por porción`;
+            return 'Empacar 1 unidad por porción';
+        }
+
+        const name = String(item.name || '').toLowerCase();
+        if (name.includes('molde') || name.includes('canelones')) {
+            return 'Empacar entero en molde';
+        }
+        if (name.includes('burrito') || name.includes('omelet') || name.includes('pinto') || name.includes('pancake')) {
+            return 'Empacar porción individual de desayuno';
+        }
+        return 'Empacar porción individual';
     };
 
     // OJO: acá NO puede ir un useMemo. Arriba hay tres `return` tempranos
@@ -1021,7 +1332,7 @@ export default function PrintProductionView() {
                 {/* SECCIÓN 1: PRODUCCIÓN A GRANEL PARA PACKS */}
                 <div className="mb-12">
                     <div className="bg-gray-900 text-white p-3 font-bold text-base uppercase tracking-wide rounded-t border-2 border-black flex justify-between items-center">
-                        <span>🥘 1. PRODUCCIÓN A GRANEL PARA PACKS (Ollas / Contenedores de Empaque) — CANTIDADES CON 30% DE MERMA YA INCLUIDO</span>
+                        <span>🥘 1. PRODUCCIÓN A GRANEL PARA PACKS E INDIVIDUALES (Ollas / Contenedores de Empaque) — CANTIDADES CON 30% DE MERMA YA INCLUIDO</span>
                         <span className="text-xs font-normal bg-gray-800 px-3 py-1 rounded">Se cocina a granel para que Empaque pese las porciones</span>
                     </div>
 
@@ -1035,18 +1346,31 @@ export default function PrintProductionView() {
                                     <table className="w-full text-sm border-collapse border-2 border-black mb-2">
                                         <thead>
                                             <tr>
-                                                <th colSpan="2" className="border-2 border-black p-2.5 font-bold text-center text-xl uppercase tracking-widest bg-gray-100 text-gray-900">
+                                                <th colSpan="3" className="border-2 border-black p-2.5 font-bold text-center text-xl uppercase tracking-widest bg-gray-100 text-gray-900">
                                                     {cook}
                                                 </th>
+                                            </tr>
+                                            <tr className="bg-gray-200 text-gray-800 text-xs uppercase font-bold">
+                                                <th className="border border-black p-2 text-left w-1/2">Ingrediente / Platillo</th>
+                                                <th className="border border-black p-2 text-center w-1/4">Cantidad Total (+30% Merma)</th>
+                                                <th className="border border-black p-2 text-left w-1/4">Nota de Empaque en Cocina</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {items.map((item, idx) => {
+                                                const hasNotes = item.kitchenNotes && item.kitchenNotes.length > 0;
                                                 return (
                                                     <tr key={idx} className="border-b border-black last:border-b-0 bg-white">
-                                                        <td className="border-r border-black p-2.5 font-medium text-gray-900 w-2/3">{item.name}</td>
-                                                        <td className="p-2.5 text-center font-extrabold text-lg text-gray-900 w-1/3">
+                                                        <td className="border-r border-black p-2.5 font-bold text-gray-900">{item.name}</td>
+                                                        <td className="border-r border-black p-2.5 text-center font-extrabold text-lg text-gray-900">
                                                             {conMargen(item.totalQty)} {item.unit === 'g' ? 'g' : item.unit.toUpperCase()}
+                                                        </td>
+                                                        <td className="p-2.5 text-left text-xs font-bold text-amber-900 bg-amber-50">
+                                                            {hasNotes ? (
+                                                                <span>{item.kitchenNotes.join(' | ')}</span>
+                                                            ) : (
+                                                                <span className="text-gray-400 font-normal italic">Olla a granel (Packs)</span>
+                                                            )}
                                                         </td>
                                                     </tr>
                                                 );
@@ -1077,40 +1401,14 @@ export default function PrintProductionView() {
                             </thead>
                             <tbody>
                                 {individualItems.map((item, idx) => {
-                                    let packInstruction = '';
-                                    const isDesayunoOrPlatoUnico = /burrito|omelet|pinto|desayuno|molde|casado|pastel/i.test(item.name);
-
-                                    if (isDesayunoOrPlatoUnico) {
-                                        packInstruction = `Cocinar y empacar ENTERO (${item.totalQty} ${item.totalQty === 1 ? 'unidad' : 'unidades'})`;
-                                    } else if (item.portionGrams) {
-                                        packInstruction = `Empacar porción individual de ${item.portionGrams} g`;
-                                    } else {
-                                        const gramsMatch = item.name.match(/(\d+)\s*(g|gr|gramos|kg)/i) || (item.portionSpec && item.portionSpec.match(/(\d+)\s*(g|gr|gramos|kg)/i));
-                                        const tazasMatch = item.name.match(/(\d+)\s*tazas?/i) || (item.portionSpec && item.portionSpec.match(/(\d+)\s*tazas?/i));
-
-                                        if (gramsMatch) {
-                                            const val = gramsMatch[1];
-                                            const unit = gramsMatch[2].toLowerCase() === 'kg' ? 'kg' : 'g';
-                                            packInstruction = `Empacar porción individual de ${val} ${unit}`;
-                                        } else if (tazasMatch) {
-                                            packInstruction = `Empacar porción de ${tazasMatch[1]} tazas`;
-                                        } else {
-                                            const cleanName = item.name.toLowerCase().trim();
-                                            const catalogItem = individualesData.find(d => d.nombre && d.nombre.toLowerCase().trim() === cleanName);
-                                            if (catalogItem && catalogItem.categoria) {
-                                                const units = getProductUnits(catalogItem.categoria);
-                                                packInstruction = `Empacar porción de ${units.labelPequeno || 'porción de pedido'}`;
-                                            } else {
-                                                packInstruction = `Empacar porción según etiqueta del cliente`;
-                                            }
-                                        }
-                                    }
+                                    const packInstruction = getKitchenPackingInstruction(item);
+                                    const displayQty = `${item.totalQty} ${item.unit === 'g' ? 'g' : item.unit.toUpperCase()}`;
 
                                     return (
                                         <tr key={idx} className="border-b border-black last:border-b-0 bg-white">
                                             <td className="border-r border-black p-3 font-bold text-gray-900">{item.name}</td>
                                             <td className="border-r border-black p-3 text-center font-bold text-lg text-blue-900">
-                                                {item.totalQty} {item.totalQty === 1 ? 'UNIDAD / PEDIDO' : 'UNIDADES / PEDIDOS'}
+                                                {displayQty}
                                             </td>
                                             <td className="p-3 text-gray-900 font-bold italic bg-amber-50">
                                                 👉 {packInstruction}
@@ -1136,309 +1434,810 @@ export default function PrintProductionView() {
             .replace(/'/g, '&apos;');
     };
 
-    const handleExportToExcel = () => {
-        let xml = `<?xml version="1.0"?>
-<?mso-application progid="Excel.Sheet"?>
-<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
- xmlns:o="urn:schemas-microsoft-com:office:office"
- xmlns:x="urn:schemas-microsoft-com:office:excel"
- xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
- xmlns:html="http://www.w3.org/TR/REC-html40">
- <Styles>
-  <Style ss:ID="Default" ss:Name="Normal">
-   <Alignment ss:Vertical="Bottom"/>
-   <Font ss:FontName="Calibri" ss:Size="11"/>
-  </Style>
-  <Style ss:ID="Title">
-   <Font ss:FontName="Calibri" ss:Size="16" ss:Bold="1" ss:Color="#1E3A8A"/>
-   <Alignment ss:Horizontal="Center"/>
-  </Style>
-  <Style ss:ID="PackHeader">
-   <Font ss:FontName="Calibri" ss:Size="14" ss:Bold="1" ss:Color="#000000"/>
-   <Interior ss:Color="#FACC15" ss:Pattern="Solid"/>
-   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
-  </Style>
-  <Style ss:ID="DesayunoHeader">
-   <Font ss:FontName="Calibri" ss:Size="14" ss:Bold="1" ss:Color="#000000"/>
-   <Interior ss:Color="#F4B084" ss:Pattern="Solid"/>
-   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
-  </Style>
-  <Style ss:ID="Header">
-   <Font ss:FontName="Calibri" ss:Size="11" ss:Bold="1" ss:Color="#FFFFFF"/>
-   <Interior ss:Color="#1F2937" ss:Pattern="Solid"/>
-   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
-  </Style>
-  <Style ss:ID="CookHeader">
-   <Font ss:FontName="Calibri" ss:Size="12" ss:Bold="1" ss:Color="#000000"/>
-   <Interior ss:Color="#E5E7EB" ss:Pattern="Solid"/>
-   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
-  </Style>
-  <Style ss:ID="IndividualHeader">
-   <Font ss:FontName="Calibri" ss:Size="12" ss:Bold="1" ss:Color="#000000"/>
-   <Interior ss:Color="#FEF08A" ss:Pattern="Solid"/>
-   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
-  </Style>
-  <Style ss:ID="BoldCell">
-   <Font ss:FontName="Calibri" ss:Size="11" ss:Bold="1"/>
-   <Alignment ss:Vertical="Center"/>
-  </Style>
-  <Style ss:ID="CenterBold">
-   <Font ss:FontName="Calibri" ss:Size="11" ss:Bold="1"/>
-   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
-  </Style>
-  <Style ss:ID="ClientCell">
-   <Interior ss:Color="#E2F0D9" ss:Pattern="Solid"/>
-   <Alignment ss:Vertical="Top"/>
-  </Style>
- </Styles>
-`;
+    const handleExportToExcel = async () => {
+        try {
+            if (typeof window !== 'undefined' && !window.Buffer) {
+                // Ensuring Uint8Array fallback if Buffer is missing in browser
+                window.Buffer = window.Buffer || Uint8Array;
+            }
 
-        // ═════════════════════════════════════════
-        // PESTAÑA 1: HOJA DE COCINA
-        // ═════════════════════════════════════════
-        xml += `<Worksheet ss:Name="Hoja de Cocina">
-  <Table>
-   <Column ss:Width="260"/>
-   <Column ss:Width="120"/>
-   <Column ss:Width="100"/>
-   <Column ss:Width="260"/>
-   <Row ss:Height="30">
-    <Cell ss:MergeAcross="3" ss:StyleID="Title"><Data ss:Type="String">HOJA DE COCINA GLOBAL - BIKITCHEN (${date || ''})</Data></Cell>
-   </Row>
-   <Row/>
-   <Row ss:Height="24">
-    <Cell ss:MergeAcross="3" ss:StyleID="Header"><Data ss:Type="String">1. PRODUCCIÓN A GRANEL PARA PACKS (OLLAS) — CANTIDADES CON 30% DE MERMA YA INCLUIDO</Data></Cell>
-   </Row>`;
+            const wb = new ExcelJS.Workbook();
+            wb.creator = 'BiKitchen System';
+            wb.lastModifiedBy = 'BiKitchen System';
+            wb.created = new Date();
 
-        const groupedByCook = {};
-        bulkItems.forEach(item => {
-            const cookName = kitchenAssignments[item.name]?.trim() || 'SIN ASIGNAR';
-            if (!groupedByCook[cookName]) groupedByCook[cookName] = [];
-            groupedByCook[cookName].push(item);
-        });
+            const thinBorder = {
+                top: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+                left: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+                bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+                right: { style: 'thin', color: { argb: 'FFCCCCCC' } }
+            };
 
-        Object.keys(groupedByCook).sort().forEach(cook => {
-            const items = groupedByCook[cook];
-            if (items.length === 0) return;
+            const thickBottomBorder = {
+                top: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+                left: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+                bottom: { style: 'medium', color: { argb: 'FF000000' } },
+                right: { style: 'thin', color: { argb: 'FFCCCCCC' } }
+            };
 
-            xml += `
-   <Row ss:Height="22">
-    <Cell ss:MergeAcross="3" ss:StyleID="CookHeader"><Data ss:Type="String">COCINERA: ${cook}</Data></Cell>
-   </Row>
-   <Row ss:Height="20">
-    <Cell ss:StyleID="BoldCell"><Data ss:Type="String">Ingrediente / Platillo</Data></Cell>
-    <Cell ss:StyleID="CenterBold"><Data ss:Type="String">Cantidad Total</Data></Cell>
-    <Cell ss:StyleID="CenterBold"><Data ss:Type="String">Unidad</Data></Cell>
-    <Cell ss:StyleID="BoldCell"><Data ss:Type="String">Instrucción de Empaque</Data></Cell>
-   </Row>`;
+            const sanitizeNote = (obs) => {
+                if (!obs) return '';
+                const cleaned = String(obs)
+                    .replace(/^Incluye:.*$/i, '')
+                    .replace(/Incluye:[^|]*/gi, '')
+                    .replace(/\b\d{2,3}[\.,]?\d{3}\b/g, '')
+                    .replace(/\b(colones|crc|¢|₡|\$)\b/gi, '')
+                    .replace(/^\s*[-—*|]+\s*/, '')
+                    .replace(/\s*—\s*$/g, '')
+                    .replace(/\s+/g, ' ')
+                    .trim();
 
-            items.forEach(item => {
-                let empaqueNote = '';
-                if (item.unit === 'g') {
-                    // Sobre la cantidad CON merma: es la que se va a cocinar
-                    const tazas500 = Math.ceil(conMargen(item.totalQty) / 500);
-                    empaqueNote = tazas500 <= 1 ? 'empacar 1 taza de 500 g' : `empacar ${tazas500} tazas de 500 g`;
-                }
-                xml += `
-   <Row>
-    <Cell><Data ss:Type="String">${escapeXml(item.name)}</Data></Cell>
-    <Cell ss:StyleID="CenterBold"><Data ss:Type="Number">${conMargen(item.totalQty)}</Data></Cell>
-    <Cell ss:StyleID="CenterBold"><Data ss:Type="String">${item.unit === 'g' ? 'g' : item.unit.toUpperCase()}</Data></Cell>
-    <Cell><Data ss:Type="String">${escapeXml(empaqueNote)}</Data></Cell>
-   </Row>`;
+                const parts = cleaned.split(/\s*[\·\|—]\s*/).map(p => p.trim()).filter(Boolean);
+                const uniqueParts = [];
+                parts.forEach(p => {
+                    const lower = p.toLowerCase();
+                    if (!uniqueParts.some(u => u.toLowerCase() === lower)) {
+                        uniqueParts.push(p);
+                    }
+                });
+                return uniqueParts.join(' · ');
+            };
+
+            // ═════════════════════════════════════════════════════════════════
+            // PESTAÑA 1: HOJAS DE EMPAQUE (PACKS)
+            // ═════════════════════════════════════════════════════════════════
+            const wsEmpaque = wb.addWorksheet('Empaque Packs', {
+                views: [{ showGridLines: true }],
+                pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 }
             });
-            xml += `<Row/>`;
-        });
 
-        if (individualItems.length > 0) {
-            xml += `
-   <Row ss:Height="24">
-    <Cell ss:MergeAcross="3" ss:StyleID="IndividualHeader"><Data ss:Type="String">2. PRODUCTOS INDIVIDUALES Y MOLDES (EMPACADOS DIRECTAMENTE EN COCINA)</Data></Cell>
-   </Row>
-   <Row ss:Height="20">
-    <Cell ss:StyleID="BoldCell"><Data ss:Type="String">Producto / Platillo Individual</Data></Cell>
-    <Cell ss:StyleID="CenterBold"><Data ss:Type="String">Cantidad Total</Data></Cell>
-    <Cell ss:StyleID="CenterBold"><Data ss:Type="String">Unidad</Data></Cell>
-    <Cell ss:StyleID="BoldCell"><Data ss:Type="String">Instrucción de Empaque</Data></Cell>
-   </Row>`;
+            wsEmpaque.columns = [
+                { width: 14 }, // A: # Plato
+                { width: 40 }, // B: Descripción Platillo
+                { width: 16 }, // C: Porción
+                { width: 10 }, // D: Platos
+                { width: 35 }, // E: Especificaciones
+                { width: 60 }  // F: Cliente / Zona / Nota
+            ];
 
-            individualItems.forEach(item => {
-                let packInstruction = 'Empacar en cocina';
-                if (item.portionSpec) {
-                    const portionMatch = item.portionSpec.match(/(\d+)\s*porciones?/i);
-                    const gramsMatch = item.portionSpec.match(/(\d+)\s*g/i);
-                    const kgMatch = item.portionSpec.match(/(\d+)\s*kg/i);
-                    if (portionMatch) packInstruction = `empacar en porciones de ${portionMatch[1]}`;
-                    else if (gramsMatch) packInstruction = `empacar 1 taza de ${gramsMatch[1]}g`;
-                    else if (kgMatch) packInstruction = `empacar 1 taza de ${kgMatch[1]} kg`;
-                    else packInstruction = `empacar según: ${item.portionSpec}`;
+            // Main Title Header
+            wsEmpaque.mergeCells('A1:F1');
+            const mainEmpaqueTitle = wsEmpaque.getCell('A1');
+            mainEmpaqueTitle.value = `HOJA DE EMPAQUE - PACKS (FECHA: ${date || ''})`;
+            mainEmpaqueTitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+            mainEmpaqueTitle.font = { name: 'Calibri', size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
+            mainEmpaqueTitle.alignment = { horizontal: 'center', vertical: 'middle' };
+            wsEmpaque.getRow(1).height = 30;
+
+            let rowIdx = 3;
+
+            regularPackNames.forEach((packName, pIdx) => {
+                const packData = consolidatedPacksMap[packName];
+                const totalPacks = packData?.totalPacks || 0;
+                const defaultGrams = getDefaultGrams(packName);
+
+                if (pIdx > 0 && rowIdx > 3) {
+                    wsEmpaque.getRow(rowIdx - 1).pageBreak = true;
                 }
 
-                xml += `
-   <Row>
-    <Cell><Data ss:Type="String">${escapeXml(item.name)}</Data></Cell>
-    <Cell ss:StyleID="CenterBold"><Data ss:Type="Number">${item.totalQty}</Data></Cell>
-    <Cell ss:StyleID="CenterBold"><Data ss:Type="String">UNIDADES</Data></Cell>
-    <Cell><Data ss:Type="String">${escapeXml(packInstruction)}</Data></Cell>
-   </Row>`;
-            });
-        }
+                // Yellow Title Banner
+                wsEmpaque.mergeCells(`A${rowIdx}:F${rowIdx}`);
+                const bannerCell = wsEmpaque.getCell(`A${rowIdx}`);
+                bannerCell.value = `PACK: ${packName.toUpperCase()} (${totalPacks} PACKS Total)`;
+                bannerCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFACC15' } };
+                bannerCell.font = { name: 'Calibri', size: 14, bold: true, color: { argb: 'FF000000' } };
+                bannerCell.alignment = { horizontal: 'center', vertical: 'middle' };
+                wsEmpaque.getRow(rowIdx).height = 26;
+                rowIdx++;
 
-        xml += `
-  </Table>
- </Worksheet>`;
+                // Quantity Rules
+                wsEmpaque.mergeCells(`A${rowIdx}:B${rowIdx}`);
+                wsEmpaque.getCell(`A${rowIdx}`).value = 'CANTIDAD POR PLATO';
+                wsEmpaque.getCell(`A${rowIdx}`).font = { name: 'Calibri', size: 10, bold: true };
+                wsEmpaque.mergeCells(`C${rowIdx}:F${rowIdx}`);
+                wsEmpaque.getCell(`C${rowIdx}`).value = `${defaultGrams} GRAMOS DE PROTEINA`;
+                wsEmpaque.getCell(`C${rowIdx}`).font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FF1E3A8A' } };
+                rowIdx++;
 
-        // ═════════════════════════════════════════
-        // PESTAÑA 2: HOJA DE EMPAQUE DE PACKS (Formato Rico de Web App)
-        // ═════════════════════════════════════════
-        xml += `<Worksheet ss:Name="Hojas de Empaque Packs">
-  <Table>
-   <Column ss:Width="90"/>
-   <Column ss:Width="250"/>
-   <Column ss:Width="90"/>
-   <Column ss:Width="70"/>
-   <Column ss:Width="250"/>
-   <Column ss:Width="280"/>`;
+                wsEmpaque.mergeCells(`A${rowIdx}:B${rowIdx}`);
+                wsEmpaque.getCell(`A${rowIdx}`).value = 'CANTIDAD POR PLATO';
+                wsEmpaque.getCell(`A${rowIdx}`).font = { name: 'Calibri', size: 10, bold: true };
+                wsEmpaque.mergeCells(`C${rowIdx}:F${rowIdx}`);
+                wsEmpaque.getCell(`C${rowIdx}`).value = '1 TAZA(S) DE VEGETALES';
+                wsEmpaque.getCell(`C${rowIdx}`).font = { name: 'Calibri', size: 10, bold: true };
+                rowIdx++;
 
-        regularPackNames.forEach(packName => {
-            const packData = consolidatedPacksMap[packName];
-            const menuKey = packData?.menuKey || mapPackNameToMenuKey(packName);
-            let rawPlatos = (officialMenus && menuKey && officialMenus[menuKey]) ? officialMenus[menuKey].platos || officialMenus[menuKey] : [];
-            if (!rawPlatos || rawPlatos.length === 0) rawPlatos = packData?.platosBase || [];
-            if (!rawPlatos || rawPlatos.length === 0) return;
-
-            const totalPacks = packData.totalPacks || 0;
-            const defaultGrams = getDefaultGrams(packName);
-
-            // Yellow Title Header
-            xml += `
-   <Row ss:Height="28">
-    <Cell ss:MergeAcross="5" ss:StyleID="PackHeader"><Data ss:Type="String">${escapeXml(packName.toUpperCase())} (${totalPacks} PACKS)</Data></Cell>
-   </Row>
-   <Row>
-    <Cell ss:StyleID="BoldCell"><Data ss:Type="String">CANTIDAD POR PLATO</Data></Cell>
-    <Cell ss:MergeAcross="4"><Data ss:Type="String">${defaultGrams} GRAMOS DE PROTEINA</Data></Cell>
-   </Row>
-   <Row>
-    <Cell ss:StyleID="BoldCell"><Data ss:Type="String">CANTIDAD POR PLATO</Data></Cell>
-    <Cell ss:MergeAcross="4"><Data ss:Type="String">1 TAZA(S) DE VEGETALES</Data></Cell>
-   </Row>
-   <Row>
-    <Cell ss:StyleID="BoldCell"><Data ss:Type="String">CANTIDAD POR PLATO</Data></Cell>
-    <Cell ss:MergeAcross="4"><Data ss:Type="String">0.5 TAZA(S) DE HARINA</Data></Cell>
-   </Row>
-   <Row ss:Height="22">
-    <Cell ss:StyleID="Header"><Data ss:Type="String"># de Plato</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Descripcion</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Cantidad</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Platos</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Especificaciones</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Cliente</Data></Cell>
-   </Row>`;
-
-            // Clients List String
-            const clientsListStr = packData.clientes.map(c => {
-                const zone = c.zona_envio || '';
-                const zoneStr = zone && zone !== 'No especificada' && zone.toLowerCase() !== 'recoge en tienda' ? `, ${zone}` : '';
-                return `${c.nombre} (${c.cantidad})${zoneStr}`;
-            }).join(' | ');
-
-            rawPlatos.forEach((dish, dishIdx) => {
-                const isOfficial = typeof dish.proteina === 'string';
-                const protName = isOfficial ? dish.proteina : (dish.proteina?.nombre || '—');
-                const vegName = isOfficial ? dish.vegetal : (dish.vegetal?.nombre || '—');
+                const menuKey = packData?.menuKey || mapPackNameToMenuKey(packName);
                 const showCarbo = menuKey !== 'keto' && menuKey !== 'sinCarbos';
-                const carboName = showCarbo ? (isOfficial ? dish.carbo : (dish.carbo?.nombre || '—')) : '—';
 
-                // Row 1: Proteina
-                xml += `
-   <Row>
-    <Cell ss:StyleID="CenterBold"><Data ss:Type="String">Plato ${dishIdx + 1}</Data></Cell>
-    <Cell><Data ss:Type="String">${escapeXml(protName)}</Data></Cell>
-    <Cell ss:StyleID="CenterBold"><Data ss:Type="Number">${defaultGrams}</Data></Cell>
-    <Cell ss:StyleID="CenterBold"><Data ss:Type="Number">${totalPacks}</Data></Cell>
-    <Cell><Data ss:Type="String"></Data></Cell>
-    <Cell ss:StyleID="ClientCell"><Data ss:Type="String">${dishIdx === 0 ? escapeXml(clientsListStr) : ''}</Data></Cell>
-   </Row>`;
+                if (showCarbo) {
+                    wsEmpaque.mergeCells(`A${rowIdx}:B${rowIdx}`);
+                    wsEmpaque.getCell(`A${rowIdx}`).value = 'CANTIDAD POR PLATO';
+                    wsEmpaque.getCell(`A${rowIdx}`).font = { name: 'Calibri', size: 10, bold: true };
+                    wsEmpaque.mergeCells(`C${rowIdx}:F${rowIdx}`);
+                    wsEmpaque.getCell(`C${rowIdx}`).value = '0.5 TAZA(S) DE HARINA';
+                    wsEmpaque.getCell(`C${rowIdx}`).font = { name: 'Calibri', size: 10, bold: true };
+                    rowIdx++;
+                }
 
-                // Row 2: Vegetal
-                xml += `
-   <Row>
-    <Cell></Cell>
-    <Cell><Data ss:Type="String">${escapeXml(vegName)}</Data></Cell>
-    <Cell ss:StyleID="CenterBold"><Data ss:Type="Number">1</Data></Cell>
-    <Cell></Cell>
-    <Cell><Data ss:Type="String"></Data></Cell>
-    <Cell></Cell>
-   </Row>`;
+                // Table Column Headers
+                const packHeaders = ['# de Plato', 'Descripción Platillo', 'Porción', 'Platos', 'Especificaciones', 'Cliente'];
+                const hRow = wsEmpaque.getRow(rowIdx);
+                hRow.height = 24;
+                packHeaders.forEach((h, colI) => {
+                    const cell = hRow.getCell(colI + 1);
+                    cell.value = h;
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+                    cell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
+                    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                    cell.border = thinBorder;
+                });
+                rowIdx++;
 
-                // Row 3: Carbo
-                xml += `
-   <Row>
-    <Cell></Cell>
-    <Cell><Data ss:Type="String">${escapeXml(carboName)}</Data></Cell>
-    <Cell ss:StyleID="CenterBold"><Data ss:Type="Number">0.5</Data></Cell>
-    <Cell></Cell>
-    <Cell><Data ss:Type="String"></Data></Cell>
-    <Cell></Cell>
-   </Row>`;
+                const rawPlatos = resolvePlatosForPack(packName, packData);
+
+                const clientsList = [...packData.clientes];
+                const subRowsCount = 3; // 3 sub-rows per dish (Protein, Veggie, Carbo)
+                const maxDishes = rawPlatos.length > 0 ? rawPlatos.length : 5;
+
+                const getDishVal = (val) => {
+                    if (!val) return '—';
+                    if (typeof val === 'string') return val;
+                    if (typeof val === 'object' && val.nombre) return val.nombre;
+                    return '—';
+                };
+
+                for (let dIdx = 0; dIdx < maxDishes; dIdx++) {
+                    const dish = rawPlatos[dIdx] || {};
+                    const pName = getDishVal(dish.proteina);
+                    const vName = getDishVal(dish.vegetal || dish.ensalada);
+                    const cName = showCarbo ? getDishVal(dish.carbo) : '—';
+
+                    const startR = rowIdx;
+                    const subRowsData = [
+                        { name: pName, portion: `${defaultGrams}g` },
+                        { name: vName, portion: '1 taza' },
+                        { name: cName, portion: '0.5 taza' }
+                    ];
+
+                    subRowsData.forEach((sub, subRowIdx) => {
+                        // Column E & F: Map clients 1:1 per dish sub-row
+                        const clientIndex = dIdx * subRowsCount + subRowIdx;
+                        const client = clientsList[clientIndex];
+
+                        let specText = '';
+                        let clientText = '';
+
+                        if (client) {
+                            const zone = client.zona_envio || '';
+                            const zoneStr = zone && zone !== 'No especificada' && zone.toLowerCase() !== 'recoge en tienda' ? `, ${zone}` : '';
+                            const qty = client.cantidad || 1;
+
+                            let displayName = client.nombre;
+                            if (client.rawPedido) {
+                                const schedule = getScheduleFromOrder(client.rawPedido);
+                                const dateIdx = schedule.indexOf(date);
+                                if (schedule.length > 1 && dateIdx !== -1) {
+                                    displayName = `${client.nombre} (Semana ${dateIdx + 1})`;
+                                }
+                            }
+
+                            clientText = qty > 1 ? `${displayName} (${qty})${zoneStr}` : `${displayName}${zoneStr}`;
+
+                            const tags = [];
+                            const otherPacksTag = getOtherPacksTag(client.nombre, packName);
+                            if (otherPacksTag) tags.push(otherPacksTag);
+
+                            const dishObs = filterNoteForDish(client.observaciones, dish, rawPlatos);
+                            const cleanObsText = sanitizeNote(dishObs);
+                            specText = [cleanObsText, tags.join(' | ')].filter(Boolean).join(' — ');
+                            if (specText) specText = `** ${specText}`;
+                        }
+
+                        // Calculate dynamic row height so text in Col B, Col E, Col F NEVER clips
+                        const linesB = Math.ceil((sub.name || '').length / 38);
+                        const linesE = Math.ceil((specText || '').length / 32);
+                        const linesF = Math.ceil((clientText || '').length / 45);
+                        const maxLines = Math.max(1, linesB, linesE, linesF);
+
+                        const r = wsEmpaque.getRow(rowIdx);
+                        r.height = Math.max(22, maxLines * 16);
+
+                        r.getCell(2).value = sub.name;
+                        r.getCell(3).value = sub.portion;
+
+                        r.getCell(2).font = { name: 'Calibri', size: 10 };
+                        r.getCell(3).font = { name: 'Calibri', size: 10 };
+                        r.getCell(2).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+                        r.getCell(3).alignment = { horizontal: 'center', vertical: 'middle' };
+
+                        r.getCell(2).border = thinBorder;
+                        r.getCell(3).border = thinBorder;
+
+                        r.getCell(5).value = specText;
+                        r.getCell(6).value = clientText;
+
+                        r.getCell(5).font = { name: 'Calibri', size: 9 };
+                        r.getCell(6).font = { name: 'Calibri', size: 10, bold: true };
+                        r.getCell(5).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+                        r.getCell(6).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+
+                        r.getCell(5).border = thinBorder;
+                        r.getCell(6).border = thinBorder;
+
+                        if (client) {
+                            r.getCell(6).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2F0D9' } };
+                        }
+
+                        rowIdx++;
+                    });
+
+                    const endR = rowIdx - 1;
+
+                    // Merge Column A (# de Plato) across the 3 sub-rows
+                    wsEmpaque.mergeCells(`A${startR}:A${endR}`);
+                    const cellA = wsEmpaque.getCell(`A${startR}`);
+                    cellA.value = `Plato ${dIdx + 1}`;
+                    cellA.font = { name: 'Calibri', size: 10, bold: true };
+                    cellA.alignment = { horizontal: 'center', vertical: 'middle' };
+
+                    // Merge Column D (Platos total count) across the 3 sub-rows
+                    wsEmpaque.mergeCells(`D${startR}:D${endR}`);
+                    const cellD = wsEmpaque.getCell(`D${startR}`);
+                    cellD.value = totalPacks;
+                    cellD.font = { name: 'Calibri', size: 11, bold: true };
+                    cellD.alignment = { horizontal: 'center', vertical: 'middle' };
+
+                    for (let r = startR; r <= endR; r++) {
+                        const curRow = wsEmpaque.getRow(r);
+                        curRow.getCell(1).border = (r === endR) ? thickBottomBorder : thinBorder;
+                        curRow.getCell(2).border = (r === endR) ? thickBottomBorder : thinBorder;
+                        curRow.getCell(3).border = (r === endR) ? thickBottomBorder : thinBorder;
+                        curRow.getCell(4).border = (r === endR) ? thickBottomBorder : thinBorder;
+                        curRow.getCell(5).border = (r === endR) ? thickBottomBorder : thinBorder;
+                        curRow.getCell(6).border = (r === endR) ? thickBottomBorder : thinBorder;
+                    }
+                }
+
+                rowIdx += 2; // Blank spacing
             });
 
-            xml += `<Row/><Row/>`;
-        });
-
-        xml += `
-  </Table>
- </Worksheet>`;
-
-        // ═════════════════════════════════════════
-        // PESTAÑA 3: DESAYUNOS E INDIVIDUALES
-        // ═════════════════════════════════════════
-        xml += `<Worksheet ss:Name="Desayunos e Individuales">
-  <Table>
-   <Column ss:Width="250"/>
-   <Column ss:Width="150"/>
-   <Column ss:Width="280"/>
-   <Row ss:Height="26">
-    <Cell ss:MergeAcross="2" ss:StyleID="DesayunoHeader"><Data ss:Type="String">DESAYUNOS E INDIVIDUALES</Data></Cell>
-   </Row>
-   <Row ss:Height="22">
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Producto / Platillo</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Cantidad</Data></Cell>
-    <Cell ss:StyleID="Header"><Data ss:Type="String">Cliente (Zona / Observaciones)</Data></Cell>
-   </Row>`;
-
-        individualPackNames.forEach(pName => {
-            const pData = packsMap[pName];
-            pData.clientes.forEach(c => {
-                const zone = c.zona_envio || '';
-                const zoneStr = zone && zone !== 'No especificada' && zone.toLowerCase() !== 'recoge en tienda' ? `, ${zone}` : '';
-                const obs = c.observaciones ? ` [${c.observaciones}]` : '';
-
-                xml += `
-   <Row>
-    <Cell><Data ss:Type="String">${escapeXml(pName)}</Data></Cell>
-    <Cell ss:StyleID="CenterBold"><Data ss:Type="String">${c.cantidad} unidad(es)</Data></Cell>
-    <Cell ss:StyleID="ClientCell"><Data ss:Type="String">${escapeXml(c.nombre)}${escapeXml(zoneStr)}${escapeXml(obs)}</Data></Cell>
-   </Row>`;
+            // ═════════════════════════════════════════════════════════════════
+            // PESTAÑA 2: EMPAQUE DESAYUNOS (Formato Gina 1:1 con altura dinámica)
+            // ═════════════════════════════════════════════════════════════════
+            const wsDesayunos = wb.addWorksheet('Empaque Desayunos', {
+                views: [{ showGridLines: true }],
+                pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 }
             });
-        });
 
-        xml += `
-  </Table>
- </Worksheet>`;
+            wsDesayunos.columns = [
+                { width: 14 }, // A: Plato
+                { width: 40 }, // B: Descripción
+                { width: 14 }, // C: Cantidad
+                { width: 50 }, // D: NOTA
+                { width: 50 }  // E: Cliente
+            ];
 
-        xml += `</Workbook>`;
+            let dRowIdx = 1;
+            const desayunoPackNames = allPackNames.filter(n => isDesayunoPack(n));
 
-        const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `Produccion_BiKitchen_${date || 'export'}.xls`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+            if (desayunoPackNames.length === 0) {
+                wsDesayunos.mergeCells('A1:E1');
+                const emptyTitle = wsDesayunos.getCell('A1');
+                emptyTitle.value = `DESAYUNOS - EMPAQUE (${date || ''}) — No hay desayunos programados`;
+                emptyTitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF4B084' } };
+                emptyTitle.font = { name: 'Calibri', size: 14, bold: true };
+                emptyTitle.alignment = { horizontal: 'center', vertical: 'middle' };
+            } else {
+                desayunoPackNames.forEach((packName, pIdx) => {
+                    const packData = packsMap[packName];
+                    if (!packData || !packData.clientes || packData.clientes.length === 0) return;
+
+                    if (pIdx > 0 && dRowIdx > 1) {
+                        wsDesayunos.getRow(dRowIdx - 1).pageBreak = true;
+                    }
+
+                    const menuKey = mapPackNameToMenuKey(packName);
+                    let rawPlatos = (officialMenus && menuKey && officialMenus[menuKey]) ? officialMenus[menuKey].platos || officialMenus[menuKey] : [];
+                    if (!rawPlatos || rawPlatos.length === 0) rawPlatos = packData.platosBase || [];
+
+                    // Title Header - Soft Orange #F4B084
+                    wsDesayunos.mergeCells(`A${dRowIdx}:E${dRowIdx}`);
+                    const banner = wsDesayunos.getCell(`A${dRowIdx}`);
+                    banner.value = `DESAYUNOS - ${packName.toUpperCase()} (${packData.totalPacks} TOTAL)`;
+                    banner.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF4B084' } };
+                    banner.font = { name: 'Calibri', size: 14, bold: true, color: { argb: 'FF000000' } };
+                    banner.alignment = { horizontal: 'center', vertical: 'middle' };
+                    wsDesayunos.getRow(dRowIdx).height = 28;
+                    dRowIdx++;
+
+                    // Subheaders - Light Orange #FCE4D6
+                    const dHeaders = ['Plato', 'Descripción', 'Cantidad', 'NOTA', 'Cliente'];
+                    const dHeaderRow = wsDesayunos.getRow(dRowIdx);
+                    dHeaderRow.height = 22;
+                    dHeaders.forEach((h, colI) => {
+                        const cell = dHeaderRow.getCell(colI + 1);
+                        cell.value = h;
+                        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFCE4D6' } };
+                        cell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FF000000' } };
+                        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                        cell.border = thinBorder;
+                    });
+                    dRowIdx++;
+
+                    const clientsList = [...packData.clientes];
+                    const maxRows = Math.max(rawPlatos.length > 0 ? rawPlatos.length : 5, clientsList.length);
+
+                    for (let i = 0; i < maxRows; i++) {
+                        const dish = rawPlatos[i];
+                        let dishDesc = '';
+                        if (dish) {
+                            const isOfficial = typeof dish.proteina === 'string';
+                            dishDesc = isOfficial ? dish.proteina : (dish.proteina?.nombre || '');
+                        }
+
+                        const client = clientsList[i];
+                        let clientName = '';
+                        let clientNote = '';
+                        if (client) {
+                            const zone = client.zona_envio || '';
+                            const zoneStr = zone && zone !== 'No especificada' && zone.toLowerCase() !== 'recoge en tienda' ? `, ${zone}` : '';
+                            const qty = client.cantidad || 1;
+                            let displayName = client.nombre;
+                            if (client.rawPedido) {
+                                const schedule = getScheduleFromOrder(client.rawPedido);
+                                const dateIdx = schedule.indexOf(date);
+                                if (schedule.length > 1 && dateIdx !== -1) {
+                                    displayName = `${client.nombre} (Semana ${dateIdx + 1})`;
+                                }
+                            }
+                            clientName = qty > 1 ? `${displayName} (${qty})${zoneStr}` : `${displayName}${zoneStr}`;
+
+                            const tags = [];
+                            if (client.rawPedido?.plan && !client.rawPedido.plan.toLowerCase().includes('desayuno')) tags.push(client.rawPedido.plan);
+                            const otherPacksTag = getOtherPacksTag(client.nombre, packName);
+                            if (otherPacksTag) tags.push(otherPacksTag);
+
+                            const cleanObsText = sanitizeNote(client.observaciones);
+                            clientNote = [cleanObsText, tags.join(' | ')].filter(Boolean).join(' — ');
+                        }
+
+                        // Dynamic height calculation so long multi-line notes are NEVER clipped
+                        const noteLines = Math.max(
+                            1,
+                            Math.ceil((clientNote || '').length / 45),
+                            Math.ceil((clientName || '').length / 35)
+                        );
+                        const rowHeight = Math.max(22, noteLines * 16);
+
+                        const row = wsDesayunos.getRow(dRowIdx);
+                        row.height = rowHeight;
+                        row.getCell(1).value = dish ? `Plato ${i + 1}` : '';
+                        row.getCell(2).value = dishDesc;
+                        row.getCell(3).value = dish ? packData.totalPacks : '';
+                        row.getCell(4).value = clientNote;
+                        row.getCell(5).value = clientName;
+
+                        for (let c = 1; c <= 5; c++) {
+                            const cell = row.getCell(c);
+                            cell.border = thinBorder;
+                            cell.font = { name: 'Calibri', size: 10 };
+                            if (c === 1 || c === 3) cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                            if (c === 2) cell.alignment = { horizontal: 'left', vertical: 'middle' };
+                            if (c === 4) cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+                            if (c === 5) {
+                                cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+                                if (client) {
+                                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2F0D9' } };
+                                    cell.font = { name: 'Calibri', size: 10, bold: true };
+                                }
+                            }
+                        }
+                        dRowIdx++;
+                    }
+
+                    dRowIdx += 2; // Blank spacing
+                });
+            }
+
+            // ═════════════════════════════════════════════════════════════════
+            // PESTAÑA 3: EMPAQUE INDIVIDUALES (Formato Gina 1:1 con celdas combinadas)
+            // ═════════════════════════════════════════════════════════════════
+            const wsIndividuales = wb.addWorksheet('Empaque Individuales', {
+                views: [{ showGridLines: true }],
+                pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 }
+            });
+
+            wsIndividuales.columns = [
+                { width: 45 }, // A: Producto / Platillo
+                { width: 22 }, // B: Cantidad
+                { width: 55 }  // C: Cliente
+            ];
+
+            const indivPackNames = allPackNames.filter(n => isActuallyIndividual(n) && !isDesayunoPack(n));
+            const clientsDataIndiv = {};
+
+            indivPackNames.forEach(packName => {
+                const packData = packsMap[packName];
+                if (!packData || !packData.clientes) return;
+
+                packData.clientes.forEach(c => {
+                    const zone = c.zona_envio || '';
+                    const zoneStr = zone && zone !== 'No especificada' && zone.toLowerCase() !== 'recoge en tienda' ? `, ${zone}` : '';
+                    const fullName = `${c.nombre}${zoneStr}`;
+                    const cleanUserObs = sanitizeNote(c.observaciones);
+                    const otherPacksTag = getOtherPacksTag(c.nombre, packName);
+                    const finalObs = [cleanUserObs, otherPacksTag].filter(Boolean).join(' | ');
+
+                    if (!clientsDataIndiv[fullName]) {
+                        clientsDataIndiv[fullName] = { nombre: fullName, items: [], observaciones: finalObs };
+                    }
+
+                    const formatQty = (nameStr, count, gramsVal) => {
+                        const parsed = parseQuantityAndUnit(nameStr, '', count, gramsVal);
+                        if (parsed.unit === 'g' && parsed.portionGrams) {
+                            const tazas = Math.round(parsed.totalQty / parsed.portionGrams);
+                            if (tazas > 1) {
+                                return `${parsed.totalQty}g (${tazas} porciones de ${parsed.portionGrams}g)`;
+                            }
+                            return `${parsed.totalQty}g (${parsed.portionGrams}g)`;
+                        }
+                        if (parsed.unit === 'g') {
+                            return `${parsed.totalQty}g`;
+                        }
+                        if (parsed.unit === 'taza(s)') {
+                            return `${parsed.totalQty} taza${parsed.totalQty > 1 ? 's' : ''}`;
+                        }
+                        if (parsed.unit === 'kg') {
+                            return `${parsed.totalQty} kg`;
+                        }
+                        return `${parsed.totalQty} unidad${parsed.totalQty > 1 ? 'es' : ''}`;
+                    };
+
+                    if (c.platos && c.platos.length > 0) {
+                        c.platos.forEach(p => {
+                            let protName = p.proteina?.nombre || packName;
+                            if (p.descripcion && p.descripcion.trim() !== '') protName += ` (${p.descripcion})`;
+                            const grams = p.proteina?.gramosPorPorcion;
+                            const itemCount = p.cantidad || c.cantidad || 1;
+                            clientsDataIndiv[fullName].items.push({
+                                name: protName,
+                                qty: formatQty(protName, itemCount, grams)
+                            });
+                        });
+                    } else {
+                        const itemCount = c.cantidad || 1;
+                        clientsDataIndiv[fullName].items.push({
+                            name: packName,
+                            qty: formatQty(packName, itemCount, null)
+                        });
+                    }
+                });
+            });
+
+            const indivClientNames = Object.keys(clientsDataIndiv).sort();
+
+            wsIndividuales.mergeCells('A1:C1');
+            const indivTitleBanner = wsIndividuales.getCell('A1');
+            indivTitleBanner.value = `PRODUCTOS INDIVIDUALES - EMPAQUE (${date || ''})`;
+            indivTitleBanner.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+            indivTitleBanner.font = { name: 'Calibri', size: 15, bold: true, color: { argb: 'FFFFFFFF' } };
+            indivTitleBanner.alignment = { horizontal: 'center', vertical: 'middle' };
+            wsIndividuales.getRow(1).height = 30;
+
+            let indRowIdx = 3;
+
+            if (indivClientNames.length === 0) {
+                const row = wsIndividuales.getRow(indRowIdx);
+                row.getCell(1).value = 'No hay productos individuales para esta fecha';
+                wsIndividuales.mergeCells(`A${indRowIdx}:C${indRowIdx}`);
+                row.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+                row.getCell(1).font = { name: 'Calibri', size: 11, italic: true };
+            } else {
+                const iSubHeaders = ['Producto / Platillo', 'Cantidad', 'Cliente'];
+                const iHeaderRow = wsIndividuales.getRow(indRowIdx);
+                iHeaderRow.height = 22;
+                iSubHeaders.forEach((h, colI) => {
+                    const cell = iHeaderRow.getCell(colI + 1);
+                    cell.value = h;
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF374151' } };
+                    cell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
+                    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                    cell.border = thinBorder;
+                });
+                indRowIdx++;
+
+                indivClientNames.forEach(cName => {
+                    const client = clientsDataIndiv[cName];
+                    const items = client.items;
+                    const startR = indRowIdx;
+                    const endR = indRowIdx + items.length - 1;
+
+                    items.forEach((item) => {
+                        const row = wsIndividuales.getRow(indRowIdx);
+                        row.height = 22;
+                        row.getCell(1).value = item.name;
+                        row.getCell(2).value = item.qty;
+
+                        row.getCell(1).border = thinBorder;
+                        row.getCell(2).border = thinBorder;
+                        row.getCell(1).font = { name: 'Calibri', size: 10 };
+                        row.getCell(2).font = { name: 'Calibri', size: 10, bold: true };
+                        row.getCell(2).alignment = { horizontal: 'center', vertical: 'middle' };
+
+                        indRowIdx++;
+                    });
+
+                    // Merge client cell vertically across all items of this client (matching Gina 1:1)
+                    wsIndividuales.mergeCells(`C${startR}:C${endR}`);
+                    const clientCell = wsIndividuales.getCell(`C${startR}`);
+                    const obsStr = client.observaciones ? ` [${client.observaciones}]` : '';
+                    clientCell.value = `${client.nombre}${obsStr}`;
+                    clientCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2F0D9' } };
+                    clientCell.font = { name: 'Calibri', size: 10, bold: true };
+                    clientCell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+
+                    for (let r = startR; r <= endR; r++) {
+                        const cCell = wsIndividuales.getCell(`C${r}`);
+                        cCell.border = (r === endR) ? thickBottomBorder : thinBorder;
+                    }
+
+                    // Blank spacing row between clients
+                    indRowIdx++;
+                });
+            }
+
+            // ═════════════════════════════════════════════════════════════════
+            // PESTAÑA 4: HOJA DE COCINA
+            // ═════════════════════════════════════════════════════════════════
+            const wsCocina = wb.addWorksheet('Hoja Cocina', {
+                views: [{ showGridLines: true }],
+                pageSetup: { paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0 }
+            });
+
+            wsCocina.columns = [
+                { width: 45 }, // A: Ingrediente / Platillo
+                { width: 28 }, // B: Cantidad Total
+                { width: 15 }, // C: Unidad
+                { width: 65 }  // D: Nota de Empaque en Cocina
+            ];
+
+            wsCocina.mergeCells('A1:D1');
+            const titleCellCocina = wsCocina.getCell('A1');
+            titleCellCocina.value = `HOJA DE COCINA - ${date || ''}`;
+            titleCellCocina.font = { name: 'Calibri', size: 16, bold: true };
+            titleCellCocina.alignment = { horizontal: 'center', vertical: 'middle' };
+            wsCocina.getRow(1).height = 32;
+
+            wsCocina.mergeCells('A3:D3');
+            const subCocinaHeader = wsCocina.getCell('A3');
+            subCocinaHeader.value = '1. PRODUCCIÓN A GRANEL PARA PACKS E INDIVIDUALES (OLLAS - CANTIDADES CON 30% DE MERMA INCLUIDO)';
+            subCocinaHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+            subCocinaHeader.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
+            subCocinaHeader.alignment = { horizontal: 'center', vertical: 'middle' };
+            wsCocina.getRow(3).height = 24;
+
+            let cRowIdx = 5;
+
+            const groupedByCook = {};
+            bulkItems.forEach(item => {
+                const cookName = kitchenAssignments[item.name]?.trim() || 'SIN ASIGNAR';
+                if (!groupedByCook[cookName]) groupedByCook[cookName] = [];
+                groupedByCook[cookName].push(item);
+            });
+
+            const cookKeys = Object.keys(groupedByCook).sort((a, b) => {
+                if (a === 'SIN ASIGNAR') return 1;
+                if (b === 'SIN ASIGNAR') return -1;
+                return a.localeCompare(b);
+            });
+
+            cookKeys.forEach((cook, cookIdx) => {
+                const items = groupedByCook[cook];
+                if (items.length === 0) return;
+
+                if (cookIdx > 0 && cRowIdx > 5) {
+                    wsCocina.getRow(cRowIdx - 1).pageBreak = true;
+                }
+
+                wsCocina.mergeCells(`A${cRowIdx}:D${cRowIdx}`);
+                const cookCell = wsCocina.getCell(`A${cRowIdx}`);
+                cookCell.value = `COCINERA: ${cook.toUpperCase()}`;
+                cookCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E7EB' } };
+                cookCell.font = { name: 'Calibri', size: 12, bold: true };
+                wsCocina.getRow(cRowIdx).height = 24;
+                cRowIdx++;
+
+                const cHeaders = ['Ingrediente / Platillo', 'Cantidad Total (+30% Merma)', 'Unidad', 'Nota de Empaque en Cocina'];
+                const cHeaderRow = wsCocina.getRow(cRowIdx);
+                cHeaderRow.height = 22;
+                cHeaders.forEach((h, colI) => {
+                    const cell = cHeaderRow.getCell(colI + 1);
+                    cell.value = h;
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF374151' } };
+                    cell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
+                    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                    cell.border = thinBorder;
+                });
+                cRowIdx++;
+
+                items.forEach(item => {
+                    const hasNotes = item.kitchenNotes && item.kitchenNotes.length > 0;
+                    const noteStr = hasNotes ? item.kitchenNotes.join(' | ') : '';
+
+                    const row = wsCocina.getRow(cRowIdx);
+                    const estimatedLines = Math.max(1, Math.ceil(noteStr.length / 55));
+                    row.height = Math.max(22, estimatedLines * 16);
+
+                    row.getCell(1).value = item.name;
+                    row.getCell(2).value = conMargen(item.totalQty);
+                    row.getCell(3).value = item.unit === 'g' ? 'g' : item.unit.toUpperCase();
+                    row.getCell(4).value = noteStr;
+
+                    for (let c = 1; c <= 4; c++) {
+                        const cell = row.getCell(c);
+                        cell.border = thinBorder;
+                        cell.font = { name: 'Calibri', size: 10 };
+                        if (c === 2 || c === 3) cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                        if (c === 2) cell.font = { name: 'Calibri', size: 10, bold: true };
+                        if (c === 4) {
+                            cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+                            if (hasNotes) cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FF78350F' } };
+                        }
+                    }
+                    cRowIdx++;
+                });
+
+                cRowIdx += 2; // Blank spacing
+            });
+
+            if (individualItems.length > 0) {
+                wsCocina.mergeCells(`A${cRowIdx}:D${cRowIdx}`);
+                const indivTitle = wsCocina.getCell(`A${cRowIdx}`);
+                indivTitle.value = '2. PRODUCTOS INDIVIDUALES Y MOLDES (EMPACADOS DIRECTAMENTE EN COCINA)';
+                indivTitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF08A' } };
+                indivTitle.font = { name: 'Calibri', size: 12, bold: true };
+                wsCocina.getRow(cRowIdx).height = 24;
+                cRowIdx++;
+
+                const indHeaders = ['Producto / Platillo Individual', 'Cantidad Total', 'Unidad', 'Instrucción de Empaque en Cocina'];
+                const indHeaderRow = wsCocina.getRow(cRowIdx);
+                indHeaderRow.height = 22;
+                indHeaders.forEach((h, colI) => {
+                    const cell = indHeaderRow.getCell(colI + 1);
+                    cell.value = h;
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF374151' } };
+                    cell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
+                    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                    cell.border = thinBorder;
+                });
+                cRowIdx++;
+
+                individualItems.forEach(item => {
+                    const packInst = getKitchenPackingInstruction(item);
+                    const displayQty = item.totalQty;
+                    const displayUnit = item.unit === 'g' ? 'g' : item.unit.toUpperCase();
+
+                    const row = wsCocina.getRow(cRowIdx);
+                    row.height = 22;
+                    row.getCell(1).value = item.name;
+                    row.getCell(2).value = displayQty;
+                    row.getCell(3).value = displayUnit;
+                    row.getCell(4).value = packInst;
+
+                    for (let c = 1; c <= 4; c++) {
+                        const cell = row.getCell(c);
+                        cell.border = thinBorder;
+                        cell.font = { name: 'Calibri', size: 10 };
+                        if (c === 2 || c === 3) cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                        if (c === 2) cell.font = { name: 'Calibri', size: 10, bold: true };
+                        if (c === 4) cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+                    }
+                    cRowIdx++;
+                });
+            }
+
+            // ═════════════════════════════════════════════════════════════════
+            // PESTAÑA 4: RESUMEN PEDIDOS
+            // ═════════════════════════════════════════════════════════════════
+            const wsResumen = wb.addWorksheet('Resumen Pedidos', {
+                views: [{ showGridLines: true }]
+            });
+
+            wsResumen.columns = [
+                { width: 22 }, // A: # Orden
+                { width: 32 }, // B: Cliente
+                { width: 16 }, // C: Teléfono
+                { width: 36 }, // D: Zona
+                { width: 45 }, // E: Plan
+                { width: 40 }, // F: Fechas
+                { width: 60 }, // G: Observaciones
+                { width: 16 }  // H: Estado
+            ];
+
+            wsResumen.mergeCells('A1:H1');
+            const resTitle = wsResumen.getCell('A1');
+            resTitle.value = `RESUMEN GENERAL DE PEDIDOS (${date || ''})`;
+            resTitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A8A' } };
+            resTitle.font = { name: 'Calibri', size: 15, bold: true, color: { argb: 'FFFFFFFF' } };
+            resTitle.alignment = { horizontal: 'center', vertical: 'middle' };
+            wsResumen.getRow(1).height = 32;
+
+            let rRowIdx = 3;
+            const rHeaders = ['# Órden', 'Cliente', 'Teléfono', 'Zona de Envío', 'Plan / Menú', 'Entregas Programadas', 'Observaciones / Cambios', 'Estado'];
+            const rHeaderRow = wsResumen.getRow(rRowIdx);
+            rHeaderRow.height = 24;
+            rHeaders.forEach((h, colI) => {
+                const cell = rHeaderRow.getCell(colI + 1);
+                cell.value = h;
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+                cell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
+                cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                cell.border = thinBorder;
+            });
+            rRowIdx++;
+
+            orders.forEach((o, index) => {
+                const sch = getScheduleFromOrder(o);
+                const datesStr = Array.isArray(sch) && sch.length > 0 ? sch.join(', ') : (o.fecha_entrega || '—');
+                const row = wsResumen.getRow(rRowIdx);
+                row.height = 24;
+
+                const orderNum = o.numeroOrden || (o.id ? (o.id.startsWith('ORD-') ? o.id : `#${o.id}`) : '—');
+                const rawStatus = (o.status || 'Confirmado').toLowerCase();
+                const statusText = rawStatus.includes('entregad') ? 'Entregado' : (rawStatus.includes('cancel') ? 'Cancelado' : 'Confirmado');
+
+                row.getCell(1).value = orderNum;
+                row.getCell(2).value = o.cliente || o.nombre || '—';
+                row.getCell(3).value = o.telefono || '—';
+                row.getCell(4).value = o.zona_envio || o.zona || '—';
+                row.getCell(5).value = o.tipoMenu || o.plan || '—';
+                row.getCell(6).value = datesStr;
+                row.getCell(7).value = o.observaciones || o.cambios || '—';
+                row.getCell(8).value = statusText;
+
+                // Alternating row colors for executive clarity
+                const isEven = index % 2 === 0;
+                const rowFill = isEven
+                    ? { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } }
+                    : { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9FAFB' } };
+
+                for (let c = 1; c <= 8; c++) {
+                    const cell = row.getCell(c);
+                    cell.border = thinBorder;
+                    cell.fill = rowFill;
+                    cell.font = { name: 'Calibri', size: 10 };
+
+                    if (c === 1 || c === 3) {
+                        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                    } else if (c === 8) {
+                        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                        cell.font = { name: 'Calibri', size: 10, bold: true };
+                        if (statusText === 'Entregado' || statusText === 'Confirmado') {
+                            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2F0D9' } };
+                        }
+                    } else {
+                        cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+                    }
+                }
+                rRowIdx++;
+            });
+
+            // Trigger Download using Uint8Array buffer to be 100% compatible with browser
+            const buffer = await wb.xlsx.writeBuffer();
+            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Produccion_BiKitchen_${date || 'export'}.xlsx`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error('Error al generar el Excel:', err);
+            alert('Error al generar el archivo Excel: ' + err.message);
+        }
     };
 
     return (
@@ -1446,12 +2245,14 @@ export default function PrintProductionView() {
             {/* Ocultar en impresión pero dar info en pantalla */}
             <div className="mb-4 print:hidden text-center">
                 <h1 className="text-2xl font-bold text-gray-800">Vista de Producción para: {date}</h1>
-                <div className="text-sm font-medium text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
-                    {viewMode === 'empaque' && 'Mostrando solo Hoja de Empaque'}
-                    {viewMode === 'cocina' && 'Mostrando solo Hoja de Cocina'}
+                <div className="flex flex-wrap items-center justify-center gap-3 mt-2 mb-3">
+                    <div className="text-sm font-medium text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
+                        {viewMode === 'empaque' && 'Mostrando solo Hoja de Empaque'}
+                        {viewMode === 'cocina' && 'Mostrando solo Hoja de Cocina'}
+                    </div>
                 </div>
 
-                <RevisionHoja revision={revisarHoja(orders, officialMenus, date)} />
+                <RevisionHoja revision={revisarHoja(cleanOrders, officialMenus, date)} fusionados={fusionados} />
 
                 {viewMode !== 'cocina' && (
                     <div className="mt-4 flex justify-center gap-4">
@@ -1515,9 +2316,10 @@ export default function PrintProductionView() {
                             const packData = consolidatedPacksMap[packName];
                             const kitchenMenuData = kitchenData.porMenu[packName] || (packData.sourcePackNames?.length > 0 ? kitchenData.porMenu[packData.sourcePackNames[0]] : null);
 
-                            const menuKey = packData.menuKey || mapPackNameToMenuKey(packName);
-                            let rawPlatos = (officialMenus && menuKey && officialMenus[menuKey]) ? officialMenus[menuKey].platos || officialMenus[menuKey] : [];
-                            if (!rawPlatos || rawPlatos.length === 0) rawPlatos = packData.platosBase || []; // fallback
+                            const isCenaSheet = packName.startsWith('CENAS -');
+                            const basePackName = isCenaSheet ? packName.replace(/^CENAS\s*-\s*/i, '') : packName;
+                            const menuKey = packData.menuKey || mapPackNameToMenuKey(basePackName);
+                            const rawPlatos = resolvePlatosForPack(packName, packData);
 
                             // Generar especificaciones
                             const specsList = packData.clientes.map(c => {
@@ -1642,7 +2444,8 @@ export default function PrintProductionView() {
                                                         }
                                                         if (otherPacksTag) tags.push(otherPacksTag);
 
-                                                        let notes = client.observaciones ? `** ${client.observaciones}` : '';
+                                                        const dishObs = filterNoteForDish(client.observaciones, platosEmpaque[idx], platosEmpaque);
+                                                        let notes = dishObs ? `** ${dishObs}` : '';
                                                         if (tags.length > 0) {
                                                             const tagsStr = tags.map(t => `** ${t}`).join('\n');
                                                             notes = notes ? `${tagsStr}\n${notes}` : tagsStr;
@@ -1723,7 +2526,16 @@ export default function PrintProductionView() {
                                                                 otherPacksTag = cleaned ? `Lleva también: ${cleaned}` : '';
                                                             }
                                                             if (otherPacksTag) tags.push(otherPacksTag);
-                                                            let notes = client.observaciones ? `** ${client.observaciones}` : '';
+                                                            
+                                                            let clientNotesText = client.observaciones || client.rawPedido?.observaciones || client.rawPedido?.details?.notes || '';
+                                                            if (client.rawPedido?.items) {
+                                                                client.rawPedido.items.forEach(it => {
+                                                                    if (it.observaciones && !clientNotesText.includes(it.observaciones)) {
+                                                                        clientNotesText = clientNotesText ? `${clientNotesText} · ${it.observaciones}` : it.observaciones;
+                                                                    }
+                                                                });
+                                                            }
+                                                            let notes = clientNotesText ? `** ${clientNotesText}` : '';
                                                             if (tags.length > 0) {
                                                                 const tagsStr = tags.map(t => `** ${t}`).join('\n');
                                                                 notes = notes ? `${tagsStr}\n${notes}` : tagsStr;

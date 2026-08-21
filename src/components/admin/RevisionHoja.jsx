@@ -1,12 +1,12 @@
 import React from 'react';
-import { AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Merge } from 'lucide-react';
 
 /**
  * Aviso de lo que está incompleto en la hoja, ANTES de imprimirla.
  *
  * No se imprime (print:hidden): es para la pantalla, para revisar y corregir.
  */
-export default function RevisionHoja({ revision }) {
+export default function RevisionHoja({ revision, fusionados = [] }) {
     if (!revision) return null;
 
     const { resumen, problemas, graves } = revision;
@@ -30,7 +30,36 @@ export default function RevisionHoja({ revision }) {
                 ))}
             </div>
 
-            {graves === 0 && medias.length === 0 && (
+            {/* Pedidos que se fusionaron por parecerse a otro.
+                Al fusionar solo se conservan las observaciones y la zona: los
+                platos del pedido absorbido NO se cocinan. Si eran dos pedidos
+                distintos del mismo cliente, uno se pierde — y antes esto pasaba
+                en silencio. */}
+            {fusionados.length > 0 && (
+                <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-3 mb-2">
+                    <p className="text-sm font-bold text-orange-900 flex items-center gap-2 mb-1">
+                        <Merge size={16} aria-hidden="true" />
+                        {fusionados.length} {fusionados.length === 1 ? 'pedido se unió' : 'pedidos se unieron'} a otro del mismo cliente
+                    </p>
+                    <p className="text-xs text-orange-800 mb-2">
+                        Solo se cocina el que queda. Si eran pedidos distintos, revisalos.
+                    </p>
+                    <ul className="space-y-1">
+                        {fusionados.map((f, i) => (
+                            <li key={i} className="text-xs text-orange-900">
+                                <strong>{f.cliente}</strong> — se cocina{' '}
+                                <span className="font-mono">{f.conserva}</span>
+                                {f.conservaPlan && ` (${f.conservaPlan})`}
+                                {' · '}no se cocina{' '}
+                                <span className="font-mono">{f.absorbido}</span>
+                                {f.absorbidoPlan && ` (${f.absorbidoPlan})`}
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+
+            {graves === 0 && medias.length === 0 && fusionados.length === 0 && (
                 <p className="text-sm text-green-800 bg-green-50 border border-green-200 rounded-xl px-4 py-3 flex items-center gap-2">
                     <CheckCircle2 size={16} aria-hidden="true" />
                     Todo revisado: los {resumen.total} pedidos salen completos.
