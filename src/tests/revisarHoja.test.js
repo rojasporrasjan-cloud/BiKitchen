@@ -166,3 +166,29 @@ describe('Resumen para contar contra el Excel', () => {
         expect(r.problemas).toEqual([]);
     });
 });
+
+describe('El contador de desayunos', () => {
+    it('cuenta los que van de regalía dentro de otro pack', () => {
+        // Antes solo contaba packs cuyo menú fuera "desayuno", y como los
+        // desayunos viajan de regalía dentro de un pack normal, el panel decía
+        // "0 Desayunos" mientras la hoja imprimía ocho.
+        const r = revisarHoja([
+            pedido({ plan: 'Pack Bajo Calorías', incluyeDesayuno: true }),
+            pedido({ plan: 'Pack Bajo Calorías', incluyeDesayuno: true }),
+            pedido({ plan: 'Pack Keto' })
+        ], MENUS, '2026-08-22');
+        expect(r.resumen.desayunos).toBe(2);
+    });
+
+    it('un pack de desayunos de verdad también cuenta', () => {
+        const r = revisarHoja([pedido({ plan: 'Pack de Desayunos' })], MENUS, '2026-08-22');
+        expect(r.resumen.desayunos).toBe(1);
+    });
+
+    it('no cuenta doble al que es pack de desayunos Y trae la marca', () => {
+        const r = revisarHoja([
+            pedido({ plan: 'Pack de Desayunos', incluyeDesayuno: true })
+        ], MENUS, '2026-08-22');
+        expect(r.resumen.desayunos).toBe(1);
+    });
+});

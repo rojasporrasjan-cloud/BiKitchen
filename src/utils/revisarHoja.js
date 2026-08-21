@@ -34,7 +34,11 @@ export const revisarHoja = (pedidos = [], menus = null, fecha = '') => {
         resumen.platos += platos.length;
         if (esIndividual) resumen.individuales += 1;
         else resumen.packs += 1;
-        if (menuKey === 'desayuno') resumen.desayunos += 1;
+        // Los desayunos casi nunca son un pack aparte: viajan de regalía dentro
+        // de otro pack. Contando solo `menuKey === 'desayuno'` el panel decía
+        // "0 Desayunos" mientras la hoja imprimía ocho, y no había forma de
+        // cuadrarlo contra el Excel.
+        if (menuKey === 'desayuno' || p.incluyeDesayuno) resumen.desayunos += 1;
 
         // --- Un pack cuyo menú existe pero está vacío ---
         if (!esIndividual && menuKey) {
