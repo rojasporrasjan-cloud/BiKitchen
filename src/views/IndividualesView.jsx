@@ -396,8 +396,8 @@ export default function IndividualesView() {
           className="flex-1"
           style={{
             paddingTop: showPromoBanner
-              ? 'calc(var(--promo-banner-height, 36px) + 76px)'
-              : '76px'
+              ? 'calc(var(--promo-banner-height, 0px) + 96px)'
+              : '96px'
           }}
         >
           {/* Banner cuenta regresiva — encima de los filtros, igual que packs */}
@@ -459,11 +459,11 @@ export default function IndividualesView() {
               className="hidden lg:flex flex-col gap-3 w-64 xl:w-72 flex-shrink-0 sticky z-20 overflow-y-auto hide-scrollbar bg-white border-r border-gray-100 shadow-xl shadow-gray-200/20"
               style={{
                 top: showPromoBanner
-                  ? 'calc(var(--promo-banner-height, 36px) + 84px)'
-                  : '84px',
+                  ? 'calc(var(--promo-banner-height, 0px) + 96px)'
+                  : '96px',
                 height: showPromoBanner
-                  ? 'calc(100vh - var(--promo-banner-height, 36px) - 84px)'
-                  : 'calc(100vh - 84px)'
+                  ? 'calc(100vh - var(--promo-banner-height, 0px) - 96px)'
+                  : 'calc(100vh - 96px)'
               }}
             >
               <div className="flex flex-col h-full">

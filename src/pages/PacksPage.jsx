@@ -562,8 +562,8 @@ export default function PacksPage() {
                 className="min-h-screen bg-gradient-to-b from-bikitchen-beige to-white"
                 style={{
                     paddingTop: showPromoBanner
-                        ? 'calc(var(--promo-banner-height, 36px) + 76px)'
-                        : '76px'
+                        ? 'calc(var(--promo-banner-height, 0px) + 96px)'
+                        : '96px'
                 }}
             >
                 <Navbar />
@@ -584,10 +584,10 @@ export default function PacksPage() {
                         className="hidden lg:flex flex-col w-64 xl:w-72 flex-shrink-0 sticky z-20 overflow-y-auto hide-scrollbar bg-white border-r border-gray-100 shadow-xl shadow-gray-200/20"
                         style={{
                             top: showPromoBanner
-                                ? 'calc(var(--promo-banner-height, 36px) + 96px)'
+                                ? 'calc(var(--promo-banner-height, 0px) + 96px)'
                                 : '96px',
                             height: showPromoBanner
-                                ? 'calc(100vh - var(--promo-banner-height, 36px) - 96px)'
+                                ? 'calc(100vh - var(--promo-banner-height, 0px) - 96px)'
                                 : 'calc(100vh - 96px)'
                         }}
                     >
