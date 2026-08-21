@@ -75,7 +75,33 @@ describe('Fechas que se están adivinando', () => {
                 items: [{ nombre: 'Pack Keto Mensual', plan: 'monthly' }]
             }
         }));
-        expect(avisos.join(' ')).toMatch(/la hoja las est[áa] calculando/i);
+        expect(avisos.join(' ')).toMatch(/3 son inventadas/i);
+    });
+
+    it('avisa aunque YA tenga varias fechas guardadas', () => {
+        // El caso de Maripaz Acevedo: 2 fechas guardadas y la hoja le calcula 4.
+        // El aviso pedía "una o ninguna fecha guardada" y por eso no lo vio.
+        const avisos = problemasDe(pedido({
+            rawPedido: {
+                zona_envio: 'Cartago',
+                fecha_entrega: '2026-08-01',
+                fechas_entrega: ['2026-08-01', '2026-08-08'],
+                items: [{ nombre: 'Pack Keto', planLabel: 'Promoción Mensual' }]
+            }
+        }));
+        expect(avisos.join(' ')).toMatch(/2 entregas guardadas pero la hoja le calcula 4/i);
+    });
+
+    it('un pack de DOS SEMANAS mal etiquetado como mensual ya no inventa nada', () => {
+        // Mismo pedido, pero con el nombre real del producto: son 2 entregas.
+        expect(problemasDe(pedido({
+            rawPedido: {
+                zona_envio: 'Cartago',
+                fecha_entrega: '2026-08-01',
+                fechas_entrega: ['2026-08-01', '2026-08-08'],
+                items: [{ nombre: '🎉 PACK DOS SEMANAS CON DESAYUNOS GRATIS', planLabel: 'Promoción Mensual' }]
+            }
+        }))).toEqual([]);
     });
 
     it('con las 4 fechas guardadas no avisa', () => {

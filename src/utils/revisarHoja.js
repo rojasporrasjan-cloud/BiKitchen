@@ -65,13 +65,20 @@ export const revisarHoja = (pedidos = [], menus = null, fecha = '') => {
         // Cuando el pedido no trae `fechas_entrega`, getScheduleFromOrder las
         // calcula sumando semanas a la fecha base. Eso funciona, pero si el
         // cliente pidió días salteados las fechas inventadas no son las suyas.
+        // Este aviso pedía `guardadas <= 1`, y por eso NO vio el caso de Maripaz
+        // Acevedo: su pedido tenía 2 fechas guardadas pero la hoja le calculaba
+        // 4, y las dos inventadas la metieron en un sábado que no le tocaba.
+        // Basta con que la hoja vea MÁS de las que hay guardadas.
         const guardadas = (p.rawPedido?.fechas_entrega || []).filter(Boolean).length;
         const queVe = getScheduleFromOrder(p.rawPedido || {}).length;
-        if (queVe > 1 && guardadas <= 1) {
+        if (queVe > 1 && queVe > guardadas) {
+            const inventadas = queVe - guardadas;
             problemas.push({
                 gravedad: 'alta',
                 cliente,
-                que: `Es de ${queVe} entregas pero el pedido no las tiene guardadas: la hoja las está calculando.`,
+                que: guardadas === 0
+                    ? `Es de ${queVe} entregas pero el pedido no tiene ninguna guardada: la hoja las está calculando.`
+                    : `Tiene ${guardadas} entregas guardadas pero la hoja le calcula ${queVe}: ${inventadas} son inventadas.`,
                 comoSeArregla: 'Abrí el pedido y confirmá las fechas reales de entrega.'
             });
         }

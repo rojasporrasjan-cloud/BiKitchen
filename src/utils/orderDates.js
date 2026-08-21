@@ -41,6 +41,27 @@ export const getScheduleFromOrder = (order) => {
             const category = textJoin(i.category || '');
             const id = textJoin(i.id || '');
 
+            // El NOMBRE del producto manda sobre la etiqueta.
+            //
+            // "🎉 PACK DOS SEMANAS CON DESAYUNOS GRATIS" son DOS entregas, lo
+            // diga quien lo diga. Varios de esos pedidos quedaron etiquetados
+            // como `planLabel: "Promoción Mensual"` —una etiqueta que se usa
+            // para varias promos— y el sistema los leía como cuatro entregas.
+            // Como solo tenían dos fechas guardadas, INVENTABA las otras dos
+            // sumando semanas.
+            //
+            // A Maripaz Acevedo eso le puso un pack completo, más cenas y más
+            // desayunos, en la hoja del sábado 22 de agosto de 2026: comida que
+            // nadie pidió ni pagó. Le pasaba igual a Priscilla Montoya y a
+            // Verónica Solórzano: 7 pedidos en total.
+            //
+            // El nombre del producto es el dato confiable: de 21 pedidos que
+            // dicen "dos semanas", 18 tienen exactamente 2 fechas guardadas.
+            if (/\b(dos|2)\s*semanas\b/.test(name)) {
+                targetCount = Math.max(targetCount, 2);
+                return;
+            }
+
             // Planes: monthly (4 entregas) o biweekly (2 entregas)
             // El plan field es el indicador principal
             if (plan === 'monthly') {
