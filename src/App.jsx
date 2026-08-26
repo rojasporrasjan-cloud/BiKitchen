@@ -84,6 +84,7 @@ const WhatsAppImportView = lazyWithRetry(() => import('./pages/admin/WhatsAppImp
 const MonthlyPacksView = lazyWithRetry(() => import('./pages/admin/MonthlyPacksView'));
 const BroadcastView = lazyWithRetry(() => import('./pages/admin/BroadcastView'));
 const PointsAuditView = lazyWithRetry(() => import('./pages/admin/PointsAuditView'));
+const PrinterView = lazyWithRetry(() => import('./pages/admin/PrinterView'));
 const DriverPortalView = lazyWithRetry(() => import('./pages/driver/DriverPortalView'));
 
 import SmoothScroll from './components/SmoothScroll';
@@ -301,6 +302,7 @@ function AnimatedRoutes() {
               <Route path="monthly-packs" element={<MonthlyPacksView />} />
               <Route path="broadcast" element={<BroadcastView />} />
               <Route path="points-audit" element={<PointsAuditView />} />
+              <Route path="impresion" element={<PrinterView />} />
             </Route>
 
             {/* 404 - Catch all */}

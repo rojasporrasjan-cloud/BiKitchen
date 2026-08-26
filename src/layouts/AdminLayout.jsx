@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, Outlet, Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Menu as MenuIcon, LogOut, X, LayoutDashboard, ShoppingBag, Users, ClipboardList, Truck, UtensilsCrossed, Gift, Tag, Search, Bell, Image, MessageCircle, FileText, Target, BadgePercent, Settings, Phone, CalendarDays, Send, Award } from 'lucide-react';
+import { Menu as MenuIcon, LogOut, X, LayoutDashboard, ShoppingBag, Users, ClipboardList, Truck, UtensilsCrossed, Gift, Tag, Search, Bell, Image, MessageCircle, FileText, Target, BadgePercent, Settings, Phone, CalendarDays, Send, Award, Printer } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useOrders } from '../context/OrdersContext';
 import { getAllCoupons } from '../utils/firestoreCoupons';
@@ -134,6 +134,7 @@ export default function AdminLayout() {
         { to: '/admin/monthly-packs', label: 'Packs Mensuales', icon: CalendarDays, superOnly: true },
         { to: '/admin/broadcast', label: 'Listas de Difusión', icon: Send, superOnly: true },
         { to: '/admin/points-audit', label: 'Auditoría BiPuntos', icon: Award, superOnly: true },
+        { to: '/admin/impresion', label: 'Impresión', icon: Printer, superOnly: true },
     ].filter(item => !item.superOnly || isSuperAdmin());
 
     const handleLogout = async () => {

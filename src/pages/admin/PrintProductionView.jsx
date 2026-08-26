@@ -28,71 +28,13 @@ import RevisionHoja from '../../components/admin/RevisionHoja';
 import { individualesData, getProductUnits } from '../../data/individualesData';
 import ExcelJS from 'exceljs';
 
-/**
- * Margen de merma de cocina.
- *
- * La hoja a granel muestra un 30% MÁS de lo que se empaca, porque cocinando se
- * pierde producto. Es el margen que pidió Gina.
- *
- * Estaba escrito a mano como `* 1.30` en la pantalla, pero el Excel exportaba el
- * neto: la misma hoja daba dos números distintos para el mismo plato (1430 g en
- * pantalla, 1100 g en el archivo). Y la cuenta de envases se hacía sobre el neto,
- * así que mandaba a empacar 1235 g en 2 tazas de 500 g.
- *
- * Ahora hay un solo lugar donde vive el margen y todos lo usan.
- */
-export const MARGEN_COCINA = 1.30;
-
-/** Cantidad a cocinar, con la merma ya sumada. */
-export const conMargen = (cantidad) => Math.round((Number(cantidad) || 0) * MARGEN_COCINA);
-
-export const filterNoteForDish = (obs, currentDish, allDishes) => {
-    if (!obs) return '';
-    const currentProt = (currentDish?.proteina?.nombre || (typeof currentDish?.proteina === 'string' ? currentDish.proteina : '') || '').toLowerCase();
-
-    const clauses = String(obs).split(/\s*[\·\|—]\s*/).map(c => c.trim()).filter(Boolean);
-
-    const filteredClauses = clauses.filter(clause => {
-        const lowerClause = clause.toLowerCase();
-
-        if (lowerClause.includes('cambiar ')) {
-            const match = lowerClause.match(/cambiar\s+(.*?)(?:\s+por\s+|$)/i);
-            if (match && match[1]) {
-                const sourceDishText = match[1].trim();
-                const currentKeywords = currentProt.split(/\s+/).filter(k => k.length > 3 && !['salsa', 'con', 'para', 'de', 'el', 'la'].includes(k));
-                const matchesCurrentDish = currentKeywords.some(kw => sourceDishText.includes(kw));
-
-                if (matchesCurrentDish) {
-                    return true; // Keep this change instruction on its home dish!
-                }
-
-                const matchesOtherDish = (allDishes || []).some(d => {
-                    const dishProt = (d.proteina?.nombre || (typeof d.proteina === 'string' ? d.proteina : '') || '').toLowerCase();
-                    if (!dishProt || dishProt === currentProt) return false;
-                    const keywords = dishProt.split(/\s+/).filter(k => k.length > 3 && !['salsa', 'con', 'para', 'de', 'el', 'la'].includes(k));
-                    return keywords.some(kw => sourceDishText.includes(kw));
-                });
-
-                if (matchesOtherDish) {
-                    return false;
-                }
-            }
-        }
-
-        return true;
-    });
-
-    return filteredClauses.join(' · ');
-};
-
-export const normalizeClientKey = (name) => {
-    if (!name) return '';
-    return String(name)
-        .toLowerCase()
-        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-z0-9\s]/g, '')
-        .trim();
-};
+import {
+    MARGEN_COCINA,
+    conMargen,
+    filterNoteForDish,
+    normalizeClientKey,
+    deduplicateOrdersByClient
+} from '../../utils/productionHelpers';
 
 const MENU_LABELS = {
     regular: 'PACK REGULAR',
@@ -232,70 +174,6 @@ export default function PrintProductionView() {
             )}
         </div>
     );
-
-    const deduplicateOrdersByClient = (ordersList) => {
-        if (!ordersList || ordersList.length === 0) return [];
-        const seen = new Map();
-        const result = [];
-        const fusionados = [];
-
-        ordersList.forEach(order => {
-            const clientName = order.cliente || order.nombre || '';
-            const normKey = normalizeClientKey(clientName);
-            const tokens = normKey.split(/\s+/).filter(t => t.length > 2);
-
-            let existingKey = null;
-            for (const [key, val] of seen.entries()) {
-                const keyTokens = key.split(/\s+/).filter(t => t.length > 2);
-                const samePhone = order.telefono && val.telefono && String(order.telefono).replace(/\D/g, '') === String(val.telefono).replace(/\D/g, '') && String(order.telefono).replace(/\D/g, '').length >= 8;
-                const isMatch = key === normKey ||
-                    samePhone ||
-                    (tokens.length >= 2 && tokens.every(t => key.includes(t))) ||
-                    (keyTokens.length >= 2 && keyTokens.every(t => normKey.includes(t)));
-
-                if (isMatch) {
-                    existingKey = key;
-                    break;
-                }
-            }
-
-            if (existingKey) {
-                const existingOrder = seen.get(existingKey);
-                // Queda constancia de la fusion: solo se conservan observaciones
-                // y zona; los ITEMS del segundo pedido se descartan. Si eran dos
-                // pedidos distintos del mismo cliente, uno se pierde y nadie se
-                // entera. Por eso se reporta en pantalla.
-                // El número de orden vive en `rawPedido`: el pedido ya mapeado
-                // solo trae el id interno de Firestore, que no le dice nada a
-                // nadie cuando hay que ir a buscarlo en Pedidos.
-                const numeroDe = (o) => o.rawPedido?.numeroOrden || o.numeroOrden || o.id;
-                fusionados.push({
-                    cliente: order.cliente || existingOrder.cliente || '',
-                    absorbido: numeroDe(order),
-                    absorbidoPlan: order.plan || order.tipoMenu || '',
-                    conserva: numeroDe(existingOrder),
-                    conservaPlan: existingOrder.plan || existingOrder.tipoMenu || ''
-                });
-                const newObs = order.observaciones || order.details?.notes || '';
-                if (newObs) {
-                    if (!existingOrder.observaciones) {
-                        existingOrder.observaciones = newObs;
-                    } else if (!existingOrder.observaciones.toLowerCase().includes(newObs.toLowerCase())) {
-                        existingOrder.observaciones += ` · ${newObs}`;
-                    }
-                }
-                if (order.zona_envio && !existingOrder.zona_envio) {
-                    existingOrder.zona_envio = order.zona_envio;
-                }
-            } else {
-                const orderCopy = { ...order };
-                seen.set(normKey, orderCopy);
-                result.push(orderCopy);
-            }
-        });
-
-        return { pedidos: result, fusionados };
-    };
 
     // `cleanOrders` es lo que REALMENTE se cocina; `fusionados` son los pedidos
     // que se descartaron por parecerse a otro. La revision tiene que mirar lo
