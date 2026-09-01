@@ -123,7 +123,9 @@ function escribirPlatos(ws, col, bloque) {
         num.alignment = { horizontal: 'center', vertical: 'middle' };
 
         const conteo = ws.getRow(fila).getCell(col + 3);
-        conteo.value = bloque.totalPlatos;
+        // Un plato puede hacerse varias veces dentro del mismo pack
+        // (PERSONALIZADO: 2 de una receta, 4 de otra).
+        conteo.value = bloque.totalPlatos * (p.vecesPorPack || 1);
         conteo.font = { bold: true, size: 14 };
         conteo.alignment = { horizontal: 'center', vertical: 'middle' };
 
@@ -186,12 +188,13 @@ function escribirResumen(ws, col, filaInicio, bloque) {
     const total = bloque.totalPlatos || 0;
 
     bloque.platos.forEach(p => {
+        const platos = total * (p.vecesPorPack || 1);
         const partes = [
-            [p.proteina?.nombre, (p.proteina?.gramosPorPorcion || 0) * total, 'g'],
-            [p.vegetal?.nombre, (p.vegetal?.cantidadPorPorcion || 0) * total, 'tazas']
+            [p.proteina?.nombre, (p.proteina?.gramosPorPorcion || 0) * platos, 'g'],
+            [p.vegetal?.nombre, (p.vegetal?.cantidadPorPorcion || 0) * platos, 'tazas']
         ];
         if (bloque.llevaCarbo) {
-            partes.push([p.carbo?.nombre, (p.carbo?.cantidadPorPorcion || 0) * total, 'tazas']);
+            partes.push([p.carbo?.nombre, (p.carbo?.cantidadPorPorcion || 0) * platos, 'tazas']);
         }
         partes.filter(([d]) => d && d !== '—').forEach(([desc, cant, unidad]) => {
             const r = ws.getRow(f++);

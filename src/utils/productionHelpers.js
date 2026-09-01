@@ -131,7 +131,11 @@ export const etiquetasDeEmpaque = (cliente, opts = {}) => {
     const tags = [];
 
     if (opts.esTwoPack) tags.push('TWO PACK - empacar 2 packs iguales');
-    if (cliente.incluyeDesayuno) tags.push('Lleva desayunos');
+    // Si la nota del pedido ya habla de desayunos, la etiqueta generica sobra:
+    // salian las dos juntas ("Lleva desayunos" arriba de "Lleva 2 packs de
+    // desayunos") y la nota que SI dice cuantos quedaba enterrada.
+    const notaHablaDeDesayuno = /desayun/i.test(String(cliente.observaciones || ''));
+    if (cliente.incluyeDesayuno && !notaHablaDeDesayuno) tags.push('Lleva desayunos');
 
     const subs = listarSustituciones(cliente.rawPedido || cliente);
     if (subs.length > 0) tags.push(`CAMBIA: ${subs.map(textoSustitucion).join(' · ')}`);

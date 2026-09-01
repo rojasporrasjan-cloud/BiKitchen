@@ -202,6 +202,14 @@ export function mapPedidosFromLegacy(rawPedidos) {
             // Medida tal como la escribió Gina ("1 kg", "4 unidades", "1 molde
             // desechable"). Si viene, manda sobre cualquier cálculo.
             medida: (Array.isArray(item.medidas) && item.medidas[idx]) || null,
+            // Cuantas veces se hace ESTE plato dentro de un pack. Un pack
+            // PERSONALIZADO puede llevar 2 de una receta y 4 de otra: sin esto
+            // el plato habia que repetirlo en la lista, y la hoja imprimia
+            // "Plato 1 Albondigas (1)" / "Plato 2 Albondigas (1)" en vez de una
+            // sola linea que diga 2. Le paso a Christopher Ulloa, 20 renglones.
+            vecesPorPack: (Array.isArray(item.cantidades) && Number(item.cantidades[idx]) > 0)
+              ? Number(item.cantidades[idx])
+              : 1,
             proteina: {
               nombre: aplicarCambio(protName, custom, 'protein', idx + 1),
               gramosPorPorcion: gramosPorcionProteina || 0
@@ -227,6 +235,7 @@ export function mapPedidosFromLegacy(rawPedidos) {
           cantidad: Number(item.cantidad) || 1,
           // Misma regla que arriba: la medida escrita en el pedido manda.
           medida: (Array.isArray(item.medidas) && item.medidas[0]) || null,
+          vecesPorPack: 1,
           // Los packs familiares y los individuales caen acá: el cambio viene
           // por ítem ({ protein, vegetal, carbo }), no por plato.
           proteina: {
@@ -314,6 +323,10 @@ export function mapPedidosFromLegacy(rawPedidos) {
       fecha_entrega: p.fecha_entrega,
       observaciones: rawObs,
       incluyeDesayuno: !!p.incluyeDesayuno || /desayun/i.test(p.plan || '') || /desayun/i.test(rawObs || '') || (Array.isArray(p.items || p.menu) && (p.items || p.menu).some(it => /desayun/i.test(it.nombre || ''))),
+      // Cuantos packs de DESAYUNO. No siempre coincide con los del almuerzo:
+      // Christopher Ulloa lleva un personalizado y DOS packs de desayunos.
+      // null = usar el conteo del almuerzo, que es lo de siempre.
+      packsDesayuno: Number(p.packsDesayuno) > 0 ? Number(p.packsDesayuno) : null,
       categoria: p.categoria || (isTwoPack ? 'two_pack' : ''),
       categoryLabel: p.categoryLabel || (isTwoPack ? 'Two Pack' : ''),
       items: p.items || p.menu || [],
@@ -688,6 +701,8 @@ export function buildPackagingSheetData(pedidos, menus, workloadInfo) {
       tipoMenu: p.tipoMenu || p.plan || 'Desconocido',
       plan: p.plan || null, // nombre comercial del pack (Full Pack, Bajo Calorías, etc.)
       cantidadMenus: computedQty, // número de packs de ese menú para este pedido (Two Pack = 2)
+      // Los packs de DESAYUNO se cuentan aparte de los de almuerzo.
+      packsDesayuno: Number(p.packsDesayuno) > 0 ? Number(p.packsDesayuno) : null,
       observaciones: parts.join(' · '),
       incluyeDesayuno: !!p.incluyeDesayuno || /desayun/i.test(p.plan || '') || /desayun/i.test(p.observaciones || '') || (Array.isArray(p.items) && p.items.some(it => /desayun/i.test(it.nombre || ''))),
       platos: p.platos || [],

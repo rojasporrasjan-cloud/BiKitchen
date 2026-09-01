@@ -81,3 +81,18 @@ describe('sinSustituciones', () => {
         expect(sinSustituciones(null)).toBe('');
     });
 });
+
+describe('la etiqueta de desayunos no se repite', () => {
+    it('si la nota ya dice cuantos packs, no agrega el "Lleva desayunos" pelado', () => {
+        const tags = etiquetasDeEmpaque({
+            incluyeDesayuno: true,
+            observaciones: 'Lleva 2 packs de desayunos'
+        });
+        expect(tags).toEqual([]);
+    });
+
+    it('sin nota, la etiqueta sigue saliendo', () => {
+        const tags = etiquetasDeEmpaque({ incluyeDesayuno: true, observaciones: '' });
+        expect(tags).toContain('Lleva desayunos');
+    });
+});

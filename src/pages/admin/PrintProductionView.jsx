@@ -384,8 +384,11 @@ export default function PrintProductionView() {
             // bloque corría dos veces y le contaba 2 packs de desayunos en vez de 1.
             const esProductoSuelto = productosSueltos.has(packName);
             if (!esProductoSuelto && (c.incluyeDesayuno || hasBreakfastGift || obsHasBreakfast) && menuKey !== 'desayuno') {
+                // Los packs de desayuno se cuentan aparte: Christopher lleva UN
+                // personalizado de almuerzo y DOS packs de desayunos.
+                const packsDeDesayuno = Number(c.packsDesayuno) > 0 ? Number(c.packsDesayuno) : totalQty;
                 const desClient = { ...clientForPack, observaciones: cleanObs };
-                addClientToPackMap('Pack de Desayunos', { ...desClient, cantidadMenus: totalQty }, []);
+                addClientToPackMap('Pack de Desayunos', { ...desClient, cantidadMenus: packsDeDesayuno }, []);
             }
         });
     });
@@ -822,6 +825,7 @@ export default function PrintProductionView() {
             const platosEmpaque = rawPlatos.map((p, idx) => {
                 const isOfficial = typeof p.proteina === 'string';
                 return {
+                    vecesPorPack: Number(p.vecesPorPack) > 0 ? Number(p.vecesPorPack) : 1,
                     proteina: {
                         nombre: isOfficial ? p.proteina : p.proteina?.nombre,
                         gramosPorPorcion: getDefaultGrams(packName)
@@ -837,8 +841,12 @@ export default function PrintProductionView() {
                 };
             });
 
-            const totalPlatos = packData.totalPacks || 0;
+            const packsDelPack = packData.totalPacks || 0;
             platosEmpaque.forEach(p => {
+                // Un plato que se hace varias veces por pack cuenta esas veces:
+                // si no, el pack de Christopher pedia 960 g de proteina cuando
+                // sus 20 platos necesitan 2400 g.
+                const totalPlatos = packsDelPack * (p.vecesPorPack || 1);
                 if (p.proteina?.nombre && p.proteina.nombre !== '—') {
                     const grams = (p.proteina.gramosPorPorcion || getDefaultGrams(packName)) * totalPlatos;
                     sumarAGranel(bulkItemsMap, p.proteina.nombre, grams, 'g', guessCategory);
@@ -1483,6 +1491,9 @@ export default function PrintProductionView() {
                     const esOficial = typeof p.proteina === 'string';
                     return {
                         numero: p.numero || idx + 1,
+                        vecesPorPack: Number(p.vecesPorPack || original.vecesPorPack) > 0
+                            ? Number(p.vecesPorPack || original.vecesPorPack)
+                            : 1,
                         proteina: {
                             nombre: esOficial ? p.proteina : (p.proteina?.nombre || original.proteina?.nombre || '—'),
                             gramosPorPorcion: esOficial ? gramosPack
@@ -2020,6 +2031,9 @@ export default function PrintProductionView() {
                                 const isOfficial = typeof p.proteina === 'string';
                                 return {
                                     numero: p.numero || idx + 1,
+                                    vecesPorPack: Number(p.vecesPorPack || original.vecesPorPack) > 0
+                                        ? Number(p.vecesPorPack || original.vecesPorPack)
+                                        : 1,
                                     proteina: {
                                         nombre: isOfficial ? p.proteina : (p.proteina?.nombre || original.proteina?.nombre || '—'),
                                         gramosPorPorcion: isOfficial ? getDefaultGrams(packName) : (p.proteina?.gramosPorPorcion || original.proteina?.gramosPorPorcion || getDefaultGrams(packName))
@@ -2077,7 +2091,7 @@ export default function PrintProductionView() {
                                                 </tr>
                                             </thead>
                                             {platosEmpaque.map((p, idx) => {
-                                                const totalPlatos = packData.totalPacks || 0;
+                                                const totalPlatos = (packData.totalPacks || 0) * (p.vecesPorPack || 1);
 
                                                 // Función para obtener la celda del cliente en base al índice absoluto de la fila
                                                 const renderClientCells = (subRowIndex) => {
