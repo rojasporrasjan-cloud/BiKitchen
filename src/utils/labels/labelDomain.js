@@ -339,6 +339,23 @@ export const selectOrdersForDate = (rawOrders, date) => {
  * @param {Object} officialMenus - menús de la semana (opcional; cae a DEFAULT_MENUS)
  * @returns {{ groups, totalLabels, totalOrders, fusionados, warnings }}
  */
+/**
+ * Un pack que es SOLO de desayunos, y no un pack de almuerzos que los regala.
+ *
+ * Angie Navarro lleva "Paquete mensual desayunos (6 por semana)": sus platos YA
+ * son los desayunos. Las etiquetas le sumaban ademas los cinco del menu de la
+ * semana, que ella no pidio.
+ *
+ * La distincion importa porque hay packs de ALMUERZOS cuyo nombre tambien dice
+ * "desayunos" —"PACK DOS SEMANAS CON DESAYUNOS GRATIS - Pack Regular"— y esos
+ * SI llevan los desayunos aparte. Se reconocen porque nombran una familia.
+ */
+export const esPackDeSoloDesayunos = (nombre) => {
+    const n = String(nombre || '').toLowerCase();
+    if (!/desayun/.test(n)) return false;
+    return !/bajo|calor|sin carbos|keto|vegetarian|casadito|full pack|deluxe|familiar|regular|est[áa]ndar|almuerzo/.test(n);
+};
+
 export const buildLabelBatch = (rawOrders, date, officialMenus = null) => {
     const { pedidos, fusionados } = selectOrdersForDate(rawOrders, date);
 
@@ -457,7 +474,19 @@ export const buildLabelBatch = (rawOrders, date, officialMenus = null) => {
         // Van dentro del nombre del pack ("CON DESAYUNOS GRATIS", "REGALIA
         // DESAYUNOS"), no como ítem. Antes solo se avisaba y las etiquetas
         // había que hacerlas a mano.
-        const conDesayuno = menuKey !== 'desayuno' && llevaDesayunos(pedido);
+        // Si el pack pertenece a una familia de ALMUERZOS, el pedido no es de
+        // puros desayunos por más que su texto los mencione: "20 COMIDAS Y 10
+        // DESAYUNOS" dentro de un Pack Bajo Calorías son almuerzos con regalía.
+        const itemsDelPedido = pedido.rawPedido?.items || pedido.items || [];
+        const yaEsDeDesayunos = !menuKey
+            && itemsDelPedido.length > 0
+            && itemsDelPedido.every(i => esPackDeSoloDesayunos(i?.nombre));
+        // Cuantos packs de DESAYUNO. No siempre coincide con los del almuerzo:
+        // Christopher Ulloa lleva UN personalizado y DOS packs de desayunos.
+        const packsDeDesayuno = Number(pedido.packsDesayuno) > 0
+            ? Number(pedido.packsDesayuno)
+            : cantidadMenus;
+        const conDesayuno = menuKey !== 'desayuno' && !yaEsDeDesayunos && llevaDesayunos(pedido);
         const platosDesayuno = conDesayuno ? platosDelMenuDesayuno(officialMenus) : [];
 
         if (conDesayuno && platosDesayuno.length === 0) {
@@ -468,7 +497,7 @@ export const buildLabelBatch = (rawOrders, date, officialMenus = null) => {
             });
         } else if (conDesayuno) {
             const pedidos_ = desayunosPedidos(pedido);
-            const generadas = platosDesayuno.length * cantidadMenus;
+            const generadas = platosDesayuno.length * packsDeDesayuno;
             // Si el pedido dice un número distinto al del menú, lo decide una
             // persona: repetir un plato al azar sería inventar qué come.
             if (pedidos_ && pedidos_ !== generadas) {
@@ -495,7 +524,10 @@ export const buildLabelBatch = (rawOrders, date, officialMenus = null) => {
         // Un pack de "almuerzo y cena" son DOS juegos de envases con platos
         // distintos. Antes solo salían los del almuerzo: al cliente le faltaban
         // las 5 etiquetas de sus cenas y no había ningún aviso.
-        const llevaCena = esPack && esPromoCena(pedido);
+        // Un PERSONALIZADO no se parte: sus platos son literalmente lo que va en
+        // los envases. A Fatima Arauz, cuyo pack se llama "CENAS ...", le sumaba
+        // ademas las cinco del menu de cenas ACTIVO.
+        const llevaCena = esPack && !esPersonalizado && esPromoCena(pedido);
         const platosCena = llevaCena ? platosDelMenuCena(menuKey, officialMenus) : [];
 
         if (llevaCena && platosCena.length === 0) {
@@ -512,7 +544,7 @@ export const buildLabelBatch = (rawOrders, date, officialMenus = null) => {
             });
         }
 
-        const agregar = (plato, tipoEtiqueta) => {
+        const agregar = (plato, tipoEtiqueta, vecesFijas = null) => {
             const nombre = resolveFinalDishName(plato?.proteina?.nombre);
             if (!nombre) return;
 
@@ -523,9 +555,13 @@ export const buildLabelBatch = (rawOrders, date, officialMenus = null) => {
             // Es el mismo criterio que usa cantidadDePacks en la hoja.
             // En un pack la cantidad es del pedido entero. En un suelto manda la del
             // plato: un pedido con "1× salsa y 5× pollo" no lleva 5 de cada cosa.
-            const cantidad = esPack
-                ? Math.max(packsDelPedido, plato.cantidad || 1)
-                : (plato.cantidad || 1);
+            // Cuantas veces se hace ESTE plato dentro del pack. Un PERSONALIZADO
+            // puede llevar 2 de una receta y 4 de otra: Christopher Ulloa lleva 20
+            // platos de 8 recetas y salian 8 etiquetas, una por receta.
+            const veces = Number(plato.vecesPorPack) > 0 ? Number(plato.vecesPorPack) : 1;
+            const cantidad = vecesFijas !== null ? vecesFijas : (esPack
+                ? Math.max(packsDelPedido, plato.cantidad || 1) * veces
+                : (plato.cantidad || 1) * veces);
             const original = String(plato?.proteina?.nombre || '');
             const esSustitucion = /→|->/.test(original);
 
@@ -553,7 +589,7 @@ export const buildLabelBatch = (rawOrders, date, officialMenus = null) => {
         platosCena.forEach(p => agregar(p, `${tipo} Cena`));
         // Los desayunos van con su propio tipo, no con el del pack: el envase
         // dice "Desayuno", no "Bajo Calorías".
-        platosDesayuno.forEach(p => agregar(p, TIPO_ETIQUETA.desayuno));
+        platosDesayuno.forEach(p => agregar(p, TIPO_ETIQUETA.desayuno, packsDeDesayuno));
     });
 
     const groups = [...grupos.values()].sort((a, b) => {
