@@ -63,6 +63,29 @@ const nombreDePestana = (nombre, usados) => {
     return final;
 };
 
+/**
+ * Como sale impresa cada pestaña.
+ *
+ * Gina reparte las hojas impresas, asi que un MENU partido a la mitad no le
+ * sirve a nadie: esos van enteros en una pagina. Las listas que crecen con la
+ * cantidad de clientes —Individuales, Desayunos— NO se fuerzan a una pagina: con
+ * sesenta filas la letra saldria ilegible. Esas se parten solas y repiten los
+ * titulos de columna arriba de cada hoja.
+ *
+ * @param {boolean} enUnaPagina  true = el bloque entero cabe en una hoja
+ * @param {string}  [titulos]    filas de encabezado a repetir ('1:2')
+ */
+const impresion = (enUnaPagina, titulos) => ({
+    paperSize: 9,
+    orientation: 'landscape',
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: enUnaPagina ? 1 : 0,
+    horizontalCentered: true,
+    margins: { left: 0.3, right: 0.3, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 },
+    ...(titulos ? { printTitlesRow: titulos } : {})
+});
+
 /** Encabezado naranja + las líneas de "CANTIDAD POR PLATO" + los títulos. */
 function escribirCabecera(ws, col, bloque) {
     const titulo = ws.getRow(3).getCell(col);
@@ -220,7 +243,7 @@ function escribirResumen(ws, col, filaInicio, bloque) {
 function agregarPestanaFamilia(wb, usados, familia) {
     const ws = wb.addWorksheet(nombreDePestana(familia.titulo, usados), {
         views: [{ showGridLines: true }],
-        pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 1 }
+        pageSetup: impresion(true)
     });
     ANCHOS.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
 
@@ -240,7 +263,7 @@ function agregarPestanaFamilia(wb, usados, familia) {
 /** Pestaña de entregas del día: la lista que ella va marcando al despachar. */
 function agregarPestanaEntregas(wb, usados, datos) {
     const ws = wb.addWorksheet(nombreDePestana(datos.etiquetaDia, usados), {
-        pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 1 }
+        pageSetup: impresion(false, '1:2')
     });
     [10, 12, 34, 26, 52, 60].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
 
@@ -288,7 +311,7 @@ function agregarPestanaDesayunos(wb, usados, desayunos) {
     if (bloques.length === 0) bloques.push({ platos: [], clientes: [], totalPlatos: 0 });
 
     const ws = wb.addWorksheet(nombreDePestana('Desayunos', usados), {
-        pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 1 }
+        pageSetup: impresion(false)
     });
     [10, 56, 13, 40, 46].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
 
@@ -363,7 +386,7 @@ function agregarPestanaDesayunos(wb, usados, desayunos) {
  */
 function agregarPestanaIndividuales(wb, usados, individuales) {
     const ws = wb.addWorksheet(nombreDePestana('Individuales', usados), {
-        pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 1 }
+        pageSetup: impresion(false, '1:2')
     });
     [58, 26, 52].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
 
