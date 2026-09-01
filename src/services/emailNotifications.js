@@ -1,7 +1,11 @@
 import emailjs from '@emailjs/browser';
 import { db } from '../firebase/config';
 import { doc, getDoc } from 'firebase/firestore';
-import { formatProteinList } from '../utils/formatters';
+import {
+    formatItemsForEmail,
+    generateStyledSummary,
+    buildAdminTemplateParams
+} from '../utils/orderEmailFormat';
 
 // Flag para desactivar/activar envío de emails
 const EMAILS_ENABLED = true; // Cambiar a false para desactivar emails
@@ -192,112 +196,6 @@ function validateOrderData(orderData) {
     }
 }
 
-/**
- * Formatear items del pedido para el email con estilo ASCII (Gina Style)
- */
-const formatItemsForEmail = (items) => {
-    if (!items || !Array.isArray(items)) return "Sin items";
-    return items.map(item => {
-        const itemPlan = item.planLabel ? ` (${item.planLabel})` : '';
-
-        // Generar prefix de categoría - usar categoryLabel si existe, o extraer del id/category
-        let categoryPrefix = '';
-        if (item.categoryLabel) {
-            categoryPrefix = `${item.categoryLabel} - `;
-        } else if (item.id) {
-            // Fallback: extraer categoría del id (ej: "two_pack-Pack Sin Carbos" -> "Two Pack")
-            const idParts = item.id.split('-');
-            const categoryId = idParts[0];
-            const categoryMap = {
-                'two_pack': 'Two Pack',
-                'familiar': 'Pack Familiar',
-                '5_comidas': '5 Comidas',
-                '10_comidas': '10 Comidas',
-                'desayuno_almuerzo_cena': 'Desayuno, Almuerzo y Cena',
-                'proteinas': 'Pack de Proteínas',
-                'desayunos': 'Pack de Desayunos'
-            };
-            if (categoryMap[categoryId]) {
-                categoryPrefix = `${categoryMap[categoryId]} - `;
-            }
-        }
-
-        const itemTotal = (Number(item.price) || 0) * (Number(item.quantity) || 0);
-        let line = `${item.quantity}× ${categoryPrefix}${item.name}${itemPlan} - ₡${itemTotal.toLocaleString('es-CR')}`;
-
-        // Soporta varios formatos de proteínas para asegurar que siempre se envíen
-        const proteinas = item.proteinas || (item.proteina ? [item.proteina] : []) || (item.protein ? [item.protein] : []);
-        if (proteinas.length > 0) {
-            line += `\n└ Proteínas: ${formatProteinList(proteinas)}`;
-        }
-
-        // Sustituciones — todos los formatos históricos
-        const c = item.customizations || {};
-        (c.proteinChanges || []).forEach(d => { line += `\n└ 🍗 Plato ${d.dishNumber} (${d.dishName}) → ${d.newValue}`; });
-        (c.vegeChanges    || []).forEach(d => { line += `\n└ 🥦 Plato ${d.dishNumber} (${d.dishName}) → ${d.newValue}`; });
-        (c.carboChanges   || []).forEach(d => { line += `\n└ 🍚 Plato ${d.dishNumber} (${d.dishName}) → ${d.newValue}`; });
-        (c.dishChanges    || []).forEach(d => { line += `\n└ 🍗 Plato ${d.dishNumber} (${d.dishName}) → ${d.newProtein || d.newValue}`; });
-        if (c.protein) line += `\n└ Proteína: ${c.protein}`;
-        if (c.vegetal) line += `\n└ Vegetal: ${c.vegetal}`;
-        if (c.carbo)   line += `\n└ Carbo: ${c.carbo}`;
-        if (c.notes)   line += `\n└ Notas: ${c.notes}`;
-        return line;
-    }).join('\n\n');
-};
-
-/**
- * Genera el bloque completo de la orden con el estilo solicitado (Separadores y Emojis)
- */
-const generateStyledSummary = (orderData) => {
-    const divider = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
-    const headerLine = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
-    
-    let summary = `${headerLine}\n📦 PEDIDO: ${orderData.orderNumber}\n${divider}\n`;
-    summary += `Fecha del Pedido: ${orderData.orderDate || new Date().toLocaleDateString('es-CR')}\n${divider}\n\n`;
-    
-    summary += `👤 INFORMACIÓN DEL CLIENTE\n${divider}\n`;
-    summary += `Nombre: ${orderData.cliente}\n`;
-    summary += `Teléfono: ${orderData.telefono}\n`;
-    summary += `Email: ${orderData.correo}\n`;
-    summary += `Cédula: ${orderData.cedula || 'No especificado'}\n\n`;
-    
-    summary += `📦 ITEMS DEL PEDIDO\n${divider}\n`;
-    summary += `${formatItemsForEmail(orderData.items)}\n\n`;
-    
-    summary += `💰 RESUMEN DE PAGO\n${divider}\n`;
-    summary += `Subtotal: ₡${(orderData.subtotal || 0).toLocaleString('es-CR')}\n`;
-    summary += `Descuento: ${orderData.descuento > 0 ? `₡${orderData.descuento.toLocaleString('es-CR')}` : 'Sin descuento'}\n`;
-    if (orderData.cupon) summary += `Cupón aplicado: ${orderData.cupon}\n`;
-    summary += `Envio: ${orderData.envioPorConfirmar ? 'Por confirmar ⚠️' : `₡${(orderData.costoEnvio || 0).toLocaleString('es-CR')}`}\n`;
-    summary += `${divider}\n`;
-    summary += `TOTAL: ₡${(orderData.total || 0).toLocaleString('es-CR')}\n\n`;
-    
-    summary += `🚚 INFORMACIÓN DE ENTREGA\n${divider}\n`;
-    summary += `Zona: ${orderData.zona}\n`;
-    summary += `Dirección: ${orderData.direccion}\n`;
-    if (orderData.ubicacionFueraCobertura) summary += `Ubicación exacta (fuera cobertura): ${orderData.ubicacionFueraCobertura}\n`;
-    summary += `Referencias: ${orderData.referencias || 'Sin referencias'}\n`;
-    
-    // Manejo de múltiples fechas de entrega (Suscripciones)
-    if (Array.isArray(orderData.fechasEntrega) && orderData.fechasEntrega.length > 0) {
-        if (orderData.fechasEntrega.length > 1) {
-            summary += `Fechas de Entrega:\n${orderData.fechasEntrega.map((d, i) => ` • Entrega ${i + 1}: ${d}`).join('\n')}\n\n`;
-        } else {
-            summary += `Fecha de Entrega: ${orderData.fechasEntrega[0]}\n\n`;
-        }
-    } else {
-        summary += `Fecha de Entrega: ${orderData.fechasEntrega || orderData.fechaEntrega || 'N/A'}\n\n`;
-    }
-    
-    summary += `💳 MÉTODO DE PAGO\n${divider}\n`;
-    summary += `${orderData.metodoPago?.toUpperCase() || 'TARJETA'}\n`;
-    if (orderData.transactionId) summary += `Transacción: ${orderData.transactionId}\n`;
-    summary += `\n`;
-    
-    summary += `📝 OBSERVACIONES DEL CLIENTE\n${orderData.observaciones || 'Ninguna'}\n`;
-    
-    return summary;
-};
 
 /**
  * Enviar notificación de nuevo pedido al administrador (con reintentos y timeout).
@@ -332,47 +230,9 @@ export const sendOrderNotification = async (orderData) => {
             return { success: false, error: 'Sin destinatarios', sent: 0, failed: 0 };
         }
 
-        // Bloque completo estilizado para que Gina lo use en un solo campo {{message}}
-        const styledMessage = generateStyledSummary(orderData);
-
-        // Función para formatear fechas de entrega (soporta múltiples fechas para packs)
-        const formatDeliveryDates = (fechasEntrega) => {
-            if (!fechasEntrega) return 'N/A';
-            if (!Array.isArray(fechasEntrega)) return fechasEntrega;
-
-            const validDates = fechasEntrega.filter(Boolean);
-            if (validDates.length === 0) return 'N/A';
-            if (validDates.length === 1) return validDates[0];
-
-            // Múltiples fechas: formatear como lista
-            return validDates.map((d, i) => `Entrega ${i + 1}: ${d}`).join('\n');
-        };
-
-        // Parámetros que coinciden con el template en EmailJS (template_k8xdi69)
-        const baseParams = {
-            message: styledMessage,
-            orderNumber: orderData.orderNumber || 'N/A',
-            cliente: orderData.cliente || 'Cliente',
-            telefono: orderData.telefono || 'No especificado',
-            correo: orderData.correo || 'No especificado',
-            email: orderData.correo || 'No especificado',
-            cedula: orderData.cedula || 'No especificado',
-            items: formatItemsForEmail(orderData.items || []),
-            subtotal: `₡${(orderData.subtotal || 0).toLocaleString('es-CR')}`,
-            descuento: orderData.descuento > 0 ? `₡${orderData.descuento.toLocaleString('es-CR')}` : 'Sin descuento',
-            cupon: orderData.cupon || 'Sin cupón',
-            envio: orderData.envioPorConfirmar ? 'Por confirmar ⚠️' : `₡${(orderData.costoEnvio || 0).toLocaleString('es-CR')}`,
-            total: `₡${(orderData.total || 0).toLocaleString('es-CR')}`,
-            direccion: orderData.direccion || 'No especificada',
-            ubicacionFueraCobertura: orderData.ubicacionFueraCobertura || '',
-            referencias: orderData.referencias || 'Sin referencias',
-            zona: orderData.zona || 'No especificada',
-            fechaEntrega: formatDeliveryDates(orderData.fechasEntrega),
-            metodoPago: orderData.metodoPago || 'Tarjeta (Procesado)',
-            transactionId: orderData.transactionId || '',
-            observaciones: orderData.observaciones || 'Sin observaciones',
-            name: "Admin BiKitchen"
-        };
+        // Los mismos campos que arma la función programada de Netlify, para que
+        // el correo se vea idéntico salga por donde salga.
+        const baseParams = buildAdminTemplateParams(orderData);
 
         // FIX #2: Usar Promise.allSettled en vez de Promise.all
         // Esto permite que si uno falla, los demás siguen intentando
@@ -433,7 +293,10 @@ export const sendCustomerOrderConfirmation = async (orderData) => {
             return { success: true, _duplicate: true };
         }
 
-        const formatDeliveryDates = (fechasEntrega) => {
+        // El correo al cliente lista las fechas en una sola línea separadas por
+        // coma; el del admin las pone una por renglón. Por eso no usa la versión
+        // compartida: no produce la misma salida.
+        const formatDeliveryDatesInline = (fechasEntrega) => {
             if (!fechasEntrega) return 'N/A';
             if (!Array.isArray(fechasEntrega)) return fechasEntrega;
             const valid = fechasEntrega.filter(Boolean);
@@ -457,7 +320,7 @@ export const sendCustomerOrderConfirmation = async (orderData) => {
             total: `₡${(orderData.total || 0).toLocaleString('es-CR')}`,
             direccion: orderData.direccion || 'No especificada',
             zona: orderData.zona || 'No especificada',
-            fechaEntrega: formatDeliveryDates(orderData.fechasEntrega),
+            fechaEntrega: formatDeliveryDatesInline(orderData.fechasEntrega),
             metodoPago: orderData.metodoPago || 'No especificado',
             observaciones: orderData.observaciones || 'Sin observaciones',
             message: generateStyledSummary(orderData)

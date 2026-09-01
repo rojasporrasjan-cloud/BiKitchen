@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { parseDateStr, getScheduleFromOrder } from '../../utils/orderDates';
+import { puedeCerrarsePedido } from '../../utils/subscriptionProgress';
 import {
     Search,
     Package,
@@ -53,6 +54,29 @@ import { formatProteinList } from '../../utils/formatters';
 import { formatFechaCorta } from '../../utils/dateDisplay';
 
 // Generar próximas fechas de entrega disponibles (lógica mirror de Checkout)
+/**
+ * Botones de la cabecera que solo ve el dueño.
+ *
+ * No es una cuestión de estética: acá viven "Eliminar Todos", "Eliminar Pedidos
+ * de Gina" y "Reparar Pedidos", que reescriben o borran la colección entera. Un
+ * clic equivocado en medio de un día de producción se lleva los pedidos de la
+ * semana. Gina trabaja en esta pantalla todos los días y no necesita ninguno.
+ *
+ * Lo que sí le queda: crear un pedido, exportar e imprimir.
+ *
+ * OJO: esto esconde los botones, no bloquea permisos. Un admin normal sigue
+ * teniendo escritura en Firestore (ver firestore.rules); si algún día hace falta
+ * blindarlo de verdad, hay que endurecer las reglas, no solo el panel.
+ */
+const ACCIONES_SOLO_DUENO = new Set([
+    'approve-all-pending',   // aprueba pagos en masa
+    'master-gina-load',      // carga interna de una sola vez
+    'master-gina-delete',    // borra pedidos importados
+    'sync-nmi',              // parche con lista de órdenes escrita a mano
+    'repair',                // reescribe totales de toda la colección
+    'delete-all'             // borra TODO
+]);
+
 const getNextDeliveryDatesForZone = (zoneId) => {
     if (!zoneId) return [];
 
@@ -198,6 +222,9 @@ const FILTER_OPTIONS = [
     { id: 'pending_shipments', label: 'Envíos pendientes' }
 ];
 
+import { Sparkles } from 'lucide-react';
+import { eliminarPedidosDeGina } from '../../data/masterGinaLoader';
+
 // Filtros de fecha
 const DATE_FILTERS = [
     { id: 'all', label: 'Todas las fechas' },
@@ -209,12 +236,80 @@ const DATE_FILTERS = [
 export default function OrdersView() {
     const { SHIPPING_ZONES } = useShipping();
     const { orders, updateOrderStatus, addOrder, getStats, formatTotal, deleteAllOrders, deleteOrder, loading } = useOrders();
-    const { currentUser } = useAuth();
+    const { currentUser, isSuperAdmin } = useAuth();
     // Use menus for individual products
     const { menus } = useMenus();
     const [searchParams, setSearchParams] = useSearchParams();
 
+    const [isImportingGina, setIsImportingGina] = useState(false);
+    const [isApprovingAll, setIsApprovingAll] = useState(false);
+
+    const handleAprobarTodosLosPendientes = async () => {
+        const pendientes = orders.filter(o =>
+            ['pending', 'pending_payment', 'payment_failed', 'new'].includes(o.status)
+        );
+        if (pendientes.length === 0) {
+            alert('No hay ningún pedido pendiente para aprobar.');
+            return;
+        }
+
+        const confirmMsg = `¿Deseas aprobar y confirmar los ${pendientes.length} pedidos pendientes?\n\nAl aprobarlos:\n• Cambiarán de "Pendiente" a "Confirmado / En Proceso"\n• Se otorgarán sus BiPuntos de lealtad\n• Aparecerán listos en la pestaña "En Proceso" y en la Hoja de Producción`;
+        if (!window.confirm(confirmMsg)) return;
+
+        setIsApprovingAll(true);
+        let aprobados = 0;
+        let fallaron = 0;
+
+        try {
+            for (const order of pendientes) {
+                try {
+                    await updateOrderStatus(order.id, 'confirmed', {
+                        paymentStatus: 'paid',
+                        pendingReason: 'Aprobación masiva por admin'
+                    });
+                    aprobados++;
+                } catch (err) {
+                    console.error('Error aprobando pedido:', order.id, err);
+                    fallaron++;
+                }
+            }
+
+            if (fallaron === 0) {
+                alert(`¡Se han aprobado e ingresado exitosamente los ${aprobados} pedidos a "En Proceso"!`);
+            } else {
+                alert(`Se aprobaron ${aprobados} pedidos. ${fallaron} no pudieron actualizarse.`);
+            }
+            setActiveTab('processing');
+        } catch (err) {
+            console.error('Error en aprobación masiva:', err);
+            alert('Ocurrió un error al aprobar los pedidos: ' + err.message);
+        } finally {
+            setIsApprovingAll(false);
+        }
+    };
+
+    const handleEliminarPedidosDeGina = async () => {
+        if (!window.confirm('¿Deseas ELIMINAR todos los pedidos cargados desde el Excel de Gina (source: excel-master-gina)?\n\nEsta acción no se puede deshacer.')) return;
+        setIsImportingGina(true);
+        try {
+            const { eliminados, conservados } = await eliminarPedidosDeGina(db);
+            const detalle = conservados.map(c => '· ' + c.cliente + ' (' + c.id + ')').join('\n');
+            const aviso = conservados.length > 0
+                ? '\n\nNO se tocaron ' + conservados.length + ' porque todavía tienen entrega pendiente:\n' + detalle
+                : '';
+            alert(`Se eliminaron ${eliminados} pedidos ya entregados.${aviso}`);
+            window.location.reload();
+        } catch (err) {
+            console.error('Error al eliminar pedidos de Gina:', err);
+            alert('Error al eliminar: ' + err.message);
+        } finally {
+            setIsImportingGina(false);
+        }
+    };
+
     const [selectedOrder, setSelectedOrder] = useState(null);
+    const [editingDatesOrder, setEditingDatesOrder] = useState(false);
+    const [customDatesList, setCustomDatesList] = useState([]);
     const [showErrorModal, setShowErrorModal] = useState(false);
     const [selectedError, setSelectedError] = useState(null);
     const [showDateDropdown, setShowDateDropdown] = useState(false);
@@ -899,6 +994,7 @@ export default function OrdersView() {
     const MAX_FECHAS_SUGERIDAS = 8;
 
     const [despachando, setDespachando] = useState(null);
+    const [reabriendo, setReabriendo] = useState(false);
 
     // Edición de observaciones. `null` = no se ha tocado nada todavía, que es
     // distinto de '' (se borraron a propósito).
@@ -989,10 +1085,20 @@ export default function OrdersView() {
         );
         if (delDia.length === 0) return;
 
+        // Un pack multi-entrega NO se cierra por completo al terminar una de sus
+        // fechas: vuelve a "Confirmado" para entrar en la ruta de la próxima. Si se
+        // cerrara, caería al historial y la hoja de cocina dejaría de verlo.
+        const cierraElPedido = (pedido) => hacia !== 'delivered' || puedeCerrarsePedido(pedido).puede;
+        const siguenActivos = hacia === 'delivered' ? delDia.filter(p => !cierraElPedido(p)) : [];
+
         const ok = window.confirm(
             confirmacion(delDia.length, formatFechaCorta(fecha)) + '\n\n' +
             delDia.slice(0, 10).map(o => `• ${o.cliente || 'Sin nombre'}`).join('\n') +
-            (delDia.length > 10 ? `\n…y ${delDia.length - 10} más` : '')
+            (delDia.length > 10 ? `\n…y ${delDia.length - 10} más` : '') +
+            (siguenActivos.length > 0
+                ? `\n\n⚠️ ${siguenActivos.length} de estos son packs con entregas pendientes.\n` +
+                  'Esos NO se cierran: vuelven a "Confirmado" para la próxima entrega.'
+                : '')
         );
         if (!ok) return;
 
@@ -1000,7 +1106,16 @@ export default function OrdersView() {
         const fallaron = [];
         for (const pedido of delDia) {
             try {
-                await updateOrderStatus(pedido.id, hacia);
+                if (cierraElPedido(pedido)) {
+                    await updateOrderStatus(pedido.id, hacia);
+                } else {
+                    // Se deja constancia de la entrega que sí se completó, sin cerrar
+                    // el pedido: así no se pierde el rastro de por cuál semana va.
+                    const yaHechas = Array.isArray(pedido.entregas_completadas) ? pedido.entregas_completadas : [];
+                    await updateOrderStatus(pedido.id, 'confirmed', {
+                        entregas_completadas: yaHechas.includes(fecha) ? yaHechas : [...yaHechas, fecha]
+                    });
+                }
             } catch (error) {
                 console.error('[Pedidos] Error cambiando estado:', pedido.id, error);
                 fallaron.push(pedido.cliente || pedido.id);
@@ -1010,6 +1125,55 @@ export default function OrdersView() {
 
         if (fallaron.length > 0) {
             alert(`No se pudieron actualizar: ${fallaron.join(', ')}.\nRevisalos uno por uno.`);
+        }
+    };
+
+    /**
+     * Pedidos que se cerraron antes de tiempo: figuran como entregados pero su
+     * calendario todavía tiene fechas por delante. Mientras sigan así, la hoja de
+     * producción no los ve y el cliente no recibe lo que ya pagó.
+     *
+     * Los cancelados quedan fuera a propósito: cancelar es una decisión, no un
+     * descuido, y reabrirlos en bloque revuelve pedidos que alguien dio de baja.
+     */
+    const pedidosCerradosPorError = useMemo(
+        () => orders.filter(o => o.status === 'delivered' && !puedeCerrarsePedido(o).puede),
+        [orders]
+    );
+
+    /** Los devuelve a "Confirmado" para que vuelvan a la hoja y a la ruta. */
+    const reabrirCerradosPorError = async () => {
+        const lista = pedidosCerradosPorError;
+        if (lista.length === 0) return;
+
+        const ok = window.confirm(
+            `¿Reabrir ${lista.length} pedido${lista.length > 1 ? 's' : ''} que se cerraron con entregas pendientes?\n\n` +
+            lista.slice(0, 12).map(o =>
+                `• ${o.cliente || 'Sin nombre'} — próxima ${puedeCerrarsePedido(o).proxima}`
+            ).join('\n') +
+            (lista.length > 12 ? `\n…y ${lista.length - 12} más` : '') +
+            '\n\nVuelven a "Confirmado" y reaparecen en la hoja de producción.\n' +
+            'Los BiPuntos ya otorgados no se vuelven a dar.'
+        );
+        if (!ok) return;
+
+        setReabriendo(true);
+        const fallaron = [];
+        for (const pedido of lista) {
+            try {
+                await updateOrderStatus(pedido.id, 'confirmed', {
+                    reabiertoAt: new Date().toISOString(),
+                    reabiertoMotivo: 'Se cerró con entregas pendientes'
+                });
+            } catch (error) {
+                console.error('[Pedidos] Error reabriendo pedido:', pedido.id, error);
+                fallaron.push(pedido.cliente || pedido.id);
+            }
+        }
+        setReabriendo(false);
+
+        if (fallaron.length > 0) {
+            alert(`No se pudieron reabrir: ${fallaron.join(', ')}.\nRevisalos uno por uno.`);
         }
     };
 
@@ -1239,7 +1403,40 @@ export default function OrdersView() {
     const sortedOrders = filteredOrders;
 
     const handleStatusChange = async (orderId, newStatus) => {
-        await updateOrderStatus(orderId, newStatus);
+        // Cerrar a mano un pack al que todavía le quedan entregas lo manda al
+        // historial, y desde ahí la hoja de cocina deja de verlo. Se bloquea y se
+        // muestran las fechas pendientes para que se vea por qué.
+        if (newStatus === 'delivered') {
+            const pedido = orders.find(o => o.id === orderId);
+            const cierre = pedido ? puedeCerrarsePedido(pedido) : { puede: true };
+            if (!cierre.puede) {
+                alert(
+                    'Todavía no se puede marcar como entregado.\n\n' +
+                    `${cierre.motivo}\n\n` +
+                    `Fechas pendientes:\n${cierre.restantes.map(f => `• ${f}`).join('\n')}\n\n` +
+                    'Si se cierra ahora, el pedido cae al historial y la cocina deja de verlo ' +
+                    'en las semanas que faltan. Cerralo cuando pase la última entrega.'
+                );
+                return;
+            }
+        }
+
+        try {
+            await updateOrderStatus(orderId, newStatus);
+        } catch (error) {
+            // Antes esto se perdía en la consola: el botón parecía no hacer nada y
+            // el pedido se quedaba en pendiente sin explicación.
+            const codigo = error?.code || '';
+            alert(
+                codigo === 'resource-exhausted'
+                    ? 'Firebase está rechazando las operaciones por límite de cuota.\n\n' +
+                      'Se reintentó varias veces y no pasó. Esperá un momento y volvé a ' +
+                      'intentar; si sigue igual, revisá la cuota en la consola de Firebase.'
+                    : `No se pudo cambiar el estado del pedido.\n\n${error?.message || codigo}`
+            );
+            return;
+        }
+
         if (selectedOrder?.id === orderId) {
             setSelectedOrder(prev => ({ ...prev, status: newStatus }));
         }
@@ -1750,6 +1947,23 @@ export default function OrdersView() {
                     ]}
                     actions={[
                         <button
+                            key="approve-all-pending"
+                            disabled={isApprovingAll}
+                            onClick={handleAprobarTodosLosPendientes}
+                            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-sm font-black hover:from-emerald-700 hover:to-teal-700 shadow-lg transition-all transform active:scale-95 disabled:opacity-50 cursor-pointer"
+                        >
+                            <CheckCircle size={16} className={isApprovingAll ? 'animate-spin' : ''} />
+                            {isApprovingAll ? 'Aprobando...' : '✅ Aprobar Todos Pendientes'}
+                        </button>,
+                        <button
+                            key="master-gina-delete"
+                            disabled={isImportingGina}
+                            onClick={handleEliminarPedidosDeGina}
+                            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 text-white text-sm font-black hover:from-red-700 hover:to-rose-700 shadow-lg transition-all transform active:scale-95 disabled:opacity-50 cursor-pointer"
+                        >
+                            🗑️ {isImportingGina ? 'Eliminando...' : 'Eliminar Pedidos Entregados de Gina'}
+                        </button>,
+                        <button
                             key="sync-nmi"
                             disabled={isSyncingNMI}
                             onClick={syncNMIHistory}
@@ -1798,7 +2012,7 @@ export default function OrdersView() {
                         >
                             <Printer size={16} /> Imprimir
                         </button>
-                    ]}
+                    ].filter(btn => isSuperAdmin() || !ACCIONES_SOLO_DUENO.has(btn.key))}
                 />
 
                 {/* Stats Cards */}
@@ -1916,6 +2130,37 @@ export default function OrdersView() {
                     </button>
                 </div>
 
+                {/* Aprobar todos los pedidos pendientes de una sola vez.
+                    Solo el dueño: dar por pagados varios pedidos de un clic mueve
+                    plata y otorga BiPuntos, y no hay forma de deshacerlo en bloque. */}
+                {activeTab === 'pending' && isSuperAdmin() && (
+                    <div className="mb-6 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/80 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
+                        <div className="flex items-start gap-3">
+                            <div className="p-2.5 bg-amber-500 text-white rounded-xl shadow-md mt-0.5">
+                                <CheckCircle size={20} />
+                            </div>
+                            <div>
+                                <p className="text-base font-extrabold text-amber-950">
+                                    Aprobación Masiva de Pedidos Pendientes
+                                </p>
+                                <p className="text-xs sm:text-sm text-amber-800/90 mt-0.5">
+                                    Tienes <strong className="font-bold text-amber-950 underline">{orders.filter(o => ['pending', 'pending_payment', 'payment_failed', 'new'].includes(o.status)).length}</strong> pedidos en estado pendiente. Puedes aprobarlos y confirmarlos todos juntos en un solo clic.
+                                </p>
+                            </div>
+                        </div>
+                        <button
+                            onClick={handleAprobarTodosLosPendientes}
+                            disabled={isApprovingAll || orders.filter(o => ['pending', 'pending_payment', 'payment_failed', 'new'].includes(o.status)).length === 0}
+                            className="w-full sm:w-auto px-6 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-sm font-black rounded-xl shadow-lg hover:shadow-xl transition-all transform active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2.5 cursor-pointer whitespace-nowrap"
+                        >
+                            <CheckCircle size={18} className={isApprovingAll ? 'animate-spin' : ''} />
+                            {isApprovingAll
+                                ? 'Aprobando pedidos...'
+                                : `✅ Aprobar Todos los Pedidos Pendientes (${orders.filter(o => ['pending', 'pending_payment', 'payment_failed', 'new'].includes(o.status)).length})`}
+                        </button>
+                    </div>
+                )}
+
                 {/* Despachar el día completo a la ruta — solo en "En proceso" */}
                 {activeTab === 'processing' && fechasParaRuta.length > 0 && (
                     <div className="mb-4 bg-purple-50 border border-purple-200 rounded-xl p-4">
@@ -1969,6 +2214,37 @@ export default function OrdersView() {
                                 </button>
                             ))}
                         </div>
+                    </div>
+                )}
+
+                {/* Cerrados antes de tiempo: siguen debiendo entregas */}
+                {activeTab === 'history' && pedidosCerradosPorError.length > 0 && (
+                    <div className="mb-4 bg-amber-50 border border-amber-200 rounded-xl p-4">
+                        <p className="text-sm font-bold text-amber-900 flex items-center gap-2">
+                            <History size={16} aria-hidden="true" />
+                            {pedidosCerradosPorError.length} pedido{pedidosCerradosPorError.length > 1 ? 's' : ''} cerrado{pedidosCerradosPorError.length > 1 ? 's' : ''} antes de tiempo
+                        </p>
+                        <p className="text-xs text-amber-800 mt-1">
+                            Figuran como entregados pero todavía les quedan entregas. Mientras sigan
+                            así la cocina no los ve y esos clientes no reciben lo que ya pagaron.
+                        </p>
+                        <ul className="mt-2 grid gap-x-6 gap-y-0.5 sm:grid-cols-2 text-xs text-amber-900">
+                            {pedidosCerradosPorError.map((o) => {
+                                const { proxima, restantes } = puedeCerrarsePedido(o);
+                                return (
+                                    <li key={o.id}>
+                                        • {o.cliente || 'Sin nombre'} — faltan {restantes.length}, próxima {proxima}
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                        <button
+                            onClick={reabrirCerradosPorError}
+                            disabled={reabriendo}
+                            className="mt-3 px-4 py-2 bg-amber-600 text-white text-sm font-bold rounded-lg hover:bg-amber-700 active:scale-95 transition-all disabled:opacity-50"
+                        >
+                            {reabriendo ? 'Reabriendo…' : `Reabrir los ${pedidosCerradosPorError.length}`}
+                        </button>
                     </div>
                 )}
 
@@ -2572,6 +2848,17 @@ export default function OrdersView() {
                                                 Reactivar pedido
                                             </button>
                                         )}
+                                        {/* Solo aparece si el pedido se cerró debiendo entregas: reabrir
+                                            uno que ya terminó de verdad no tendría sentido. */}
+                                        {selectedOrder.status === 'delivered' && !puedeCerrarsePedido(selectedOrder).puede && (
+                                            <button
+                                                onClick={() => handleReactivateOrder(selectedOrder)}
+                                                className="px-4 py-2 bg-amber-600 text-white text-sm font-medium rounded-lg hover:bg-amber-700 transition-colors flex items-center gap-2"
+                                            >
+                                                <History size={16} aria-hidden="true" />
+                                                Reabrir — le quedan {puedeCerrarsePedido(selectedOrder).restantes.length} entrega{puedeCerrarsePedido(selectedOrder).restantes.length > 1 ? 's' : ''}
+                                            </button>
+                                        )}
                                         {selectedOrder.status !== 'cancelled' && selectedOrder.status !== 'delivered' && (
                                             <button
                                                 onClick={() => {
@@ -2769,30 +3056,97 @@ Somos de BiKitchen, te contactamos sobre tu pedido ${selectedOrder.displayId}.
                                             )}
                                             {(() => {
                                                 const sch = getScheduleFromOrder(selectedOrder);
-                                                if (Array.isArray(sch) && sch.length > 1) {
-                                                    return (
-                                                        <div className="flex items-start gap-3 text-sm text-gray-600">
-                                                            <Calendar size={16} className="text-gray-400 mt-0.5" />
-                                                            <div>
-                                                                <div className="font-medium text-gray-700">Entregas programadas</div>
-                                                                <ul className="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 list-disc list-inside text-gray-600">
-                                                                    {sch.map((d, i) => (
-                                                                        <li key={i}> {d} <span className="text-gray-400">(9am-2pm)</span></li>
+                                                const dateList = Array.isArray(sch) && sch.length > 0 ? sch : (selectedOrder.fecha_entrega ? [selectedOrder.fecha_entrega] : []);
+
+                                                if (dateList.length === 0) return null;
+
+                                                return (
+                                                    <div className="flex items-start gap-3 text-sm text-gray-600 bg-gray-50/80 p-3 rounded-xl border border-gray-100">
+                                                        <Calendar size={18} className="text-purple-600 mt-0.5 shrink-0" />
+                                                        <div className="w-full">
+                                                            <div className="flex items-center justify-between gap-2">
+                                                                <div className="font-bold text-gray-800">Entregas programadas</div>
+                                                                {!editingDatesOrder ? (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            setCustomDatesList([...dateList]);
+                                                                            setEditingDatesOrder(true);
+                                                                        }}
+                                                                        className="text-xs text-purple-600 hover:text-purple-800 font-bold hover:underline cursor-pointer bg-purple-50 px-2 py-0.5 rounded border border-purple-200"
+                                                                    >
+                                                                        ✏️ Editar fechas
+                                                                    </button>
+                                                                ) : null}
+                                                            </div>
+
+                                                            {editingDatesOrder ? (
+                                                                <div className="mt-2 space-y-2 bg-purple-50/60 p-3 rounded-xl border border-purple-200">
+                                                                    <p className="text-xs font-bold text-purple-900 mb-1">Modificar fechas de entrega:</p>
+                                                                    {customDatesList.map((dStr, idx) => (
+                                                                        <div key={idx} className="flex items-center gap-2">
+                                                                            <span className="text-xs font-semibold text-purple-700 w-20">Entrega {idx + 1}:</span>
+                                                                            <input
+                                                                                type="date"
+                                                                                value={dStr}
+                                                                                onChange={(e) => {
+                                                                                    const next = [...customDatesList];
+                                                                                    next[idx] = e.target.value;
+                                                                                    setCustomDatesList(next);
+                                                                                }}
+                                                                                className="px-2 py-1 bg-white border border-purple-300 rounded text-xs font-mono text-gray-800 focus:ring-2 focus:ring-purple-400 outline-none"
+                                                                            />
+                                                                        </div>
+                                                                    ))}
+                                                                    <div className="flex gap-2 pt-2 border-t border-purple-200 mt-2">
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={async () => {
+                                                                                try {
+                                                                                    const ref = doc(db, 'pedidos', selectedOrder.id);
+                                                                                    await updateDoc(ref, {
+                                                                                        fechas_entrega: customDatesList,
+                                                                                        fecha_entrega: customDatesList[0] || null,
+                                                                                        updatedAt: new Date().toISOString()
+                                                                                    });
+                                                                                    setSelectedOrder(prev => ({
+                                                                                        ...prev,
+                                                                                        fechas_entrega: customDatesList,
+                                                                                        fecha_entrega: customDatesList[0] || null
+                                                                                    }));
+                                                                                    setEditingDatesOrder(false);
+                                                                                    alert('¡Fechas de entrega actualizadas exitosamente!');
+                                                                                } catch (err) {
+                                                                                    console.error('Error al guardar fechas:', err);
+                                                                                    alert('Error al guardar fechas: ' + err.message);
+                                                                                }
+                                                                            }}
+                                                                            className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold transition shadow-sm cursor-pointer"
+                                                                        >
+                                                                            💾 Guardar Fechas
+                                                                        </button>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => setEditingDatesOrder(false)}
+                                                                            className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-xs font-bold transition cursor-pointer"
+                                                                        >
+                                                                            Cancelar
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            ) : (
+                                                                <ul className="mt-1.5 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 list-disc list-inside text-gray-600">
+                                                                    {dateList.map((d, i) => (
+                                                                        <li key={i} className="text-xs">
+                                                                            <span className="font-mono font-bold text-gray-800">{d}</span>
+                                                                            <span className="text-gray-400 ml-1">(9am-2pm)</span>
+                                                                        </li>
                                                                     ))}
                                                                 </ul>
-                                                            </div>
+                                                            )}
                                                         </div>
-                                                    );
-                                                }
-                                                if (selectedOrder.fecha_entrega || selectedOrder.details.fechaEntrega) {
-                                                    return (
-                                                        <div className="flex items-center gap-3 text-sm text-gray-600">
-                                                            <Calendar size={16} className="text-gray-400" />
-                                                            <span>Entrega: {selectedOrder.fecha_entrega || selectedOrder.details.fechaEntrega}</span>
-                                                        </div>
-                                                    );
-                                                }
-                                                return null;
+                                                    </div>
+                                                );
                                             })()}
                                             {selectedOrder.details.horarioEntrega && (
                                                 <div className="flex items-center gap-3 text-sm text-gray-600">
@@ -2925,14 +3279,14 @@ Somos de BiKitchen, te contactamos sobre tu pedido ${selectedOrder.displayId}.
                                     </div>
                                 </div>
 
-                                {/* Observaciones — editables.
-                                    Es lo ÚNICO que la hoja de cocina imprime como
-                                    especificación, así que tiene que poderse corregir
-                                    sin entrar a Firebase. Antes solo se mostraban. */}
+                                {/* Observaciones y Especificaciones (Empaque y Cocina) */}
                                 <div className="mb-6">
-                                    <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
-                                        Observaciones — esto es lo que ve cocina
+                                    <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider mb-1">
+                                        Observaciones y Especificaciones (Empaque y Cocina)
                                     </h3>
+                                    <p className="text-xs text-gray-500 mb-2">
+                                        Lo que escribás acá (ej: <em>Cambiar papas por arroz</em>, <em>Sin cebolla</em>) saldrá impreso directamente en la columna <strong>Especificaciones</strong> de la Hoja de Empaque.
+                                    </p>
                                     <label htmlFor="obs-pedido" className="sr-only">Observaciones del pedido</label>
                                     <textarea
                                         id="obs-pedido"

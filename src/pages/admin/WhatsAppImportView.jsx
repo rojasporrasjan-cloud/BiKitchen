@@ -199,12 +199,6 @@ export default function WhatsAppImportView() {
             const ref = await addDoc(collection(db, 'pedidos'), pedido);
 
             // Registrar al cliente en el CRM, igual que hace el checkout de la web.
-            // upsertClient busca primero por correo y después por teléfono, así que
-            // un cliente que vuelve a pedir NO se duplica: se le suma el pedido.
-            //
-            // OJO: si el correo es inventado no se manda, para que el cliente quede
-            // identificado por su teléfono. Si se mandara, se crearía una ficha con
-            // un correo falso que después no cruzaría con el real del cliente.
             try {
                 await upsertClient({
                     nombre: pedido.cliente,
@@ -213,7 +207,6 @@ export default function WhatsAppImportView() {
                     direccion: pedido.direccion
                 });
             } catch (crmError) {
-                // Que falle el CRM no puede tumbar el pedido, que es lo importante
                 console.error('[Importador] Error registrando el cliente:', crmError);
             }
 

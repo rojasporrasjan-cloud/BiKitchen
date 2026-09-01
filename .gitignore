@@ -53,3 +53,26 @@ readOrders.js
 scratch_*
 scratch/
 *_dump.json
+
+# Scripts sueltos de análisis puntual.
+# Se escribieron para revisar una fecha concreta y no son parte de la app: viven
+# en la raíz, se corren a mano y nadie los importa. Se ignoran para que no
+# ensucien los commits, pero se dejan en disco por si hacen falta de nuevo.
+_fix*.cjs
+analyze_excel_completions.py
+audit_excel_image.py
+check_master_orders.py
+count_sabado22_detail.py
+dump_all_master_orders.py
+inspect_scratch_json.py
+calculate_sabado22_all_clients.js
+calculate_sabado22_simple.cjs
+check_firestore_sabado22.js
+test_check_menus.cjs
+test_exceljs.cjs
+test_exceljs.js
+docs/confirmar_lunes31.js
+
+# Salidas de Excel de esas pruebas
+full_test_styled.xlsx
+test_output.xlsx

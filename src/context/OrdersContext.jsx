@@ -255,6 +255,34 @@ export const OrdersProvider = ({ children }) => {
         }
     };
 
+    /**
+     * Reintenta una operación de Firestore cuando la base contesta que no puede
+     * atenderla en ese momento.
+     *
+     * Firestore devuelve `resource-exhausted` al pasarse de cuota o de ritmo, y
+     * `unavailable` cuando la red se cae un instante. Las dos son temporales,
+     * pero sin reintento el botón de "Confirmar Pago" simplemente no hacía nada:
+     * el pedido se quedaba en pendiente y no había forma de meterlo a la hoja.
+     *
+     * Las transacciones son las primeras en caer porque son la operación más
+     * cara, y son justo las que otorgan los BiPuntos.
+     */
+    const conReintentos = async (operacion, intentos = 4) => {
+        let ultimoError;
+        for (let i = 0; i < intentos; i++) {
+            try {
+                return await operacion();
+            } catch (error) {
+                const codigo = error?.code || '';
+                if (codigo !== 'resource-exhausted' && codigo !== 'unavailable') throw error;
+                ultimoError = error;
+                // 400 ms, 800, 1600… le da tiempo a que se libere la cuota
+                await new Promise(r => setTimeout(r, 400 * Math.pow(2, i)));
+            }
+        }
+        throw ultimoError;
+    };
+
     const updateOrderStatus = async (orderId, newStatus, additionalUpdates = {}) => {
         try {
             let orderRef = doc(db, "pedidos", orderId);
@@ -286,7 +314,7 @@ export const OrdersProvider = ({ children }) => {
             // (previene doble-otorgamiento si dos admins confirman el mismo pedido a la vez)
             let shouldAwardPoints = false;
             if (newStatus === 'confirmed' && !orderData.pointsAwarded) {
-                await runTransaction(db, async (transaction) => {
+                await conReintentos(() => runTransaction(db, async (transaction) => {
                     const freshSnap = await transaction.get(orderRef);
                     if (!freshSnap.exists() || freshSnap.data().pointsAwarded) return;
                     transaction.update(orderRef, {
@@ -297,14 +325,14 @@ export const OrdersProvider = ({ children }) => {
                         ...additionalUpdates
                     });
                     shouldAwardPoints = true;
-                });
+                }));
 
                 if (!shouldAwardPoints) {
                     // Los puntos ya fueron otorgados por otra instancia — solo actualizar status
-                    await updateDoc(orderRef, { status: newStatus, ...additionalUpdates });
+                    await conReintentos(() => updateDoc(orderRef, { status: newStatus, ...additionalUpdates }));
                 }
             } else {
-                await updateDoc(orderRef, { status: newStatus, ...additionalUpdates });
+                await conReintentos(() => updateDoc(orderRef, { status: newStatus, ...additionalUpdates }));
             }
 
             // De aquí en adelante solo aplica a confirmaciones de pago
