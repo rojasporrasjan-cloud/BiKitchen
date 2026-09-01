@@ -161,3 +161,53 @@ export const llevaFilaDeVegetal = (platos) => {
  */
 export const nombreDeHojaDeEmpaque = (packName, etiquetaFamilia) =>
     esPersonalizado(packName) ? packName : (etiquetaFamilia || packName);
+
+/**
+ * Cuanto lleva CADA PLATO de cada familia de pack.
+ *
+ * Estaba a medias y repartido: la proteina salia de getDefaultGrams y el
+ * vegetal y la harina eran 1 y 0,5 fijos para todos, escritos a mano en cinco
+ * lugares distintos de la hoja. Gina lo corrigio al sacar la hoja del miercoles
+ * 2 de setiembre de 2026:
+ *
+ *   Keto        1,5 taza de vegetal   (no 1)
+ *   Casaditos   1,5 de harina y 0,5 de vegetal   (estaba al reves)
+ *   Familiar    la porcion es 1 kg o 4 tazas, no gramos por persona
+ *
+ * `proteina: null` quiere decir que el plato NO se mide en gramos por persona:
+ * es una bandeja entera y el numero por plato no significa nada.
+ */
+export const PORCIONES_POR_FAMILIA = {
+    bajoCalorias:    { proteina: 120,  vegetal: 1,   carbo: 0.5 },
+    sinCarbos:       { proteina: 120,  vegetal: 1,   carbo: 0   },
+    keto:            { proteina: 200,  vegetal: 1.5, carbo: 0   },
+    regular:         { proteina: 100,  vegetal: 1,   carbo: 0.5 },
+    casaditos:       { proteina: 100,  vegetal: 0.5, carbo: 1.5 },
+    vegetariano:     { proteina: 150,  vegetal: 1,   carbo: 0.5 },
+    fullPack:        { proteina: 150,  vegetal: 1,   carbo: 0.5 },
+    familiarPremium: { proteina: null, vegetal: null, carbo: null, textoPorcion: '1 KG O 4 TAZAS POR PLATO' },
+    familiarDeluxe:  { proteina: null, vegetal: null, carbo: null, textoPorcion: '1 KG O 4 TAZAS POR PLATO' }
+};
+
+const PORCION_POR_DEFECTO = { proteina: 150, vegetal: 1, carbo: 0.5 };
+
+/** Lo que lleva un plato de ese pack. Acepta el nombre o la clave del menu. */
+export const porcionesDelPack = (packNameOMenuKey) => {
+    const clave = PORCIONES_POR_FAMILIA[packNameOMenuKey]
+        ? packNameOMenuKey
+        : mapPackNameToMenuKey(packNameOMenuKey);
+    return PORCIONES_POR_FAMILIA[clave] || PORCION_POR_DEFECTO;
+};
+
+/**
+ * Familias que se cocinan APARTE y hay que poder verlas de un vistazo.
+ *
+ * "Ojala en la hoja de produccion especifique que es keto porque se cocina
+ * aparte, igual cuando es vegetariano" — Gina.
+ */
+export const AVISO_DE_FAMILIA = {
+    keto: 'KETO — SE COCINA APARTE',
+    vegetariano: 'VEGETARIANO — SE COCINA APARTE'
+};
+
+export const avisoDeFamilia = (packName) => AVISO_DE_FAMILIA[mapPackNameToMenuKey(packName)] || '';
