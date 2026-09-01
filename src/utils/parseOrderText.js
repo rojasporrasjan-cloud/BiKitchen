@@ -411,6 +411,21 @@ const DETALLE_PROTEINAS_RE = /^[\s└│├•·*◽◾-]*Prote[íi]nas?\s*:/i;
 const CANTIDAD_ANUNCIADA = /(\d+)\s*(?:prote[íi]nas?|desayunos?|almuerzos?|comidas?|platos?|por\s+semana)/i;
 
 /**
+ * Lo mismo pero al reves: "Pack de Proteinas 3 de 250g".
+ *
+ * Gina lo escribe de las dos formas y CANTIDAD_ANUNCIADA solo ve el numero
+ * ANTES de la palabra. Con el numero despues, el pack no anunciaba platos: las
+ * tres proteinas de abajo se pegaban al NOMBRE del item
+ * ("...250g - -Pollo a la toscana - -Pollo caribeno") y la hoja imprimia una
+ * sola linea de "750 g (3 porciones)". Quien empaca no sabia cuales eran.
+ * Le paso a Jose Alexander Zuniga y a Nuria Rojas.
+ */
+const CANTIDAD_ANUNCIADA_INVERTIDA = /prote[íi]nas?\s+(\d+)\b/i;
+
+/** El guion con que se escribe la lista es vineta, no parte del nombre del plato. */
+const VINETA_INICIAL = /^[\s•·*□▢▪◦◽◾–—-]+/;
+
+/**
  * Líneas que son un ítem aunque no las siga una línea de "Precio".
  *
  * Cuando el pedido trae un solo ítem, se suele escribir el monto una única vez
@@ -452,7 +467,7 @@ const absorberDescripcion = (lines, i, texto) => {
     // Un ítem que anuncia N platos viene seguido de la LISTA, una por línea. Ahí
     // se aceptan varias; si no, solo dos, para que una descripción suelta no se
     // trague media hoja.
-    const anuncio = texto.match(CANTIDAD_ANUNCIADA);
+    const anuncio = texto.match(CANTIDAD_ANUNCIADA) || texto.match(CANTIDAD_ANUNCIADA_INVERTIDA);
     const cantidadAnunciada = anuncio ? parseInt(anuncio[1], 10) : 0;
     const maxExtras = cantidadAnunciada > 0 ? Math.max(cantidadAnunciada, 12) : 6;
 
@@ -473,7 +488,7 @@ const absorberDescripcion = (lines, i, texto) => {
             }
         }
         if (esCorteDeItem(t) || DETALLE_PROTEINAS_RE.test(t)) break;
-        extras.push({ idx: j, texto: t });
+        extras.push({ idx: j, texto: t.replace(VINETA_INICIAL, '').trim() || t });
         j++;
     }
 
