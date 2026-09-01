@@ -18,6 +18,7 @@ import {
     runTransaction,
     writeBatch
 } from 'firebase/firestore';
+import { confirmarPagoConRespaldo } from '../utils/confirmarPedido';
 import { onAuthStateChanged } from 'firebase/auth';
 import { ADMIN_EMAILS } from '../config/admins';
 import { PUNTOS_REFERIDO, calcularPuntos } from '../config/loyalty';
@@ -314,18 +315,31 @@ export const OrdersProvider = ({ children }) => {
             // (previene doble-otorgamiento si dos admins confirman el mismo pedido a la vez)
             let shouldAwardPoints = false;
             if (newStatus === 'confirmed' && !orderData.pointsAwarded) {
-                await conReintentos(() => runTransaction(db, async (transaction) => {
-                    const freshSnap = await transaction.get(orderRef);
-                    if (!freshSnap.exists() || freshSnap.data().pointsAwarded) return;
-                    transaction.update(orderRef, {
-                        status: newStatus,
-                        paymentConfirmed: true,
-                        pointsAwarded: true,
-                        pointsAwardedAt: new Date().toISOString(),
-                        ...additionalUpdates
-                    });
-                    shouldAwardPoints = true;
-                }));
+                const camposDeConfirmacion = {
+                    status: newStatus,
+                    paymentConfirmed: true,
+                    pointsAwarded: true,
+                    pointsAwardedAt: new Date().toISOString(),
+                    ...additionalUpdates
+                };
+
+                shouldAwardPoints = await confirmarPagoConRespaldo({
+                    conTransaccion: async () => {
+                        let otorga = false;
+                        await conReintentos(() => runTransaction(db, async (transaction) => {
+                            const freshSnap = await transaction.get(orderRef);
+                            if (!freshSnap.exists() || freshSnap.data().pointsAwarded) return;
+                            transaction.update(orderRef, camposDeConfirmacion);
+                            otorga = true;
+                        }));
+                        return otorga;
+                    },
+                    releerPedido: async () => {
+                        const snap = await conReintentos(() => getDoc(orderRef));
+                        return snap.exists() ? snap.data() : null;
+                    },
+                    escribirDirecto: () => conReintentos(() => updateDoc(orderRef, camposDeConfirmacion))
+                });
 
                 if (!shouldAwardPoints) {
                     // Los puntos ya fueron otorgados por otra instancia — solo actualizar status
