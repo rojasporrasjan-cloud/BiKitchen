@@ -69,9 +69,21 @@ export const isIndividualPack = (name) => {
 export const esIndividualEnLaHoja = (name) =>
     isIndividualPack(name) || !mapPackNameToMenuKey(name);
 
-/** Gramos de proteína por porción cuando el plato no trae el dato. */
+/**
+ * Gramos de proteína por porción cuando el plato no trae el dato.
+ *
+ * Un gramaje escrito en el nombre MANDA sobre todo lo demás. Hace falta para
+ * los pedidos PERSONALIZADO: su nombre no puede calzar con ningún pack —si
+ * calzara, la hoja les pondría los platos del menú oficial en vez de los suyos—
+ * y sin gramaje caían en los 150 g por defecto. A Sonia Oreamuno, que es Pack
+ * Regular de 100 g, eso le subía la porción un 50%.
+ */
 export const getDefaultGrams = (packName) => {
     const n = String(packName || '').toLowerCase();
+
+    const escrito = n.match(/(\d{2,4})\s*(?:gramos|grs?|g)\b/);
+    if (escrito) return Number(escrito[1]);
+
     if (((n.includes('bajo') || n.includes('bajas')) && n.includes('calor')) || n.includes('sin carbo')) return 120;
     if (n.includes('keto')) return 200;
     if (n.includes('regular') || n.includes('casadito')) return 100;
