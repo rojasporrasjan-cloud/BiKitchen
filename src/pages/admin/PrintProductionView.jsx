@@ -237,8 +237,29 @@ export default function PrintProductionView() {
         }
     };
 
+    const isActuallyIndividual = (packName) => {
+        // Un menú PERSONALIZADO se empaca como pack —con sus platos, gramaje y
+        // vegetal/carbo— pero sus platos NO salen del menú semanal, sino del propio
+        // pedido. Gina los lleva así en su pestaña "Personalizado": Dalia Parrales
+        // con 3 packs sin cerdo, Maycol Ávila con dos menús y sin vainica.
+        if (/^personalizado/i.test(String(packName || '').trim())) return false;
+
+        if (isIndividualPack(packName)) return true;
+        // Si pertenece a una de las 7 familias de packs oficiales (Bajo Calorías, Full Pack, Keto, etc),
+        // NUNCA es individual, sin importar si en las notas dice "120g proteína"
+        if (mapPackNameToMenuKey(packName)) return false;
+        return true;
+    };
+
     packagingData.clientes.forEach((c) => {
-        const isIndividual = c.categoria === 'individuales' || String(c.plan || c.tipoMenu || '').toLowerCase().includes('individual');
+        // El MISMO criterio que usa el resto de la hoja. Antes acá se pedía que el
+        // plan dijera "individual", y el de un pedido de individuales es el nombre
+        // del PRIMER plato: el de Larissa Serendero decía "Cochinita pibil". Al no
+        // reconocerla, se la trataba como un pack con ese nombre y el filtro de
+        // abajo le dejaba solo el plato que coincidía — perdía el Taco alambre y el
+        // Arroz estilo cantones que sí pagó.
+        const isIndividual = c.categoria === 'individuales'
+            || isActuallyIndividual(c.plan || c.tipoMenu || '');
 
         let packsInOrder = [];
 
@@ -372,19 +393,6 @@ export default function PrintProductionView() {
     const allPackNames = Object.keys(packsMap).sort();
     const isDesayunoPack = (n) => mapPackNameToMenuKey(n) === 'desayuno';
 
-    const isActuallyIndividual = (packName) => {
-        // Un menú PERSONALIZADO se empaca como pack —con sus platos, gramaje y
-        // vegetal/carbo— pero sus platos NO salen del menú semanal, sino del propio
-        // pedido. Gina los lleva así en su pestaña "Personalizado": Dalia Parrales
-        // con 3 packs sin cerdo, Maycol Ávila con dos menús y sin vainica.
-        if (/^personalizado/i.test(String(packName || '').trim())) return false;
-
-        if (isIndividualPack(packName)) return true;
-        // Si pertenece a una de las 7 familias de packs oficiales (Bajo Calorías, Full Pack, Keto, etc),
-        // NUNCA es individual, sin importar si en las notas dice "120g proteína"
-        if (mapPackNameToMenuKey(packName)) return false;
-        return true;
-    };
 
     // ── Consolidar packs que comparten el mismo menú (mismos platos) ──
     // "Pack Bajo Calorías Promo Almuerzo y Cena" y "Pack 2 Semanas Bajo Calorías"
