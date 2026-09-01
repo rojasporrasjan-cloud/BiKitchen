@@ -198,6 +198,35 @@ export const renderLabel = (canvas, label, opts = {}) => {
     const anchoUtil = W - PADDING * 2;
     let y = PADDING;
 
+    // ── Etiqueta divisoria ──
+    // No es un envase: es el separador que se pega al empezar cada bloque para
+    // partir la tira sobre la mesa. Va sin logo y sin vencimiento —solo el
+    // nombre, lo más grande que quepa— y con marco para distinguirla de un
+    // vistazo de las etiquetas de comida.
+    if (label.divider) {
+        const MARCO = 3;
+        ctx.fillRect(0, 0, W, MARCO);
+        ctx.fillRect(0, H - MARCO, W, MARCO);
+        ctx.fillRect(0, 0, MARCO, H);
+        ctx.fillRect(W - MARCO, 0, MARCO, H);
+
+        const margen = MARCO + 4;
+        const util = W - margen * 2;
+        const titulo = fitText(ctx, String(label.type || '').toUpperCase(), {
+            maxWidth: util, maxLines: 3, maxSize: 30, minSize: 11, weight: 'bold'
+        });
+
+        const alto = titulo.lines.length * (titulo.fontSize + 2);
+        let cur = Math.max(margen, Math.round((H - alto) / 2));
+        ctx.font = `bold ${titulo.fontSize}px ${FONT_FAMILY}`;
+        titulo.lines.forEach(line => {
+            ctx.fillText(line, centro, cur);
+            cur += titulo.fontSize + 2;
+        });
+
+        return { truncated: !!titulo.truncated, width: W, height: H, divider: true };
+    }
+
     // ── Marca: el logo si está disponible, si no el nombre en texto ──
     const textoMarca = opts.brandText ?? label.brand ?? 'BIKITCHEN FOOD';
 

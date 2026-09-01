@@ -7,7 +7,8 @@ import {
     auditarPuntos,
     detectarDuplicados,
     soloDescuadrados,
-    resumenAuditoria
+    resumenAuditoria,
+    paraCorregir
 } from '../../utils/auditarPuntos';
 
 /**
@@ -34,6 +35,7 @@ export default function PointsAuditView() {
     // que bloquean diálogos, y cuando eso pasa la función sale sin hacer nada:
     // el botón parece roto. Acá se ve siempre y queda claro qué se va a escribir.
     const [confirmando, setConfirmando] = useState(null);
+    const [incluirInventados, setIncluirInventados] = useState(false);
     const [textoConfirma, setTextoConfirma] = useState('');
 
     if (!isSuperAdmin()) {
@@ -68,9 +70,8 @@ export default function PointsAuditView() {
         setOcupado(false);
     };
 
-    /** Quiénes se van a corregir. Los correos inventados quedan fuera. */
-    const aCorregir = () => (informe || [])
-        .filter(c => c.faltante > 0 && !c.correoInventado);
+    /** Quiénes se van a corregir. Ver paraCorregir() para la regla. */
+    const aCorregir = () => paraCorregir(informe, { incluirInventados });
 
     const pedirConfirmacion = () => {
         const pendientes = aCorregir();
@@ -83,7 +84,9 @@ export default function PointsAuditView() {
             pendientes,
             cantidad: pendientes.length,
             puntos: pendientes.reduce((s, c) => s + c.faltante, 0),
-            excluidos: (informe || []).filter(c => c.faltante > 0 && c.correoInventado).length
+            excluidos: incluirInventados
+                ? 0
+                : (informe || []).filter(c => c.faltante > 0 && c.correoInventado).length
         });
     };
 
@@ -244,6 +247,21 @@ export default function PointsAuditView() {
                                     Solo se corrige a quien le FALTA saldo. A nadie se le quita nada.
                                     Revisá la lista de arriba antes de darle.
                                 </p>
+                                <label className="flex items-start gap-2 mb-3 text-xs text-red-900 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={incluirInventados}
+                                        onChange={(e) => { setIncluirInventados(e.target.checked); setConfirmando(null); }}
+                                        className="mt-0.5 accent-red-600"
+                                    />
+                                    <span>
+                                        <strong>Incluir los de correo inventado</strong> (@sin-correo.bikitchen.cr).
+                                        Son clientes que entraron por WhatsApp sin correo: <strong>no pueden iniciar
+                                        sesión con él</strong>, así que el saldo les queda registrado pero no lo van a
+                                        ver hasta que den su correo real y se lo migres. Sirve para saber cuánto
+                                        migrarle a cada uno.
+                                    </span>
+                                </label>
                                 {!confirmando ? (
                                     <button
                                         onClick={pedirConfirmacion}

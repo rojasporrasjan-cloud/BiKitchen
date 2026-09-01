@@ -149,6 +149,26 @@ export const auditarPuntos = (pedidos = [], loyaltyPorCorreo = {}) => {
     }).sort((a, b) => b.faltante - a.faltante);
 };
 
+/**
+ * A quién se le va a corregir el saldo.
+ *
+ * Nunca entra quien tiene de MÁS: la corrección solo acredita, nunca quita.
+ *
+ * Los correos inventados (@sin-correo.bikitchen.cr) quedan fuera por defecto.
+ * Ese correo lo fabrica el sistema cuando el pedido entra por WhatsApp sin uno
+ * real, así que el cliente no puede entrar con él y arreglarle el saldo ahí no
+ * le sirve de nada. Pero el número SÍ vale para saber cuánto migrarle el día que
+ * dé su correo verdadero, así que se puede pedir a propósito con
+ * `incluirInventados`.
+ *
+ * @param {object[]} informe - salida de auditarPuntos()
+ * @param {{incluirInventados?: boolean}} [opts]
+ */
+export const paraCorregir = (informe, opts = {}) =>
+    (Array.isArray(informe) ? informe : [])
+        .filter((c) => c.faltante > 0 && (opts.incluirInventados || !c.correoInventado))
+        .sort((a, b) => b.faltante - a.faltante);
+
 /** Solo los que hay que corregir. */
 export const soloDescuadrados = (informe = []) => informe.filter((c) => c.faltante !== 0);
 

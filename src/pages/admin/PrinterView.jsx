@@ -83,6 +83,16 @@ export default function PrinterView() {
     const [logo, setLogo] = useState(null);
     const [mostrarAjustes, setMostrarAjustes] = useState(false);
 
+    /**
+     * ¿La persona ya ajustó algo a mano en esta sesión?
+     *
+     * La calibración compartida se pide al entrar y tarda lo que tarde la red.
+     * Si llega DESPUÉS de que alguien movió un control, no puede pisarlo: se veía
+     * como que el ajuste "no se guardaba" —el control volvía solo— y el lote
+     * salía sin calibrar aunque la etiqueta de prueba sí lo estuviera.
+     */
+    const ajustesTocados = useRef(false);
+
     useEffect(() => { prepareLogo().then(setLogo); }, []);
 
     const mockRef = useRef(null);
@@ -102,6 +112,9 @@ export default function PrinterView() {
     // para todos, así que quien la ajustó bien la deja lista para los demás.
     useEffect(() => {
         loadSharedSettings().then(remoto => {
+            // Si ya movió algo mientras cargaba, lo suyo manda
+            if (ajustesTocados.current) return;
+
             if (remoto) {
                 setSettings(remoto);
                 setSyncEstado('compartida');
@@ -137,17 +150,22 @@ export default function PrinterView() {
     }, []);
 
     const actualizarAjuste = (campo, valor) => {
-        setSettings(prev => {
-            const next = { ...prev, [campo]: valor };
-            saveSettings(next); // inmediato y local: nunca se pierde el ajuste
+        // A partir de acá manda lo que ajustó la persona: la calibración
+        // compartida que llegue después NO puede pisarlo.
+        ajustesTocados.current = true;
 
-            // Si la base de datos rechaza la escritura hay que decirlo. Antes
-            // solo quedaba en la consola y se creía que estaba compartida.
-            saveSharedSettings(next, currentUser?.email || null)
-                .then(ok => setSyncEstado(ok ? 'compartida' : 'solo-local'));
+        const next = { ...settings, [campo]: valor };
+        setSettings(next);
+        saveSettings(next); // inmediato y local: nunca se pierde el ajuste
 
-            return next;
-        });
+        // Si la base de datos rechaza la escritura hay que decirlo. Antes
+        // solo quedaba en la consola y se creía que estaba compartida.
+        //
+        // Guardar va FUERA del updater de setSettings a propósito: React puede
+        // llamar un updater más de una vez o descartar su resultado, así que un
+        // efecto ahí adentro no está garantizado.
+        saveSharedSettings(next, currentUser?.email || null)
+            .then(ok => setSyncEstado(ok ? 'compartida' : 'solo-local'));
     };
 
     const adapter = modoReal ? realRef.current : mockRef.current;
@@ -283,7 +301,7 @@ export default function PrinterView() {
     };
 
     const prepararLote = () => {
-        const labels = expandGroupsToLabels(selectedGroups, expirationDate);
+        const labels = expandGroupsToLabels(selectedGroups, expirationDate, { conDivisores: true });
         ejecutarLote(labels, JOB_KIND.BATCH, `${selectedGroups.length} grupos`);
     };
 
@@ -358,7 +376,9 @@ export default function PrinterView() {
             <AdminPageHeader
                 icon={Printer}
                 title="Etiquetas de Producción"
-                subtitle="Calcula e imprime las etiquetas térmicas 30 × 20 mm a partir de los pedidos reales"
+                // El tamaño sale de la calibración, no de un número escrito acá:
+                // el rollo se cambió a 35 × 25 y el encabezado siguió diciendo 30 × 20.
+                subtitle={`Calcula e imprime las etiquetas térmicas ${settings.widthMm} × ${settings.heightMm} mm a partir de los pedidos reales`}
                 gradient="from-slate-700 via-slate-600 to-gray-500"
                 stats={[
                     { value: batch.totalOrders, label: 'Pedidos' },
@@ -381,7 +401,7 @@ export default function PrinterView() {
                 onToggleAjustes={() => setMostrarAjustes(v => !v)}
                 settings={settings}
                 onAjusteChange={actualizarAjuste}
-                onResetAjustes={() => setSettings(resetSettings())}
+                onResetAjustes={() => { ajustesTocados.current = true; setSettings(resetSettings()); }}
                 syncEstado={syncEstado}
                 logo={logo}
                 previewLabel={previewLabel || {

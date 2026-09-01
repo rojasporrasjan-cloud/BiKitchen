@@ -46,6 +46,9 @@ export const TIPO_ETIQUETA = {
 
 export const TIPO_INDIVIDUAL = 'Individual';
 
+/** Los menús personalizados: cada cliente lleva sus propios platos. */
+export const TIPO_PERSONALIZADO = 'Personalizado';
+
 /**
  * Las tres familias con las que trabaja el equipo al empacar.
  *
@@ -58,6 +61,45 @@ export const FAMILIA = {
     CENA: 'Cenas',
     DESAYUNO: 'Desayunos',
     INDIVIDUAL: 'Individuales'
+};
+
+/**
+ * En qué orden salen los bloques de la impresora.
+ *
+ * Se imprimen en una tira continua, así que el orden es el orden en que quedan
+ * apilados sobre la mesa. Primero los packs —que es el grueso del trabajo—, y
+ * los personalizados de último porque cada uno lleva sus propios platos y
+ * conviene armarlos aparte, sin mezclarlos con la producción en serie.
+ */
+const ORDEN_PACKS = [
+    TIPO_ETIQUETA.regular,
+    TIPO_ETIQUETA.fullPack,
+    TIPO_ETIQUETA.bajoCalorias,
+    TIPO_ETIQUETA.sinCarbos,
+    TIPO_ETIQUETA.keto,
+    TIPO_ETIQUETA.vegetariano,
+    TIPO_ETIQUETA.casaditos,
+    TIPO_ETIQUETA.familiarPremium,
+    TIPO_ETIQUETA.familiarDeluxe
+];
+
+export const ordenDeTipo = (tipo) => {
+    const t = String(tipo || '');
+
+    // Los personalizados van al final: se arman uno por uno
+    if (t === TIPO_PERSONALIZADO) return 500;
+    if (t === TIPO_INDIVIDUAL) return 400;
+    if (t === TIPO_ETIQUETA.desayuno) return 300;
+
+    // Las cenas después de todos los packs, en el mismo orden de familia
+    if (/\bcena\b/i.test(t)) {
+        const base = t.replace(/\s*cena\s*$/i, '').trim();
+        const i = ORDEN_PACKS.indexOf(base);
+        return 200 + (i === -1 ? ORDEN_PACKS.length : i);
+    }
+
+    const i = ORDEN_PACKS.indexOf(t);
+    return 100 + (i === -1 ? ORDEN_PACKS.length : i);
 };
 
 export const familiaDeTipo = (tipo) => {
@@ -85,6 +127,9 @@ export const resolveFinalDishName = (nombre) => {
 export const resolveTipoEtiqueta = (packName) => {
     const menuKey = mapPackNameToMenuKey(packName);
     if (menuKey && TIPO_ETIQUETA[menuKey]) return TIPO_ETIQUETA[menuKey];
+    // Un menú personalizado se empaca como pack, no como plato suelto: va en su
+    // propio envase de pack y se cuenta con los packs al empacar.
+    if (/^personalizado/i.test(String(packName || '').trim())) return TIPO_PERSONALIZADO;
     return TIPO_INDIVIDUAL;
 };
 
@@ -100,28 +145,57 @@ export const resolveTipoEtiqueta = (packName) => {
 export const esNombreDePack = (nombre) => {
     const n = String(nombre || '').trim();
     if (!n) return false;
-    if (mapPackNameToMenuKey(n)) return true;
-    return /\bpack\b|mensual|quincenal|semanal/i.test(n);
+
+    // Palabras que solo aparecen en el nombre comercial de un pack
+    if (/\bpack\b|mensual|quincenal|semanal|promo/i.test(n)) return true;
+
+    // Un nombre corto que además cae en una familia ("Bajo Calorías", "Keto").
+    // El límite de palabras importa: mapPackNameToMenuKey reconoce por palabra
+    // suelta, así que "Chili vegetariano de frijoles rojos y vegetales" —un plato
+    // real del menú— daba "vegetariano" y su etiqueta se borraba.
+    const palabras = n.split(/\s+/).filter(Boolean);
+    return palabras.length <= 3 && !!mapPackNameToMenuKey(n);
 };
 
 /**
  * ¿El pedido lleva almuerzo Y cena?
  *
- * Se mira solo "almuerzo y cena" o "cenas", y a propósito NO se incluye
- * "two pack" ni "dos semanas":
- *   - "two pack"    → dos packs del MISMO menú (ya lo duplica cantidadMenus)
- *   - "dos semanas" → dos ENTREGAS, que se resuelven por fecha
- * Meterlos todos en la misma bolsa —como hace la hoja de producción— hace que
- * un pedido cuente doble sin que lleve cena.
+ * "two pack" a propósito NO cuenta: el catálogo lo define como "Plan Parejas:
+ * 10 Comidas Totales (5 para cada uno)" (packsData.js). Son dos packs del MISMO
+ * menú y la cantidad ya la duplica cantidadMenus; sumarle cenas le da al cliente
+ * el doble de lo que pagó.
+ *
+ * La promo de DOS SEMANAS sí lleva cena, aunque su nombre corto no lo diga. En
+ * los chats aparece escrita de las dos formas y siempre al mismo precio:
+ *   "pack dos semanas con desayunos gratis"                      → ₡87.890
+ *   "pack dos semanas ALMUERZO Y CENA con desayuno gratis"       → ₡87.890
+ *   "pack quincenal ALMUERZO Y CENA con regalía de desayunos"    → ₡87.890
+ * Es el mismo producto. Para comparar: dos semanas de solo almuerzo cuesta
+ * ₡49.000 (5 Comidas Bajo Calorías quincenal). Sin esto, a esos clientes les
+ * faltaban las cinco etiquetas de sus cenas.
  */
+export const textoLlevaCena = (texto) => {
+    const t = String(texto || '').toLowerCase();
+
+    const diceCena = /almuerzo[s]?\s*y\s*cena[s]?/.test(t) || /\bcenas?\b/.test(t);
+
+    // "two pack" gana sobre todo lo demás salvo que el pedido diga cena aparte.
+    // Se descarta primero porque "two pack ... mensual" también dispararía otras reglas.
+    if (/two\s*pack/.test(t) && !diceCena) return false;
+
+    return diceCena
+        || /\b(dos|2)\s*semanas\b/.test(t)
+        || /promo\s*2\s*semanas/.test(t)
+        || (/quincenal/.test(t) && /desayun/.test(t));
+};
+
+/** Misma regla, aplicada a un pedido completo. */
 export const esPromoCena = (pedido) => {
     const items = pedido?.items || pedido?.rawPedido?.items || [];
-    const texto = [
-        pedido?.plan, pedido?.tipoMenu, pedido?.categoryLabel, pedido?.observaciones,
+    return textoLlevaCena([
+        pedido?.plan, pedido?.tipoMenu, pedido?.categoryLabel, pedido?.categoria, pedido?.observaciones,
         ...items.map(i => `${i?.nombre || ''} ${i?.planLabel || ''}`)
-    ].join(' ').toLowerCase();
-
-    return /almuerzo[s]?\s*y\s*cena[s]?/.test(texto) || /\bcenas?\b/.test(texto);
+    ].join(' '));
 };
 
 /**
@@ -235,6 +309,11 @@ export const selectOrdersForDate = (rawOrders, date) => {
         return getScheduleFromOrder(order).includes(date);
     });
 
+    // Se ordena por cliente ANTES de fusionar, igual que PrintProductionView.
+    // La fusión conserva el primero que ve: sin este orden, la hoja y las
+    // etiquetas se quedaban con pedidos DISTINTOS del mismo cliente.
+    elegibles.sort((a, b) => String(a.cliente || '').localeCompare(String(b.cliente || '')));
+
     const normalizados = mapPedidosFromLegacy(elegibles);
     return deduplicateOrdersByClient(normalizados);
 };
@@ -259,6 +338,17 @@ export const buildLabelBatch = (rawOrders, date, officialMenus = null) => {
         const menuKey = mapPackNameToMenuKey(packName);
         const cantidadMenus = pedido.cantidadMenus || 1;
 
+        // Cuántos packs lleva el pedido. El dato viaja en `cantidadMenus` (pedidos
+        // de la web) o en la cantidad del ítem (los de WhatsApp), y a veces en
+        // ambos. Se toma el mayor, igual que cantidadDePacks en la hoja.
+        //
+        // Hace falta mirar el ítem porque cuando los platos salen del MENÚ OFICIAL
+        // vienen con cantidad 1, y sin esto Enid Murillo —que lleva 2 packs— sacaba
+        // 5 etiquetas en vez de 10.
+        const cantidadDeItems = Math.max(1, ...(pedido.rawPedido?.items || pedido.items || [])
+            .map(i => Number(i?.cantidad) || 1));
+        const packsDelPedido = Math.max(cantidadMenus, cantidadDeItems);
+
         // Los platos del pedido mandan: son los únicos que traen las
         // sustituciones del cliente. El menú oficial es solo el respaldo.
         //
@@ -266,15 +356,77 @@ export const buildLabelBatch = (rawOrders, date, officialMenus = null) => {
         // del pack: en la etiqueta tiene que ir la proteína que trae el envase.
         // En un individual NO se descarta nada, porque ahí el nombre del
         // producto SÍ es lo que come el cliente ("Tilapia a la meunier").
-        const esPack = !!menuKey;
+        // Un menú PERSONALIZADO es un pack aunque no pertenezca a ninguna familia:
+        // sus platos vienen en el propio pedido, no del menú semanal.
+        const esPersonalizado = /^personalizado/i.test(String(packName).trim());
+        const esPack = !!menuKey || esPersonalizado;
+        // Sustituciones sobre el NOMBRE DEL PACK, no sobre un plato.
+        //
+        // Cuando un pack no trae la lista de proteínas, mapPedidosFromLegacy arma un
+        // solo plato con el nombre comercial. Si además el cliente pidió un cambio,
+        // queda "Pack Vegetariano → Filet de pollo encebollado": parece un plato real
+        // y el pack se quedaba con UNA etiqueta en vez de las cinco de su menú.
+        // Se descarta como plato y el cambio se avisa aparte para no perderlo.
+        const sustitucionesSobrePack = [];
         let platos = (pedido.platos || []).filter(p => {
-            const n = resolveFinalDishName(p?.proteina?.nombre);
+            const crudo = String(p?.proteina?.nombre || '');
+            const n = resolveFinalDishName(crudo);
             if (!n) return false;
-            return !(esPack && esNombreDePack(n));
+            if (!esPack) return true;
+
+            const original = crudo.split(/→|->/)[0].trim();
+            if (esNombreDePack(original)) {
+                if (n !== original) sustitucionesSobrePack.push(n);
+                return false;
+            }
+            return !esNombreDePack(n);
         });
 
-        if (platos.length === 0 && esPack) {
+        // Un pedido puede traer el pack Y productos sueltos (Priscilla lleva su
+        // pack quincenal y aparte tortas de maduro). Los sueltos NO describen el
+        // pack: si se toman por sus platos, el cliente recibe UNA etiqueta en vez
+        // de las cinco de su menú. Cuando lo que queda no alcanza a cubrir el
+        // menú de la semana, el menú manda y lo demás se etiqueta como suelto.
+        // Se reconoce por el nombre: si coincide con OTRO ítem del pedido, es un
+        // producto aparte y no un plato del pack. Mirar solo la cantidad no sirve
+        // —un pack puede tener legítimamente menos platos que el menú.
+        let sueltos = [];
+        if (esPack && !esPersonalizado) {
+            const clave = (x) => String(x || '').trim().toLowerCase();
+            const nombrePack = clave(packName);
+            const otrosItems = (pedido.rawPedido?.items || pedido.items || [])
+                .map(i => clave(i?.nombre))
+                .filter(n => n && n !== nombrePack);
+
+            if (otrosItems.length > 0) {
+                sueltos = platos.filter(p => otrosItems.includes(clave(resolveFinalDishName(p?.proteina?.nombre))));
+                platos = platos.filter(p => !sueltos.includes(p));
+            }
+        }
+
+        if (platos.length === 0 && esPack && !esPersonalizado) {
             platos = platosDelMenuOficial(menuKey, officialMenus);
+        }
+
+        // Reposiciones y entregas atrasadas piden el menú de OTRA semana. Las
+        // etiquetas solo conocen el menú activo, así que saldrían con los platos
+        // equivocados sin que nadie se entere. Enid Murillo es el caso: su
+        // reposición va "con el menú de la semana pasada".
+        const textoDelPedido = [pedido.plan, pedido.tipoMenu, pedido.observaciones].join(' ');
+        if (/semana pasada|men[úu] anterior|semana anterior/i.test(textoDelPedido)) {
+            warnings.push({
+                tipo: 'menu-de-otra-semana',
+                cliente: pedido.cliente || 'Sin nombre',
+                detalle: 'El pedido pide el MENÚ DE OTRA SEMANA. Las etiquetas salieron con los platos del menú activo: revisá cuáles van antes de imprimir.'
+            });
+        }
+
+        if (sustitucionesSobrePack.length > 0) {
+            warnings.push({
+                tipo: 'sustitucion-sobre-pack',
+                cliente: pedido.cliente || 'Sin nombre',
+                detalle: `Pidió un cambio (${sustitucionesSobrePack.join(', ')}) pero está anotado sobre el nombre del pack, no sobre un plato. Se imprimieron los ${platos.length} platos del menú: cambiá a mano la etiqueta que corresponda.`
+            });
         }
 
         if (platos.length === 0) {
@@ -351,7 +503,16 @@ export const buildLabelBatch = (rawOrders, date, officialMenus = null) => {
             const nombre = resolveFinalDishName(plato?.proteina?.nombre);
             if (!nombre) return;
 
-            const cantidad = cantidadMenus * (plato.cantidad || 1);
+            // Se toma el MAYOR de los dos, no el producto: son dos formas de
+            // escribir el mismo dato. Un pedido puede traer la cantidad en
+            // `cantidadMenus` (web) o en el ítem (WhatsApp), y a veces en ambos.
+            // Multiplicarlos le daba 9 etiquetas a quien lleva 3 packs.
+            // Es el mismo criterio que usa cantidadDePacks en la hoja.
+            // En un pack la cantidad es del pedido entero. En un suelto manda la del
+            // plato: un pedido con "1× salsa y 5× pollo" no lleva 5 de cada cosa.
+            const cantidad = esPack
+                ? Math.max(packsDelPedido, plato.cantidad || 1)
+                : (plato.cantidad || 1);
             const original = String(plato?.proteina?.nombre || '');
             const esSustitucion = /→|->/.test(original);
 
@@ -375,6 +536,7 @@ export const buildLabelBatch = (rawOrders, date, officialMenus = null) => {
         };
 
         platos.forEach(p => agregar(p, tipo));
+        sueltos.forEach(p => agregar(p, TIPO_INDIVIDUAL));
         platosCena.forEach(p => agregar(p, `${tipo} Cena`));
         // Los desayunos van con su propio tipo, no con el del pack: el envase
         // dice "Desayuno", no "Bajo Calorías".
@@ -382,6 +544,9 @@ export const buildLabelBatch = (rawOrders, date, officialMenus = null) => {
     });
 
     const groups = [...grupos.values()].sort((a, b) => {
+        // Primero el orden de impresión; dentro del bloque, el plato más pedido
+        const oa = ordenDeTipo(a.tipo), ob = ordenDeTipo(b.tipo);
+        if (oa !== ob) return oa - ob;
         if (a.tipo !== b.tipo) return a.tipo.localeCompare(b.tipo);
         if (a.cantidad !== b.cantidad) return b.cantidad - a.cantidad;
         return a.dishName.localeCompare(b.dishName);
@@ -438,10 +603,26 @@ export const formatExpirationDate = (isoDate) => {
  * Expande los grupos a las etiquetas individuales que se van a imprimir.
  * Un grupo de 18 se convierte en 18 etiquetas idénticas: la cola imprime de a una.
  */
-export const expandGroupsToLabels = (groups, expirationDate) => {
+export const expandGroupsToLabels = (groups, expirationDate, opciones = {}) => {
+    const { conDivisores = false } = opciones;
     const vence = formatExpirationDate(expirationDate);
     const labels = [];
+    let bloqueActual = null;
+
     groups.forEach(g => {
+        // Una etiqueta suelta al empezar cada bloque, para partir la tira sobre la
+        // mesa y no tener que leer plato por plato dónde empieza el Full Pack.
+        if (conDivisores && g.tipo !== bloqueActual) {
+            labels.push({
+                groupId: `divisor-${g.tipo}`,
+                divider: true,
+                type: g.tipo,
+                protein: '',
+                expirationDate: ''
+            });
+            bloqueActual = g.tipo;
+        }
+
         for (let i = 0; i < g.cantidad; i++) {
             labels.push({
                 groupId: g.id,
