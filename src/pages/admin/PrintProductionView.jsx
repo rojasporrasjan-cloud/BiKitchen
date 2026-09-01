@@ -5,7 +5,8 @@ import { collection, query, where, getDocs, onSnapshot, orderBy } from 'firebase
 import {
     mapPedidosFromLegacy,
     buildKitchenSheetData,
-    buildPackagingSheetData
+    buildPackagingSheetData,
+    detectIsTwoPack
 } from '../../utils/logisticsUtils';
 import {
     mapPackNameToMenuKey,
@@ -22,17 +23,26 @@ import {
     cleanIndividualDishName,
     isMoldOrSpecialDish,
     isBulkDishCandidate,
-    parseQuantityAndUnit
+    parseQuantityAndUnit,
+    aplicarSustitucionesAlGranel,
+    limpiarGranelVacio
 } from '../../utils/granelKitchen';
 import RevisionHoja from '../../components/admin/RevisionHoja';
 import { individualesData, getProductUnits } from '../../data/individualesData';
 import ExcelJS from 'exceljs';
+import { agregarHojasGina } from '../../utils/excelHojaProduccion';
+import { textoLlevaCena } from '../../utils/labels/labelDomain';
 
 import {
     MARGEN_COCINA,
     conMargen,
     filterNoteForDish,
+    notaParaEmpaque,
+    cantidadDePacks,
     normalizeClientKey,
+    esMismoCliente,
+    listarSustituciones,
+    textoSustitucion,
     deduplicateOrdersByClient
 } from '../../utils/productionHelpers';
 
@@ -190,16 +200,11 @@ export default function PrintProductionView() {
         if (!packsMap[pName]) {
             packsMap[pName] = { name: pName, clientes: [], platosBase: [], totalPacks: 0 };
         }
-        const cKey = normalizeClientKey(cData.cliente);
-        const nameTokens = cKey.split(/\s+/).filter(t => t.length > 2);
-
-        const existingClient = packsMap[pName].clientes.find(existing => {
-            const exKey = normalizeClientKey(existing.nombre);
-            if (exKey === cKey) return true;
-            const exTokens = exKey.split(/\s+/).filter(t => t.length > 2);
-            return (nameTokens.length >= 2 && nameTokens.every(t => exKey.includes(t))) ||
-                   (exTokens.length >= 2 && exTokens.every(t => cKey.includes(t)));
-        });
+        // Misma regla que deduplicateOrdersByClient: si cada una comparara los
+        // nombres a su manera, la hoja y las etiquetas dirian cantidades distintas.
+        const existingClient = packsMap[pName].clientes.find(
+            existing => esMismoCliente(existing.nombre, cData.cliente)
+        );
 
         if (existingClient) {
             existingClient.cantidad += (cData.cantidadMenus || 1);
@@ -239,19 +244,53 @@ export default function PrintProductionView() {
             packsInOrder.push({ name: c.plan || c.tipoMenu || 'Pack Individuales', qty: c.cantidadMenus || 1, forceIndividual: true });
         } else {
             const mainPackName = c.plan || c.tipoMenu || 'Pack Estándar';
-            packsInOrder.push({ name: mainPackName, qty: c.cantidadMenus || 1 });
+
+            // Un cliente puede comprar VARIOS packs iguales. Esa cantidad puede venir
+            // en `cantidadMenus` (pedidos de la web) o solo en el ítem (pedidos que
+            // entraron por WhatsApp). Mirando únicamente `cantidadMenus`, el pedido de
+            // "3x Pack Mensual Bajo Calorías" —₡232.500, o sea 3 × ₡77.500— salía en
+            // la hoja como UN pack: el cliente recibía la tercera parte de lo que pagó.
+            //
+            // Se toma el mayor de los dos y no la suma: son dos formas de escribir el
+            // mismo dato, no dos cantidades distintas. Solo aplica a packs; en los
+            // individuales la cantidad ya viaja dentro de cada plato.
+            packsInOrder.push({ name: mainPackName, qty: cantidadDePacks(c) });
+
+            // Un mismo pedido puede traer el pack Y productos sueltos: Priscilla lleva
+            // su pack quincenal y aparte tortas de maduro, en el mismo pedido. Esos
+            // platos se perdían, porque más abajo solo se conservan los que calzan con
+            // el nombre del pack: el cliente pagaba algo que nadie empacaba.
+            //
+            // Se descarta lo que sea un pack conocido (mapPackNameToMenuKey lo
+            // reconoce) para no convertir el propio pack en un "individual" cuando el
+            // nombre del ítem y el del plan no coinciden exactamente.
+            // Solo hace falta cuando el pack principal es un pack de MENÚ: sus platos
+            // salen del menú semanal, así que cualquier otro producto del pedido queda
+            // invisible. Si el pack ya es un producto suelto (ej: "Pack 3 Proteínas"),
+            // sus platos se listan enteros más abajo y separarlos los duplicaría.
+            if (mapPackNameToMenuKey(mainPackName)) {
+                (c.rawPedido?.items || []).forEach(item => {
+                    const nombre = String(item?.nombre || '').trim();
+                    if (!nombre || nombre === mainPackName) return;
+                    if (mapPackNameToMenuKey(nombre)) return;
+
+                    packsInOrder.push({ name: nombre, qty: Number(item.cantidad) || 1, forceIndividual: true });
+                });
+            }
         }
 
         const aggregatedPacks = {};
+        // Los productos sueltos no se parten en cenas: un postre no tiene "versión cena"
+        const productosSueltos = new Set();
         packsInOrder.forEach(pack => {
             if (!aggregatedPacks[pack.name]) aggregatedPacks[pack.name] = 0;
             aggregatedPacks[pack.name] += pack.qty;
+            if (pack.forceIndividual) productosSueltos.add(pack.name);
         });
 
-        const cleanCustomerNotes = (rawObs) => {
-            if (!rawObs) return '';
-            return String(rawObs).trim();
-        };
+        // Esta hoja la lee quien empaca: se le quitan los teléfonos y las notas de
+        // control interno, que solo le tapaban los cambios de plato de verdad.
+        const cleanCustomerNotes = (rawObs) => notaParaEmpaque(rawObs);
 
         Object.entries(aggregatedPacks).forEach(([packName, totalQty]) => {
             const nameLower = packName.toLowerCase();
@@ -266,14 +305,10 @@ export default function PrintProductionView() {
 
             const orderPlanText = `${c.plan || ''} ${c.tipoMenu || ''} ${c.categoryLabel || ''} ${c.categoria || ''} ${c.rawPedido?.plan || ''} ${c.rawPedido?.tipoMenu || ''}`;
             const combinedText = `${nameLower} ${obsLower} ${orderPlanText.toLowerCase()}`;
-            const isCenaPromo =
-                /almuerzo[s]?\s*y\s*cena[s]?/i.test(combinedText) ||
-                /\bcenas?\b/i.test(combinedText) ||
-                /two\s*pack/i.test(combinedText) ||
-                /2\s*pack/i.test(combinedText) ||
-                /dos\s*semanas/i.test(combinedText) ||
-                /promo\s*2\s*semanas/i.test(combinedText) ||
-                (/quincenal/i.test(combinedText) && /desayuno/i.test(combinedText));
+            // La regla vive en labelDomain para que la hoja y las etiquetas no puedan
+            // contradecirse: antes esta vista contaba "two pack" como cena y el
+            // impresor de etiquetas no, así que Gina cocinaba packs que nadie pidió.
+            const isCenaPromo = !productosSueltos.has(packName) && textoLlevaCena(combinedText);
 
             const filteredPlates = isIndividual ? c.platos : (c.platos || []).filter(p => p.proteina?.nombre === packName);
             const clientForPack = { ...c, cantidadMenus: totalQty };
@@ -321,7 +356,11 @@ export default function PrintProductionView() {
 
             const menuKey = mapPackNameToMenuKey(packName);
 
-            if ((c.incluyeDesayuno || hasBreakfastGift || obsHasBreakfast) && menuKey !== 'desayuno') {
+            // Los desayunos van UNA vez por cliente, no una por cada línea del pedido.
+            // Priscilla lleva su pack y aparte tortas de maduro: al separarlas, este
+            // bloque corría dos veces y le contaba 2 packs de desayunos en vez de 1.
+            const esProductoSuelto = productosSueltos.has(packName);
+            if (!esProductoSuelto && (c.incluyeDesayuno || hasBreakfastGift || obsHasBreakfast) && menuKey !== 'desayuno') {
                 const desClient = { ...clientForPack, observaciones: cleanObs };
                 addClientToPackMap('Pack de Desayunos', { ...desClient, cantidadMenus: totalQty }, []);
             }
@@ -332,6 +371,12 @@ export default function PrintProductionView() {
     const isDesayunoPack = (n) => mapPackNameToMenuKey(n) === 'desayuno';
 
     const isActuallyIndividual = (packName) => {
+        // Un menú PERSONALIZADO se empaca como pack —con sus platos, gramaje y
+        // vegetal/carbo— pero sus platos NO salen del menú semanal, sino del propio
+        // pedido. Gina los lleva así en su pestaña "Personalizado": Dalia Parrales
+        // con 3 packs sin cerdo, Maycol Ávila con dos menús y sin vainica.
+        if (/^personalizado/i.test(String(packName || '').trim())) return false;
+
         if (isIndividualPack(packName)) return true;
         // Si pertenece a una de las 7 familias de packs oficiales (Bajo Calorías, Full Pack, Keto, etc),
         // NUNCA es individual, sin importar si en las notas dice "120g proteína"
@@ -448,18 +493,12 @@ export default function PrintProductionView() {
         }
 
         const nameKey = normalizeClientKey(cName);
-        const nameTokens = nameKey.split(/\s+/).filter(t => t.length > 2);
 
+        // Misma regla de nombres que la fusion: comparar palabras, no subcadenas.
+        // Con `includes()` a un cliente le aparecia el "Lleva tambien" de otro.
         let matchedPacks = [];
         Object.keys(clientToOtherPacks).forEach(registeredName => {
-            const regKey = normalizeClientKey(registeredName);
-            const regTokens = regKey.split(/\s+/).filter(t => t.length > 2);
-
-            const isMatch = regKey === nameKey ||
-                (nameTokens.length >= 2 && nameTokens.every(token => regKey.includes(token))) ||
-                (regTokens.length >= 2 && regTokens.every(token => nameKey.includes(token)));
-
-            if (isMatch) {
+            if (esMismoCliente(registeredName, cName)) {
                 matchedPacks.push(...clientToOtherPacks[registeredName]);
             }
         });
@@ -804,6 +843,21 @@ export default function PrintProductionView() {
                     sumarAGranel(bulkItemsMap, p.carbo.nombre, units, 'taza(s)', guessCategory);
                 }
             });
+
+            // Lo que el cliente pidió cambiar tiene que cocinarse. Arriba se sumó
+            // el menú oficial parejo para todos; acá se le resta al plato original
+            // la porción de quien lo cambió y se le suma al sustituto.
+            (packData.clientes || []).forEach(c => {
+                const subs = listarSustituciones(c.rawPedido || c);
+                if (subs.length === 0) return;
+                aplicarSustitucionesAlGranel(bulkItemsMap, {
+                    sustituciones: subs,
+                    platos: platosEmpaque,
+                    porciones: cantidadDePacks(c),
+                    gramosPorPorcion: getDefaultGrams(packName),
+                    categoria: guessCategory
+                });
+            });
         });
 
         // 2. Process Individuales (Pre-empacados directamente en cocina)
@@ -902,6 +956,9 @@ export default function PrintProductionView() {
                 });
             });
         });
+
+        // Un plato que quedó en cero por las sustituciones ya no se cocina.
+        limpiarGranelVacio(bulkItemsMap);
 
         // Format consolidated kitchen notes for bulk items
         Object.values(bulkItemsMap).forEach(item => {
@@ -1330,14 +1387,6 @@ export default function PrintProductionView() {
                 bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } },
                 right: { style: 'thin', color: { argb: 'FFCCCCCC' } }
             };
-
-            const thickBottomBorder = {
-                top: { style: 'thin', color: { argb: 'FFCCCCCC' } },
-                left: { style: 'thin', color: { argb: 'FFCCCCCC' } },
-                bottom: { style: 'medium', color: { argb: 'FF000000' } },
-                right: { style: 'thin', color: { argb: 'FFCCCCCC' } }
-            };
-
             const sanitizeNote = (obs) => {
                 if (!obs) return '';
                 const cleaned = String(obs)
@@ -1362,511 +1411,224 @@ export default function PrintProductionView() {
             };
 
             // ═════════════════════════════════════════════════════════════════
-            // PESTAÑA 1: HOJAS DE EMPAQUE (PACKS)
+            // PESTAÑAS EN EL FORMATO DE GINA
+            //
+            // Ella arma su archivo a mano con una pestaña por familia de pack y
+            // los dos menús del día uno al lado del otro. Se respeta ese formato
+            // para que lo entienda de una y pueda editarlo si algo cambia.
             // ═════════════════════════════════════════════════════════════════
-            const wsEmpaque = wb.addWorksheet('Empaque Packs', {
-                views: [{ showGridLines: true }],
-                pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 }
-            });
 
-            wsEmpaque.columns = [
-                { width: 14 }, // A: # Plato
-                { width: 40 }, // B: Descripción Platillo
-                { width: 16 }, // C: Porción
-                { width: 10 }, // D: Platos
-                { width: 35 }, // E: Especificaciones
-                { width: 60 }  // F: Cliente / Zona / Nota
-            ];
+            /** "MIERCOLES 26 AGOSTO", tal como titula ella sus pestañas. */
+            const etiquetaDia = (() => {
+                if (!date) return 'PRODUCCION';
+                const d = new Date(`${date}T12:00:00`);
+                if (Number.isNaN(d.getTime())) return String(date);
+                const dias = ['DOMINGO', 'LUNES', 'MARTES', 'MIERCOLES', 'JUEVES', 'VIERNES', 'SABADO'];
+                const meses = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO',
+                    'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'];
+                return `${dias[d.getDay()]} ${d.getDate()} ${meses[d.getMonth()]}`;
+            })();
 
-            // Main Title Header
-            wsEmpaque.mergeCells('A1:F1');
-            const mainEmpaqueTitle = wsEmpaque.getCell('A1');
-            mainEmpaqueTitle.value = `HOJA DE EMPAQUE - PACKS (FECHA: ${date || ''})`;
-            mainEmpaqueTitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
-            mainEmpaqueTitle.font = { name: 'Calibri', size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
-            mainEmpaqueTitle.alignment = { horizontal: 'center', vertical: 'middle' };
-            wsEmpaque.getRow(1).height = 30;
-
-            let rowIdx = 3;
-
-            regularPackNames.forEach((packName, pIdx) => {
-                const packData = consolidatedPacksMap[packName];
-                const totalPacks = packData?.totalPacks || 0;
-                const defaultGrams = getDefaultGrams(packName);
-
-                if (pIdx > 0 && rowIdx > 3) {
-                    wsEmpaque.getRow(rowIdx - 1).pageBreak = true;
+            /** Nombre y zona; y la semana cuando el pack tiene varias entregas. */
+            const etiquetaDeCliente = (c) => {
+                const zona = c.zona_envio || '';
+                const zonaStr = zona && zona !== 'No especificada' && zona.toLowerCase() !== 'recoge en tienda'
+                    ? `, ${zona}` : '';
+                if (c.rawPedido) {
+                    const schedule = getScheduleFromOrder(c.rawPedido);
+                    const idx = schedule.indexOf(date);
+                    if (schedule.length > 1 && idx !== -1) {
+                        return `${c.nombre} (${c.cantidad}) (Semana ${idx + 1})${zonaStr}`;
+                    }
                 }
+                return `${c.nombre} (${c.cantidad})${zonaStr}`;
+            };
 
-                // Yellow Title Banner
-                wsEmpaque.mergeCells(`A${rowIdx}:F${rowIdx}`);
-                const bannerCell = wsEmpaque.getCell(`A${rowIdx}`);
-                bannerCell.value = `PACK: ${packName.toUpperCase()} (${totalPacks} PACKS Total)`;
-                bannerCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFACC15' } };
-                bannerCell.font = { name: 'Calibri', size: 14, bold: true, color: { argb: 'FF000000' } };
-                bannerCell.alignment = { horizontal: 'center', vertical: 'middle' };
-                wsEmpaque.getRow(rowIdx).height = 26;
-                rowIdx++;
+            // TWO PACK va de primero: es lo que decide cuantos packs se empacan.
+            const notasDeCliente = (c, packName) =>
+                [
+                    detectIsTwoPack(c.rawPedido || c) ? 'TWO PACK - empacar 2 packs iguales' : '',
+                    sanitizeNote(c.observaciones),
+                    getOtherPacksTag(c.nombre, packName)
+                ].filter(Boolean).join(' | ');
 
-                // Quantity Rules
-                wsEmpaque.mergeCells(`A${rowIdx}:B${rowIdx}`);
-                wsEmpaque.getCell(`A${rowIdx}`).value = 'CANTIDAD POR PLATO';
-                wsEmpaque.getCell(`A${rowIdx}`).font = { name: 'Calibri', size: 10, bold: true };
-                wsEmpaque.mergeCells(`C${rowIdx}:F${rowIdx}`);
-                wsEmpaque.getCell(`C${rowIdx}`).value = `${defaultGrams} GRAMOS DE PROTEINA`;
-                wsEmpaque.getCell(`C${rowIdx}`).font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FF1E3A8A' } };
-                rowIdx++;
-
-                wsEmpaque.mergeCells(`A${rowIdx}:B${rowIdx}`);
-                wsEmpaque.getCell(`A${rowIdx}`).value = 'CANTIDAD POR PLATO';
-                wsEmpaque.getCell(`A${rowIdx}`).font = { name: 'Calibri', size: 10, bold: true };
-                wsEmpaque.mergeCells(`C${rowIdx}:F${rowIdx}`);
-                wsEmpaque.getCell(`C${rowIdx}`).value = '1 TAZA(S) DE VEGETALES';
-                wsEmpaque.getCell(`C${rowIdx}`).font = { name: 'Calibri', size: 10, bold: true };
-                rowIdx++;
-
-                const menuKey = packData?.menuKey || mapPackNameToMenuKey(packName);
-                const showCarbo = menuKey !== 'keto' && menuKey !== 'sinCarbos';
-
-                if (showCarbo) {
-                    wsEmpaque.mergeCells(`A${rowIdx}:B${rowIdx}`);
-                    wsEmpaque.getCell(`A${rowIdx}`).value = 'CANTIDAD POR PLATO';
-                    wsEmpaque.getCell(`A${rowIdx}`).font = { name: 'Calibri', size: 10, bold: true };
-                    wsEmpaque.mergeCells(`C${rowIdx}:F${rowIdx}`);
-                    wsEmpaque.getCell(`C${rowIdx}`).value = '0.5 TAZA(S) DE HARINA';
-                    wsEmpaque.getCell(`C${rowIdx}`).font = { name: 'Calibri', size: 10, bold: true };
-                    rowIdx++;
-                }
-
-                // Table Column Headers
-                const packHeaders = ['# de Plato', 'Descripción Platillo', 'Porción', 'Platos', 'Especificaciones', 'Cliente'];
-                const hRow = wsEmpaque.getRow(rowIdx);
-                hRow.height = 24;
-                packHeaders.forEach((h, colI) => {
-                    const cell = hRow.getCell(colI + 1);
-                    cell.value = h;
-                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
-                    cell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
-                    cell.alignment = { horizontal: 'center', vertical: 'middle' };
-                    cell.border = thinBorder;
-                });
-                rowIdx++;
-
+            /** Los platos del pack con el gramaje ya resuelto. */
+            const platosDelPack = (packName, packData) => {
                 const rawPlatos = resolvePlatosForPack(packName, packData);
+                const base = rawPlatos.length > 0 ? rawPlatos : (packData.platosBase || []);
+                const gramosPack = getDefaultGrams(packName);
 
-                const clientsList = [...packData.clientes];
-                const subRowsCount = 3; // 3 sub-rows per dish (Protein, Veggie, Carbo)
-                const maxDishes = rawPlatos.length > 0 ? rawPlatos.length : 5;
-
-                const getDishVal = (val) => {
-                    if (!val) return '—';
-                    if (typeof val === 'string') return val;
-                    if (typeof val === 'object' && val.nombre) return val.nombre;
-                    return '—';
-                };
-
-                for (let dIdx = 0; dIdx < maxDishes; dIdx++) {
-                    const dish = rawPlatos[dIdx] || {};
-                    const pName = getDishVal(dish.proteina);
-                    const vName = getDishVal(dish.vegetal || dish.ensalada);
-                    const cName = showCarbo ? getDishVal(dish.carbo) : '—';
-
-                    const startR = rowIdx;
-                    const subRowsData = [
-                        { name: pName, portion: `${defaultGrams}g` },
-                        { name: vName, portion: '1 taza' },
-                        { name: cName, portion: '0.5 taza' }
-                    ];
-
-                    subRowsData.forEach((sub, subRowIdx) => {
-                        // Column E & F: Map clients 1:1 per dish sub-row
-                        const clientIndex = dIdx * subRowsCount + subRowIdx;
-                        const client = clientsList[clientIndex];
-
-                        let specText = '';
-                        let clientText = '';
-
-                        if (client) {
-                            const zone = client.zona_envio || '';
-                            const zoneStr = zone && zone !== 'No especificada' && zone.toLowerCase() !== 'recoge en tienda' ? `, ${zone}` : '';
-                            const qty = client.cantidad || 1;
-
-                            let displayName = client.nombre;
-                            if (client.rawPedido) {
-                                const schedule = getScheduleFromOrder(client.rawPedido);
-                                const dateIdx = schedule.indexOf(date);
-                                if (schedule.length > 1 && dateIdx !== -1) {
-                                    displayName = `${client.nombre} (Semana ${dateIdx + 1})`;
-                                }
-                            }
-
-                            clientText = qty > 1 ? `${displayName} (${qty})${zoneStr}` : `${displayName}${zoneStr}`;
-
-                            const tags = [];
-                            const otherPacksTag = getOtherPacksTag(client.nombre, packName);
-                            if (otherPacksTag) tags.push(otherPacksTag);
-
-                            const dishObs = filterNoteForDish(client.observaciones, dish, rawPlatos);
-                            const cleanObsText = sanitizeNote(dishObs);
-                            specText = [cleanObsText, tags.join(' | ')].filter(Boolean).join(' — ');
-                            if (specText) specText = `** ${specText}`;
+                return base.map((p, idx) => {
+                    const original = (packData.platosBase || [])[idx] || {};
+                    // El menú oficial guarda los platos como texto; los del pedido, como objetos
+                    const esOficial = typeof p.proteina === 'string';
+                    return {
+                        numero: p.numero || idx + 1,
+                        proteina: {
+                            nombre: esOficial ? p.proteina : (p.proteina?.nombre || original.proteina?.nombre || '—'),
+                            gramosPorPorcion: esOficial ? gramosPack
+                                : (p.proteina?.gramosPorPorcion || original.proteina?.gramosPorPorcion || gramosPack)
+                        },
+                        vegetal: {
+                            nombre: esOficial ? p.vegetal : (p.vegetal?.nombre || original.vegetal?.nombre || '—'),
+                            cantidadPorPorcion: esOficial ? 1
+                                : (p.vegetal?.cantidadPorPorcion || original.vegetal?.cantidadPorPorcion || 1)
+                        },
+                        carbo: {
+                            nombre: esOficial ? p.carbo : (p.carbo?.nombre || original.carbo?.nombre || '—'),
+                            cantidadPorPorcion: esOficial ? 0.5
+                                : (p.carbo?.cantidadPorPorcion || original.carbo?.cantidadPorPorcion || 0.5)
                         }
-
-                        // Calculate dynamic row height so text in Col B, Col E, Col F NEVER clips
-                        const linesB = Math.ceil((sub.name || '').length / 38);
-                        const linesE = Math.ceil((specText || '').length / 32);
-                        const linesF = Math.ceil((clientText || '').length / 45);
-                        const maxLines = Math.max(1, linesB, linesE, linesF);
-
-                        const r = wsEmpaque.getRow(rowIdx);
-                        r.height = Math.max(22, maxLines * 16);
-
-                        r.getCell(2).value = sub.name;
-                        r.getCell(3).value = sub.portion;
-
-                        r.getCell(2).font = { name: 'Calibri', size: 10 };
-                        r.getCell(3).font = { name: 'Calibri', size: 10 };
-                        r.getCell(2).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
-                        r.getCell(3).alignment = { horizontal: 'center', vertical: 'middle' };
-
-                        r.getCell(2).border = thinBorder;
-                        r.getCell(3).border = thinBorder;
-
-                        r.getCell(5).value = specText;
-                        r.getCell(6).value = clientText;
-
-                        r.getCell(5).font = { name: 'Calibri', size: 9 };
-                        r.getCell(6).font = { name: 'Calibri', size: 10, bold: true };
-                        r.getCell(5).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
-                        r.getCell(6).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
-
-                        r.getCell(5).border = thinBorder;
-                        r.getCell(6).border = thinBorder;
-
-                        if (client) {
-                            r.getCell(6).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2F0D9' } };
-                        }
-
-                        rowIdx++;
-                    });
-
-                    const endR = rowIdx - 1;
-
-                    // Merge Column A (# de Plato) across the 3 sub-rows
-                    wsEmpaque.mergeCells(`A${startR}:A${endR}`);
-                    const cellA = wsEmpaque.getCell(`A${startR}`);
-                    cellA.value = `Plato ${dIdx + 1}`;
-                    cellA.font = { name: 'Calibri', size: 10, bold: true };
-                    cellA.alignment = { horizontal: 'center', vertical: 'middle' };
-
-                    // Merge Column D (Platos total count) across the 3 sub-rows
-                    wsEmpaque.mergeCells(`D${startR}:D${endR}`);
-                    const cellD = wsEmpaque.getCell(`D${startR}`);
-                    cellD.value = totalPacks;
-                    cellD.font = { name: 'Calibri', size: 11, bold: true };
-                    cellD.alignment = { horizontal: 'center', vertical: 'middle' };
-
-                    for (let r = startR; r <= endR; r++) {
-                        const curRow = wsEmpaque.getRow(r);
-                        curRow.getCell(1).border = (r === endR) ? thickBottomBorder : thinBorder;
-                        curRow.getCell(2).border = (r === endR) ? thickBottomBorder : thinBorder;
-                        curRow.getCell(3).border = (r === endR) ? thickBottomBorder : thinBorder;
-                        curRow.getCell(4).border = (r === endR) ? thickBottomBorder : thinBorder;
-                        curRow.getCell(5).border = (r === endR) ? thickBottomBorder : thinBorder;
-                        curRow.getCell(6).border = (r === endR) ? thickBottomBorder : thinBorder;
-                    }
-                }
-
-                rowIdx += 2; // Blank spacing
-            });
-
-            // ═════════════════════════════════════════════════════════════════
-            // PESTAÑA 2: EMPAQUE DESAYUNOS (Formato Gina 1:1 con altura dinámica)
-            // ═════════════════════════════════════════════════════════════════
-            const wsDesayunos = wb.addWorksheet('Empaque Desayunos', {
-                views: [{ showGridLines: true }],
-                pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 }
-            });
-
-            wsDesayunos.columns = [
-                { width: 14 }, // A: Plato
-                { width: 40 }, // B: Descripción
-                { width: 14 }, // C: Cantidad
-                { width: 50 }, // D: NOTA
-                { width: 50 }  // E: Cliente
-            ];
-
-            let dRowIdx = 1;
-            const desayunoPackNames = allPackNames.filter(n => isDesayunoPack(n));
-
-            if (desayunoPackNames.length === 0) {
-                wsDesayunos.mergeCells('A1:E1');
-                const emptyTitle = wsDesayunos.getCell('A1');
-                emptyTitle.value = `DESAYUNOS - EMPAQUE (${date || ''}) — No hay desayunos programados`;
-                emptyTitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF4B084' } };
-                emptyTitle.font = { name: 'Calibri', size: 14, bold: true };
-                emptyTitle.alignment = { horizontal: 'center', vertical: 'middle' };
-            } else {
-                desayunoPackNames.forEach((packName, pIdx) => {
-                    const packData = packsMap[packName];
-                    if (!packData || !packData.clientes || packData.clientes.length === 0) return;
-
-                    if (pIdx > 0 && dRowIdx > 1) {
-                        wsDesayunos.getRow(dRowIdx - 1).pageBreak = true;
-                    }
-
-                    const menuKey = mapPackNameToMenuKey(packName);
-                    let rawPlatos = (officialMenus && menuKey && officialMenus[menuKey]) ? officialMenus[menuKey].platos || officialMenus[menuKey] : [];
-                    if (!rawPlatos || rawPlatos.length === 0) rawPlatos = packData.platosBase || [];
-
-                    // Title Header - Soft Orange #F4B084
-                    wsDesayunos.mergeCells(`A${dRowIdx}:E${dRowIdx}`);
-                    const banner = wsDesayunos.getCell(`A${dRowIdx}`);
-                    banner.value = `DESAYUNOS - ${packName.toUpperCase()} (${packData.totalPacks} TOTAL)`;
-                    banner.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF4B084' } };
-                    banner.font = { name: 'Calibri', size: 14, bold: true, color: { argb: 'FF000000' } };
-                    banner.alignment = { horizontal: 'center', vertical: 'middle' };
-                    wsDesayunos.getRow(dRowIdx).height = 28;
-                    dRowIdx++;
-
-                    // Subheaders - Light Orange #FCE4D6
-                    const dHeaders = ['Plato', 'Descripción', 'Cantidad', 'NOTA', 'Cliente'];
-                    const dHeaderRow = wsDesayunos.getRow(dRowIdx);
-                    dHeaderRow.height = 22;
-                    dHeaders.forEach((h, colI) => {
-                        const cell = dHeaderRow.getCell(colI + 1);
-                        cell.value = h;
-                        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFCE4D6' } };
-                        cell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FF000000' } };
-                        cell.alignment = { horizontal: 'center', vertical: 'middle' };
-                        cell.border = thinBorder;
-                    });
-                    dRowIdx++;
-
-                    const clientsList = [...packData.clientes];
-                    const maxRows = Math.max(rawPlatos.length > 0 ? rawPlatos.length : 5, clientsList.length);
-
-                    for (let i = 0; i < maxRows; i++) {
-                        const dish = rawPlatos[i];
-                        let dishDesc = '';
-                        if (dish) {
-                            const isOfficial = typeof dish.proteina === 'string';
-                            dishDesc = isOfficial ? dish.proteina : (dish.proteina?.nombre || '');
-                        }
-
-                        const client = clientsList[i];
-                        let clientName = '';
-                        let clientNote = '';
-                        if (client) {
-                            const zone = client.zona_envio || '';
-                            const zoneStr = zone && zone !== 'No especificada' && zone.toLowerCase() !== 'recoge en tienda' ? `, ${zone}` : '';
-                            const qty = client.cantidad || 1;
-                            let displayName = client.nombre;
-                            if (client.rawPedido) {
-                                const schedule = getScheduleFromOrder(client.rawPedido);
-                                const dateIdx = schedule.indexOf(date);
-                                if (schedule.length > 1 && dateIdx !== -1) {
-                                    displayName = `${client.nombre} (Semana ${dateIdx + 1})`;
-                                }
-                            }
-                            clientName = qty > 1 ? `${displayName} (${qty})${zoneStr}` : `${displayName}${zoneStr}`;
-
-                            const tags = [];
-                            if (client.rawPedido?.plan && !client.rawPedido.plan.toLowerCase().includes('desayuno')) tags.push(client.rawPedido.plan);
-                            const otherPacksTag = getOtherPacksTag(client.nombre, packName);
-                            if (otherPacksTag) tags.push(otherPacksTag);
-
-                            const cleanObsText = sanitizeNote(client.observaciones);
-                            clientNote = [cleanObsText, tags.join(' | ')].filter(Boolean).join(' — ');
-                        }
-
-                        // Dynamic height calculation so long multi-line notes are NEVER clipped
-                        const noteLines = Math.max(
-                            1,
-                            Math.ceil((clientNote || '').length / 45),
-                            Math.ceil((clientName || '').length / 35)
-                        );
-                        const rowHeight = Math.max(22, noteLines * 16);
-
-                        const row = wsDesayunos.getRow(dRowIdx);
-                        row.height = rowHeight;
-                        row.getCell(1).value = dish ? `Plato ${i + 1}` : '';
-                        row.getCell(2).value = dishDesc;
-                        row.getCell(3).value = dish ? packData.totalPacks : '';
-                        row.getCell(4).value = clientNote;
-                        row.getCell(5).value = clientName;
-
-                        for (let c = 1; c <= 5; c++) {
-                            const cell = row.getCell(c);
-                            cell.border = thinBorder;
-                            cell.font = { name: 'Calibri', size: 10 };
-                            if (c === 1 || c === 3) cell.alignment = { horizontal: 'center', vertical: 'middle' };
-                            if (c === 2) cell.alignment = { horizontal: 'left', vertical: 'middle' };
-                            if (c === 4) cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
-                            if (c === 5) {
-                                cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
-                                if (client) {
-                                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2F0D9' } };
-                                    cell.font = { name: 'Calibri', size: 10, bold: true };
-                                }
-                            }
-                        }
-                        dRowIdx++;
-                    }
-
-                    dRowIdx += 2; // Blank spacing
+                    };
                 });
-            }
+            };
 
-            // ═════════════════════════════════════════════════════════════════
-            // PESTAÑA 3: EMPAQUE INDIVIDUALES (Formato Gina 1:1 con celdas combinadas)
-            // ═════════════════════════════════════════════════════════════════
-            const wsIndividuales = wb.addWorksheet('Empaque Individuales', {
-                views: [{ showGridLines: true }],
-                pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 }
+            /** Un bloque de menú listo para escribirse en la pestaña. */
+            const bloqueDeMenu = (packName, packData, numero) => {
+                if (!packData) return null;
+                const menuKey = packData.menuKey || mapPackNameToMenuKey(packName);
+                // Keto y Sin Carbos no llevan harina: su bloque es de dos filas por plato
+                const llevaCarbo = menuKey !== 'keto' && menuKey !== 'sinCarbos';
+                const platos = platosDelPack(packName, packData);
+
+                const porciones = [
+                    `${platos[0]?.proteina?.gramosPorPorcion || getDefaultGrams(packName)} GRAMOS DE PROTEINA`,
+                    `${platos[0]?.vegetal?.cantidadPorPorcion || 1} TAZA(S) DE VEGETALES`
+                ];
+                if (llevaCarbo) porciones.push(`${platos[0]?.carbo?.cantidadPorPorcion || 0.5} TAZA(S) DE HARINA`);
+
+                return {
+                    // "Menú #2" ya dice que es la cena: repetir el prefijo sobra
+                    titulo: `Menú #${numero} ${packName.replace(/^CENAS\s*-\s*/i, '')}`,
+                    porciones,
+                    platos,
+                    llevaCarbo,
+                    totalPlatos: packData.totalPacks || 0,
+                    clientes: (packData.clientes || []).map(c => ({
+                        etiqueta: etiquetaDeCliente(c),
+                        notas: notasDeCliente(c, packName)
+                    }))
+                };
+            };
+
+            // Cada familia es una pestaña: el menú de almuerzo y, al lado, el de cena
+            const nombresDeAlmuerzo = regularPackNames.filter(n => !n.startsWith('CENAS -'));
+            const familias = nombresDeAlmuerzo.map(packName => ({
+                titulo: packName,
+                menu1: bloqueDeMenu(packName, consolidatedPacksMap[packName], 1),
+                menu2: consolidatedPacksMap[`CENAS - ${packName}`]
+                    ? bloqueDeMenu(`CENAS - ${packName}`, consolidatedPacksMap[`CENAS - ${packName}`], 2)
+                    : null
+            }));
+
+            // Cenas de una familia que ese día no lleva almuerzos: van en su propia pestaña
+            regularPackNames.filter(n => n.startsWith('CENAS -')).forEach(nombreCena => {
+                const base = nombreCena.replace(/^CENAS\s*-\s*/i, '');
+                if (nombresDeAlmuerzo.includes(base)) return;
+                familias.push({
+                    titulo: nombreCena,
+                    menu1: bloqueDeMenu(nombreCena, consolidatedPacksMap[nombreCena], 2),
+                    menu2: null
+                });
             });
 
-            wsIndividuales.columns = [
-                { width: 45 }, // A: Producto / Platillo
-                { width: 22 }, // B: Cantidad
-                { width: 55 }  // C: Cliente
-            ];
-
-            const indivPackNames = allPackNames.filter(n => isActuallyIndividual(n) && !isDesayunoPack(n));
-            const clientsDataIndiv = {};
-
-            indivPackNames.forEach(packName => {
+            // ── Desayunos ──
+            const desayunos = { platos: [], clientes: [], totalPlatos: 0 };
+            allPackNames.filter(n => isDesayunoPack(n)).forEach(packName => {
                 const packData = packsMap[packName];
-                if (!packData || !packData.clientes) return;
+                if (!packData?.clientes?.length) return;
+                desayunos.totalPlatos += packData.totalPacks || 0;
+                if (desayunos.platos.length === 0) desayunos.platos = platosDelPack(packName, packData);
+                packData.clientes.forEach(c => desayunos.clientes.push({
+                    etiqueta: etiquetaDeCliente(c),
+                    notas: notasDeCliente(c, packName)
+                }));
+            });
+
+            // ── Individuales ──
+            const formatoCantidad = (nombre, cuenta, gramos) => {
+                const parsed = parseQuantityAndUnit(nombre, '', cuenta, gramos);
+                if (parsed.unit === 'g' && parsed.portionGrams) {
+                    const porciones = Math.round(parsed.totalQty / parsed.portionGrams);
+                    return porciones > 1
+                        ? `${parsed.totalQty}g (${porciones} porciones de ${parsed.portionGrams}g)`
+                        : `${parsed.totalQty}g (${parsed.portionGrams}g)`;
+                }
+                if (parsed.unit === 'g') return `${parsed.totalQty}g`;
+                if (parsed.unit === 'kg') return `${parsed.totalQty} kg`;
+                if (parsed.unit === 'taza(s)') return `${parsed.totalQty} taza${parsed.totalQty > 1 ? 's' : ''}`;
+                return `${parsed.totalQty} unidad${parsed.totalQty > 1 ? 'es' : ''}`;
+            };
+
+            const individuales = [];
+            allPackNames.filter(n => isActuallyIndividual(n) && !isDesayunoPack(n)).forEach(packName => {
+                const packData = packsMap[packName];
+                if (!packData?.clientes) return;
 
                 packData.clientes.forEach(c => {
-                    const zone = c.zona_envio || '';
-                    const zoneStr = zone && zone !== 'No especificada' && zone.toLowerCase() !== 'recoge en tienda' ? `, ${zone}` : '';
-                    const fullName = `${c.nombre}${zoneStr}`;
-                    const cleanUserObs = sanitizeNote(c.observaciones);
-                    const otherPacksTag = getOtherPacksTag(c.nombre, packName);
-                    const finalObs = [cleanUserObs, otherPacksTag].filter(Boolean).join(' | ');
-
-                    if (!clientsDataIndiv[fullName]) {
-                        clientsDataIndiv[fullName] = { nombre: fullName, items: [], observaciones: finalObs };
+                    const etiqueta = etiquetaDeCliente(c);
+                    let entrada = individuales.find(i => i.cliente === etiqueta);
+                    if (!entrada) {
+                        entrada = { cliente: etiqueta, notas: '', lineas: [] };
+                        individuales.push(entrada);
                     }
-
-                    const formatQty = (nameStr, count, gramsVal) => {
-                        const parsed = parseQuantityAndUnit(nameStr, '', count, gramsVal);
-                        if (parsed.unit === 'g' && parsed.portionGrams) {
-                            const tazas = Math.round(parsed.totalQty / parsed.portionGrams);
-                            if (tazas > 1) {
-                                return `${parsed.totalQty}g (${tazas} porciones de ${parsed.portionGrams}g)`;
-                            }
-                            return `${parsed.totalQty}g (${parsed.portionGrams}g)`;
-                        }
-                        if (parsed.unit === 'g') {
-                            return `${parsed.totalQty}g`;
-                        }
-                        if (parsed.unit === 'taza(s)') {
-                            return `${parsed.totalQty} taza${parsed.totalQty > 1 ? 's' : ''}`;
-                        }
-                        if (parsed.unit === 'kg') {
-                            return `${parsed.totalQty} kg`;
-                        }
-                        return `${parsed.totalQty} unidad${parsed.totalQty > 1 ? 'es' : ''}`;
-                    };
+                    // La nota va una sola vez, junto al nombre, como en la hoja impresa
+                    const notas = notasDeCliente(c, packName);
+                    if (notas && !entrada.notas.includes(notas)) {
+                        entrada.notas = entrada.notas ? `${entrada.notas} · ${notas}` : notas;
+                    }
 
                     if (c.platos && c.platos.length > 0) {
                         c.platos.forEach(p => {
-                            let protName = p.proteina?.nombre || packName;
-                            if (p.descripcion && p.descripcion.trim() !== '') protName += ` (${p.descripcion})`;
-                            const grams = p.proteina?.gramosPorPorcion;
-                            const itemCount = p.cantidad || c.cantidad || 1;
-                            clientsDataIndiv[fullName].items.push({
-                                name: protName,
-                                qty: formatQty(protName, itemCount, grams)
-                            });
+                            const nombre = p.proteina?.nombre || packName;
+
+                            // La etiqueta del plan ("Individuales", "Semanal") no es una
+                            // porción: solo sirve si trae un número ("8 porciones",
+                            // "2 tazas"). Si no, ensucia el nombre y ocupa la columna
+                            // de cantidad con una palabra que no dice cuánto va.
+                            const etiqueta = String(p.descripcion || '').trim();
+                            const etiquetaUtil = /\d/.test(etiqueta) ? etiqueta : '';
+                            const desc = nombre;
+                            // Cuando el producto no se mide en gramos, parseQuantityAndUnit
+                            // adivina "tazas" y a un pastel le ponía "1 taza". La etiqueta
+                            // del propio producto ("8 porciones") es el dato de verdad.
+                            const veces = p.cantidad || c.cantidad || 1;
+                            const gramos = p.proteina?.gramosPorPorcion;
+                            // La medida escrita en el pedido manda sobre todo: es la que Gina
+                            // anotó y la que se cocina. Solo si no viene se recurre a la
+                            // etiqueta del producto o al cálculo.
+                            const cantidad = p.medida
+                                ? (veces > 1 ? `${veces} × ${p.medida}` : p.medida)
+                                : (!gramos && etiquetaUtil)
+                                ? (veces > 1 ? `${veces} × ${etiquetaUtil}` : etiquetaUtil)
+                                : formatoCantidad(nombre, veces, gramos);
+
+                            entrada.lineas.push({ desc, cantidad, notas });
                         });
                     } else {
-                        const itemCount = c.cantidad || 1;
-                        clientsDataIndiv[fullName].items.push({
-                            name: packName,
-                            qty: formatQty(packName, itemCount, null)
+                        entrada.lineas.push({
+                            desc: packName,
+                            cantidad: formatoCantidad(packName, c.cantidad || 1, null)
                         });
                     }
                 });
             });
 
-            const indivClientNames = Object.keys(clientsDataIndiv).sort();
+            // ── Entregas del día ──
+            const entregas = cleanOrders
+                .map(o => ({
+                    cliente: o.cliente,
+                    zona: o.zona_envio,
+                    paquete: o.plan || o.tipoMenu,
+                    // Sin teléfonos ni notas de control: esta lista se usa para despachar
+                    cambios: notaParaEmpaque(sanitizeNote(o.observaciones))
+                }))
+                .sort((a, b) => String(a.cliente || '').localeCompare(String(b.cliente || '')));
 
-            wsIndividuales.mergeCells('A1:C1');
-            const indivTitleBanner = wsIndividuales.getCell('A1');
-            indivTitleBanner.value = `PRODUCTOS INDIVIDUALES - EMPAQUE (${date || ''})`;
-            indivTitleBanner.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
-            indivTitleBanner.font = { name: 'Calibri', size: 15, bold: true, color: { argb: 'FFFFFFFF' } };
-            indivTitleBanner.alignment = { horizontal: 'center', vertical: 'middle' };
-            wsIndividuales.getRow(1).height = 30;
-
-            let indRowIdx = 3;
-
-            if (indivClientNames.length === 0) {
-                const row = wsIndividuales.getRow(indRowIdx);
-                row.getCell(1).value = 'No hay productos individuales para esta fecha';
-                wsIndividuales.mergeCells(`A${indRowIdx}:C${indRowIdx}`);
-                row.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
-                row.getCell(1).font = { name: 'Calibri', size: 11, italic: true };
-            } else {
-                const iSubHeaders = ['Producto / Platillo', 'Cantidad', 'Cliente'];
-                const iHeaderRow = wsIndividuales.getRow(indRowIdx);
-                iHeaderRow.height = 22;
-                iSubHeaders.forEach((h, colI) => {
-                    const cell = iHeaderRow.getCell(colI + 1);
-                    cell.value = h;
-                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF374151' } };
-                    cell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
-                    cell.alignment = { horizontal: 'center', vertical: 'middle' };
-                    cell.border = thinBorder;
-                });
-                indRowIdx++;
-
-                indivClientNames.forEach(cName => {
-                    const client = clientsDataIndiv[cName];
-                    const items = client.items;
-                    const startR = indRowIdx;
-                    const endR = indRowIdx + items.length - 1;
-
-                    items.forEach((item) => {
-                        const row = wsIndividuales.getRow(indRowIdx);
-                        row.height = 22;
-                        row.getCell(1).value = item.name;
-                        row.getCell(2).value = item.qty;
-
-                        row.getCell(1).border = thinBorder;
-                        row.getCell(2).border = thinBorder;
-                        row.getCell(1).font = { name: 'Calibri', size: 10 };
-                        row.getCell(2).font = { name: 'Calibri', size: 10, bold: true };
-                        row.getCell(2).alignment = { horizontal: 'center', vertical: 'middle' };
-
-                        indRowIdx++;
-                    });
-
-                    // Merge client cell vertically across all items of this client (matching Gina 1:1)
-                    wsIndividuales.mergeCells(`C${startR}:C${endR}`);
-                    const clientCell = wsIndividuales.getCell(`C${startR}`);
-                    const obsStr = client.observaciones ? ` [${client.observaciones}]` : '';
-                    clientCell.value = `${client.nombre}${obsStr}`;
-                    clientCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2F0D9' } };
-                    clientCell.font = { name: 'Calibri', size: 10, bold: true };
-                    clientCell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
-
-                    for (let r = startR; r <= endR; r++) {
-                        const cCell = wsIndividuales.getCell(`C${r}`);
-                        cCell.border = (r === endR) ? thickBottomBorder : thinBorder;
-                    }
-
-                    // Blank spacing row between clients
-                    indRowIdx++;
-                });
-            }
+            agregarHojasGina(wb, { etiquetaDia, entregas, familias, desayunos, individuales });
 
             // ═════════════════════════════════════════════════════════════════
-            // PESTAÑA 4: HOJA DE COCINA
+            // PESTAÑA EXTRA: HOJA DE COCINA (los totales a cocinar)
             // ═════════════════════════════════════════════════════════════════
             const wsCocina = wb.addWorksheet('Hoja Cocina', {
                 views: [{ showGridLines: true }],
@@ -2016,7 +1778,7 @@ export default function PrintProductionView() {
             }
 
             // ═════════════════════════════════════════════════════════════════
-            // PESTAÑA 4: RESUMEN PEDIDOS
+            // PESTAÑA EXTRA: RESUMEN DE PEDIDOS
             // ═════════════════════════════════════════════════════════════════
             const wsResumen = wb.addWorksheet('Resumen Pedidos', {
                 views: [{ showGridLines: true }]
@@ -2107,7 +1869,7 @@ export default function PrintProductionView() {
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `Produccion_BiKitchen_${date || 'export'}.xlsx`;
+            a.download = `Tabla para resumenes ${etiquetaDia}.xlsx`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -2163,7 +1925,7 @@ export default function PrintProductionView() {
                         onClick={handleExportToExcel}
                         className="px-8 py-3 bg-emerald-600 text-white rounded-lg font-bold hover:bg-emerald-700 transition shadow-lg flex items-center gap-2"
                     >
-                        📊 Descargar Excel Completo (.xls)
+                        📊 Descargar Excel (formato de Gina)
                     </button>
                     {date === '2026-08-19' && (
                         <button
@@ -2308,11 +2070,15 @@ export default function PrintProductionView() {
                                                         const hasDesayunoAlready = client.incluyeDesayuno || (client.observaciones && client.observaciones.toLowerCase().includes('desayun'));
                                                         if (client.incluyeDesayuno) tags.push('🌅 Desayunos');
 
-                                                        const isTwoPack = client.categoria === 'two_pack' || /two\s*pack/i.test(client.categoryLabel || '') || /two\s*pack/i.test(client.plan || '');
-                                                        if (isTwoPack) tags.push('Two Pack');
+                                                        // TWO PACK se escribe aparte: quien empaca tiene que leer que son DOS
+                                                        // packs iguales. El "(2)" de la celda del cliente se pasa por alto y se
+                                                        // empacaba uno solo. "Individuales" sigue fuera: tiene su propia hoja.
+                                                        if (detectIsTwoPack(client.rawPedido || client)) tags.push('👥 TWO PACK — empacar 2 packs iguales');
+                                                        // La coccion a granel cuenta el plato ORIGINAL: si el cambio no se lee
+                                                        // aca, se empaca lo que el cliente justamente pidio no comer.
+                                                        const subsCliente = listarSustituciones(client.rawPedido || client);
+                                                        if (subsCliente.length > 0) tags.push(`🔁 CAMBIA: ${subsCliente.map(textoSustitucion).join(' · ')}`);
 
-                                                        const isIndividuales = client.categoria === 'individuales' || /individual/i.test(client.categoryLabel || '') || /individual/i.test(client.plan || '');
-                                                        if (isIndividuales) tags.push('Individuales');
 
                                                         let otherPacksTag = getOtherPacksTag(client.nombre, packName);
                                                         // Quitar "Desayunos" del tag si ya se mostró arriba o en observaciones
@@ -2394,10 +2160,14 @@ export default function PrintProductionView() {
                                                             const tags = [];
                                                             const hasDesayunoAlready = client.incluyeDesayuno || (client.observaciones && client.observaciones.toLowerCase().includes('desayun'));
                                                             if (client.incluyeDesayuno) tags.push('🌅 Desayunos');
-                                                            const isTwoPack = client.categoria === 'two_pack' || /two\s*pack/i.test(client.categoryLabel || '') || /two\s*pack/i.test(client.plan || '');
-                                                            if (isTwoPack) tags.push('Two Pack');
-                                                            const isIndividuales = client.categoria === 'individuales' || /individual/i.test(client.categoryLabel || '') || /individual/i.test(client.plan || '');
-                                                            if (isIndividuales) tags.push('Individuales');
+                                                            // TWO PACK se escribe aparte: quien empaca tiene que leer que son DOS
+                                                            // packs iguales. El "(2)" de la celda del cliente se pasa por alto y se
+                                                            // empacaba uno solo. "Individuales" sigue fuera: tiene su propia hoja.
+                                                            if (detectIsTwoPack(client.rawPedido || client)) tags.push('👥 TWO PACK — empacar 2 packs iguales');
+                                                            // La coccion a granel cuenta el plato ORIGINAL: si el cambio no se lee
+                                                            // aca, se empaca lo que el cliente justamente pidio no comer.
+                                                            const subsCliente = listarSustituciones(client.rawPedido || client);
+                                                            if (subsCliente.length > 0) tags.push(`🔁 CAMBIA: ${subsCliente.map(textoSustitucion).join(' · ')}`);
                                                             let otherPacksTag = getOtherPacksTag(client.nombre, packName);
                                                             if (hasDesayunoAlready && otherPacksTag) {
                                                                 const cleaned = otherPacksTag.replace('Lleva también: ', '').split(', ').filter(p => p !== 'Desayunos').join(', ');

@@ -1,3 +1,5 @@
+import { esIndividualEnLaHoja } from './packClassification';
+
 // Utilidades de logística para BiKitchen Food
 // - Normalización de pedidos al modelo de platos/ingredientes
 // - Asignación de tareas de empaquetado y cocina
@@ -46,6 +48,38 @@ export function isTaza(value) {
 
 export function gramosDesdeTazas(tazas, gramosPorTaza = 250) {
   return (tazas || 0) * gramosPorTaza;
+}
+
+/**
+ * Texto que nombra un Two Pack, escriba quien escriba.
+ *
+ * Cada fuente lo escribe distinto, y si la busqueda falla el pedido se cocina
+ * como UN pack: al cliente le llega la mitad de lo que pago.
+ *   checkout de la web  -> categoryLabel "Two Pack"
+ *   Excel de Gina       -> "TWO PACK, CON DESAYUNOS" en OBSERVACIONES
+ *   catalogo            -> "Plan Parejas" (packsData.js)
+ *
+ * OJO: "2 pack" queda fuera a proposito. En los chats "2 pack de 3 proteinas"
+ * significa dos unidades de un individual, no un pack para dos personas.
+ */
+const TWO_PACK_TEXTO = /two[\s._-]*pack|(?:plan|pack)\s*(?:para\s*)?parejas?/i;
+
+export function detectIsTwoPack(order) {
+  if (!order) return false;
+  const dice = (val) => TWO_PACK_TEXTO.test(String(val || ''));
+
+  if (order.categoria === 'two_pack' || order.category === 'two_pack') return true;
+
+  // Las observaciones cuentan: Gina escribe "TWO PACK" ahi, no en el nombre del pack.
+  if ([order.categoryLabel, order.plan, order.tipoMenu,
+       order.observaciones, order.notas, order.details?.notes].some(dice)) return true;
+
+  const items = Array.isArray(order.items) ? order.items : (Array.isArray(order.menu) ? order.menu : []);
+  return items.some(item =>
+    item.category === 'two_pack'
+    || [item.categoryLabel, item.nombre, item.planLabel,
+        item.desc, item.descripcion, item.plan].some(dice)
+  );
 }
 
 // --------- Normalización desde el formato actual de Firestore ---------
@@ -165,6 +199,9 @@ export function mapPedidosFromLegacy(rawPedidos) {
             numero: ++numeroPlato,
             // Cuántas veces pidió este ítem el cliente (ej: 2 packs iguales)
             cantidad: Number(item.cantidad) || 1,
+            // Medida tal como la escribió Gina ("1 kg", "4 unidades", "1 molde
+            // desechable"). Si viene, manda sobre cualquier cálculo.
+            medida: (Array.isArray(item.medidas) && item.medidas[idx]) || null,
             proteina: {
               nombre: aplicarCambio(protName, custom, 'protein', idx + 1),
               gramosPorPorcion: gramosPorcionProteina || 0
@@ -188,6 +225,8 @@ export function mapPedidosFromLegacy(rawPedidos) {
           numero: ++numeroPlato,
           // Individuales pedidos varias veces (ej: 3× Pollo Teriyaki)
           cantidad: Number(item.cantidad) || 1,
+          // Misma regla que arriba: la medida escrita en el pedido manda.
+          medida: (Array.isArray(item.medidas) && item.medidas[0]) || null,
           // Los packs familiares y los individuales caen acá: el cambio viene
           // por ítem ({ protein, vegetal, carbo }), no por plato.
           proteina: {
@@ -243,6 +282,26 @@ export function mapPedidosFromLegacy(rawPedidos) {
       rawObs = rawObs ? `${rawObs} · ${subsText}` : subsText;
     }
 
+    const isTwoPack = detectIsTwoPack(p);
+    const baseQty = p.cantidadMenus || 1;
+    const itemQty = (Array.isArray(p.items) && p.items[0]?.cantidad) || (Array.isArray(p.menu) && p.menu[0]?.cantidad) || 1;
+    // "Two Pack" YA significa dos packs del mismo menu. Si el pedido ADEMAS trae
+    // cantidad 2, esa es la cuenta escrita de otra forma —no dos cantidades que
+    // se multipliquen—: a Enid Murillo y a Ericka Anderson les salian 4 packs en
+    // la hoja del 31 de agosto y se cocinaban 20 platos de sobra.
+    // Misma regla que cantidadDePacks: se toma el MAYOR, con piso de 2.
+    // La cantidad puede venir en `cantidadMenus` (web) o en la del item (WhatsApp).
+    // Mirando solo `cantidadMenus`, un pedido de "3x Pack Bajo Calorias" salia
+    // como UN pack en la hoja de cierre y como TRES en la de produccion, que si
+    // pasa por cantidadDePacks(). Resolverlo acá deja a las dos hojas iguales.
+    //
+    // Los INDIVIDUALES quedan fuera: su cantidad ya viaja dentro de cada plato y
+    // contarla también acá la multiplicaria dos veces.
+    const esIndividual = esIndividualEnLaHoja(p.plan || p.tipoMenu || '');
+    const computedQty = isTwoPack
+        ? Math.max(2, Number(p.cantidadMenus) || 0, Number(itemQty) || 1)
+        : (esIndividual ? baseQty : Math.max(baseQty, Number(itemQty) || 1));
+
     return {
       id: p.id,
       cliente: p.cliente,
@@ -251,10 +310,14 @@ export function mapPedidosFromLegacy(rawPedidos) {
       zona_envio: p.zona_envio || p.zona_de_envio || p.zona || '',
       tipoMenu: p.tipoMenu || p.plan || 'Desconocido',
       plan: p.plan || null,
-      cantidadMenus: p.cantidadMenus || 1,
+      cantidadMenus: computedQty,
       fecha_entrega: p.fecha_entrega,
       observaciones: rawObs,
-      incluyeDesayuno: !!p.incluyeDesayuno,
+      incluyeDesayuno: !!p.incluyeDesayuno || /desayun/i.test(p.plan || '') || /desayun/i.test(rawObs || '') || (Array.isArray(p.items || p.menu) && (p.items || p.menu).some(it => /desayun/i.test(it.nombre || ''))),
+      categoria: p.categoria || (isTwoPack ? 'two_pack' : ''),
+      categoryLabel: p.categoryLabel || (isTwoPack ? 'Two Pack' : ''),
+      items: p.items || p.menu || [],
+      rawPedido: p,
       platos: platosNormalizados.length > 0 ? platosNormalizados : (p.platos || [])
     };
   });
@@ -575,20 +638,66 @@ export function buildPackagingSheetData(pedidos, menus, workloadInfo) {
     });
   }
 
-  const clientes = pedidos.map((p) => ({
-    cliente: p.cliente,
-    tipoMenu: p.tipoMenu || p.plan || 'Desconocido',
-    plan: p.plan || null, // nombre comercial del pack (Full Pack, Bajo Calorías, etc.)
-    cantidadMenus: p.cantidadMenus || 1, // número de packs de ese menú para este pedido
-    observaciones: p.observaciones || '',
-    incluyeDesayuno: !!p.incluyeDesayuno,
-    platos: p.platos || [],
-    empaquetador: empaquetadorPorCliente[p.cliente] || null,
-    categoria: p.categoria || p.category || (p.platos && p.platos[0]?.category) || '',
-    categoryLabel: p.categoryLabel || (p.platos && p.platos[0]?.categoryLabel) || '',
-    zona_envio: p.zona_envio || '',
-    rawPedido: p
-  }));
+  const clientes = pedidos.map((p) => {
+    const parts = [];
+    const cleanObs = (str) => {
+      if (!str) return '';
+      return str
+        .replace(/\b\d{2,3}g\s+prote[ií]na(?:\s*[\+\,\-]\s*\d+\s*(?:veg|vegetales|carbo|harinas?))*/gi, '')
+        .replace(/^\s*[\-\–\—\·\|\,\s]+|\s*[\-\–\—\·\|\,\s]+$/g, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+    };
+
+    const pObsClean = cleanObs(p.observaciones);
+    if (pObsClean) parts.push(pObsClean);
+
+    const detailsNotesClean = cleanObs(p.details?.notes);
+    if (detailsNotesClean && !parts.includes(detailsNotesClean)) {
+      parts.push(detailsNotesClean);
+    }
+
+    const items = p.items || p.menu || [];
+    items.forEach(item => {
+      const itemObsClean = cleanObs(item.observaciones);
+      if (itemObsClean && !parts.includes(itemObsClean)) {
+        parts.push(itemObsClean);
+      }
+
+      if (item.desc && item.desc.trim()) {
+        const isDefaultMacroOrPlan = /mensual|semanal|quincenal|\d{2,3}g\s+prote[ií]na/i.test(item.desc);
+        if (!isDefaultMacroOrPlan) {
+          const descClean = cleanObs(item.desc);
+          if (descClean && !parts.includes(descClean)) {
+            parts.push(descClean);
+          }
+        }
+      }
+
+      const cambioMatch = String(item.nombre || '').match(/\b(?:cambiar|con\s|sin\s|nota)\s+.+/i);
+      if (cambioMatch && !parts.some(pt => pt.toLowerCase().includes(cambioMatch[0].toLowerCase()))) {
+        parts.push(cambioMatch[0].trim());
+      }
+    });
+
+    const isTwoPack = detectIsTwoPack(p);
+    const computedQty = p.cantidadMenus || (isTwoPack ? ((Array.isArray(p.items) && p.items[0]?.cantidad) || 1) * 2 : ((Array.isArray(p.items) && p.items[0]?.cantidad) || 1));
+
+    return {
+      cliente: p.cliente,
+      tipoMenu: p.tipoMenu || p.plan || 'Desconocido',
+      plan: p.plan || null, // nombre comercial del pack (Full Pack, Bajo Calorías, etc.)
+      cantidadMenus: computedQty, // número de packs de ese menú para este pedido (Two Pack = 2)
+      observaciones: parts.join(' · '),
+      incluyeDesayuno: !!p.incluyeDesayuno || /desayun/i.test(p.plan || '') || /desayun/i.test(p.observaciones || '') || (Array.isArray(p.items) && p.items.some(it => /desayun/i.test(it.nombre || ''))),
+      platos: p.platos || [],
+      empaquetador: empaquetadorPorCliente[p.cliente] || null,
+      categoria: p.categoria || p.category || (p.platos && p.platos[0]?.category) || '',
+      categoryLabel: p.categoryLabel || (p.platos && p.platos[0]?.categoryLabel) || '',
+      zona_envio: p.zona_envio || '',
+      rawPedido: p
+    };
+  });
 
   const desayunos = clientes
     .filter((c) => c.incluyeDesayuno)

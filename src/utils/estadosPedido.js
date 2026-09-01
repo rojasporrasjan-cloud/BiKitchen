@@ -16,7 +16,8 @@
 export const ESTADOS_QUE_IMPRIMEN = [
     'confirmed', 'confirmado', 'pagado',
     'preparing', 'preparando', 'making',
-    'ready', 'listo', 'in_transit'
+    'ready', 'listo', 'in_transit',
+    'delivered', 'entregado'
 ];
 
 /** ¿Este pedido sale en la hoja? */

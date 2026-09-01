@@ -100,6 +100,44 @@ export const getSubscriptionProgress = (order, referenceDate = new Date()) => {
     };
 };
 
+/**
+ * ¿Se puede dar por cerrado el pedido ENTERO?
+ *
+ * Un pack mensual o quincenal guarda todas sus fechas en el mismo pedido. Marcarlo
+ * "entregado" cuando todavía le quedan fechas por delante lo manda al historial, y
+ * desde ahí la hoja de producción deja de verlo: el cliente pagó cuatro semanas y
+ * la cocina lo pierde después de la primera. El 24 de agosto de 2026 había 33
+ * pedidos así, 27 de ellos con entrega ese mismo lunes.
+ *
+ * Las entregas de HOY no bloquean el cierre: cerrar el día es justamente lo que se
+ * hace cuando el repartidor termina. Solo bloquean las estrictamente futuras.
+ *
+ * @param {object} order - pedido de Firestore
+ * @param {Date} [referenceDate] - "hoy" (inyectable para poder testear)
+ * @returns {{ puede: boolean, restantes: string[], proxima: string|null, motivo: string }}
+ */
+export const puedeCerrarsePedido = (order, referenceDate = new Date()) => {
+    const { fechas, total } = getSubscriptionProgress(order, referenceDate);
+    const hoy = startOfDay(referenceDate);
+
+    const restantes = fechas.filter((iso) => {
+        const d = parseDateStr(iso);
+        return d && startOfDay(d) > hoy;
+    });
+
+    if (total <= 1 || restantes.length === 0) {
+        return { puede: true, restantes: [], proxima: null, motivo: '' };
+    }
+
+    const plural = restantes.length === 1 ? 'entrega' : 'entregas';
+    return {
+        puede: false,
+        restantes,
+        proxima: restantes[0],
+        motivo: `Le ${restantes.length === 1 ? 'queda' : 'quedan'} ${restantes.length} ${plural} por delante (próxima: ${restantes[0]}).`
+    };
+};
+
 /** Etiqueta del tipo de plan según cuántas entregas tenga. */
 export const getPlanLabel = (totalEntregas) => {
     if (totalEntregas >= 4) return 'Pack mensual';

@@ -227,26 +227,45 @@ const grabDeliveryDates = (text, hoy) => {
         .filter(Boolean);
     if (multi.length > 0) return multi;
 
-    // Encabezado "Entregas" solo, con las fechas en las líneas siguientes.
     const lineas = text.split('\n');
-    const idx = lineas.findIndex(l => /^\s*Entregas?\s*:?\s*$/i.test(l));
-    if (idx !== -1) {
-        const fechas = [];
-        let lastMonth = null;
+    const fechasEncontradas = [];
+    let lastMonth = null;
+    let inDeliverySection = false;
 
-        for (let i = idx + 1; i < lineas.length; i++) {
-            const linea = lineas[i].trim();
-            if (!linea) continue;
+    for (let i = 0; i < lineas.length; i++) {
+        const linea = lineas[i].trim();
+        if (!linea) continue;
 
-            const fecha = parseFechaEspanol(linea, hoy, lastMonth);
-            if (fecha) {
-                fechas.push(fecha);
-                const m = Number(fecha.split('-')[1]) - 1;
-                lastMonth = m;
+        if (/entrega/i.test(linea)) {
+            inDeliverySection = true;
+            if (/^\s*entrega\s*\d+\s*$/i.test(linea)) {
+                continue;
+            }
+            const fechaMismaLinea = parseFechaEspanol(linea.replace(/.*entrega\s*\d*\s*:?/i, ''), hoy, lastMonth);
+            if (fechaMismaLinea) {
+                if (!fechasEncontradas.includes(fechaMismaLinea)) {
+                    fechasEncontradas.push(fechaMismaLinea);
+                    lastMonth = Number(fechaMismaLinea.split('-')[1]) - 1;
+                }
+                continue;
             }
         }
-        if (fechas.length > 0) return fechas;
+
+        if (inDeliverySection) {
+            if (/m[eé]todo\s+de\s+pago|resumen|items\s+del\s+pedido|informaci[oó]n\s+del\s+cliente/i.test(linea)) {
+                inDeliverySection = false;
+                continue;
+            }
+
+            const fecha = parseFechaEspanol(linea, hoy, lastMonth);
+            if (fecha && !fechasEncontradas.includes(fecha)) {
+                fechasEncontradas.push(fecha);
+                lastMonth = Number(fecha.split('-')[1]) - 1;
+            }
+        }
     }
+
+    if (fechasEncontradas.length > 0) return fechasEncontradas;
 
     const single = grab(text, ['Fecha de Entrega', 'Fecha Entrega', 'ENTREGA', 'Entregas?']);
     const desdeEtiqueta = parseFechaEspanol(single || '', hoy);
@@ -398,7 +417,36 @@ const CANTIDAD_ANUNCIADA = /(\d+)\s*(?:prote[íi]nas?|desayunos?|almuerzos?|comi
  * como "Total: 66.800" y nunca aparece un "Precio". Sin esto, ese pedido entra
  * SIN ítems: ni platos, ni hoja de cocina, ni nada.
  */
-const esItemEvidente = (t) => /\b(pack|paquete|desayunos?|almuerzos?|comidas?|cenas?|unidades?)\b/i.test(t) || CANTIDAD_ANUNCIADA.test(t);
+/**
+ * Una línea que es SOLO la medida: "250gr", "500 g", "1 kg".
+ *
+ * Así escribe Gina los packs de proteínas cuando no pone la palabra "pack":
+ * la medida sola de encabezado y debajo la lista de proteínas.
+ *
+ *   250gr
+ *   Albondigas artesanales
+ *   Pollo al pesto
+ *   Bistec de cerdo encebollado
+ *
+ * Sin esto el pedido entraba SIN NINGÚN ítem —ni platos ni hoja de cocina—
+ * porque la línea no dice "pack" ni "N proteínas" (Jazmin Elizondo, 29 ago).
+ */
+const SOLO_MEDIDA = /^[\s•·*□▢▪◦◽◾-]*(?:packs?|paquetes?)?\s*(\d{2,4})\s*(gr?|gramos?|kg|kilos?)\.?\s*$/i;
+
+/**
+ * Un número que cuenta PLATOS, no packs: "3 proteinas de 250 g", "5 comidas".
+ *
+ * El lector de ítems toma como cantidad el número con que arranca la línea, y
+ * eso acá está mal: "3 proteinas" es UN pack de tres proteínas, no tres packs.
+ * Cocina preparaba el triple. Además, sin reconocer el anuncio, la lista de
+ * proteínas de abajo no se leía y la cocina no sabía qué preparar.
+ *
+ * Ojo con "2 pack bajo en calorías": ahí el 2 SÍ son dos packs, y por eso la
+ * palabra "pack" no está en esta lista.
+ */
+const ANUNCIA_PLATOS = /^[\s•·*□▢▪◦◽◾-]*(\d+)\s*(?:prote[íi]nas?|desayunos?|almuerzos?|comidas?|platos?)\b/i;
+
+const esItemEvidente = (t) => /\b(pack|paquete|desayunos?|almuerzos?|comidas?|cenas?|unidades?)\b/i.test(t) || CANTIDAD_ANUNCIADA.test(t) || SOLO_MEDIDA.test(t);
 
 const absorberDescripcion = (lines, i, texto) => {
     // Un ítem que anuncia N platos viene seguido de la LISTA, una por línea. Ahí
@@ -434,7 +482,9 @@ const absorberDescripcion = (lines, i, texto) => {
     let platos = [];
     if (cantidadAnunciada > 1 && extras.length === 1) {
         platos = Array.from({ length: cantidadAnunciada }, () => extras[0].texto);
-    } else if (cantidadAnunciada > 0 && extras.length > 0) {
+    } else if ((cantidadAnunciada > 0 || SOLO_MEDIDA.test(texto)) && extras.length > 0) {
+        // Con la medida sola de encabezado ("250gr") no hay número que anuncie
+        // cuántas son: las proteínas son las líneas que vienen debajo.
         platos = extras.map(e => e.texto);
     }
 
@@ -462,16 +512,21 @@ const grabItems = (text) => {
 
             // Formato correo: el precio va al final de la misma línea. Es el ÚLTIMO
             // " - ₡..." porque el nombre del pack también trae guiones. Ocasionalmente viene con ":" en vez de "-".
-            const priceMatch = rest.match(/^(.*?)\s*[-:]\s*[₡¢$]\s*([\d.,\s]+)$/);
+            const priceMatch = rest.match(/^(.*?)\s*[-:]\s*(?:[₡¢$]|colones|col\.?|crc)?\s*([\d.,\s]+)$/i);
             if (priceMatch) {
                 rest = priceMatch[1].trim();
                 precio = parseAmount(priceMatch[2]);
             }
 
+            // "3 proteinas de 250 g": el 3 cuenta PLATOS, no packs. Se le pasa la
+            // línea entera a absorberDescripcion —y no `rest`, que ya viene sin el
+            // número— para que sepa cuántas proteínas buscar debajo.
+            const anuncioDePlatos = ANUNCIA_PLATOS.exec(line);
+
             // Sin precio en la misma línea es formato escrito a mano: debajo puede
             // venir la lista de proteínas o una descripción, y después el precio.
             const desc = precio === null
-                ? absorberDescripcion(lines, i, rest)
+                ? absorberDescripcion(lines, i, anuncioDePlatos ? line.trim() : rest)
                 : { platos: [], extras: [], idxPrecio: -1 };
 
             // Se registra la descripción si hay precio abajo, o si la línea es un
@@ -488,7 +543,8 @@ const grabItems = (text) => {
             );
 
             items.push({
-                cantidad: parseInt(itemMatch[1], 10) || 1,
+                // Si el número anunciaba platos ("3 proteinas"), es UN solo pack.
+                cantidad: anuncioDePlatos ? 1 : (parseInt(itemMatch[1], 10) || 1),
                 nombre,
                 precio,
                 proteinas: tieneDescripcion ? desc.platos : [],
@@ -513,25 +569,40 @@ const grabItems = (text) => {
         let precioInline = null;
 
         if (texto && !esCorteDeItem(texto)) {
-            const inlineMatch = texto.match(/^(.*?)\s*[-:]\s*[₡¢$]\s*([\d.,\s]+)$/);
-            if (inlineMatch) {
+            // Precio en la misma línea con moneda explícita (₡, $, colones, col, crc)
+            const inlineCurrencyMatch = texto.match(/^(.*?)\s*[-:]\s*(?:[₡¢$]|colones|col\.?|crc)\s*([\d.,\s]+)$/i);
+            const inlineMatch = inlineCurrencyMatch || texto.match(/^(.*?)\s*[-:]\s*[₡¢$]?\s*([\d.,\s]+)$/);
+
+            if (inlineCurrencyMatch) {
+                texto = inlineCurrencyMatch[1].trim();
+                precioInline = parseAmount(inlineCurrencyMatch[2]);
+            } else if (inlineMatch && esItemEvidente(inlineMatch[1])) {
                 texto = inlineMatch[1].trim();
                 precioInline = parseAmount(inlineMatch[2]);
             }
 
             const { platos, extras, idxPrecio } = absorberDescripcion(lines, i, texto);
 
-            if (idxPrecio !== -1 || (esItemEvidente(texto) && extras.length > 0)) {
+            if (idxPrecio !== -1 || (esItemEvidente(texto) && extras.length > 0) || inlineCurrencyMatch) {
                 
                 const { nombre, instruccionesSuelta } = processItemNameAndInstructions(
-                    texto, 
-                    extras, 
+                    texto,
+                    extras,
                     platos.length === 0
                 );
 
+                // "250gr" sola no le dice nada a la cocina. Con la lista de abajo
+                // ya se sabe qué es, así que se le arma el nombre completo: la hoja
+                // lo trata igual que a los demás packs de proteínas y los gramos por
+                // porción salen del propio nombre (lo hace logisticsUtils).
+                const medida = SOLO_MEDIDA.exec(texto);
+                const nombreFinal = (medida && platos.length > 0)
+                    ? `Pack ${platos.length} Proteínas (${medida[1]}${/^k/i.test(medida[2]) ? 'kg' : 'g'})`
+                    : nombre;
+
                 items.push({
                     cantidad: 1,
-                    nombre,
+                    nombre: nombreFinal,
                     precio: precioInline,
                     proteinas: platos,
                     instruccionesSuelta
@@ -543,7 +614,7 @@ const grabItems = (text) => {
                 // volvería a evaluar y entraría como ítem repetido.
                 i = idxPrecio !== -1
                     ? idxPrecio - 1
-                    : extras[extras.length - 1].idx;
+                    : (extras.length > 0 ? extras[extras.length - 1].idx : i);
                 continue;
             }
         }
@@ -566,8 +637,8 @@ const grabItems = (text) => {
         // El precio del ítem puede venir en su propia línea:
         //   "   └ ₡13.500"     (WhatsApp)
         //   "Precio 25.850"    (a mano)
-        const precioSuelto = line.match(/└\s*[₡¢$]\s*([\d.,\s]+)$/)
-            || line.match(/^\s*Precio\s*:?\s*[₡¢$]?\s*([\d.,\s]+)\s*$/i);
+        const precioSuelto = line.match(/└\s*(?:[₡¢$]|colones|col\.?|crc)?\s*([\d.,\s]+)$/i)
+            || line.match(/^\s*Precio\s*:?\s*(?:[₡¢$]|colones|col\.?|crc)?\s*([\d.,\s]+)\s*$/i);
         if (precioSuelto) {
             if (ultimo.precio === null) ultimo.precio = parseAmount(precioSuelto[1]);
             consumidas.add(i);
@@ -690,6 +761,14 @@ export const parseOrderBlock = (textoCrudo, hoy = new Date()) => {
     // (ver resolverCorreo en buildPedidoFromImport.js).
     if (!total || total <= 0) warnings.push('Falta el TOTAL o quedó en cero.');
     if (items.length === 0) warnings.push('No pude leer ningún ítem del pedido.');
+
+    // Auto-asignar precio del ítem si viene 1 solo ítem y su precio no se extrajo explícito
+    if (items.length === 1 && (!items[0].precio || items[0].precio <= 0) && total > 0) {
+        const precioCalculado = total - (costoEnvio || 0) + (descuento || 0);
+        if (precioCalculado > 0) {
+            items[0].precio = precioCalculado;
+        }
+    }
 
     // Un pack que anuncia N proteínas pero no dice cuáles deja a la cocina sin
     // saber qué preparar: saldría un solo renglón con el nombre del pack.

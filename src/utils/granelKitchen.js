@@ -58,6 +58,61 @@ export const sumarAGranel = (mapa, nombre, cantidad, unidad, categoria) => {
 };
 
 /**
+ * Aplica al granel los cambios de plato que pidio un cliente.
+ *
+ * El granel se arma con el menu OFICIAL del pack, igual para todos. Si alguien
+ * cambio el Plato 2, se cocinaba el plato original y del sustituto no salia
+ * nada: al empacar faltaba justo la proteina que el cliente pidio.
+ *
+ * Le paso a Bryan Ocampo con su pack de casaditos "sin res ni cerdo": cambio el
+ * lomo y las fajitas de cerdo por pollo, y la cocina seguia contando res y cerdo.
+ *
+ * Solo mueve PROTEINAS. Los vegetales y carbos van en tazas y su cambio se anota
+ * en la columna de especificaciones; calcularlos acá daria un falso sentido de
+ * precision sobre un dato que casi siempre viene escrito a mano.
+ *
+ * @param {object} mapa - acumulador de granel (se modifica)
+ * @param {object} opts
+ * @param {Array}  opts.sustituciones - las de listarSustituciones()
+ * @param {Array}  opts.platos - platos del pack, en orden (indice = numero - 1)
+ * @param {number} opts.porciones - cuantos packs lleva ese cliente
+ * @param {number} opts.gramosPorPorcion - gramaje del pack
+ * @param {(n: string) => string} [opts.categoria]
+ */
+export const aplicarSustitucionesAlGranel = (mapa, opts = {}) => {
+    const { sustituciones = [], platos = [], porciones = 1, gramosPorPorcion = 0, categoria } = opts;
+    const gramos = (Number(gramosPorPorcion) || 0) * (Number(porciones) || 1);
+    if (!gramos) return mapa;
+
+    sustituciones.forEach((s) => {
+        if (s.tipo !== 'proteina' && s.tipo !== 'plato') return;
+        if (!s.a) return;
+
+        const idx = Number(s.plato) - 1;
+        // El nombre del menu manda sobre el que venia escrito en el pedido:
+        // el pedido puede traerlo con otra ortografia y no restaria nada.
+        const original = platos[idx]?.proteina?.nombre || platos[idx]?.proteina || s.de;
+
+        if (original) sumarAGranel(mapa, original, -gramos, 'g', categoria);
+        sumarAGranel(mapa, s.a, gramos, 'g', categoria);
+    });
+    return mapa;
+};
+
+/**
+ * Saca del granel lo que quedo en cero o en negativo.
+ *
+ * Se llama UNA vez, al final: si se limpiara dentro de cada suma, un plato que
+ * pasa por cero a mitad del recorrido desapareceria antes de recibir el resto.
+ */
+export const limpiarGranelVacio = (mapa) => {
+    Object.keys(mapa).forEach((k) => {
+        if (!(mapa[k].totalQty > 0)) delete mapa[k];
+    });
+    return mapa;
+};
+
+/**
  * Limpia el nombre del platillo individual para exhibición.
  * Ej: "4 tazas Gallo pinto (en dos tazas frijoles mas suaves)" -> "Gallo pinto"
  */

@@ -11,6 +11,8 @@
 
 import { mapPackNameToMenuKey, esIndividualEnLaHoja } from './packClassification';
 import { getScheduleFromOrder } from './orderDates';
+import { listarSustituciones, textoSustitucion } from './productionHelpers';
+import { textoLlevaCena } from './labels/labelDomain';
 
 const nombrePlan = (pedido) => pedido?.plan || pedido?.tipoMenu || '';
 
@@ -39,6 +41,62 @@ export const revisarHoja = (pedidos = [], menus = null, fecha = '') => {
         // "0 Desayunos" mientras la hoja imprimía ocho, y no había forma de
         // cuadrarlo contra el Excel.
         if (menuKey === 'desayuno' || p.incluyeDesayuno) resumen.desayunos += 1;
+
+        // --- Cena y desayuno que la hoja rellena con un menú por defecto ---
+        //
+        // Cuando el menú de cena de la semana está vacío, la hoja NO se queda en
+        // blanco: cae a DEFAULT_MENUS e imprime esos platos como si fueran los de
+        // la semana. Las etiquetas, en cambio, se niegan a generarse a propósito.
+        // Sin este aviso se cocina una cena que después no tiene etiqueta, con
+        // platos que nadie configuró.
+        const llevaCena = !esIndividual && textoLlevaCena(plan);
+        if (llevaCena && menuKey) {
+            const delCena = menus?.cena?.[menuKey];
+            const listaCena = Array.isArray(delCena) ? delCena : delCena?.platos;
+            if (!listaCena || listaCena.length === 0) {
+                problemas.push({
+                    gravedad: 'alta',
+                    cliente,
+                    que: `Lleva cena pero el menú de cena de "${menuKey}" está vacío: la hoja está mostrando el menú POR DEFECTO, no el de esta semana. Sus etiquetas de cena tampoco se generan.`,
+                    comoSeArregla: 'Cargá el menú de cena de la semana en Menús → Cena.'
+                });
+            }
+        }
+
+        const llevaDesayuno = p.incluyeDesayuno || /desayun/i.test(plan);
+        if (llevaDesayuno) {
+            const delDesayuno = menus?.desayuno;
+            const listaDesayuno = Array.isArray(delDesayuno) ? delDesayuno : delDesayuno?.platos;
+            if (!listaDesayuno || listaDesayuno.length === 0) {
+                problemas.push({
+                    gravedad: 'alta',
+                    cliente,
+                    que: 'Lleva desayunos pero no hay Menú de Desayunos configurado esta semana. Sus etiquetas de desayuno NO se generan.',
+                    comoSeArregla: 'Cargá el menú de desayunos de la semana en Menús → Desayuno.'
+                });
+            }
+        }
+
+        // --- Sustituciones que la cocción a granel NO refleja ---
+        //
+        // Las sustituciones se guardan bien, pero la hoja cocina el MENU OFICIAL
+        // del pack: a granel se cuenta el plato original y del sustituto no se
+        // cocina nada. Si no se avisa acá, se descubre al empacar, sin la
+        // proteina que el cliente pidio.
+        const sustituciones = listarSustituciones(p.rawPedido || p);
+        if (sustituciones.length > 0) {
+            const soloProteinas = sustituciones.every((x) => x.tipo === 'proteina' || x.tipo === 'plato');
+            problemas.push({
+                gravedad: soloProteinas ? 'media' : 'alta',
+                cliente,
+                que: soloProteinas
+                    ? `Cambia platos: ${sustituciones.map(textoSustitucion).join(' · ')}. Ya está descontado del plato original y sumado al sustituto en la hoja de cocina.`
+                    : `Cambia vegetales o carbos: ${sustituciones.map(textoSustitucion).join(' · ')}. Eso NO se cuenta a granel porque va en tazas.`,
+                comoSeArregla: soloProteinas
+                    ? 'Verificá al empacar que le llegue el plato que pidió, no el del menú.'
+                    : 'Ajustá esas tazas a mano en la hoja de cocina.'
+            });
+        }
 
         // --- Un pack cuyo menú existe pero está vacío ---
         if (!esIndividual && menuKey) {

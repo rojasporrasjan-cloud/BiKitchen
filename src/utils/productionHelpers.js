@@ -30,6 +30,89 @@ export const normalizeClientKey = (name) => {
  * @param {Array} ordersList - pedidos ya normalizados por mapPedidosFromLegacy
  * @returns {{ pedidos: Array, fusionados: Array }}
  */
+/**
+ * ¿Es un teléfono de relleno y no uno real?
+ *
+ * Cuando el pedido llega por WhatsApp sin número se anota 8888-8888. Ese valor
+ * NO identifica a nadie: si se usa para fusionar, Luis Carlos Monge y Lizbeth
+ * Zeledón —dos clientes sin relación— se convierten en un solo pedido.
+ */
+export const esTelefonoDeRelleno = (telefono) => {
+    const d = String(telefono || '').replace(/\D/g, '');
+    if (d.length < 8) return true;
+    if (/^(\d)\1+$/.test(d)) return true;        // 88888888, 00000000
+    if (/^0?12345678/.test(d)) return true;      // 12345678
+    return false;
+};
+
+/**
+ * Los dos nombres, la misma persona?
+ *
+ * Compara PALABRAS COMPLETAS, no subcadenas. Con `includes()` sobre el texto,
+ * "Ana Mora" caia dentro de "Mariana Morales" —"ana" esta dentro de "mariana"
+ * y "mora" dentro de "morales"— y los dos pedidos se fusionaban: el segundo
+ * perdia sus items y esa comida no se cocinaba.
+ *
+ * Sigue uniendo al mismo cliente escrito de mas o de menos: "Bryan Ocampo" y
+ * "Bryan Ocampo Granados" comparten TODAS las palabras del nombre corto.
+ * Se piden 2 palabras minimo para no unir a todos los "Jose".
+ */
+/**
+ * Las sustituciones que pidio el cliente, plato por plato.
+ *
+ * El checkout las guarda en `items[].customizations` separadas por tipo
+ * (proteinChanges / vegeChanges / carboChanges); los pedidos viejos usan
+ * `dishChanges`. Se leen todas para que ningun cambio quede invisible.
+ *
+ * OJO: la hoja de cocina cocina el MENU OFICIAL del pack. A granel se cuenta el
+ * plato original, no el sustituto, asi que el cambio hay que avisarlo aparte o
+ * la proteina que pidio el cliente no se cocina.
+ */
+export const listarSustituciones = (pedido) => {
+    if (!pedido) return [];
+    const items = pedido.items || pedido.menu || pedido.rawPedido?.items || [];
+    if (!Array.isArray(items)) return [];
+
+    const TIPOS = [
+        ['proteinChanges', 'proteina'],
+        ['vegeChanges', 'vegetal'],
+        ['carboChanges', 'carbo'],
+        ['dishChanges', 'plato']
+    ];
+
+    const subs = [];
+    items.forEach(item => {
+        const c = item?.customizations || {};
+        TIPOS.forEach(([campo, tipo]) => {
+            (c[campo] || []).forEach(d => {
+                const a = d.newValue || d.newProtein;
+                if (!a) return;
+                subs.push({ tipo, plato: d.dishNumber, de: d.dishName || '', a });
+            });
+        });
+    });
+    return subs;
+};
+
+/** Una linea legible por sustitucion, para la hoja y los avisos. */
+export const textoSustitucion = (s) =>
+    `Plato ${s.plato}: ${s.de || s.tipo} → ${s.a}`;
+
+export const esMismoCliente = (a, b) => {
+    const ka = normalizeClientKey(a);
+    const kb = normalizeClientKey(b);
+    if (!ka || !kb) return false;
+    if (ka === kb) return true;
+
+    const ta = ka.split(/\s+/).filter(t => t.length > 2);
+    const tb = kb.split(/\s+/).filter(t => t.length > 2);
+    const sa = new Set(ta);
+    const sb = new Set(tb);
+
+    return (ta.length >= 2 && ta.every(t => sb.has(t)))
+        || (tb.length >= 2 && tb.every(t => sa.has(t)));
+};
+
 export const deduplicateOrdersByClient = (ordersList) => {
     if (!ordersList || ordersList.length === 0) return { pedidos: [], fusionados: [] };
     const seen = new Map();
@@ -39,16 +122,15 @@ export const deduplicateOrdersByClient = (ordersList) => {
     ordersList.forEach(order => {
         const clientName = order.cliente || order.nombre || '';
         const normKey = normalizeClientKey(clientName);
-        const tokens = normKey.split(/\s+/).filter(t => t.length > 2);
 
         let existingKey = null;
         for (const [key, val] of seen.entries()) {
-            const keyTokens = key.split(/\s+/).filter(t => t.length > 2);
-            const samePhone = order.telefono && val.telefono && String(order.telefono).replace(/\D/g, '') === String(val.telefono).replace(/\D/g, '') && String(order.telefono).replace(/\D/g, '').length >= 8;
-            const isMatch = key === normKey ||
-                samePhone ||
-                (tokens.length >= 2 && tokens.every(t => key.includes(t))) ||
-                (keyTokens.length >= 2 && keyTokens.every(t => normKey.includes(t)));
+            // El teléfono solo sirve para identificar si es real: el relleno lo comparten
+            // muchos clientes y fusionaría pedidos que no tienen nada que ver.
+            const samePhone = !esTelefonoDeRelleno(order.telefono)
+                && !esTelefonoDeRelleno(val.telefono)
+                && String(order.telefono).replace(/\D/g, '') === String(val.telefono).replace(/\D/g, '');
+            const isMatch = samePhone || esMismoCliente(key, normKey);
 
             if (isMatch) {
                 existingKey = key;
@@ -91,7 +173,7 @@ export const filterNoteForDish = (obs, currentDish, allDishes) => {
     if (!obs) return '';
     const currentProt = (currentDish?.proteina?.nombre || (typeof currentDish?.proteina === 'string' ? currentDish.proteina : '') || '').toLowerCase();
 
-    const clauses = String(obs).split(/\s*[\·\|—]\s*/).map(c => c.trim()).filter(Boolean);
+    const clauses = String(obs).split(/\s*[·|—]\s*/).map(c => c.trim()).filter(Boolean);
 
     const filteredClauses = clauses.filter(clause => {
         const lowerClause = clause.toLowerCase();
@@ -124,4 +206,94 @@ export const filterNoteForDish = (obs, currentDish, allDishes) => {
     });
 
     return filteredClauses.join(' · ');
+};
+
+/**
+ * Deja en la nota SOLO lo que le sirve a quien empaca.
+ *
+ * La hoja la lee el equipo de empaque, no administración. Ahí llegaban cosas que
+ * solo servían para el control interno y le tapaban lo importante:
+ *
+ *   "Diana Jiménez 72047512 / Ricardo Campos 88972181"        → teléfonos
+ *   "Fecha corregida: el chat del 24 ago dice sábado 29..."   → nota de sistema
+ *   "#ORD-2MSHA9HADP · ₡87.890"                               → número y precio
+ *
+ * Se conserva todo lo que cambia lo que va en la caja —cambios de plato, alergias,
+ * horarios de entrega— y se descarta el resto. Ante la duda, se conserva: perder
+ * un "sin chile dulce" es peor que dejar un dato de más.
+ */
+
+/** Ocho dígitos seguidos: un teléfono de Costa Rica. */
+const TELEFONO = /(?:\+?506[\s-]?)?\b\d{4}[\s-]?\d{4}\b/g;
+
+/** Frases que solo existen para el control interno. */
+const NOTA_INTERNA = new RegExp([
+    'fecha corregida', 'revisar chat', 'seg[úu]n el chat', 'el chat del',
+    '#ord-', 'correo', '@[\\w.-]+\\.\\w+',
+    // Notas que dejamos nosotros al ordenar la base, no del cliente
+    'pendiente de pago', 'aparece en la hoja de gina', 'fecha movida',
+    'no renov[óo]', 'confirmado para que entre', 'seman[ao] \\d+ de \\d+'
+].join('|'), 'i');
+
+/** Señales de que la frase sí es una instrucción para la cocina o la entrega. */
+const ES_INSTRUCCION = /cambiar|cambio|no poner|sin\b|quitar|agregar|en vez de|sustitu|entregar|antes de las|despu[ée]s de las|llamar|alerg|solo\b|extra|doble|aparte/i;
+
+export const notaParaEmpaque = (obs) => {
+    if (!obs) return '';
+
+    const frases = String(obs)
+        .split(/\s*[·|—]\s*/)
+        .map(f => f.trim())
+        .filter(Boolean);
+
+    const utiles = frases.filter(frase => {
+        if (NOTA_INTERNA.test(frase)) return false;
+
+        // Un teléfono solo estorba, salvo que la frase además pida algo
+        if (TELEFONO.test(frase)) {
+            TELEFONO.lastIndex = 0;
+            return ES_INSTRUCCION.test(frase);
+        }
+        TELEFONO.lastIndex = 0;
+
+        // Una frase que es puro precio no dice nada al empacar
+        if (/^[₡¢$]?\s*[\d.,\s]+(colones|crc)?$/i.test(frase)) return false;
+
+        return true;
+    }).map(frase => {
+        // "Llamar al 7157-8779 antes de entregar" se queda ENTERA: sin el número la
+        // instrucción no sirve. Los teléfonos sueltos ya se descartaron más arriba.
+        const esInstruccion = ES_INSTRUCCION.test(frase);
+        TELEFONO.lastIndex = 0;
+
+        return (esInstruccion ? frase : frase.replace(TELEFONO, ''))
+            .replace(/\s{2,}/g, ' ')
+            .replace(/\s+([,.])/g, '$1')
+            .trim();
+    }).filter(Boolean);
+
+    return utiles.join(' · ');
+};
+
+/**
+ * Cuántos packs de ese menú lleva un cliente.
+ *
+ * La cantidad puede venir en dos lugares según por dónde entró el pedido:
+ *   - `cantidadMenus` → pedidos hechos en la web
+ *   - la cantidad del ítem → pedidos que Gina metió por WhatsApp
+ *
+ * Mirando solo `cantidadMenus`, el pedido de "3x Pack Mensual Bajo Calorías"
+ * —₡232.500, o sea 3 × ₡77.500— salía en la hoja como UN pack: el cliente
+ * recibía la tercera parte de lo que pagó.
+ *
+ * Se toma el MAYOR de los dos, no la suma: son dos formas de escribir el mismo
+ * dato, no dos cantidades que se acumulen.
+ *
+ * Solo vale para packs. En los individuales la cantidad ya viaja dentro de cada
+ * plato, y contarla también acá la multiplicaría dos veces.
+ */
+export const cantidadDePacks = (cliente) => {
+    const declarada = Number(cliente?.cantidadMenus) || 1;
+    const delItem = Number(cliente?.rawPedido?.items?.[0]?.cantidad) || 1;
+    return Math.max(declarada, delItem);
 };

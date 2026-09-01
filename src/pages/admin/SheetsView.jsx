@@ -351,8 +351,20 @@ export default function SheetsView() {
 
         orders.forEach(order => {
             const qtyMenus = order.cantidadMenus || 1;
-            const cliente = order.cliente || 'Anónimo';
-            const notas = order.observaciones ? order.observaciones.replace(/"/g, '""') : '';
+            const parts = [];
+            if (order.observaciones && order.observaciones.trim()) parts.push(order.observaciones.trim());
+            if (order.details?.notes && order.details.notes.trim() && !parts.includes(order.details.notes.trim())) {
+                parts.push(order.details.notes.trim());
+            }
+            (order.items || order.menu || []).forEach(it => {
+                if (it.observaciones && !parts.includes(it.observaciones.trim())) parts.push(it.observaciones.trim());
+                if (it.desc && !/mensual|semanal|quincenal/i.test(it.desc) && !parts.includes(it.desc.trim())) parts.push(it.desc.trim());
+                const cambioMatch = String(it.nombre || '').match(/\b(?:cambiar|con\s|sin\s|nota)\s+.+/i);
+                if (cambioMatch && !parts.some(pt => pt.toLowerCase().includes(cambioMatch[0].toLowerCase()))) {
+                    parts.push(cambioMatch[0].trim());
+                }
+            });
+            const notas = parts.join(' · ').replace(/"/g, '""');
 
             // Expandir cada plato del menú
             if (Array.isArray(order.platos)) {

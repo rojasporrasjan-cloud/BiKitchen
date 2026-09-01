@@ -17,6 +17,12 @@
 /** Menú oficial de la semana al que corresponde el pack. null = no hay menú. */
 export const mapPackNameToMenuKey = (name) => {
     const n = String(name || '').toLowerCase();
+    
+    // Si es un pack de solo proteínas a la carta (Pack 5 Proteínas, Pack 3 Proteínas, etc), es un ítem individual
+    if (/pack\s*\d*\s*prote[íi]na/i.test(n) || /pack\s+de\s+prote[íi]na/i.test(n)) {
+        return null;
+    }
+
     if (n.includes('familiar') && n.includes('deluxe')) return 'familiarDeluxe';
     if (n.includes('familiar') && n.includes('premium')) return 'familiarPremium';
     if (n.includes('familiar')) return 'familiarPremium';
@@ -26,14 +32,9 @@ export const mapPackNameToMenuKey = (name) => {
     if (n.includes('vegetariano')) return 'vegetariano';
     if (n.includes('casadito')) return 'casaditos';
     if (n.includes('full pack') || (n.includes('deluxe') && !n.includes('familiar'))) return 'fullPack';
-    // Los desayunos van ANTES del comodín de abajo. Si se dejan después,
-    // "Pack Desayunos Mensual" cae en la regla de "mensual" y la cocina recibe
-    // el menú de almuerzos: gallo pinto convertido en carne mechada.
     if (n.includes('desayuno')) return 'desayuno';
     if ((n.includes('regular') || n.includes('estandar') || n.includes('estándar'))) return 'regular';
-    // Comodín: un pack que solo dice cada cuánto viene se asume regular. Tiene
-    // que quedar de último, después de todos los tipos con nombre propio.
-    if ((n.includes('mensual') || n.includes('quincenal')) && !n.includes('proteína') && !n.includes('proteina')) return 'regular';
+    if (n.includes('mensual') || n.includes('quincenal') || n.includes('two pack') || n.includes('2 pack') || n.includes('semanal')) return 'regular';
     return null;
 };
 
@@ -45,16 +46,13 @@ export const isIndividualPack = (name) => {
     const n = String(name || '').toLowerCase();
 
     // Si el nombre corresponde a un pack oficial, MANDA eso.
-    //
-    // El nombre del pack suele arrastrar la nota del cambio que pidió el cliente:
-    // "pack vegetariano cambiar tortas de espinaca por pollo en salsa hongos".
-    // Sin esta línea, la palabra "tortas" saca ese pack de su menú y la cocina
-    // prepara 1 porción suelta en vez de los 5 platos del Pack Vegetariano.
     if (mapPackNameToMenuKey(n)) return false;
 
     return n.includes('individual')
-        || n.includes('proteína') || n.includes('proteina')
+        || /pack\s*\d*\s*prote[íi]na/i.test(n)
+        || /prote[íi]na/i.test(n)
         || n.includes('granel')
+        || n.includes('porción') || n.includes('porcion')
         || n.includes('torta')
         || n.includes('empanada')
         || n.includes('wrap');

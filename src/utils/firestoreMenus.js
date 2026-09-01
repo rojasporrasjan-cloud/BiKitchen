@@ -111,11 +111,11 @@ export const DEFAULT_MENUS = {
       { numero: 5, proteina: 'Bistec con mantequilla de hierbas', vegetal: 'Champiñones salteados', carbo: '—' }
     ],
     bajoCalorias: [
-      { numero: 1, proteina: 'Fajitas mixtas encebolladas', vegetal: 'Ensalada fresca', carbo: 'Papas salteadas' },
-      { numero: 2, proteina: 'Pollo en salsa criolla', vegetal: 'Vegetales salteados', carbo: 'Puré de papa' },
-      { numero: 3, proteina: 'Pollo en salsa de mostaza', vegetal: 'Ensalada mixta', carbo: 'Arroz blanco' },
-      { numero: 4, proteina: 'Carne en salsa de res', vegetal: 'Ensalada verde', carbo: 'Arroz y frijoles' },
-      { numero: 5, proteina: 'Filet de tilapia al ajillo', vegetal: 'Vegetales al vapor', carbo: 'Arroz blanco' }
+      { numero: 1, proteina: 'Fajitas de cerdo encebolladas', vegetal: 'Picadillo mixto', carbo: 'Yuca al ajillo' },
+      { numero: 2, proteina: 'Pollo mechado en salsa', vegetal: 'Mix de vainica, zanhoria y ayotes', carbo: 'Arroz y frijoles' },
+      { numero: 3, proteina: 'Carne molida con verdunitas', vegetal: 'Zuchinnis salteados', carbo: 'Arroz blanco' },
+      { numero: 4, proteina: 'Filet de tilapia al ajillo', vegetal: 'Vegetales mixtos', carbo: 'Papas salteadas' },
+      { numero: 5, proteina: 'Pollo en salsa de culantro', vegetal: 'Vegetales mixtos', carbo: 'Puré de camote' }
     ],
     sinCarbos: [
       { numero: 1, proteina: 'Cerdo en salsa BBQ', vegetal: 'Picadillo mixto', carbo: '—' },
@@ -201,15 +201,8 @@ export async function getOfficialMenus(forceRefresh = false) {
 export async function saveOfficialMenus(data, meta = {}) {
   const ref = doc(db, 'menus_oficial', 'current');
 
-  // Limpiar campos antiguos de cena (cenaFullPack, cenaKeto, etc.)
+  // Preservar la estructura del menú oficial y menús de cena
   const cleanedData = { ...data };
-  delete cleanedData.cenaFullPack;
-  delete cleanedData.cenaKeto;
-  delete cleanedData.cenaBajoCalorias;
-  delete cleanedData.cenaSinCarbos;
-  delete cleanedData.cenaRegular;
-  delete cleanedData.cenaVegetariano;
-  delete cleanedData.cenaCasaditos;
 
   const payload = {
     ...cleanedData,
