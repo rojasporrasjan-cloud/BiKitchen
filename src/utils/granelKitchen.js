@@ -263,3 +263,35 @@ export const parseQuantityAndUnit = (rawName, specStr = '', itemCount = 1, expli
 
     return { totalQty: itemQty, unit: 'unidades', portionGrams: null, numPorciones: itemQty };
 };
+
+/**
+ * La cantidad de un plato, escrita como la lee quien empaca.
+ *
+ * "250g (250g)", "600g (3 porciones de 200g)", "2 tazas", "1 unidad".
+ *
+ * `medida` es lo que Gina escribio en el pedido ("120 g", "1 unidad",
+ * "4 tazas") y MANDA sobre cualquier calculo. Sin ella el parser adivina por
+ * el tipo de plato y a toda proteina le pone 250 g: las cinco cenas Sin Carbos
+ * de la reposicion de Fatima Arauz —que son de 120 g— salian al doble en la
+ * tabla de individuales, mientras el granel de abajo, que si leia la medida,
+ * mandaba a cocinar 120. La misma hoja se contradecia.
+ *
+ * @param {string} nombre  nombre del plato
+ * @param {string} medida  la medida escrita en el pedido; '' si no hay
+ * @param {number} veces   cuantas porciones lleva
+ * @param {number} gramos  gramaje por porcion ya resuelto; 0 si no se sabe
+ */
+export const textoDeCantidad = (nombre, medida, veces, gramos) => {
+    const p = parseQuantityAndUnit(nombre, medida || '', veces, gramos);
+
+    if (p.unit === 'g' && p.portionGrams) {
+        const porciones = Math.round(p.totalQty / p.portionGrams);
+        return porciones > 1
+            ? `${p.totalQty}g (${porciones} porciones de ${p.portionGrams}g)`
+            : `${p.totalQty}g (${p.portionGrams}g)`;
+    }
+    if (p.unit === 'g') return `${p.totalQty}g`;
+    if (p.unit === 'taza(s)') return `${p.totalQty} taza${p.totalQty > 1 ? 's' : ''}`;
+    if (p.unit === 'kg') return `${p.totalQty} kg`;
+    return `${p.totalQty} unidad${p.totalQty > 1 ? 'es' : ''}`;
+};

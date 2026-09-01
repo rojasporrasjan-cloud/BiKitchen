@@ -24,6 +24,7 @@ import {
     isMoldOrSpecialDish,
     isBulkDishCandidate,
     parseQuantityAndUnit,
+    textoDeCantidad,
     aplicarSustitucionesAlGranel,
     limpiarGranelVacio
 } from '../../utils/granelKitchen';
@@ -652,26 +653,8 @@ export default function PrintProductionView() {
                     clientsData[fullName] = { nombre: fullName, items: [], observaciones: finalObs };
                 }
 
-                const formatQty = (nameStr, count, gramsVal) => {
-                    const parsed = parseQuantityAndUnit(nameStr, '', count, gramsVal);
-                    if (parsed.unit === 'g' && parsed.portionGrams) {
-                        const tazas = Math.round(parsed.totalQty / parsed.portionGrams);
-                        if (tazas > 1) {
-                            return `${parsed.totalQty}g (${tazas} porciones de ${parsed.portionGrams}g)`;
-                        }
-                        return `${parsed.totalQty}g (${parsed.portionGrams}g)`;
-                    }
-                    if (parsed.unit === 'g') {
-                        return `${parsed.totalQty}g`;
-                    }
-                    if (parsed.unit === 'taza(s)') {
-                        return `${parsed.totalQty} taza${parsed.totalQty > 1 ? 's' : ''}`;
-                    }
-                    if (parsed.unit === 'kg') {
-                        return `${parsed.totalQty} kg`;
-                    }
-                    return `${parsed.totalQty} unidad${parsed.totalQty > 1 ? 'es' : ''}`;
-                };
+                const formatQty = (nameStr, count, gramsVal, medida = '') =>
+                    textoDeCantidad(nameStr, medida, count, gramsVal);
 
                 if (c.platos && c.platos.length > 0) {
                     c.platos.forEach(p => {
@@ -681,7 +664,10 @@ export default function PrintProductionView() {
                         }
                         const grams = p.proteina?.gramosPorPorcion;
                         const itemCount = p.cantidad || c.cantidad || 1;
-                        let qty = formatQty(protName, itemCount, grams);
+                        // La medida escrita en el pedido MANDA: sin ella el parser
+                        // le ponia 250 g a toda proteina y esta tabla contradecia al
+                        // granel de la misma hoja (Fatima Arauz, cenas de 120 g).
+                        let qty = formatQty(protName, itemCount, grams, p.medida);
 
                         clientsData[fullName].items.push({
                             name: protName,
@@ -1576,19 +1562,12 @@ export default function PrintProductionView() {
             });
 
             // ── Individuales ──
-            const formatoCantidad = (nombre, cuenta, gramos) => {
-                const parsed = parseQuantityAndUnit(nombre, '', cuenta, gramos);
-                if (parsed.unit === 'g' && parsed.portionGrams) {
-                    const porciones = Math.round(parsed.totalQty / parsed.portionGrams);
-                    return porciones > 1
-                        ? `${parsed.totalQty}g (${porciones} porciones de ${parsed.portionGrams}g)`
-                        : `${parsed.totalQty}g (${parsed.portionGrams}g)`;
-                }
-                if (parsed.unit === 'g') return `${parsed.totalQty}g`;
-                if (parsed.unit === 'kg') return `${parsed.totalQty} kg`;
-                if (parsed.unit === 'taza(s)') return `${parsed.totalQty} taza${parsed.totalQty > 1 ? 's' : ''}`;
-                return `${parsed.totalQty} unidad${parsed.totalQty > 1 ? 'es' : ''}`;
-            };
+            // La MISMA funcion que usa la tabla de la pantalla. Estaban escritas
+            // dos veces, palabra por palabra, y fue asi como se separaron: la de
+            // arriba dejo de leer la medida escrita y las dos salidas de la misma
+            // hoja empezaron a decir gramajes distintos.
+            const formatoCantidad = (nombre, cuenta, gramos) =>
+                textoDeCantidad(nombre, '', cuenta, gramos);
 
             const individuales = [];
             allPackNames.filter(n => isActuallyIndividual(n) && !isDesayunoPack(n)).forEach(packName => {
