@@ -94,6 +94,52 @@ export const listarSustituciones = (pedido) => {
     return subs;
 };
 
+/**
+ * Quita de la nota los cambios de plato.
+ *
+ * `mapPedidosFromLegacy` los anexa a las observaciones, y ademas salen en su
+ * propia etiqueta. Sin esto el mismo cambio aparece DOS veces en la celda, con
+ * dos formatos distintos, y quien empaca tiene que leer el doble para entender
+ * que es lo mismo.
+ */
+export const sinSustituciones = (obs) => {
+    if (!obs) return '';
+    return String(obs)
+        .split(/\s*·\s*/)
+        .filter((parte) => !/^Plato\s+\d+\s*\(.*\)\s*→/.test(parte.trim()))
+        .join(' · ')
+        .trim();
+};
+
+/**
+ * Lo que quien empaca necesita ver de un cliente, en orden de importancia.
+ *
+ * La pantalla y el Excel armaban esta lista por separado y decian cosas
+ * distintas: en el Excel no aparecia que el cliente llevara desayunos. Vive acá
+ * para que las dos salidas no puedan volver a separarse.
+ *
+ * Lo que NO va acá: las observaciones del cliente ("sin cerdo", "no aguacate").
+ * Esas se muestran aparte porque son texto libre suyo, no un estado que el
+ * sistema deduzca.
+ *
+ * @param {object} cliente - el cliente ya armado para la hoja
+ * @param {{esTwoPack?: boolean, otrosPacks?: string}} [opts]
+ * @returns {string[]}
+ */
+export const etiquetasDeEmpaque = (cliente, opts = {}) => {
+    if (!cliente) return [];
+    const tags = [];
+
+    if (opts.esTwoPack) tags.push('TWO PACK - empacar 2 packs iguales');
+    if (cliente.incluyeDesayuno) tags.push('Lleva desayunos');
+
+    const subs = listarSustituciones(cliente.rawPedido || cliente);
+    if (subs.length > 0) tags.push(`CAMBIA: ${subs.map(textoSustitucion).join(' · ')}`);
+
+    if (opts.otrosPacks) tags.push(opts.otrosPacks);
+    return tags;
+};
+
 /** Una linea legible por sustitucion, para la hoja y los avisos. */
 export const textoSustitucion = (s) =>
     `Plato ${s.plato}: ${s.de || s.tipo} → ${s.a}`;

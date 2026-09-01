@@ -43,6 +43,8 @@ import {
     esMismoCliente,
     listarSustituciones,
     textoSustitucion,
+    etiquetasDeEmpaque,
+    sinSustituciones,
     deduplicateOrdersByClient
 } from '../../utils/productionHelpers';
 
@@ -1445,12 +1447,16 @@ export default function PrintProductionView() {
             };
 
             // TWO PACK va de primero: es lo que decide cuantos packs se empacan.
-            const notasDeCliente = (c, packName) =>
-                [
-                    detectIsTwoPack(c.rawPedido || c) ? 'TWO PACK - empacar 2 packs iguales' : '',
-                    sanitizeNote(c.observaciones),
-                    getOtherPacksTag(c.nombre, packName)
-                ].filter(Boolean).join(' | ');
+            // Mismas etiquetas que la pantalla: si el Excel armara su propia lista,
+            // volveria a callarse cosas —antes no decia que el cliente llevaba
+            // desayunos— y nadie se daria cuenta hasta que faltara en la bolsa.
+            const notasDeCliente = (c, packName) => [
+                ...etiquetasDeEmpaque(c, {
+                    esTwoPack: detectIsTwoPack(c.rawPedido || c),
+                    otrosPacks: getOtherPacksTag(c.nombre, packName)
+                }),
+                sanitizeNote(sinSustituciones(c.observaciones))
+            ].filter(Boolean).join(' | ');
 
             /** Los platos del pack con el gramaje ya resuelto. */
             const platosDelPack = (packName, packData) => {
@@ -2066,18 +2072,10 @@ export default function PrintProductionView() {
                                                     const client = packData.clientes[absoluteRowIndex];
 
                                                     if (client) {
-                                                        const tags = [];
+                                                        // Las MISMAS etiquetas que el Excel: si cada salida armara su lista,
+                                                        // volverian a decir cosas distintas y nadie se daria cuenta.
                                                         const hasDesayunoAlready = client.incluyeDesayuno || (client.observaciones && client.observaciones.toLowerCase().includes('desayun'));
-                                                        if (client.incluyeDesayuno) tags.push('🌅 Desayunos');
-
-                                                        // TWO PACK se escribe aparte: quien empaca tiene que leer que son DOS
-                                                        // packs iguales. El "(2)" de la celda del cliente se pasa por alto y se
-                                                        // empacaba uno solo. "Individuales" sigue fuera: tiene su propia hoja.
-                                                        if (detectIsTwoPack(client.rawPedido || client)) tags.push('👥 TWO PACK — empacar 2 packs iguales');
-                                                        // La coccion a granel cuenta el plato ORIGINAL: si el cambio no se lee
-                                                        // aca, se empaca lo que el cliente justamente pidio no comer.
-                                                        const subsCliente = listarSustituciones(client.rawPedido || client);
-                                                        if (subsCliente.length > 0) tags.push(`🔁 CAMBIA: ${subsCliente.map(textoSustitucion).join(' · ')}`);
+                                                        const tags = etiquetasDeEmpaque(client, { esTwoPack: detectIsTwoPack(client.rawPedido || client) });
 
 
                                                         let otherPacksTag = getOtherPacksTag(client.nombre, packName);
@@ -2088,7 +2086,7 @@ export default function PrintProductionView() {
                                                         }
                                                         if (otherPacksTag) tags.push(otherPacksTag);
 
-                                                        const dishObs = filterNoteForDish(client.observaciones, platosEmpaque[idx], platosEmpaque);
+                                                        const dishObs = filterNoteForDish(sinSustituciones(client.observaciones), platosEmpaque[idx], platosEmpaque);
                                                         let notes = dishObs ? `** ${dishObs}` : '';
                                                         if (tags.length > 0) {
                                                             const tagsStr = tags.map(t => `** ${t}`).join('\n');
@@ -2157,17 +2155,9 @@ export default function PrintProductionView() {
                                                 return (
                                                     <tbody className="break-inside-avoid print:break-inside-avoid">
                                                         {extraClients.map((client, extraIdx) => {
-                                                            const tags = [];
                                                             const hasDesayunoAlready = client.incluyeDesayuno || (client.observaciones && client.observaciones.toLowerCase().includes('desayun'));
-                                                            if (client.incluyeDesayuno) tags.push('🌅 Desayunos');
-                                                            // TWO PACK se escribe aparte: quien empaca tiene que leer que son DOS
-                                                            // packs iguales. El "(2)" de la celda del cliente se pasa por alto y se
-                                                            // empacaba uno solo. "Individuales" sigue fuera: tiene su propia hoja.
-                                                            if (detectIsTwoPack(client.rawPedido || client)) tags.push('👥 TWO PACK — empacar 2 packs iguales');
-                                                            // La coccion a granel cuenta el plato ORIGINAL: si el cambio no se lee
-                                                            // aca, se empaca lo que el cliente justamente pidio no comer.
-                                                            const subsCliente = listarSustituciones(client.rawPedido || client);
-                                                            if (subsCliente.length > 0) tags.push(`🔁 CAMBIA: ${subsCliente.map(textoSustitucion).join(' · ')}`);
+                                                            // Las MISMAS etiquetas que el Excel y que la tabla de arriba.
+                                                            const tags = etiquetasDeEmpaque(client, { esTwoPack: detectIsTwoPack(client.rawPedido || client) });
                                                             let otherPacksTag = getOtherPacksTag(client.nombre, packName);
                                                             if (hasDesayunoAlready && otherPacksTag) {
                                                                 const cleaned = otherPacksTag.replace('Lleva también: ', '').split(', ').filter(p => p !== 'Desayunos').join(', ');
@@ -2175,7 +2165,7 @@ export default function PrintProductionView() {
                                                             }
                                                             if (otherPacksTag) tags.push(otherPacksTag);
                                                             
-                                                            let clientNotesText = client.observaciones || client.rawPedido?.observaciones || client.rawPedido?.details?.notes || '';
+                                                            let clientNotesText = sinSustituciones(client.observaciones || client.rawPedido?.observaciones || client.rawPedido?.details?.notes || '');
                                                             if (client.rawPedido?.items) {
                                                                 client.rawPedido.items.forEach(it => {
                                                                     if (it.observaciones && !clientNotesText.includes(it.observaciones)) {
