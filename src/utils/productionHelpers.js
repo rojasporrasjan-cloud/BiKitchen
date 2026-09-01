@@ -144,7 +144,21 @@ export const etiquetasDeEmpaque = (cliente, opts = {}) => {
     const subs = listarSustituciones(cliente.rawPedido || cliente);
     if (subs.length > 0) tags.push(`CAMBIA: ${subs.map(textoSustitucion).join(' · ')}`);
 
-    if (opts.otrosPacks) tags.push(opts.otrosPacks);
+    // "Lleva desayunos" y "Lleva también: Desayunos" son la misma frase dicha
+    // dos veces. La pantalla ya lo limpiaba por su cuenta y el Excel no, asi que
+    // ahi salian las dos juntas: "Lleva desayunos | Lleva también: Desayunos |
+    // Lleva cena" en la casilla de Angelo Oviedo. Ahora la regla vive acá y las
+    // dos salidas la comparten.
+    let otros = String(opts.otrosPacks || '').trim();
+    if (otros && (cliente.incluyeDesayuno || notaHablaDeDesayuno)) {
+        const resto = otros
+            .replace(/^Lleva también:\s*/i, '')
+            .split(',')
+            .map(p => p.trim())
+            .filter(p => p && !/^desayunos?$/i.test(p));
+        otros = resto.length > 0 ? `Lleva también: ${resto.join(', ')}` : '';
+    }
+    if (otros) tags.push(otros);
     return tags;
 };
 
@@ -308,8 +322,19 @@ const NOTA_INTERNA = new RegExp([
     '#ord-', 'correo', '@[\\w.-]+\\.\\w+',
     // Notas que dejamos nosotros al ordenar la base, no del cliente
     'pendiente de pago', 'aparece en la hoja de gina', 'fecha movida',
-    'no renov[óo]', 'confirmado para que entre', 'seman[ao] \\d+ de \\d+'
+    'no renov[óo]', 'confirmado para que entre', 'seman[ao] \\d+ de \\d+',
+    // Control de cobro y de procedencia del dato. Nada de esto le dice a quien
+    // empaca que meter en la bolsa, y tapa lo que si importa: en la hoja del
+    // miercoles 2 salio impreso, en la casilla de Randall Cerdas, 'Gina
+    // confirmo "ya pago" y "entrega en la manana" (chat 31 ago). FALTA LA ZONA'.
+    'gina confirm[óo]', 'ya pag[óo]', 'ya viene pagado', 'no se cobra',
+    'sin cargo', 'reposici[óo]n', 'falta la zona', '\\(chat\\b',
+    'que no se entreg', 'agregado al pack', 'pedido para entrega',
+    'segunda entrega de la semana'
 ].join('|'), 'i');
+
+/** Un monto en colones metido dentro de una frase: "... (4 tazas) ₡7.500". */
+const PRECIO_EN_FRASE = /\s*[₡¢]\s*\d[\d.,]*/g;
 
 /** Señales de que la frase sí es una instrucción para la cocina o la entrega. */
 const ES_INSTRUCCION = /cambiar|cambio|no poner|sin\b|quitar|agregar|en vez de|sustitu|entregar|antes de las|despu[ée]s de las|llamar|alerg|solo\b|extra|doble|aparte/i;
@@ -342,7 +367,9 @@ export const notaParaEmpaque = (obs) => {
         const esInstruccion = ES_INSTRUCCION.test(frase);
         TELEFONO.lastIndex = 0;
 
+        // A quien empaca le sirve saber QUE guarniciones van; cuanto costaron no.
         return (esInstruccion ? frase : frase.replace(TELEFONO, ''))
+            .replace(PRECIO_EN_FRASE, '')
             .replace(/\s{2,}/g, ' ')
             .replace(/\s+([,.])/g, '$1')
             .trim();

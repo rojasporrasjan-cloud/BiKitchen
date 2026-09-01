@@ -270,57 +270,82 @@ function agregarPestanaEntregas(wb, usados, datos) {
  * lado el cliente sobre fondo verde con su nota.
  */
 function agregarPestanaDesayunos(wb, usados, desayunos) {
+    // Puede haber MAS DE UN menu de desayunos el mismo dia: quien lleva el de la
+    // semana —Angelo, Christopher— y quien lleva el de otra. A Fatima Arauz se le
+    // repusieron los desayunos del menu del 25 al 31 de agosto, y esta pestana
+    // escribia los platos del PRIMER menu con los clientes de TODOS pegados
+    // debajo: su nombre salia al lado de cinco desayunos que no son los suyos.
+    const bloques = (Array.isArray(desayunos) ? desayunos : [desayunos])
+        .filter(b => b && ((b.platos && b.platos.length) || (b.clientes && b.clientes.length)));
+    if (bloques.length === 0) bloques.push({ platos: [], clientes: [], totalPlatos: 0 });
+
     const ws = wb.addWorksheet(nombreDePestana('Desayunos', usados), {
-        pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 }
+        pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 1 }
     });
     [10, 56, 13, 40, 46].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
 
-    const titulo = ws.getRow(1).getCell(1);
-    titulo.value = `DESAYUNOS${desayunos.totalPlatos ? `  (${desayunos.totalPlatos} platos)` : ''}`;
-    titulo.font = { bold: true, size: 20 };
-    titulo.alignment = { horizontal: 'center', vertical: 'middle' };
-    titulo.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: SALMON } };
-    ws.mergeCells(1, 1, 1, 5);
-    ws.getRow(1).height = 30;
+    let fila = 1;
 
-    ['Plato', 'Descripcion', 'Cantidad', 'NOTA', 'Cliente'].forEach((h, i) => {
-        const c = ws.getRow(2).getCell(i + 1);
-        c.value = h;
-        c.font = { bold: true, size: 12 };
-        c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: SALMON_CLARO } };
-        c.alignment = { horizontal: 'center', vertical: 'middle' };
-        c.border = borde;
+    bloques.forEach((bloque, idx) => {
+        // Cada menu arranca en su propia pagina: Gina las reparte impresas y un
+        // menu partido a la mitad no le sirve a nadie.
+        if (idx > 0) ws.getRow(fila).addPageBreak();
+
+        const titulo = ws.getRow(fila).getCell(1);
+        const nombre = bloque.titulo ? `DESAYUNOS — ${bloque.titulo}` : 'DESAYUNOS';
+        titulo.value = `${nombre}${bloque.totalPlatos ? `  (${bloque.totalPlatos} platos)` : ''}`;
+        titulo.font = { bold: true, size: 20 };
+        titulo.alignment = { horizontal: 'center', vertical: 'middle' };
+        titulo.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: SALMON } };
+        ws.mergeCells(fila, 1, fila, 5);
+        ws.getRow(fila).height = 30;
+        fila += 1;
+
+        ['Plato', 'Descripcion', 'Cantidad', 'NOTA', 'Cliente'].forEach((h, i) => {
+            const c = ws.getRow(fila).getCell(i + 1);
+            c.value = h;
+            c.font = { bold: true, size: 12 };
+            c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: SALMON_CLARO } };
+            c.alignment = { horizontal: 'center', vertical: 'middle' };
+            c.border = borde;
+        });
+        ws.getRow(fila).height = 22;
+        fila += 1;
+
+        // Tantas filas como haga falta: los platos y los clientes no tienen por que
+        // ser la misma cantidad, y ninguno de los dos se puede quedar por fuera.
+        const platos = bloque.platos || [];
+        const clientes = bloque.clientes || [];
+        const filas = Math.max(platos.length, clientes.length);
+        for (let i = 0; i < filas; i++) {
+            const r = ws.getRow(fila);
+            const p = platos[i];
+            const c = clientes[i];
+
+            if (p) {
+                r.getCell(1).value = i + 1;
+                r.getCell(2).value = texto(p.proteina?.nombre || p.nombre);
+                r.getCell(3).value = bloque.totalPlatos;
+            }
+            if (c) {
+                r.getCell(4).value = texto(c.notas);
+                r.getCell(5).value = texto(c.etiqueta);
+                r.getCell(5).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: VERDE } };
+                r.getCell(5).font = { bold: true, size: 11 };
+            }
+
+            r.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+            r.getCell(3).alignment = { horizontal: 'center', vertical: 'middle' };
+            r.getCell(3).font = { bold: true, size: 12 };
+            r.getCell(4).alignment = { wrapText: true, vertical: 'middle' };
+            r.getCell(5).alignment = { wrapText: true, vertical: 'middle' };
+            r.height = 26;
+            for (let col = 1; col <= 5; col++) r.getCell(col).border = borde;
+            fila += 1;
+        }
+
+        fila += 1; // una fila en blanco entre menus
     });
-    ws.getRow(2).height = 22;
-
-    // Tantas filas como haga falta: los platos y los clientes no tienen por qué
-    // ser la misma cantidad, y ninguno de los dos se puede quedar por fuera.
-    const filas = Math.max(desayunos.platos.length, desayunos.clientes.length);
-    for (let i = 0; i < filas; i++) {
-        const r = ws.getRow(3 + i);
-        const p = desayunos.platos[i];
-        const c = desayunos.clientes[i];
-
-        if (p) {
-            r.getCell(1).value = i + 1;
-            r.getCell(2).value = texto(p.proteina?.nombre || p.nombre);
-            r.getCell(3).value = desayunos.totalPlatos;
-        }
-        if (c) {
-            r.getCell(4).value = texto(c.notas);
-            r.getCell(5).value = texto(c.etiqueta);
-            r.getCell(5).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: VERDE } };
-            r.getCell(5).font = { bold: true, size: 11 };
-        }
-
-        r.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
-        r.getCell(3).alignment = { horizontal: 'center', vertical: 'middle' };
-        r.getCell(3).font = { bold: true, size: 12 };
-        r.getCell(4).alignment = { wrapText: true, vertical: 'middle' };
-        r.getCell(5).alignment = { wrapText: true, vertical: 'middle' };
-        r.height = 26;
-        for (let col = 1; col <= 5; col++) r.getCell(col).border = borde;
-    }
 }
 
 /**
@@ -398,7 +423,12 @@ export function agregarHojasGina(wb, datos) {
 
     agregarPestanaEntregas(wb, usados, datos);
     (datos.familias || []).forEach(f => agregarPestanaFamilia(wb, usados, f));
-    if (datos.desayunos?.clientes?.length) agregarPestanaDesayunos(wb, usados, datos.desayunos);
+    // `desayunos` puede ser un bloque o una lista de bloques: hay dias con mas de
+    // un menu de desayunos (ver agregarPestanaDesayunos).
+    const bloquesDesayuno = Array.isArray(datos.desayunos) ? datos.desayunos : [datos.desayunos];
+    if (bloquesDesayuno.some(b => b?.clientes?.length)) {
+        agregarPestanaDesayunos(wb, usados, datos.desayunos);
+    }
     if (datos.individuales?.length) agregarPestanaIndividuales(wb, usados, datos.individuales);
 
     return wb;

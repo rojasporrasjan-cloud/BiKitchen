@@ -96,3 +96,29 @@ describe('la etiqueta de desayunos no se repite', () => {
         expect(tags).toContain('Lleva desayunos');
     });
 });
+
+describe('no se dice dos veces que lleva desayunos', () => {
+    it('quita "Desayunos" de "Lleva también" cuando ya se dijo arriba', () => {
+        const tags = etiquetasDeEmpaque(
+            { incluyeDesayuno: true, observaciones: '' },
+            { otrosPacks: 'Lleva también: Desayunos' }
+        );
+        expect(tags).toEqual(['Lleva desayunos']);
+    });
+
+    it('deja los otros packs y saca solo el de desayunos', () => {
+        const tags = etiquetasDeEmpaque(
+            { incluyeDesayuno: true, observaciones: 'Lleva 2 packs de desayunos' },
+            { otrosPacks: 'Lleva también: Desayunos, Individuales' }
+        );
+        expect(tags).toEqual(['Lleva también: Individuales']);
+    });
+
+    it('si no lleva desayunos, el tag pasa completo', () => {
+        const tags = etiquetasDeEmpaque(
+            { incluyeDesayuno: false, observaciones: '' },
+            { otrosPacks: 'Lleva también: Desayunos, Individuales' }
+        );
+        expect(tags).toEqual(['Lleva también: Desayunos, Individuales']);
+    });
+});

@@ -1562,16 +1562,25 @@ export default function PrintProductionView() {
             });
 
             // ── Desayunos ──
-            const desayunos = { platos: [], clientes: [], totalPlatos: 0 };
+            // UN bloque por menú de desayunos. Puede haber más de uno el mismo
+            // día: quien lleva el de la semana y quien lleva el de otra —a Fátima
+            // Arauz se le repusieron los del menú del 25 al 31 de agosto—. Antes
+            // era un solo bloque y su nombre salía junto a desayunos ajenos.
+            const desayunos = [];
             allPackNames.filter(n => isDesayunoPack(n)).forEach(packName => {
                 const packData = packsMap[packName];
                 if (!packData?.clientes?.length) return;
-                desayunos.totalPlatos += packData.totalPacks || 0;
-                if (desayunos.platos.length === 0) desayunos.platos = platosDelPack(packName, packData);
-                packData.clientes.forEach(c => desayunos.clientes.push({
-                    etiqueta: etiquetaDeCliente(c),
-                    notas: notasDeCliente(c, packName)
-                }));
+                desayunos.push({
+                    // El pack genérico no necesita título; un personalizado sí, o
+                    // no se sabe de quién son esos desayunos.
+                    titulo: esPersonalizado(packName) ? packName : '',
+                    totalPlatos: packData.totalPacks || 0,
+                    platos: platosDelPack(packName, packData),
+                    clientes: packData.clientes.map(c => ({
+                        etiqueta: etiquetaDeCliente(c),
+                        notas: notasDeCliente(c, packName)
+                    }))
+                });
             });
 
             // ── Individuales ──
@@ -2093,17 +2102,10 @@ export default function PrintProductionView() {
                                                     if (client) {
                                                         // Las MISMAS etiquetas que el Excel: si cada salida armara su lista,
                                                         // volverian a decir cosas distintas y nadie se daria cuenta.
-                                                        const hasDesayunoAlready = client.incluyeDesayuno || (client.observaciones && client.observaciones.toLowerCase().includes('desayun'));
-                                                        const tags = etiquetasDeEmpaque(client, { esTwoPack: detectIsTwoPack(client.rawPedido || client) });
-
-
-                                                        let otherPacksTag = getOtherPacksTag(client.nombre, packName);
-                                                        // Quitar "Desayunos" del tag si ya se mostró arriba o en observaciones
-                                                        if (hasDesayunoAlready && otherPacksTag) {
-                                                            const cleaned = otherPacksTag.replace('Lleva también: ', '').split(', ').filter(p => p !== 'Desayunos').join(', ');
-                                                            otherPacksTag = cleaned ? `Lleva también: ${cleaned}` : '';
-                                                        }
-                                                        if (otherPacksTag) tags.push(otherPacksTag);
+                                                        const tags = etiquetasDeEmpaque(client, {
+                                                            esTwoPack: detectIsTwoPack(client.rawPedido || client),
+                                                            otrosPacks: getOtherPacksTag(client.nombre, packName)
+                                                        });
 
                                                         const dishObs = filterNoteForDish(sinSustituciones(client.observaciones), platosEmpaque[idx], platosEmpaque);
                                                         let notes = dishObs ? `** ${dishObs}` : '';
