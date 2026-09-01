@@ -185,8 +185,8 @@ export const PORCIONES_POR_FAMILIA = {
     casaditos:       { proteina: 100,  vegetal: 0.5, carbo: 1.5 },
     vegetariano:     { proteina: 150,  vegetal: 1,   carbo: 0.5 },
     fullPack:        { proteina: 150,  vegetal: 1,   carbo: 0.5 },
-    familiarPremium: { proteina: null, vegetal: null, carbo: null, textoPorcion: '1 KG O 4 TAZAS POR PLATO' },
-    familiarDeluxe:  { proteina: null, vegetal: null, carbo: null, textoPorcion: '1 KG O 4 TAZAS POR PLATO' }
+    familiarPremium: { proteina: null, vegetal: null, carbo: null, textoPorcion: '1 KG O 4 TAZAS POR PLATO', porcionCorta: '1 kg o 4 tazas' },
+    familiarDeluxe:  { proteina: null, vegetal: null, carbo: null, textoPorcion: '1 KG O 4 TAZAS POR PLATO', porcionCorta: '1 kg o 4 tazas' }
 };
 
 const PORCION_POR_DEFECTO = { proteina: 150, vegetal: 1, carbo: 0.5 };

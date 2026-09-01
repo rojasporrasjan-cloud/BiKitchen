@@ -61,3 +61,40 @@ describe('las familias que se cocinan aparte se avisan', () => {
         expect(avisoDeFamilia('Pack Casaditos')).toBe('');
     });
 });
+
+describe('el aviso llega al Excel', () => {
+    it('el titulo del menu keto dice que se cocina aparte', async () => {
+        const { construirLibroGina } = await import('../utils/excelHojaProduccion.js');
+        const wb = construirLibroGina({
+            etiquetaDia: 'MIERCOLES 02 SETIEMBRE', entregas: [], individuales: [], desayunos: [],
+            familias: [{
+                titulo: 'Pack Keto',
+                menu1: {
+                    titulo: 'Menú #1 Pack Keto',
+                    aviso: 'KETO — SE COCINA APARTE',
+                    porciones: ['200 GRAMOS DE PROTEINA', '1.5 TAZA(S) DE VEGETALES'],
+                    llevaCarbo: false, llevaVegetal: true, totalPlatos: 1,
+                    platos: [{ numero: 1,
+                        proteina: { nombre: 'Filet de tilapia en mantequilla', gramosPorPorcion: 200 },
+                        vegetal: { nombre: 'Zuchinnis a la parmesana', cantidadPorPorcion: 1.5 } }],
+                    clientes: []
+                },
+                menu2: null
+            }]
+        });
+        const ws = wb.getWorksheet('Pack Keto');
+        expect(String(ws.getCell('A3').value)).toContain('SE COCINA APARTE');
+    });
+
+    it('un pack sin aviso conserva su titulo tal cual', async () => {
+        const { construirLibroGina } = await import('../utils/excelHojaProduccion.js');
+        const wb = construirLibroGina({
+            etiquetaDia: 'X', entregas: [], individuales: [], desayunos: [],
+            familias: [{ titulo: 'Pack Bajo Calorías',
+                menu1: { titulo: 'Menú #1 Pack Bajo Calorías', porciones: ['120 GRAMOS DE PROTEINA'],
+                         llevaCarbo: true, llevaVegetal: true, totalPlatos: 1, platos: [], clientes: [] },
+                menu2: null }]
+        });
+        expect(String(wb.getWorksheet('Pack Bajo Calorías').getCell('A3').value)).toBe('Menú #1 Pack Bajo Calorías');
+    });
+});

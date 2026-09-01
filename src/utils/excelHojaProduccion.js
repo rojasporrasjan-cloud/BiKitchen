@@ -89,7 +89,10 @@ const impresion = (enUnaPagina, titulos) => ({
 /** Encabezado naranja + las líneas de "CANTIDAD POR PLATO" + los títulos. */
 function escribirCabecera(ws, col, bloque) {
     const titulo = ws.getRow(3).getCell(col);
-    titulo.value = bloque.titulo;
+    // El aviso va DENTRO del titulo: la fila 3 esta combinada de col a col+5, asi
+    // que cualquier otra celda de esa fila se pierde. "Ojala especifique que es
+    // keto porque se cocina aparte, igual vegetariano" — Gina.
+    titulo.value = bloque.aviso ? `${bloque.titulo}   —   ${bloque.aviso}` : bloque.titulo;
     titulo.font = { bold: true, size: 14 };
     titulo.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: NARANJA } };
     titulo.alignment = { horizontal: 'center', vertical: 'middle' };
@@ -218,9 +221,13 @@ function escribirResumen(ws, col, filaInicio, bloque) {
 
     bloque.platos.forEach(p => {
         const platos = total * (p.vecesPorPack || 1);
-        const partes = [
-            [p.proteina?.nombre, (p.proteina?.gramosPorPorcion || 0) * platos, 'g']
-        ];
+        // Un plato que no se mide en gramos por persona —las bandejas familiares—
+        // multiplicaba por cero y salia "0 g": le decia a la cocina que no
+        // preparara nada. Ahi va la porcion tal como la nombra Gina.
+        const gramosPorPorcion = Number(p.proteina?.gramosPorPorcion) || 0;
+        const partes = (gramosPorPorcion > 0 || !bloque.porcionPlato)
+            ? [[p.proteina?.nombre, gramosPorPorcion * platos, 'g']]
+            : [[p.proteina?.nombre, platos, '× ' + bloque.porcionPlato]];
         if (bloque.llevaVegetal !== false) {
             partes.push([p.vegetal?.nombre, (p.vegetal?.cantidadPorPorcion || 0) * platos, 'tazas']);
         }
