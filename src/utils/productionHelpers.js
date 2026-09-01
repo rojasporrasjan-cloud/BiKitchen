@@ -23,6 +23,10 @@ export const normalizeClientKey = (name) => {
  * también `fusionados`, para que la pantalla pueda avisar cuáles pedidos
  * quedaron absorbidos por otro (ver RevisionHoja).
  *
+ * Un pedido con `noFusionar: true` NO se absorbe: es un agregado hecho a
+ * propósito (una reposición, una proteína extra en una sola entrega de un pack
+ * mensual) y sus platos hay que cocinarlos igual que los del pedido principal.
+ *
  * Vive acá (no en PrintProductionView) para que Etiquetas pueda usar la MISMA
  * fusión que la hoja de producción: si cada pantalla dedupilcara a su manera,
  * la cantidad de etiquetas y la cantidad que se cocina podrían no coincidir.
@@ -191,6 +195,28 @@ export const deduplicateOrdersByClient = (ordersList) => {
         if (existingKey) {
             const existingOrder = seen.get(existingKey);
             const numeroDe = (o) => o.rawPedido?.numeroOrden || o.numeroOrden || o.id;
+
+            // Mismo cliente NO quiere decir mismo pedido. Diana Gonzalez lleva su
+            // Pack Mensual Bajo Calorias y aparte 3 milanesas de pollo de 250 g:
+            // son dos cosas distintas que hay que cocinar las dos. Aca se juntaban
+            // igual y del segundo solo sobrevivian las observaciones, asi que las
+            // milanesas desaparecian de la hoja y en su lugar quedaba pegado un
+            // "sin cargo" en la fila del pack. Nadie las hubiera empacado.
+            //
+            // La fusion existe para el pedido importado DOS VECES, y ahi el plan
+            // suele venir escrito distinto —"Two Pack" y "Pack Bajo Calorias" para
+            // el mismo pedido de Jose Daniel Benavides—, asi que el contenido no
+            // sirve para distinguir. Se marca a mano: `noFusionar` en el agregado
+            // dice que es un pedido aparte de verdad.
+            if (order.noFusionar || existingOrder.noFusionar) {
+                const suelto = { ...order };
+                if (!suelto.zona_envio && existingOrder.zona_envio) {
+                    suelto.zona_envio = existingOrder.zona_envio;
+                }
+                result.push(suelto);
+                return;
+            }
+
             fusionados.push({
                 cliente: order.cliente || existingOrder.cliente || '',
                 absorbido: numeroDe(order),

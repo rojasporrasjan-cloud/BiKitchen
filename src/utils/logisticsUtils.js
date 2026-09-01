@@ -327,6 +327,11 @@ export function mapPedidosFromLegacy(rawPedidos) {
       // Christopher Ulloa lleva un personalizado y DOS packs de desayunos.
       // null = usar el conteo del almuerzo, que es lo de siempre.
       packsDesayuno: Number(p.packsDesayuno) > 0 ? Number(p.packsDesayuno) : null,
+      // Un agregado hecho a proposito al pedido de un cliente que YA tiene otro
+      // ese dia (una reposicion, una proteina extra en una sola entrega de un
+      // pack mensual). Sin esto la hoja lo fusiona con el principal y sus platos
+      // se pierden — ver deduplicateOrdersByClient.
+      noFusionar: !!p.noFusionar,
       categoria: p.categoria || (isTwoPack ? 'two_pack' : ''),
       categoryLabel: p.categoryLabel || (isTwoPack ? 'Two Pack' : ''),
       items: p.items || p.menu || [],
