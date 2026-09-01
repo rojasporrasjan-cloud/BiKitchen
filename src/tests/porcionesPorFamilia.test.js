@@ -30,9 +30,11 @@ describe('cuanto lleva cada plato', () => {
         expect(porcionesDelPack('Pack Sin Carbos').carbo).toBe(0);
     });
 
-    it('los familiares no se miden en gramos por persona', () => {
+    it('los familiares se cocinan por kilo, pero no se imprime un numero por persona', () => {
+        // El plato es una bandeja para cuatro: la cocina necesita el kilo, y
+        // quien empaca necesita leer "1 kg o 4 tazas", no "1000".
         const p = porcionesDelPack('Paquete Deluxe');
-        expect(p.proteina).toBeNull();
+        expect(p.proteina).toBe(1000);
         expect(p.textoPorcion).toBe('1 KG O 4 TAZAS POR PLATO');
     });
 

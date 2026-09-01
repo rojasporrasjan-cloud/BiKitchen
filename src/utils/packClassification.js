@@ -185,8 +185,13 @@ export const PORCIONES_POR_FAMILIA = {
     casaditos:       { proteina: 100,  vegetal: 0.5, carbo: 1.5 },
     vegetariano:     { proteina: 150,  vegetal: 1,   carbo: 0.5 },
     fullPack:        { proteina: 150,  vegetal: 1,   carbo: 0.5 },
-    familiarPremium: { proteina: null, vegetal: null, carbo: null, textoPorcion: '1 KG O 4 TAZAS POR PLATO', porcionCorta: '1 kg o 4 tazas' },
-    familiarDeluxe:  { proteina: null, vegetal: null, carbo: null, textoPorcion: '1 KG O 4 TAZAS POR PLATO', porcionCorta: '1 kg o 4 tazas' }
+    // El plato de un familiar es una BANDEJA para cuatro, no una porcion: se
+    // cocina por KILO. Con los 150 g por defecto, el Paquete Deluxe de Rebeca
+    // Toval —siete platos— mandaba a cocinar 1.365 g cuando hacen falta 9.100.
+    // `textoPorcion` es lo que se IMPRIME: el numero por persona no significa
+    // nada ahi y solo confunde a quien empaca.
+    familiarPremium: { proteina: 1000, vegetal: null, carbo: null, textoPorcion: '1 KG O 4 TAZAS POR PLATO', porcionCorta: '1 kg o 4 tazas' },
+    familiarDeluxe:  { proteina: 1000, vegetal: null, carbo: null, textoPorcion: '1 KG O 4 TAZAS POR PLATO', porcionCorta: '1 kg o 4 tazas' }
 };
 
 const PORCION_POR_DEFECTO = { proteina: 150, vegetal: 1, carbo: 0.5 };
