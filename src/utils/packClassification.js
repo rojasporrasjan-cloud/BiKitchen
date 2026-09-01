@@ -23,6 +23,16 @@ export const mapPackNameToMenuKey = (name) => {
         return null;
     }
 
+    // "Paquete Deluxe" es el nombre VISIBLE del Pack Familiar Deluxe
+    // (packsData.js: 'Pack Familiar Deluxe' -> nombre: 'Paquete Deluxe'). El
+    // checkout guarda ese nombre en `plan` y ahi se pierde la palabra
+    // "Familiar", asi que la regla de mas abajo —deluxe sin familiar es Full
+    // Pack— lo mandaba a cocinar 5 platos individuales de 150 g en vez de los 7
+    // para 4 personas que pago. Le paso a 11 pedidos, 9 ya entregados.
+    //
+    // "Pack Deluxe" a secas NO entra: hay un pedido asi con categoria
+    // Individuales, que es otro producto.
+    if (n.includes('paquete deluxe')) return 'familiarDeluxe';
     if (n.includes('familiar') && n.includes('deluxe')) return 'familiarDeluxe';
     if (n.includes('familiar') && n.includes('premium')) return 'familiarPremium';
     if (n.includes('familiar')) return 'familiarPremium';
