@@ -66,8 +66,23 @@ describe('los pesos se redondean hacia arriba', () => {
         expect(cuantoCocinar({ unit: 'g', totalQty: 125 })).toBe(163);
     });
 
-    it('las tazas no se redondean a entero: media taza es media taza', () => {
-        expect(cuantoCocinar({ unit: 'taza(s)', totalQty: 1 })).toBe(1.3);
+    it('las tazas de las ollas tambien suben: 2,6 son 3', () => {
+        // "Si es 2.6 redondear a 3, con todas las porciones menos individuales."
+        expect(cuantoCocinar({ unit: 'taza(s)', totalQty: 2 })).toBe(3);   // 2 x 1,30 = 2,6
+        expect(cuantoCocinar({ unit: 'taza(s)', totalQty: 1 })).toBe(2);   // 1,3
+    });
+
+    it('pero la parte de individuales NO se infla al redondear', () => {
+        // 2 tazas de olla (2,6 -> 3) mas 4 tazas de un individual = 7, no 8.
+        const item = { unit: 'taza(s)', totalQty: 6,
+                       individualEntries: [{ qty: 4, unit: 'taza(s)' }] };
+        expect(cuantoCocinar(item)).toBe(7);
+    });
+
+    it('un individual con fraccion se respeta tal cual', () => {
+        const item = { unit: 'taza(s)', totalQty: 0.5,
+                       individualEntries: [{ qty: 0.5, unit: 'taza(s)' }] };
+        expect(cuantoCocinar(item)).toBe(0.5);
     });
 
     it('las unidades se cuentan de a una, sin merma', () => {

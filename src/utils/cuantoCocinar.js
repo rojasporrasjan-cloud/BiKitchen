@@ -44,9 +44,11 @@ export const cuantoCocinar = (item, margen = MARGEN_COCINA) => {
 
     const individuales = Math.min(parteDeIndividuales(item), total);
     const enOllas = Math.max(0, total - individuales);
-    const crudo = enOllas * margen + individuales;
 
-    // "Redondear pesos a mas siempre": quedarse corto deja a alguien sin comida.
-    if (item?.unit === 'g') return Math.ceil(crudo);
-    return Math.round(crudo * 100) / 100;
+    // Lo de las OLLAS se redondea hacia arriba —2,6 tazas son 3—: quedarse corto
+    // deja a alguien sin comida, y que sobre no le hace daño a nadie.
+    //
+    // Lo de los INDIVIDUALES no se redondea ni se infla: es una porcion que se
+    // pesa y se empaca. Si son 250, son 250.
+    return Math.ceil(enOllas * margen) + individuales;
 };
