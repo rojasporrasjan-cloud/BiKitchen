@@ -935,7 +935,12 @@ export default function PrintProductionView() {
                         itemsToProcess.push({
                             name: rawName,
                             grams: p.proteina?.gramosPorPorcion || p.gramos,
-                            desc: p.descripcion || '',
+                            // La medida de ESE plato manda: mapPedidosFromLegacy la guarda
+                            // tal como la escribio Gina ("120 g", "1 unidad", "4 tazas").
+                            // Sin ella el parser adivina por el tipo de plato y a toda
+                            // proteina le pone 250 g: a Fatima Arauz le ponia el doble en
+                            // cada una de sus cenas Sin Carbos, que son de 120 g.
+                            desc: p.medida || p.descripcion || '',
                             count: p.cantidad || 1
                         });
                     });
