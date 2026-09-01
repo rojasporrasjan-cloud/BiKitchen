@@ -100,3 +100,20 @@ describe('la parte que va a individuales', () => {
         expect(parteDeIndividuales({ unit: 'g' })).toBe(0);
     });
 });
+
+describe('lo que se cuenta de a uno no lleva merma', () => {
+    it('los maduros del casadito son 10, no 13', () => {
+        // 2 por plato x 5 platos. No se pierde medio maduro en la olla.
+        expect(cuantoCocinar({ unit: 'unidad(es)', totalQty: 10 })).toBe(10);
+    });
+
+    it('da igual como este escrita la unidad', () => {
+        expect(cuantoCocinar({ unit: 'unidades', totalQty: 10 })).toBe(10);
+        expect(cuantoCocinar({ unit: 'unidad(es)', totalQty: 10 })).toBe(10);
+    });
+
+    it('las tazas y los gramos si llevan merma', () => {
+        expect(cuantoCocinar({ unit: 'taza(s)', totalQty: 10 })).toBe(13);
+        expect(cuantoCocinar({ unit: 'g', totalQty: 10 })).toBe(13);
+    });
+});

@@ -201,6 +201,12 @@ service cloud.firestore {
     match /clientes/{doc} { allow read, write: if isAdmin(); }
     match /stats/{doc} { allow read, write: if isAdmin(); }
     match /admin_config/{doc} { allow read, write: if isAdmin(); }
+
+    // Las correcciones que Gina hace a mano sobre la hoja de cocina: cuanto
+    // cocinar de cada cosa y la nota de empaque. Un documento por fecha de
+    // produccion. Sin esta regla la hoja se ve pero no deja guardar nada
+    // —"permission-denied"— y el cambio se pierde al recargar.
+    match /ajustes_cocina/{fecha} { allow read, write: if isAdmin(); }
     
     // ==========================================
     // REGLA POR DEFECTO - DENEGAR TODO

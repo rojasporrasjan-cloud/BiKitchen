@@ -39,8 +39,11 @@ export const parteDeIndividuales = (item) => {
 export const cuantoCocinar = (item, margen = MARGEN_COCINA) => {
     const total = Number(item?.totalQty) || 0;
 
-    // Las unidades ya se cuentan de a una: no se les pone merma ni se redondean.
-    if (item?.unit === 'unidades') return total;
+    // Lo que se cuenta de a UNO no lleva merma: no se pierde media empanada ni
+    // medio maduro en la olla. Se acepta escrito de las dos formas —"unidades" y
+    // "unidad(es)"— porque las dos conviven en la hoja, y con solo una de ellas
+    // los maduros del casadito salian con 30% de mas: 13 para diez que hacen falta.
+    if (/^unidad/i.test(String(item?.unit || ''))) return total;
 
     const individuales = Math.min(parteDeIndividuales(item), total);
     const enOllas = Math.max(0, total - individuales);
