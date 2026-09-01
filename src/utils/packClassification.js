@@ -99,3 +99,48 @@ export const getDefaultGrams = (packName) => {
     if (n.includes('regular') || n.includes('casadito')) return 100;
     return 150; // Full pack y default
 };
+
+/**
+ * Un pack PERSONALIZADO: sus platos salen del propio pedido, no del menu
+ * semanal.
+ *
+ * Gina los lleva asi en su pestaña "Personalizado". Los usa quien pide el menu
+ * de OTRA semana —a Fatima Arauz habia que reponerle las cenas del menu del
+ * 25 al 31 de agosto— o quien pide cambios que ya no calzan con ningun pack.
+ */
+export const esPersonalizado = (name) => /^personalizado/i.test(String(name || '').trim());
+
+/**
+ * ¿El pack lleva fila de harina?
+ *
+ * Keto y Sin Carbos no llevan, por definicion. Y tampoco un pack cuyos platos
+ * simplemente no traen carbo: las cenas Sin Carbos que se le repusieron a
+ * Fatima Arauz son proteina y vegetal, y la hoja les imprimia una tercera fila
+ * con "—" y "0.5" al lado, como si hubiera media taza de algo que servir.
+ */
+export const llevaFilaDeCarbo = (platos, menuKey) => {
+    if (menuKey === 'keto' || menuKey === 'sinCarbos') return false;
+    if (!Array.isArray(platos) || platos.length === 0) return true;
+    return platos.some(p => {
+        const n = typeof p?.carbo === 'string' ? p.carbo : p?.carbo?.nombre;
+        return !!n && String(n).trim() !== '' && String(n).trim() !== '—';
+    });
+};
+
+/**
+ * Bajo que nombre se imprime la hoja de empaque de un pack.
+ *
+ * Los packs de una misma familia comparten menu, asi que se juntan en UNA sola
+ * hoja: "Pack Bajo Calorias Promo Almuerzo y Cena" y "Pack 2 Semanas Bajo
+ * Calorias" son los mismos cinco platos.
+ *
+ * Un PERSONALIZADO no. Sus platos son suyos y el nombre de familia solo dice
+ * como se empaca —cuanta proteina, si lleva harina—. A Fatima Arauz, que lleva
+ * las cenas del menu del 25 al 31 de agosto, se la metian en la hoja del Pack
+ * Sin Carbos de ESTA semana y le cambiaban los cinco platos.
+ *
+ * @param {string} packName        nombre del pack en el pedido
+ * @param {string} etiquetaFamilia nombre de la familia (MENU_LABELS), si tiene
+ */
+export const nombreDeHojaDeEmpaque = (packName, etiquetaFamilia) =>
+    esPersonalizado(packName) ? packName : (etiquetaFamilia || packName);

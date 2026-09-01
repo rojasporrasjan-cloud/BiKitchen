@@ -11,6 +11,9 @@ import {
 import {
     mapPackNameToMenuKey,
     isIndividualPack,
+    esPersonalizado,
+    nombreDeHojaDeEmpaque,
+    llevaFilaDeCarbo,
     getDefaultGrams
 } from '../../utils/packClassification';
 import { getOfficialMenus, DEFAULT_MENUS } from '../../utils/firestoreMenus';
@@ -32,7 +35,7 @@ import RevisionHoja from '../../components/admin/RevisionHoja';
 import { individualesData, getProductUnits } from '../../data/individualesData';
 import ExcelJS from 'exceljs';
 import { agregarHojasGina } from '../../utils/excelHojaProduccion';
-import { textoLlevaCena } from '../../utils/labels/labelDomain';
+import { packSeParteEnAlmuerzoYCena } from '../../utils/labels/labelDomain';
 
 import {
     MARGEN_COCINA,
@@ -77,6 +80,14 @@ export default function PrintProductionView() {
         const isCenaSheet = packName.startsWith('CENAS -');
         const basePackName = isCenaSheet ? packName.replace(/^CENAS\s*-\s*/i, '') : packName;
         const menuKey = packData?.menuKey || mapPackNameToMenuKey(basePackName);
+
+        // Un PERSONALIZADO trae sus platos escritos en el pedido y esos mandan,
+        // pase lo que pase con el nombre. Hace falta porque el nombre TIENE que
+        // decir "Sin Carbos" o "Desayunos" para que la hoja lo clasifique bien
+        // —donde imprimirlo, si lleva harina— y en cuanto lo dice, esta funcion
+        // le buscaba el menu oficial de ESTA semana. A Fatima Arauz, que lleva
+        // el menu del 25 al 31 de agosto, le habria puesto los platos de otra.
+        if (esPersonalizado(basePackName)) return packData?.platosBase || [];
 
         let rawPlatos = [];
         if (officialMenus && menuKey) {
@@ -243,7 +254,7 @@ export default function PrintProductionView() {
         // vegetal/carbo— pero sus platos NO salen del menú semanal, sino del propio
         // pedido. Gina los lleva así en su pestaña "Personalizado": Dalia Parrales
         // con 3 packs sin cerdo, Maycol Ávila con dos menús y sin vainica.
-        if (/^personalizado/i.test(String(packName || '').trim())) return false;
+        if (esPersonalizado(packName)) return false;
 
         if (isIndividualPack(packName)) return true;
         // Si pertenece a una de las 7 familias de packs oficiales (Bajo Calorías, Full Pack, Keto, etc),
@@ -332,7 +343,7 @@ export default function PrintProductionView() {
             // La regla vive en labelDomain para que la hoja y las etiquetas no puedan
             // contradecirse: antes esta vista contaba "two pack" como cena y el
             // impresor de etiquetas no, así que Gina cocinaba packs que nadie pidió.
-            const isCenaPromo = !productosSueltos.has(packName) && textoLlevaCena(combinedText);
+            const isCenaPromo = !productosSueltos.has(packName) && packSeParteEnAlmuerzoYCena(packName, combinedText);
 
             const filteredPlates = isIndividual ? c.platos : (c.platos || []).filter(p => p.proteina?.nombre === packName);
             const clientForPack = { ...c, cantidadMenus: totalQty };
@@ -410,8 +421,10 @@ export default function PrintProductionView() {
         if (isActuallyIndividual(packName) || isDesayunoPack(packName)) return;
 
         const menuKey = mapPackNameToMenuKey(packName);
-        // Si tiene menuKey, consolidar bajo el label de la familia
-        let consolidatedName = (menuKey && MENU_LABELS[menuKey]) ? MENU_LABELS[menuKey] : packName;
+        // Si tiene menuKey, consolidar bajo el label de la familia. Un
+        // PERSONALIZADO se queda con su nombre: comparte la forma de empaque de
+        // la familia pero NO sus platos.
+        let consolidatedName = nombreDeHojaDeEmpaque(packName, menuKey ? MENU_LABELS[menuKey] : null);
 
         // Si es una hoja de cenas, agregar el prefijo al nombre consolidado
         if (packName.startsWith('CENAS -')) {
@@ -1504,8 +1517,8 @@ export default function PrintProductionView() {
                 if (!packData) return null;
                 const menuKey = packData.menuKey || mapPackNameToMenuKey(packName);
                 // Keto y Sin Carbos no llevan harina: su bloque es de dos filas por plato
-                const llevaCarbo = menuKey !== 'keto' && menuKey !== 'sinCarbos';
                 const platos = platosDelPack(packName, packData);
+                const llevaCarbo = llevaFilaDeCarbo(platos, menuKey);
 
                 const porciones = [
                     `${platos[0]?.proteina?.gramosPorPorcion || getDefaultGrams(packName)} GRAMOS DE PROTEINA`,
@@ -2028,7 +2041,7 @@ export default function PrintProductionView() {
                                 };
                             });
 
-                            const showCarbos = menuKey !== 'keto' && menuKey !== 'sinCarbos';
+                            const showCarbos = llevaFilaDeCarbo(platosEmpaque, menuKey);
                             const rowsPerPlate = showCarbos ? 3 : 2;
 
                             return (

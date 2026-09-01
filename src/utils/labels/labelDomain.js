@@ -22,7 +22,7 @@ import { ESTADOS_QUE_IMPRIMEN } from '../estadosPedido';
 import { getScheduleFromOrder } from '../orderDates';
 import { mapPedidosFromLegacy, detectIsTwoPack } from '../logisticsUtils';
 import { deduplicateOrdersByClient } from '../productionHelpers';
-import { mapPackNameToMenuKey } from '../packClassification';
+import { mapPackNameToMenuKey, esPersonalizado } from '../packClassification';
 import { DEFAULT_MENUS } from '../firestoreMenus';
 
 /**
@@ -188,6 +188,19 @@ export const textoLlevaCena = (texto) => {
         || /promo\s*2\s*semanas/.test(t)
         || (/quincenal/.test(t) && /desayun/.test(t));
 };
+
+/**
+ * Si el pack hay que partirlo en una hoja de almuerzos y otra de cenas.
+ *
+ * Un PERSONALIZADO nunca: sus platos son literalmente lo que hay que cocinar,
+ * ni mas ni menos. A Fatima Arauz se le repusieron CINCO CENAS del menu del 25
+ * al 31 de agosto; como el nombre del pack dice "cenas", la hoja creia que era
+ * un pack de almuerzos que ademas llevaba cenas y la sacaba DOS veces: una con
+ * sus platos y otra con el menu de cenas de ESTA semana. Diez cenas para quien
+ * lleva cinco.
+ */
+export const packSeParteEnAlmuerzoYCena = (packName, textoDelPedido) =>
+    !esPersonalizado(packName) && textoLlevaCena(textoDelPedido);
 
 /** Misma regla, aplicada a un pedido completo. */
 export const esPromoCena = (pedido) => {
