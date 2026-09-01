@@ -14,6 +14,7 @@ import {
     esPersonalizado,
     nombreDeHojaDeEmpaque,
     llevaFilaDeCarbo,
+    llevaFilaDeVegetal,
     getDefaultGrams
 } from '../../utils/packClassification';
 import { getOfficialMenus, DEFAULT_MENUS } from '../../utils/firestoreMenus';
@@ -1519,11 +1520,14 @@ export default function PrintProductionView() {
                 // Keto y Sin Carbos no llevan harina: su bloque es de dos filas por plato
                 const platos = platosDelPack(packName, packData);
                 const llevaCarbo = llevaFilaDeCarbo(platos, menuKey);
+                // El Paquete Deluxe son platos completos para 4 personas y no
+                // llevan vegetal aparte: la fila salia en blanco.
+                const llevaVegetal = llevaFilaDeVegetal(platos);
 
                 const porciones = [
-                    `${platos[0]?.proteina?.gramosPorPorcion || getDefaultGrams(packName)} GRAMOS DE PROTEINA`,
-                    `${platos[0]?.vegetal?.cantidadPorPorcion || 1} TAZA(S) DE VEGETALES`
+                    `${platos[0]?.proteina?.gramosPorPorcion || getDefaultGrams(packName)} GRAMOS DE PROTEINA`
                 ];
+                if (llevaVegetal) porciones.push(`${platos[0]?.vegetal?.cantidadPorPorcion || 1} TAZA(S) DE VEGETALES`);
                 if (llevaCarbo) porciones.push(`${platos[0]?.carbo?.cantidadPorPorcion || 0.5} TAZA(S) DE HARINA`);
 
                 return {
@@ -1532,6 +1536,7 @@ export default function PrintProductionView() {
                     porciones,
                     platos,
                     llevaCarbo,
+                    llevaVegetal,
                     totalPlatos: packData.totalPacks || 0,
                     clientes: (packData.clientes || []).map(c => ({
                         etiqueta: etiquetaDeCliente(c),
@@ -2051,7 +2056,8 @@ export default function PrintProductionView() {
                             });
 
                             const showCarbos = llevaFilaDeCarbo(platosEmpaque, menuKey);
-                            const rowsPerPlate = showCarbos ? 3 : 2;
+                            const showVegetales = llevaFilaDeVegetal(platosEmpaque);
+                            const rowsPerPlate = 1 + (showVegetales ? 1 : 0) + (showCarbos ? 1 : 0);
 
                             return (
                                 <div key={`empaque-${packName}`} className="pack-table-container mb-12 print:mb-0 print:break-after-page print:[page-break-after:always] break-inside-avoid print:break-inside-avoid">
@@ -2068,10 +2074,12 @@ export default function PrintProductionView() {
                                                 <div className="w-48 p-0.5 px-1 border-r border-black">CANTIDAD POR PLATO</div>
                                                 <div className="flex-1 p-0.5 px-1">{platosEmpaque[0]?.proteina?.gramosPorPorcion ? `${platosEmpaque[0].proteina.gramosPorPorcion} GRAMOS DE PROTEINA` : `${getDefaultGrams(packName)} GRAMOS DE PROTEINA`}</div>
                                             </div>
-                                            <div className="flex border-b border-black">
-                                                <div className="w-48 p-0.5 px-1 border-r border-black">CANTIDAD POR PLATO</div>
-                                                <div className="flex-1 p-0.5 px-1">{platosEmpaque[0]?.vegetal?.cantidadPorPorcion ? `${platosEmpaque[0].vegetal.cantidadPorPorcion} TAZA(S) DE VEGETALES` : '1 TAZA DE VEGETALES'}</div>
-                                            </div>
+                                            {showVegetales && (
+                                                <div className="flex border-b border-black">
+                                                    <div className="w-48 p-0.5 px-1 border-r border-black">CANTIDAD POR PLATO</div>
+                                                    <div className="flex-1 p-0.5 px-1">{platosEmpaque[0]?.vegetal?.cantidadPorPorcion ? `${platosEmpaque[0].vegetal.cantidadPorPorcion} TAZA(S) DE VEGETALES` : '1 TAZA DE VEGETALES'}</div>
+                                                </div>
+                                            )}
                                             {showCarbos && (
                                                 <div className="flex border-b border-black">
                                                     <div className="w-48 p-0.5 px-1 border-r border-black">CANTIDAD POR PLATO</div>
@@ -2151,18 +2159,20 @@ export default function PrintProductionView() {
                                                             <td className="border border-black p-1 print:py-0.5 print:px-1 text-center font-bold text-base print:text-sm align-middle" rowSpan={rowsPerPlate}>{totalPlatos}</td>
                                                             {renderClientCells(0)}
                                                         </tr>
-                                                        {/* FILA 2: VEGETALES */}
-                                                        <tr>
-                                                            <td className="border border-black p-1 print:py-0.5 print:px-1">{p.vegetal?.nombre || ''}</td>
-                                                            <td className="border border-black p-1 print:py-0.5 print:px-1 text-center">{p.vegetal?.cantidadPorPorcion ? `${p.vegetal.cantidadPorPorcion}` : ''}</td>
-                                                            {renderClientCells(1)}
-                                                        </tr>
+                                                        {/* FILA 2: VEGETALES (el Paquete Deluxe no lleva) */}
+                                                        {showVegetales && (
+                                                            <tr>
+                                                                <td className="border border-black p-1 print:py-0.5 print:px-1">{p.vegetal?.nombre || ''}</td>
+                                                                <td className="border border-black p-1 print:py-0.5 print:px-1 text-center">{p.vegetal?.cantidadPorPorcion ? `${p.vegetal.cantidadPorPorcion}` : ''}</td>
+                                                                {renderClientCells(1)}
+                                                            </tr>
+                                                        )}
                                                         {/* FILA 3: CARBOS (si aplica) */}
                                                         {showCarbos && (
                                                             <tr className="break-inside-avoid">
                                                                 <td className="border border-black p-1 print:py-0.5 print:px-1">{p.carbo?.nombre || ''}</td>
                                                                 <td className="border border-black p-1 print:py-0.5 print:px-1 text-center">{p.carbo?.cantidadPorPorcion ? `${p.carbo.cantidadPorPorcion}` : ''}</td>
-                                                                {renderClientCells(2)}
+                                                                {renderClientCells(showVegetales ? 2 : 1)}
                                                             </tr>
                                                         )}
                                                     </tbody>

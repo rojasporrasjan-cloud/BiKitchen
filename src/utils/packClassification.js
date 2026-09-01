@@ -128,6 +128,23 @@ export const llevaFilaDeCarbo = (platos, menuKey) => {
 };
 
 /**
+ * Lleva fila de vegetal?
+ *
+ * El Paquete Deluxe son SIETE platos completos para 4 personas —"Estofado de
+ * carne de res (4 porciones)", "Canelones rellenos con queso (4 porciones)"—.
+ * No traen vegetal aparte, pero la hoja les imprimia igual una segunda fila
+ * vacia con un "1" al lado, como si hubiera una taza de algo que servir. Catorce
+ * renglones para siete platos, la mitad en blanco.
+ */
+export const llevaFilaDeVegetal = (platos) => {
+    if (!Array.isArray(platos) || platos.length === 0) return true;
+    return platos.some(p => {
+        const n = typeof p?.vegetal === 'string' ? p.vegetal : p?.vegetal?.nombre;
+        return !!n && String(n).trim() !== '' && String(n).trim() !== '—';
+    });
+};
+
+/**
  * Bajo que nombre se imprime la hoja de empaque de un pack.
  *
  * Los packs de una misma familia comparten menu, asi que se juntan en UNA sola

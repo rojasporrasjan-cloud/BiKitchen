@@ -99,7 +99,9 @@ function escribirCabecera(ws, col, bloque) {
  * empacando— y si sobran, siguen debajo del último plato.
  */
 function escribirPlatos(ws, col, bloque) {
-    const filasPorPlato = bloque.llevaCarbo ? 3 : 2;
+    const filasPorPlato = 1
+        + (bloque.llevaVegetal !== false ? 1 : 0)
+        + (bloque.llevaCarbo ? 1 : 0);
     let fila = 8;
 
     const celdaCliente = (indice, filaExcel) => {
@@ -130,9 +132,13 @@ function escribirPlatos(ws, col, bloque) {
         conteo.alignment = { horizontal: 'center', vertical: 'middle' };
 
         const lineas = [
-            { desc: p.proteina?.nombre, cant: p.proteina?.gramosPorPorcion, fondo: GRIS },
-            { desc: p.vegetal?.nombre, cant: p.vegetal?.cantidadPorPorcion, fondo: null }
+            { desc: p.proteina?.nombre, cant: p.proteina?.gramosPorPorcion, fondo: GRIS }
         ];
+        // El Paquete Deluxe son platos completos para 4 personas: no llevan
+        // vegetal aparte y la fila salia en blanco con un "1" al lado.
+        if (bloque.llevaVegetal !== false) {
+            lineas.push({ desc: p.vegetal?.nombre, cant: p.vegetal?.cantidadPorPorcion, fondo: null });
+        }
         if (bloque.llevaCarbo) {
             lineas.push({ desc: p.carbo?.nombre, cant: p.carbo?.cantidadPorPorcion, fondo: null });
         }
@@ -190,9 +196,11 @@ function escribirResumen(ws, col, filaInicio, bloque) {
     bloque.platos.forEach(p => {
         const platos = total * (p.vecesPorPack || 1);
         const partes = [
-            [p.proteina?.nombre, (p.proteina?.gramosPorPorcion || 0) * platos, 'g'],
-            [p.vegetal?.nombre, (p.vegetal?.cantidadPorPorcion || 0) * platos, 'tazas']
+            [p.proteina?.nombre, (p.proteina?.gramosPorPorcion || 0) * platos, 'g']
         ];
+        if (bloque.llevaVegetal !== false) {
+            partes.push([p.vegetal?.nombre, (p.vegetal?.cantidadPorPorcion || 0) * platos, 'tazas']);
+        }
         if (bloque.llevaCarbo) {
             partes.push([p.carbo?.nombre, (p.carbo?.cantidadPorPorcion || 0) * platos, 'tazas']);
         }
@@ -212,7 +220,7 @@ function escribirResumen(ws, col, filaInicio, bloque) {
 function agregarPestanaFamilia(wb, usados, familia) {
     const ws = wb.addWorksheet(nombreDePestana(familia.titulo, usados), {
         views: [{ showGridLines: true }],
-        pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 }
+        pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 1 }
     });
     ANCHOS.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
 
@@ -232,7 +240,7 @@ function agregarPestanaFamilia(wb, usados, familia) {
 /** Pestaña de entregas del día: la lista que ella va marcando al despachar. */
 function agregarPestanaEntregas(wb, usados, datos) {
     const ws = wb.addWorksheet(nombreDePestana(datos.etiquetaDia, usados), {
-        pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 }
+        pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 1 }
     });
     [10, 12, 34, 26, 52, 60].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
 
@@ -355,7 +363,7 @@ function agregarPestanaDesayunos(wb, usados, desayunos) {
  */
 function agregarPestanaIndividuales(wb, usados, individuales) {
     const ws = wb.addWorksheet(nombreDePestana('Individuales', usados), {
-        pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 }
+        pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 1 }
     });
     [58, 26, 52].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
 

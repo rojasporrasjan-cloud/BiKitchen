@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { packSeParteEnAlmuerzoYCena } from '../utils/labels/labelDomain.js';
-import { esPersonalizado, llevaFilaDeCarbo, mapPackNameToMenuKey, nombreDeHojaDeEmpaque } from '../utils/packClassification.js';
+import { esPersonalizado, llevaFilaDeCarbo, llevaFilaDeVegetal, mapPackNameToMenuKey, nombreDeHojaDeEmpaque } from '../utils/packClassification.js';
 
 /**
  * A Fatima Arauz habia que reponerle las CENAS del menu del 25 al 31 de agosto,
@@ -97,5 +97,27 @@ describe('un personalizado no se parte en almuerzo y cena', () => {
 
     it('un pack normal sin cena no se parte', () => {
         expect(packSeParteEnAlmuerzoYCena('Pack Bajo Calorías', 'pack bajo calorías')).toBe(false);
+    });
+});
+
+describe('la fila de vegetal', () => {
+    it('no se imprime en un pack familiar, donde el plato ya viene completo', () => {
+        // Paquete Deluxe: 7 platos para 4 personas, sin vegetal aparte. La hoja
+        // les ponia una segunda fila vacia con un "1" al lado.
+        const deluxe = [
+            { proteina: { nombre: 'Estofado de carne de res(4 porciones)' }, vegetal: { nombre: null } },
+            { proteina: { nombre: 'Flautas de pollo (4 porciones)' }, vegetal: { nombre: '—' } }
+        ];
+        expect(llevaFilaDeVegetal(deluxe)).toBe(false);
+    });
+
+    it('se imprime en un pack normal', () => {
+        expect(llevaFilaDeVegetal([
+            { proteina: { nombre: 'Pollo al ajillo' }, vegetal: { nombre: 'Vegetales mixtos' } }
+        ])).toBe(true);
+    });
+
+    it('sin platos todavia, se asume que si', () => {
+        expect(llevaFilaDeVegetal([])).toBe(true);
     });
 });
