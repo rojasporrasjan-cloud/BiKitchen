@@ -330,7 +330,12 @@ const NOTA_INTERNA = new RegExp([
     'gina confirm[óo]', 'ya pag[óo]', 'ya viene pagado', 'no se cobra',
     'sin cargo', 'reposici[óo]n', 'falta la zona', '\\(chat\\b',
     'que no se entreg', 'agregado al pack', 'pedido para entrega',
-    'segunda entrega de la semana'
+    'segunda entrega de la semana',
+    // Marcas que deja el panel al aprobar pedidos en lote. Salio impreso en la
+    // casilla de sebastian Villegas: "Confirmado por el admin", que no le dice
+    // nada a quien empaca y ocupa el lugar de lo que si importa.
+    'confirmado por el admin', 'aprobaci[óo]n masiva', 'fechas? corregidas?',
+    'creado por el admin', 'importado (de|desde)'
 ].join('|'), 'i');
 
 /** Un monto en colones metido dentro de una frase: "... (4 tazas) ₡7.500". */

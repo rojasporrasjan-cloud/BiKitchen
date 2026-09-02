@@ -52,3 +52,21 @@ describe('la nota de empaque no lleva control interno', () => {
             .toBe('Entregar después de las 11 am');
     });
 });
+
+describe('marcas que deja el panel al aprobar en lote', () => {
+    it('quita "Confirmado por el admin"', () => {
+        // Salio impreso en la casilla de sebastian Villegas.
+        expect(notaParaEmpaque('Confirmado por el admin')).toBe('');
+    });
+
+    it('quita las marcas de correccion de fechas', () => {
+        expect(notaParaEmpaque(
+            'Confirmado por el admin · Fechas corregidas a las de SU confirmación'
+        )).toBe('');
+    });
+
+    it('pero conserva lo que el cliente pidio, aunque venga pegado', () => {
+        expect(notaParaEmpaque('Confirmado por el admin · Sin cebolla'))
+            .toBe('Sin cebolla');
+    });
+});
