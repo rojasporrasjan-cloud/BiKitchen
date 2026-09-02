@@ -1025,7 +1025,10 @@ const PackCard = memo(({ pack, shipping, category, categoryLabel: customCategory
                                         Para ofrecerte la mejor variedad y frescura en tu dieta Keto, manejamos los desayunos bajo pedido especial.
                                     </p>
                                     <a
-                                        href={`https://wa.me/${whatsappPhone}?text=${encodeURIComponent('Hola, quisiera más información sobre el desayuno keto')}`}
+                                        /* Sin "hola", sin "información" y sin "keto": las tres son
+                                           keywords del bot, y este pedido es especial — tiene que
+                                           llegarle a una persona, no al menú automático. */
+                                        href={`https://wa.me/${whatsappPhone}?text=${encodeURIComponent('Quiero encargar desayunos especiales 🥑')}`}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         className="inline-flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-xl transition-all shadow-lg hover:shadow-green-500/30 transform hover:-translate-y-1"

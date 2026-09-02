@@ -69,7 +69,9 @@ export const WHATSAPP_MESSAGES = {
     // ⚠️ SOLO estos usan "Hola" para activar el mensaje de bienvenida completo
     // Keywords: hola, menu, menú, volver, inicio
     // ============================================
-    BIENVENIDA: '¡Hola! 😊 Quiero saber más sobre los planes de BiKitchen 🍽️',
+    // Antes decía "...sobre los planes de BiKitchen": la palabra "BiKitchen" es
+    // keyword del flujo "Sobre Nosotros", así que competía con la bienvenida.
+    BIENVENIDA: '¡Hola! 😊 Quiero conocer los planes 🍽️',
     MENU: 'Hola',
 
     // ============================================
@@ -77,93 +79,104 @@ export const WHATSAPP_MESSAGES = {
     // ⚠️ SIN "Hola" - Va directo al flujo del pack
     // Keywords: semanal, pack semanal
     // ============================================
-    PACK_SEMANAL: 'Me interesa el Pack Semanal 📅',
+    PACK_SEMANAL: 'Pack Semanal 📅',
 
     // ============================================
     // PACKS QUINCENALES
     // ⚠️ SIN "Hola" - Va directo al flujo del pack
     // Keywords: quincenal, pack quincenal
     // ============================================
-    PACK_QUINCENAL: 'Quiero información del Pack Quincenal 📦',
+    PACK_QUINCENAL: 'Pack Quincenal 📦',
 
     // ============================================
     // PACKS MENSUALES
     // ⚠️ SIN "Hola" - Va directo al flujo del pack
     // Keywords: mensual, pack mensual
     // ============================================
-    PACK_MENSUAL: 'Me gustaría saber sobre el Pack Mensual 📅',
+    PACK_MENSUAL: 'Pack Mensual 📅',
 
     // ============================================
     // PACK NAVIDEÑO
     // ⚠️ SIN "Hola" - Va directo al flujo del pack
     // Keywords: navidad, navideño, pack navideño
     // ============================================
-    PACK_NAVIDENO: 'Quiero información del Pack Navideño 🎄',
+    PACK_NAVIDENO: 'Pack Navideño 🎄',
 
     // ============================================
     // PACK FAMILIAR
     // ⚠️ SIN "Hola" - Va directo al flujo del pack
     // Keywords: familiar, pack familiar
     // ============================================
-    PACK_FAMILIAR: 'Me interesa el Pack Familiar 👨‍👩‍👧‍👦',
+    PACK_FAMILIAR: 'Pack Familiar 👨‍👩‍👧‍👦',
 
     // ============================================
     // PACK ALMUERZO Y CENA
     // ⚠️ SIN "Hola" - Va directo al flujo del pack
     // Keywords: almuerzo y cena, pack almuerzo
     // ============================================
-    PACK_ALMUERZO_CENA: 'Quiero información del Pack Almuerzo y Cena 🍽️',
+    PACK_ALMUERZO_CENA: 'Pack Almuerzo y Cena 🍽️',
 
     // ============================================
     // TWO PACK (PAREJAS)
     // ⚠️ SIN "Hola" - Va directo al flujo del pack
     // Keywords: parejas, two pack, para dos
     // ============================================
-    TWO_PACK: 'Me interesa el Two Pack 💑',
+    TWO_PACK: 'Two Pack 💑',
 
     // ============================================
     // PACK DE PROTEÍNAS
     // ⚠️ SIN "Hola" - Va directo al flujo del pack
     // Keywords: proteinas, pack de proteínas
     // ============================================
-    PACK_PROTEINAS: 'Quiero información del Pack de Proteínas 🍗',
+    PACK_PROTEINAS: 'Pack de Proteínas 🍗',
 
     // ============================================
     // INFORMACIÓN
     // ⚠️ SIN "Hola" - Va directo a la info específica
     // Keywords específicas para cada flujo
     // ============================================
-    DIAS_ENTREGA: 'Quisiera saber los días de entrega 🚚',
-    ZONAS_COBERTURA: 'Quiero saber si llegan a mi zona 📍',
-    INFORMACION: 'Necesito información general sobre BiKitchen ℹ️',
-    RECOMENDACIONES: 'Me gustaría recibir recomendaciones 📌',
+    DIAS_ENTREGA: 'Días de Entrega 🚚',
+    ZONAS_COBERTURA: 'Zonas de Cobertura 📍',
+    INFORMACION: 'Información General ℹ️',
+    RECOMENDACIONES: 'Recomendaciones 📌',
 
     // ============================================
     // PROMOCIONES
     // ⚠️ SIN "Hola" - Va directo a la promo
     // Keywords: promo, promocion, desayunos gratis
     // ============================================
-    PROMOCION_MENSUAL: 'Quiero información de la Promoción Mensual 🎁',
+    PROMOCION_MENSUAL: 'Promo desayunos gratis 🎁',
 
     // ============================================
     // PEDIDOS
     // ⚠️ SIN "Hola" - Va directo al flujo de pedido
     // Keywords: quiero pedir, hacer pedido, ordenar
     // ============================================
-    QUIERO_PEDIR: 'Quiero hacer un pedido 🛒',
+    QUIERO_PEDIR: 'Quiero pedir 🛒',
 
-    // Pack específico — activa flujo de pedido con pack pre-seleccionado
-    PACK_ORDER: (packName, fromPrice) => `Quiero hacer un pedido 🛒\n\n📦 Pack: ${packName}\n💰 Precio desde: ${fromPrice}\n\n¿Me podés ayudar a completarlo? 😊`,
+    // Pack y plato específicos: arrancan con la keyword exacta para que el bot
+    // entre al flujo de pedido, y recién después va el detalle para la persona
+    // que atiende.
+    //
+    // ⚠️ OJO: el nombre del pack o del plato ES keyword de otro flujo ("Pack
+    // Familiar" activa el flujo Pack Familiar, un plato con "pollo" activa Pack
+    // de Proteínas). Poner "Quiero pedir" de primero ayuda, pero esto no se
+    // arregla del todo desde el sitio: hace falta un flujo en Kommo que reciba
+    // "quiero pedir" junto con el nombre del producto.
+    PACK_ORDER: (packName, fromPrice) => `Quiero pedir 🛒\n\n📦 ${packName}\n💰 Desde ${fromPrice}`,
 
-    // Plato individual — activa flujo de pedido con plato pre-seleccionado
-    INDIVIDUAL_ORDER: (productName, price) => `Quiero hacer un pedido 🛒\n\n🍽️ Plato: ${productName}\n💰 Precio: ${price}\n\n¿Me podés ayudar a completarlo? 😊`,
+    INDIVIDUAL_ORDER: (productName, price) => `Quiero pedir 🛒\n\n🍽️ ${productName}\n💰 ${price}`,
 
     // ============================================
-    // SOPORTE / AYUDA (estos van a humanos, usan Hola)
+    // SOPORTE / AYUDA
+    // Estos NO llevan "Hola" a propósito: "hola" activa el menú de bienvenida,
+    // así que un cliente con un problema terminaba viendo el menú de ventas en
+    // vez de hablar con alguien. Sin keyword de ningún flujo, la conversación
+    // cae donde tiene que caer: en una persona.
     // ============================================
-    AYUDA_CUENTA: 'Hola, necesito ayuda con mi cuenta 🔐',
-    AYUDA_GENERAL: 'Hola, tengo una consulta 💬',
-    CONSULTA_PEDIDO: (orderNumber) => `Hola, tengo una consulta sobre mi pedido ${orderNumber} 📦`,
+    AYUDA_CUENTA: 'Necesito ayuda con mi cuenta 🔐',
+    AYUDA_GENERAL: 'Tengo una consulta 💬',
+    CONSULTA_PEDIDO: (orderNumber) => `Tengo una consulta sobre mi pedido ${orderNumber} 📦`,
 };
 
 /**
