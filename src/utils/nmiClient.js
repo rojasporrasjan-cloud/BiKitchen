@@ -114,15 +114,57 @@ export function unmount3DS() {
         _activeThreeDSInterface = null;
     }
 }
+// Gateway.js de BAC/NMI se carga SOLO cuando se va a cobrar, no en cada pagina.
+// Antes venia con un <script> fijo en index.html y costaba ~6.500 ms de CPU en
+// todas las visitas, aunque la mayoria nunca llega al pago.
+const GATEWAY_SRC = 'https://secure.networkmerchants.com/js/v1/Gateway.js';
+let _cargaGateway = null;
+
+function cargarGatewayJS() {
+    if (typeof window.Gateway !== 'undefined') return Promise.resolve();
+    if (_cargaGateway) return _cargaGateway;
+
+    _cargaGateway = new Promise((resolve, reject) => {
+        const yaEsta = document.querySelector(`script[src="${GATEWAY_SRC}"]`);
+        const script = yaEsta || document.createElement('script');
+
+        script.addEventListener('load', () => {
+            if (typeof window.Gateway !== 'undefined') {
+                resolve();
+            } else {
+                _cargaGateway = null;
+                reject(new Error('Gateway.js cargó pero no expuso window.Gateway'));
+            }
+        }, { once: true });
+
+        script.addEventListener('error', () => {
+            // Se limpia para que un reintento del usuario vuelva a pedirlo.
+            _cargaGateway = null;
+            script.remove();
+            reject(new Error('No se pudo cargar Gateway.js'));
+        }, { once: true });
+
+        if (!yaEsta) {
+            script.src = GATEWAY_SRC;
+            script.async = true;
+            document.head.appendChild(script);
+        }
+    });
+
+    return _cargaGateway;
+}
+
 /**
  * Initializes Gateway.js
  * @returns {Promise<any>}
  */
 export async function initGateway() {
+    await cargarGatewayJS();
+
     if (typeof window.Gateway === 'undefined') {
         throw new Error('Gateway.js not loaded. Check index.html');
     }
-    
+
     const keyLen = NMI_PUBLIC_KEY?.length || 0;
     const maskedKey = NMI_PUBLIC_KEY ? 
         `${NMI_PUBLIC_KEY.substring(0, 6)}...${NMI_PUBLIC_KEY.substring(NMI_PUBLIC_KEY.length - 4)}` : 

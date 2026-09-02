@@ -113,7 +113,7 @@
     content="comida saludable Costa Rica, meal prep Costa Rica, packs semanales comida, delivery almuerzo saludable, comida a domicilio San José, comida keto Costa Rica, almuerzo semanal entrega, BiKitchen" />
   <meta name="author" content="BiKitchen Food" />
   <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
-  <link rel="canonical" href="https://bikitchencr.com/" />
+  <link rel="canonical" href="https://www.bikitchencr.com/" />
   <!-- Geo meta tags (local SEO) -->
   <meta name="geo.region" content="CR-SJ" />
   <meta name="geo.placename" content="San José, Costa Rica" />
@@ -122,11 +122,11 @@
 
   <!-- Open Graph / Facebook -->
   <meta property="og:type" content="website" />
-  <meta property="og:url" content="https://bikitchencr.com/" />
+  <meta property="og:url" content="https://www.bikitchencr.com/" />
   <meta property="og:title" content="BiKitchen | Comida Saludable a Domicilio en Costa Rica" />
   <meta property="og:description"
     content="Meal prep y comida saludable a domicilio en Costa Rica. Packs de 5 a 15 almuerzos frescos listos para calentar. Keto, Sin Carbos, Vegetariano, Familiar y más. Delivery al GAM." />
-  <meta property="og:image" content="https://bikitchencr.com/assets/og-image.png" />
+  <meta property="og:image" content="https://www.bikitchencr.com/assets/og-image.png" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
   <meta property="og:image:alt" content="BiKitchen - Comida saludable a domicilio en Costa Rica" />
@@ -138,7 +138,7 @@
   <meta name="twitter:site" content="@bikitchencr" />
   <meta name="twitter:title" content="BiKitchen | Comida Saludable a Domicilio en Costa Rica" />
   <meta name="twitter:description" content="Meal prep y comida saludable a domicilio en Costa Rica. Packs de 5 a 15 almuerzos frescos. Keto, Sin Carbos, Vegetariano y más. Delivery al GAM." />
-  <meta name="twitter:image" content="https://bikitchencr.com/assets/og-image.png" />
+  <meta name="twitter:image" content="https://www.bikitchencr.com/assets/og-image.png" />
   <meta name="twitter:image:alt" content="BiKitchen - Comida saludable a domicilio en Costa Rica" />
 
   <!-- Analytics: Firebase Analytics está configurado en src/firebase/config.js -->
@@ -156,34 +156,34 @@
     "@graph": [
       {
         "@type": "WebSite",
-        "@id": "https://bikitchencr.com/#website",
+        "@id": "https://www.bikitchencr.com/#website",
         "name": "BiKitchen Food",
         "alternateName": "BiKitchen CR",
-        "url": "https://bikitchencr.com",
+        "url": "https://www.bikitchencr.com",
         "description": "Meal prep y comida saludable a domicilio en Costa Rica. Packs semanales de 5 a 15 almuerzos frescos.",
         "inLanguage": "es-CR",
         "potentialAction": {
           "@type": "SearchAction",
           "target": {
             "@type": "EntryPoint",
-            "urlTemplate": "https://bikitchencr.com/menu?q={search_term_string}"
+            "urlTemplate": "https://www.bikitchencr.com/menu?q={search_term_string}"
           },
           "query-input": "required name=search_term_string"
         }
       },
       {
         "@type": ["FoodEstablishment", "LocalBusiness"],
-        "@id": "https://bikitchencr.com/#business",
+        "@id": "https://www.bikitchencr.com/#business",
         "name": "BiKitchen Food",
         "legalName": "BiKitchen Food",
-        "url": "https://bikitchencr.com",
+        "url": "https://www.bikitchencr.com",
         "logo": {
           "@type": "ImageObject",
-          "url": "https://bikitchencr.com/assets/logo.png",
+          "url": "https://www.bikitchencr.com/assets/logo.png",
           "width": 640,
           "height": 412
         },
-        "image": "https://bikitchencr.com/assets/logo.png",
+        "image": "https://www.bikitchencr.com/assets/logo.png",
         "description": "Servicio de meal prep y comida saludable a domicilio en Costa Rica. Packs semanales de 5 a 15 almuerzos frescos listos para calentar. Keto, Sin Carbos, Vegetariano, Bajo Calorías y Familiar. Delivery al GAM lunes, miércoles y sábados.",
         "telephone": "+506 8506-7200",
         "address": {
@@ -208,7 +208,7 @@
           { "@type": "AdministrativeArea", "name": "Gran Área Metropolitana de Costa Rica" }
         ],
         "servesCuisine": ["Comida Saludable", "Meal Prep", "Keto", "Vegetariana", "Baja en Calorías", "Sin Carbohidratos", "Costarricense"],
-        "hasMenu": "https://bikitchencr.com/packs",
+        "hasMenu": "https://www.bikitchencr.com/packs",
         "priceRange": "₡₡",
         "currenciesAccepted": "CRC",
         "paymentAccepted": "Cash, Credit Card, SINPE Móvil, Transferencia Bancaria",
@@ -301,8 +301,12 @@
       }
     }
   </style>
-  <!-- BAC Credomatic / NMI Gateway.js (async to avoid render-blocking) -->
-  <script async src="https://secure.networkmerchants.com/js/v1/Gateway.js"></script>
+  <!-- BAC Credomatic / NMI: Gateway.js ya NO se carga aqui. Costaba ~6.500 ms de
+       CPU en TODAS las paginas, para un script que solo se usa al momento de
+       cobrar. Ahora lo pide src/utils/nmiClient.js cuando se abre el modal de
+       pago. El preconnect deja la conexion lista para que ese momento no se
+       sienta lento. -->
+  <link rel="preconnect" href="https://secure.networkmerchants.com" crossorigin />
 </head>
 
 <body>
