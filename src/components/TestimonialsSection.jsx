@@ -3,75 +3,22 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Star, Quote, ChevronLeft, ChevronRight, MessageSquare, Sparkles } from 'lucide-react';
 import { useWhatsApp } from '../hooks/useWhatsApp';
 
-// Testimonios de ejemplo - En producción vendrían de Firestore
-const TESTIMONIALS = [
-    {
-        id: 1,
-        name: 'María González',
-        avatar: 'MG',
-        role: 'Profesional ocupada',
-        rating: 5,
-        text: 'BiKitchen cambió mi vida. Ya no tengo que preocuparme por cocinar después de un largo día de trabajo. La comida es deliciosa y siempre llega fresca.',
-        date: '2024-11-15',
-        verified: true,
-        pack: 'Almuerzo y Cena'
-    },
-    {
-        id: 2,
-        name: 'Carlos Rodríguez',
-        avatar: 'CR',
-        role: 'Padre de familia',
-        rating: 5,
-        text: 'Excelente servicio. Mi familia está encantada con la variedad del menú. Los niños ahora comen más saludable y yo ahorro tiempo para estar con ellos.',
-        date: '2024-11-10',
-        verified: true,
-        pack: 'Pack Familiar'
-    },
-    {
-        id: 3,
-        name: 'Ana Martínez',
-        avatar: 'AM',
-        role: 'Emprendedora',
-        rating: 5,
-        text: 'La mejor inversión que he hecho. El tiempo que ahorro cocinando lo dedico a mi negocio. Además, las porciones son perfectas y muy bien balanceadas.',
-        date: '2024-11-08',
-        verified: true,
-        pack: 'Pack 15 Comidas'
-    },
-    {
-        id: 4,
-        name: 'Roberto Sánchez',
-        avatar: 'RS',
-        role: 'Deportista',
-        rating: 4,
-        text: 'Me encanta poder personalizar las proteínas. Como atleta, necesito comidas con buen aporte nutricional y BiKitchen cumple perfectamente.',
-        date: '2024-11-05',
-        verified: true,
-        pack: 'Almuerzo y Cena'
-    },
-    {
-        id: 5,
-        name: 'Laura Jiménez',
-        avatar: 'LJ',
-        role: 'Estudiante universitaria',
-        rating: 5,
-        text: 'Perfecto para la vida universitaria. Comida casera sin tener que cocinar. El Two Pack que comparto con mi roommate nos sale súper bien.',
-        date: '2024-10-28',
-        verified: true,
-        pack: 'Two Pack'
-    },
-    {
-        id: 6,
-        name: 'Diego Mora',
-        avatar: 'DM',
-        role: 'Trabajador remoto',
-        rating: 5,
-        text: 'Trabajando desde casa es fácil descuidar la alimentación. Con BiKitchen tengo comidas saludables listas en minutos. 100% recomendado.',
-        date: '2024-10-25',
-        verified: true,
-        pack: 'Almuerzo y Cena'
-    }
-];
+// Testimonios REALES de clientes. Vacio a proposito.
+//
+// Aca habia seis personas inventadas (Maria Gonzalez, Carlos Rodriguez, Ana
+// Martinez, Roberto Sanchez, Laura Jimenez y Diego Mora) con calificaciones y
+// fechas falsas, publicadas con una insignia de "Verificado". Se quitaron: son
+// resenas fabricadas, Google las penaliza y si un cliente nota una, deja de
+// creerle al resto del sitio.
+//
+// Para agregar uno de verdad: pedile permiso al cliente, copia su mensaje tal
+// como lo escribio y agrega un objeto con la misma forma. Con la lista vacia,
+// la seccion sencillamente no se muestra.
+//
+//   { id: 1, name: "Nombre real", avatar: "NR", role: "Como se describe",
+//     rating: 5, text: "Lo que escribio", date: "2026-09-01",
+//     verified: true, pack: "El pack que compro" }
+const TESTIMONIALS = [];
 
 const StarRating = ({ rating, size = 16 }) => {
     return (
@@ -161,12 +108,17 @@ export default function TestimonialsSection() {
 
     // Auto-play carousel
     useEffect(() => {
-        if (!isAutoPlaying) return;
+        if (!isAutoPlaying || TESTIMONIALS.length === 0) return;
         const interval = setInterval(() => {
             setCurrentSlide((prev) => (prev + 1) % TESTIMONIALS.length);
         }, 5000);
         return () => clearInterval(interval);
     }, [isAutoPlaying]);
+
+    // Sin testimonios reales no se muestra nada. Mejor una seccion menos que una
+    // seccion con clientes inventados. Los hooks van arriba de este return
+    // porque React exige que se ejecuten siempre, en el mismo orden.
+    if (TESTIMONIALS.length === 0) return null;
 
     const nextSlide = () => {
         setIsAutoPlaying(false);
