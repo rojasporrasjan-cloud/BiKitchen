@@ -22,6 +22,7 @@ import SEOHead, { SEO_CONFIG, getBreadcrumbSchema } from '../components/SEOHead'
 import useIsMobile from '../hooks/useIsMobile';
 import { formatPrice } from '../utils/formatters';
 import UrgencyBanner from '../components/UrgencyBanner';
+import { precioDePromo } from '../utils/precioDePromo';
 
 // Utilidad para optimización de imágenes (WebP)
 const optimizeToWebp = (file, maxSize = 1200) => new Promise((resolve, reject) => {
@@ -556,16 +557,10 @@ function PromoDetail({ promo, onClose, addToCart, onPackClick }) {
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
                                                                 if (onPackClick) {
-                                                                    let promoPrice = 0;
-                                                                    const normalizedPack = pack.toLowerCase();
-                                                                    if (promo.precios && Array.isArray(promo.precios)) {
-                                                                        const packPrice = promo.precios.find(p => p.nombre.toLowerCase() === normalizedPack || p.nombre.toLowerCase().includes(normalizedPack));
-                                                                        promoPrice = packPrice?.precio || 0;
-                                                                    } else if (promo.detalles?.packs) {
-                                                                        const packDetail = promo.detalles.packs.find(p => p.nombre.toLowerCase() === normalizedPack || p.nombre.toLowerCase().includes(normalizedPack));
-                                                                        promoPrice = packDetail?.precio || 0;
-                                                                    } else { promoPrice = promo.precio || 0; }
-                                                                    onPackClick(pack, promoPrice, promo.imagen || '', promo);
+                                                                    // `null` = no se pudo determinar el precio. Antes esto
+                                                                    // caia en 0 y el pack se vendia GRATIS: a Daniel Milanes
+                                                                    // le entro un mensual de ₡77.500 cobrandole solo el envio.
+                                                                    onPackClick(pack, precioDePromo(promo, pack), promo.imagen || '', promo);
                                                                 }
                                                             }}
                                                             className="px-5 py-2.5 rounded-full bg-white border border-slate-200 text-slate-700 text-xs font-bold hover:bg-orange-500 hover:text-white hover:border-orange-400 hover:shadow-lg hover:scale-105 hover:-translate-y-0.5 active:scale-95 transition-all duration-200"
@@ -839,6 +834,14 @@ export default function PromocionesPage() {
         // Buscar el mejor precio disponible
         const price = promo.precio || promo.precioEspecial || promo.detalles?.packs?.[0]?.precio || promo.precios?.[0]?.precio || promo.precioRegular || 0;
 
+        // Sin precio no se vende: en cero el cliente se lleva el pack pagando
+        // solo el envio y hay que perseguirlo despues para cobrarle.
+        if (!(Number(price) > 0)) {
+            console.error('[Promociones] Sin precio para la promo', promo?.titulo);
+            alert('Esta promoción no tiene precio configurado. Escribinos por WhatsApp y te ayudamos a completar el pedido.');
+            return;
+        }
+
         const cartItemId = esTwoPack ? `promo-${promo.id}-two_pack` : `promo-${promo.id}`;
 
         const cartItem = {
@@ -857,7 +860,15 @@ export default function PromocionesPage() {
         handleAddToCart(cartItem);
     };
 
-    const handlePackClick = (packName, promoPrice = 0, promoImage = '', fullPromo = null) => {
+    const handlePackClick = (packName, promoPrice = null, promoImage = '', fullPromo = null) => {
+        // Sin precio no se vende. Es preferible que el cliente no pueda comprar
+        // a que compre en cero y haya que cobrarle despues.
+        if (!(Number(promoPrice) > 0)) {
+            console.error('[Promociones] Sin precio para', packName, 'en', fullPromo?.titulo);
+            alert('Este pack no tiene precio configurado en la promoción. Escribinos por WhatsApp y te ayudamos a completar el pedido.');
+            return;
+        }
+
         const menuKey = PACK_TO_MENU_KEY[packName];
         if (menuKey) {
             // Guardar la promoción actual antes de cerrarla
