@@ -21,6 +21,11 @@ export default {
                     orange: '#FF671D',
                     'orange-light': '#FF8A4D',
                     'orange-dark': '#E85A15',
+                    // Naranja para BOTONES con texto blanco encima.
+                    // El naranja de marca sobre blanco da 2.91:1 de contraste y el
+                    // minimo accesible es 4.5:1; este da 5.18:1. Usar solo cuando
+                    // haya texto blanco sobre el color, no para fondos ni iconos.
+                    'orange-contraste': '#C2410C',
                     brown: '#B18978',
                     'brown-light': '#C4A08E',
                     'brown-dark': '#9A7262',
@@ -179,6 +184,14 @@ export default {
                 "shimmer": {
                     "100%": { transform: "translateX(100%)" },
                 },
+                // Rebote del indicador "Descubrir" del hero. En CSS y no en Framer
+                // Motion a proposito: una animacion infinita en JS ocupa el hilo
+                // principal en cada cuadro, y esta corre mientras la pagina esta
+                // abierta. En CSS la maneja el compositor y no bloquea nada.
+                "rebote-suave": {
+                    "0%, 100%": { transform: "translateY(0)" },
+                    "50%": { transform: "translateY(15px)" },
+                },
             },
             animation: {
                 "accordion-down": "accordion-down 0.2s ease-out",
@@ -188,6 +201,7 @@ export default {
                 "fade-up": "fade-up 0.8s ease-out forwards",
                 "fade-up-delay": "fade-up-delay 1.2s ease-out forwards",
                 "scale-in": "scale-in 0.5s ease-out forwards",
+                "rebote-suave": "rebote-suave 2.5s ease-in-out infinite",
             },
         },
     },

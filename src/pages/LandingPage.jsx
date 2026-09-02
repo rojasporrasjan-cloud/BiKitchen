@@ -200,7 +200,8 @@ export default function LandingPage() {
                     {/* Hero Section - Envuelto en ref para detectar visibilidad */}
                     <motion.div ref={heroRef} className="relative">
                         <VideoHero 
-                            videoSrc="/videos/hero_optimized.mp4"
+                            videoSrc="/videos/hero.mp4"
+                            posterSrc="/videos/hero-poster.jpg"
                             title="Comida saludable lista para comer, toda la semana."
                             subtitle="🍳 Comida casera • Saludable • Lista para calentar"
                             primaryCTA={{ text: "Ver Planes y Precios", link: "/packs" }}
@@ -326,12 +327,12 @@ export default function LandingPage() {
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="p-6 bg-gray-50 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all">
                                             <Target className="text-bikitchen-orange mb-3" size={24} />
-                                            <h4 className="font-bold mb-2 text-gray-900">Misión</h4>
+                                            <h3 className="font-bold mb-2 text-gray-900">Misión</h3>
                                             <p className="text-xs text-gray-500">Comida casera sin complicaciones para tu día a día.</p>
                                         </div>
                                         <div className="p-6 bg-gray-50 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all">
                                             <Eye className="text-bikitchen-orange mb-3" size={24} />
-                                            <h4 className="font-bold mb-2 text-gray-900">Visión</h4>
+                                            <h3 className="font-bold mb-2 text-gray-900">Visión</h3>
                                             <p className="text-xs text-gray-500">Inspirar un estilo de vida saludable y práctico.</p>
                                         </div>
                                     </div>
@@ -561,7 +562,7 @@ export default function LandingPage() {
                                             {item.icon}
                                         </div>
                                         <div>
-                                            <h4 className="font-black text-gray-900">{item.day}</h4>
+                                            <h3 className="font-black text-gray-900">{item.day}</h3>
                                             <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Cierre: {item.cierre}</p>
                                         </div>
                                     </motion.div>

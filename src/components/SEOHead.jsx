@@ -12,7 +12,7 @@ export default function SEOHead({
     title = 'BiKitchen Food',
     description = 'Meal prep y comida saludable a domicilio en Costa Rica. Packs semanales de 5 a 15 almuerzos frescos listos para calentar con delivery al GAM.',
     keywords = 'comida saludable Costa Rica, meal prep, packs semanales, delivery almuerzo saludable, comida a domicilio San José, BiKitchen',
-    image = `${BASE_URL}/assets/logo.png`,
+    image = `${BASE_URL}/assets/og-image.png`,
     url = '',
     type = 'website',
     structuredData = null,
@@ -245,10 +245,10 @@ export const getHomeSchemas = () => [
         logo: {
             '@type': 'ImageObject',
             url: `${BASE_URL}/assets/logo.png`,
-            width: 400,
-            height: 400
+            width: 640,
+            height: 412
         },
-        image: `${BASE_URL}/assets/logo.png`,
+        image: `${BASE_URL}/assets/og-image.png`,
         description: 'Servicio de meal prep y comida saludable a domicilio en Costa Rica. Packs semanales de 5 a 15 almuerzos frescos listos para calentar. Opciones Keto, Sin Carbos, Vegetariano, Bajo Calorías y Familiar con delivery al GAM.',
         telephone: PHONE,
         address: {

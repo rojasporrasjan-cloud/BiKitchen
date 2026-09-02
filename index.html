@@ -2,17 +2,71 @@
 <html lang="es" translate="no">
 
 <head>
-  <!-- Google Tag Manager -->
-  <script>(function (w, d, s, l, i) {
-      w[l] = w[l] || []; w[l].push({
-        'gtm.start':
-          new Date().getTime(), event: 'gtm.js'
-      }); var f = d.getElementsByTagName(s)[0],
-        j = d.createElement(s), dl = l != 'dataLayer' ? '&l=' + l : ''; j.async = true; j.src =
-          'https://www.googletagmanager.com/gtm.js?id=' + i + dl; f.parentNode.insertBefore(j, f);
-    })(window, document, 'script', 'dataLayer', 'GTM-TXWTND9P');</script>
-  <!-- End Google Tag Manager -->
+  <!-- charset PRIMERO: el navegador tiene que verlo dentro del primer KB del
+       HTML. Si queda debajo de un script grande, Chrome avisa que llega tarde. -->
   <meta charset="UTF-8" />
+
+  <!-- ─────────────────────────────────────────────
+       TRACKING DIFERIDO (GTM + Google Analytics + Meta Pixel)
+       Los "stubs" (dataLayer, gtag, fbq) quedan definidos desde el primer
+       instante, asi que cualquier evento que ocurra antes de tiempo se encola y
+       se envia apenas llegan los scripts reales: no se pierde ninguna medicion.
+       Lo unico que se retrasa es la descarga de ~240 KB de Google y Meta, que
+       antes competian con el HTML y el JS de la pagina y atrasaban el arranque.
+       Se disparan con lo que pase primero: el usuario interactua, o el navegador
+       queda ocioso despues de terminar de cargar.
+       ───────────────────────────────────────────── -->
+  <script>
+    (function () {
+      // --- Stubs: encolan los eventos hasta que lleguen los scripts reales ---
+      window.dataLayer = window.dataLayer || [];
+      window.dataLayer.push({ 'gtm.start': new Date().getTime(), event: 'gtm.js' });
+      window.gtag = function () { window.dataLayer.push(arguments); };
+      window.gtag('js', new Date());
+      window.gtag('config', 'G-7SB7D326BE');
+
+      if (!window.fbq) {
+        var n = window.fbq = function () {
+          n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments);
+        };
+        window._fbq = n; n.push = n; n.loaded = true; n.version = '2.0'; n.queue = [];
+      }
+
+      // --- Carga diferida de los scripts reales ---
+      var URLS = [
+        'https://www.googletagmanager.com/gtm.js?id=GTM-TXWTND9P',
+        'https://www.googletagmanager.com/gtag/js?id=G-7SB7D326BE',
+        'https://connect.facebook.net/en_US/fbevents.js'
+      ];
+      var EVENTOS = ['scroll', 'pointerdown', 'keydown', 'touchstart'];
+      var lanzado = false;
+
+      function cargar() {
+        if (lanzado) return;
+        lanzado = true;
+        EVENTOS.forEach(function (e) { window.removeEventListener(e, cargar); });
+        window.removeEventListener('load', alTerminarDeCargar);
+        URLS.forEach(function (url) {
+          var s = document.createElement('script');
+          s.async = true;
+          s.src = url;
+          document.head.appendChild(s);
+        });
+      }
+
+      function alTerminarDeCargar() {
+        if (window.requestIdleCallback) window.requestIdleCallback(cargar, { timeout: 3000 });
+        else setTimeout(cargar, 1200);
+      }
+
+      EVENTOS.forEach(function (e) {
+        window.addEventListener(e, cargar, { once: true, passive: true });
+      });
+      if (document.readyState === 'complete') alTerminarDeCargar();
+      else window.addEventListener('load', alTerminarDeCargar);
+    })();
+  </script>
+  <!-- End Tracking Diferido -->
   <meta http-equiv="Content-Language" content="es" />
   <meta name="google" content="notranslate" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
@@ -24,6 +78,11 @@
   <link rel="dns-prefetch" href="https://firebasestorage.googleapis.com" />
   <link rel="dns-prefetch" href="https://www.googleapis.com" />
   <link rel="preconnect" href="https://firebasestorage.googleapis.com" crossorigin />
+
+  <!-- El poster del hero es el elemento mas grande de la primera pantalla (el LCP
+       que mide Google). Pedirlo con prioridad alta desde el HTML evita esperar a
+       que React monte el componente para recien ahi empezar a descargarlo. -->
+  <link rel="preload" as="image" href="/videos/hero-poster.jpg" fetchpriority="high" />
 
   <!-- BiKitchen Brand Colors -->
   <meta name="theme-color" content="#FF6B35" />
@@ -67,7 +126,7 @@
   <meta property="og:title" content="BiKitchen | Comida Saludable a Domicilio en Costa Rica" />
   <meta property="og:description"
     content="Meal prep y comida saludable a domicilio en Costa Rica. Packs de 5 a 15 almuerzos frescos listos para calentar. Keto, Sin Carbos, Vegetariano, Familiar y más. Delivery al GAM." />
-  <meta property="og:image" content="https://bikitchencr.com/assets/logo.png" />
+  <meta property="og:image" content="https://bikitchencr.com/assets/og-image.png" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
   <meta property="og:image:alt" content="BiKitchen - Comida saludable a domicilio en Costa Rica" />
@@ -79,34 +138,14 @@
   <meta name="twitter:site" content="@bikitchencr" />
   <meta name="twitter:title" content="BiKitchen | Comida Saludable a Domicilio en Costa Rica" />
   <meta name="twitter:description" content="Meal prep y comida saludable a domicilio en Costa Rica. Packs de 5 a 15 almuerzos frescos. Keto, Sin Carbos, Vegetariano y más. Delivery al GAM." />
-  <meta name="twitter:image" content="https://bikitchencr.com/assets/logo.png" />
+  <meta name="twitter:image" content="https://bikitchencr.com/assets/og-image.png" />
   <meta name="twitter:image:alt" content="BiKitchen - Comida saludable a domicilio en Costa Rica" />
 
   <!-- Analytics: Firebase Analytics está configurado en src/firebase/config.js -->
   <!-- measurementId: G-VJBDBGPHV6 -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-7SB7D326BE"></script>
-  <script>
-    window.dataLayer = window.dataLayer || [];
-    function gtag() { dataLayer.push(arguments); }
-    gtag('js', new Date());
-    gtag('config', 'G-7SB7D326BE');
-  </script>
-
-  <!-- Meta Pixel Code (Facebook Pixel) -->
-  <script>
-    !function (f, b, e, v, n, t, s) {
-      if (f.fbq) return; n = f.fbq = function () {
-        n.callMethod ?
-          n.callMethod.apply(n, arguments) : n.queue.push(arguments)
-      };
-      if (!f._fbq) f._fbq = n; n.push = n; n.loaded = !0; n.version = '2.0';
-      n.queue = []; t = b.createElement(e); t.async = !0;
-      t.src = v; s = b.getElementsByTagName(e)[0];
-      s.parentNode.insertBefore(t, s)
-    }(window, document, 'script',
-      'https://connect.facebook.net/en_US/fbevents.js');
-  </script>
-  <!-- End Meta Pixel Code -->
+  <!-- Google Analytics y Meta Pixel se cargan desde el bloque "Tracking Diferido"
+       al inicio de <head>. No agregar aqui <script> de medicion: volveria a
+       bloquear el arranque de la pagina. -->
 
   <title>BiKitchen | Comida Saludable a Domicilio en Costa Rica</title>
 
@@ -141,8 +180,8 @@
         "logo": {
           "@type": "ImageObject",
           "url": "https://bikitchencr.com/assets/logo.png",
-          "width": 400,
-          "height": 400
+          "width": 640,
+          "height": 412
         },
         "image": "https://bikitchencr.com/assets/logo.png",
         "description": "Servicio de meal prep y comida saludable a domicilio en Costa Rica. Packs semanales de 5 a 15 almuerzos frescos listos para calentar. Keto, Sin Carbos, Vegetariano, Bajo Calorías y Familiar. Delivery al GAM lunes, miércoles y sábados.",
@@ -209,6 +248,40 @@
       background: #fff;
     }
 
+    /* Splash inicial: se pinta apenas llega el HTML, sin esperar a que se
+       descargue y ejecute React. Sin esto la pantalla queda en blanco ~2 s,
+       que es exactamente lo que Google mide como "First Contentful Paint".
+       React lo reemplaza al montar (createRoot vacia el contenedor). */
+    .splash-inicial {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background: #FF671D;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .splash-inicial img {
+      width: 220px;
+      max-width: 60vw;
+      height: auto;
+      background: #fff;
+      border-radius: 24px;
+      padding: 16px;
+      box-sizing: border-box;
+    }
+
+    .splash-inicial p {
+      margin: 24px 0 0;
+      color: rgba(255, 255, 255, 0.9);
+      font-size: 14px;
+      font-weight: 500;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+    }
+
     .loading-spinner {
       width: 40px;
       height: 40px;
@@ -243,7 +316,14 @@
       src="https://www.facebook.com/tr?id=825371743662986&ev=PageView&noscript=1" />
   </noscript>
 
-  <div id="root"></div>
+  <div id="root">
+    <!-- Ver .splash-inicial en el CSS critico de <head>. Esto es lo que ve el
+         visitante mientras se descarga el JavaScript; React lo reemplaza solo. -->
+    <div class="splash-inicial">
+      <img src="/assets/logo.png" alt="BiKitchen Food" width="220" height="142" fetchpriority="high" />
+      <p>Comida saludable</p>
+    </div>
+  </div>
   <script type="module" src="/src/main.jsx"></script>
 
   <!-- Register Service Worker (solo en producción, NO en desarrollo local) -->

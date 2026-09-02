@@ -58,6 +58,14 @@
   [headers.values]
     Cache-Control = "public, max-age=2592000"
 
+# Video e imagen poster del hero. No llevan hash en el nombre, asi que se
+# cachean 30 dias (no "immutable"): si algun dia se cambia el video, los
+# visitantes lo reciben sin tener que esperar un ano.
+[[headers]]
+  for = "/videos/*"
+  [headers.values]
+    Cache-Control = "public, max-age=2592000"
+
 # Root-level images
 [[headers]]
   for = "/*.png"
@@ -126,3 +134,7 @@
     Permissions-Policy = "camera=(), microphone=(), geolocation=(self), payment=(self)"
     # HSTS: fuerza HTTPS por 1 año incluyendo subdominios
     Strict-Transport-Security = "max-age=31536000; includeSubDomains; preload"
+    # Aísla la ventana de otros sitios. Se usa "allow-popups" y NO "same-origin"
+    # porque el login con Google de Firebase abre un popup y "same-origin" lo
+    # dejaría sin poder comunicarse con la página.
+    Cross-Origin-Opener-Policy = "same-origin-allow-popups"

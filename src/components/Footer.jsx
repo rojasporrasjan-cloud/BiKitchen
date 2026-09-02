@@ -79,10 +79,10 @@ export default function Footer() {
 
                         {/* Explora */}
                         <div>
-                            <h4 className="text-white font-bold text-lg mb-6 flex items-center gap-3">
+                            <h3 className="text-white font-bold text-lg mb-6 flex items-center gap-3">
                                 <span className="w-1 h-6 bg-gradient-to-b from-orange-500 to-amber-500 rounded-full shadow-lg shadow-orange-500/50"></span>
                                 Explorar
-                            </h4>
+                            </h3>
                             <ul className="space-y-3">
                                 {[
                                                     { name: 'Menú Semanal', path: '/menu' },
@@ -106,10 +106,10 @@ export default function Footer() {
 
                         {/* Contact */}
                         <div>
-                            <h4 className="text-white font-bold text-lg mb-6 flex items-center gap-3">
+                            <h3 className="text-white font-bold text-lg mb-6 flex items-center gap-3">
                                 <span className="w-1 h-6 bg-gradient-to-b from-orange-500 to-amber-500 rounded-full shadow-lg shadow-orange-500/50"></span>
                                 Contacto
-                            </h4>
+                            </h3>
                             <ul className="space-y-4 list-none p-0">
                                 <li className="flex items-start gap-3 group cursor-pointer">
                                     <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500/20 to-amber-500/20 border border-orange-500/30 flex items-center justify-center flex-shrink-0 group-hover:from-orange-500 group-hover:to-amber-500 group-hover:border-orange-400 transition-all duration-300 shadow-lg group-hover:shadow-orange-500/50">
@@ -135,18 +135,25 @@ export default function Footer() {
 
                         {/* Newsletter */}
                         <div>
-                            <h4 className="text-white font-bold text-lg mb-6 flex items-center gap-3">
+                            <h3 className="text-white font-bold text-lg mb-6 flex items-center gap-3">
                                 <span className="w-1 h-6 bg-gradient-to-b from-orange-500 to-amber-500 rounded-full shadow-lg shadow-orange-500/50"></span>
                                 Newsletter
-                            </h4>
+                            </h3>
                             <p className="text-gray-300 text-sm mb-4 font-medium">Recibe menús exclusivos.</p>
                             <form className="relative">
                                 <input
                                     type="email"
                                     placeholder="Tu email"
+                                    aria-label="Tu correo electrónico para recibir el newsletter"
                                     className="w-full bg-gradient-to-br from-white/10 to-white/5 border border-white/20 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-orange-400 transition-all shadow-lg"
                                 />
-                                <button className="absolute right-1 top-1/2 -translate-y-1/2 w-8 h-8 bg-gradient-to-r from-orange-500 to-amber-500 rounded-lg flex items-center justify-center text-white"><Send size={14} /></button>
+                                <button
+                                    type="submit"
+                                    aria-label="Suscribirme al newsletter"
+                                    className="absolute right-1 top-1/2 -translate-y-1/2 w-8 h-8 bg-gradient-to-r from-orange-500 to-amber-500 rounded-lg flex items-center justify-center text-white"
+                                >
+                                    <Send size={14} aria-hidden="true" />
+                                </button>
                             </form>
                         </div>
                     </div>
@@ -178,7 +185,9 @@ export default function Footer() {
                                     <Link
                                         key={item.name}
                                         to={item.path}
-                                        className="text-[10px] md:text-xs font-bold uppercase tracking-[0.2em] text-gray-400 hover:text-orange-400 transition-all duration-300"
+                                        /* py-1.5 sube el area tocable a ~27 px de alto sin cambiar
+                                           el tamano de la letra: abajo de 24 px el dedo falla. */
+                                        className="inline-block py-1.5 text-[10px] md:text-xs font-bold uppercase tracking-[0.2em] text-gray-400 hover:text-orange-400 transition-all duration-300"
                                     >
                                         {item.name}
                                     </Link>

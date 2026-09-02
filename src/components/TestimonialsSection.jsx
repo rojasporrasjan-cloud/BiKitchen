@@ -136,9 +136,9 @@ const TestimonialCard = ({ testimonial, featured = false }) => {
                 </div>
                 <div className="flex-1">
                     <div className="flex items-center gap-2">
-                        <h4 className="font-semibold text-gray-900">
+                        <h3 className="font-semibold text-gray-900">
                             {testimonial.name}
-                        </h4>
+                        </h3>
                         {testimonial.verified && (
                             <span className="text-xs bg-green-100 text-green-600 px-2 py-0.5 rounded-full">
                                 ✓ Verificado
@@ -243,33 +243,44 @@ export default function TestimonialsSection() {
                     <div className="flex items-center justify-center gap-4 mt-6">
                         <button
                             onClick={prevSlide}
+                            aria-label="Ver el testimonio anterior"
                             className="w-10 h-10 rounded-full bg-white shadow-md flex items-center justify-center hover:bg-gray-50:bg-gray-700 transition-colors"
                         >
-                            <ChevronLeft size={20} />
+                            <ChevronLeft size={20} aria-hidden="true" />
                         </button>
-                        
+
                         <div className="flex gap-2">
                             {TESTIMONIALS.map((_, index) => (
+                                /* El punto visible mide 8 px, pero el area que se puede tocar
+                                   es de 24x24: abajo de eso el dedo falla y Google lo marca. */
                                 <button
                                     key={index}
                                     onClick={() => {
                                         setIsAutoPlaying(false);
                                         setCurrentSlide(index);
                                     }}
-                                    className={`w-2 h-2 rounded-full transition-all ${
-                                        index === currentSlide
-                                            ? 'w-6 bg-bikitchen-orange'
-                                            : 'bg-gray-300'
-                                    }`}
-                                />
+                                    aria-label={`Ver el testimonio ${index + 1} de ${TESTIMONIALS.length}`}
+                                    aria-current={index === currentSlide ? 'true' : undefined}
+                                    className="w-6 h-6 flex items-center justify-center"
+                                >
+                                    <span
+                                        aria-hidden="true"
+                                        className={`h-2 rounded-full transition-all ${
+                                            index === currentSlide
+                                                ? 'w-6 bg-bikitchen-orange'
+                                                : 'w-2 bg-gray-300'
+                                        }`}
+                                    />
+                                </button>
                             ))}
                         </div>
 
                         <button
                             onClick={nextSlide}
+                            aria-label="Ver el testimonio siguiente"
                             className="w-10 h-10 rounded-full bg-white shadow-md flex items-center justify-center hover:bg-gray-50:bg-gray-700 transition-colors"
                         >
-                            <ChevronRight size={20} />
+                            <ChevronRight size={20} aria-hidden="true" />
                         </button>
                     </div>
                 </div>

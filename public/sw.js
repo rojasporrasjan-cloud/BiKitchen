@@ -1,6 +1,8 @@
-// BiKitchen Service Worker - Enhanced v9
-// ACTUALIZACIÓN: Cloudinary agregado a IMAGE_DOMAINS, fix undefined Response
-const CACHE_VERSION = 'v9';
+// BiKitchen Service Worker - Enhanced v10
+// ACTUALIZACIÓN: logo.png recomprimido (172 KB -> 15 KB) y hero nuevo. Subir la
+// versión invalida el caché viejo: sin esto los visitantes que ya entraron
+// seguirían viendo el logo pesado guardado en su navegador.
+const CACHE_VERSION = 'v10';
 const STATIC_CACHE = `bikitchen-static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `bikitchen-dynamic-${CACHE_VERSION}`;
 const IMAGE_CACHE = `bikitchen-images-${CACHE_VERSION}`;

@@ -7,6 +7,13 @@
       "runtimeArgs": ["run", "dev", "--", "--port", "9999", "--strictPort"],
       "port": 9999,
       "autoPort": false
+    },
+    {
+      "name": "BiKitchen Preview",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "preview", "--", "--port", "9998", "--strictPort"],
+      "port": 9998,
+      "autoPort": false
     }
   ]
 }

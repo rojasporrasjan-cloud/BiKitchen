@@ -23,6 +23,15 @@ export default defineConfig(({ command }) => ({
     rollupOptions: {
       output: {
         manualChunks(id) {
+          // Helpers internos de Vite/Rollup (preload-helper, commonjsHelpers).
+          // Los necesita el entry para poder hacer lazy loading, asi que si Rollup
+          // los mete dentro de un vendor grande, ese vendor entero pasa a ser import
+          // ESTATICO del entry y se descarga en todas las paginas.
+          // Asi es como vendor-pdf (608 KB, solo admin) terminaba cargando en el home.
+          if (id.includes('preload-helper') || id.includes('commonjsHelpers')) {
+            return 'vendor-shared';
+          }
+
           // Separate vendor chunks for better caching
           if (id.includes('node_modules')) {
             if (id.includes('react') || id.includes('react-dom') || id.includes('react-router')) {

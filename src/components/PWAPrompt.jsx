@@ -195,9 +195,10 @@ export function PWAInstallBanner() {
                     <>
                         <button
                             onClick={handleDismiss}
+                            aria-label="Cerrar el aviso de instalación"
                             className="absolute top-2 right-2 p-1 text-gray-400 hover:text-gray-600"
                         >
-                            <X size={18} />
+                            <X size={18} aria-hidden="true" />
                         </button>
 
                         <div className="flex items-start gap-4">
@@ -213,9 +214,9 @@ export function PWAInstallBanner() {
                                 </p>
                                 <button
                                     onClick={handleInstall}
-                                    className="flex items-center gap-2 bg-bikitchen-orange text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-bikitchen-orange-dark transition-colors"
+                                    className="flex items-center gap-2 bg-bikitchen-orange-contraste text-white px-4 py-2 rounded-lg text-sm font-medium hover:brightness-90 transition-all"
                                 >
-                                    <Download size={16} />
+                                    <Download size={16} aria-hidden="true" />
                                     Instalar App
                                 </button>
                             </div>
@@ -262,9 +263,10 @@ export function NotificationBanner() {
             >
                 <button
                     onClick={handleDismiss}
+                    aria-label="Cerrar el aviso de instalación"
                     className="absolute top-2 right-2 p-1 text-white/60 hover:text-white"
                 >
-                    <X size={18} />
+                    <X size={18} aria-hidden="true" />
                 </button>
 
                 <div className="flex items-start gap-4">
