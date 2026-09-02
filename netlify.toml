@@ -16,73 +16,27 @@
 # ─────────────────────────────────────────────
 #  404 REALES PARA ARCHIVOS QUE NO EXISTEN
 #  La regla comodín de abajo manda TODO a index.html con estado 200, que es lo
-#  que necesita una app de una sola página para que funcionen las rutas. El
-#  efecto secundario es que un archivo inexistente también contestaba "200 OK"
-#  con la portada: así fue como /videos/hero_optimized.mp4 devolvía HTML después
-#  de borrarlo. Google llama a eso "soft 404" y lo toma como señal de descuido.
+#  que necesita una app de una sola página. El efecto secundario es que un
+#  archivo inexistente contestaba "200 OK" con la portada: así /videos/x.mp4
+#  seguía devolviendo HTML después de borrarlo (Google lo llama "soft 404").
 #
-#  Estas reglas van ANTES del comodín. Netlify sirve primero los archivos que sí
-#  existen, así que un .png real se entrega normal y solo los que faltan caen
-#  aquí. No se tocan las rutas sin extensión: esas las maneja React Router con
-#  su propia página de "no encontrado".
+#  Se hace POR CARPETA y no por extensión: Netlify solo acepta el comodín * al
+#  final de la ruta, así que un patrón como "/*.mp4" no calza con nada — se
+#  intentó y no funcionó. Estas carpetas guardan solo archivos y NO contienen
+#  rutas de la app, así que es seguro. Netlify entrega primero los archivos que
+#  sí existen, por eso /videos/hero.mp4 se sigue sirviendo normal.
+#
+#  NO se agrega /assets/* a propósito: ahí viven el JavaScript y el CSS del
+#  sitio, y si la regla se comportara distinto a lo esperado tumbaría la página
+#  entera. No vale el riesgo por un beneficio tan chico.
 # ─────────────────────────────────────────────
 [[redirects]]
-  from = "/*.mp4"
+  from = "/videos/*"
   to = "/404.html"
   status = 404
 
 [[redirects]]
-  from = "/*.webm"
-  to = "/404.html"
-  status = 404
-
-[[redirects]]
-  from = "/*.png"
-  to = "/404.html"
-  status = 404
-
-[[redirects]]
-  from = "/*.jpg"
-  to = "/404.html"
-  status = 404
-
-[[redirects]]
-  from = "/*.jpeg"
-  to = "/404.html"
-  status = 404
-
-[[redirects]]
-  from = "/*.webp"
-  to = "/404.html"
-  status = 404
-
-[[redirects]]
-  from = "/*.avif"
-  to = "/404.html"
-  status = 404
-
-[[redirects]]
-  from = "/*.svg"
-  to = "/404.html"
-  status = 404
-
-[[redirects]]
-  from = "/*.css"
-  to = "/404.html"
-  status = 404
-
-[[redirects]]
-  from = "/*.js"
-  to = "/404.html"
-  status = 404
-
-[[redirects]]
-  from = "/*.woff2"
-  to = "/404.html"
-  status = 404
-
-[[redirects]]
-  from = "/*.pdf"
+  from = "/icons/*"
   to = "/404.html"
   status = 404
 
