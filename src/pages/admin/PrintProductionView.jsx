@@ -47,6 +47,7 @@ import { separarPorY, cantidadDeGuarnicion } from '../../utils/guarnicionesSepar
 import { agruparArroces } from '../../utils/agruparArroces';
 import { COLECCION_AJUSTES, aplicarAjustes, cantidadFinal, conAjuste } from '../../utils/ajustesDeCocina';
 import { cuantoCocinar, parteDeIndividuales } from '../../utils/cuantoCocinar';
+import { COLECCION_TANDAS, pedidosDeLaTanda, acumularEnviados, claveDePedido, canceladosDespuesDeEnviar } from '../../utils/tandasDeCocina';
 import RevisionHoja from '../../components/admin/RevisionHoja';
 import { individualesData, getProductUnits } from '../../data/individualesData';
 import ExcelJS from 'exceljs';
@@ -84,6 +85,19 @@ const MENU_LABELS = {
 export default function PrintProductionView() {
     const [searchParams] = useSearchParams();
     const date = searchParams.get('date');
+
+    // La hoja de COCINA puede cubrir varios dias: Gina empieza a cocinar el
+    // jueves para el sabado y el lunes. Se pasan separadas por coma:
+    //   ?date=2026-09-05,2026-09-07&tanda=adelanto
+    const fechas = String(date || '').split(',').map(f => f.trim()).filter(Boolean);
+    const primeraFecha = fechas[0] || '';
+    // `adelanto` = solo mensuales y quincenales, que son los que ya estan
+    // pagados y no dependen de lo que entre esta semana.
+    const soloRecurrentes = searchParams.get('tanda') === 'adelanto';
+    const claveDeTanda = fechas.join('_');
+
+    const [yaEnviados, setYaEnviados] = useState([]);
+    const [tandasPrevias, setTandasPrevias] = useState([]);
     const viewMode = searchParams.get('view') || 'all';
 
     // Lo que Gina corrige a mano sobre la hoja de cocina. Se guarda por fecha y
@@ -100,6 +114,47 @@ export default function PrintProductionView() {
             .catch(err => console.error('[Cocina] No se pudieron leer los ajustes:', err));
         return () => { vigente = false; };
     }, [date]);
+
+    const [guardandoTanda, setGuardandoTanda] = useState(false);
+
+    /**
+     * Deja anotado que ESTOS pedidos ya se le mandaron a la cocina.
+     *
+     * Es lo unico que hace que la hoja del viernes no repita lo del miercoles.
+     * Se guarda al MANDARLA, no al imprimirla: una hoja impresa y descartada no
+     * deberia descontar nada.
+     */
+    const marcarTandaEnviada = async () => {
+        if (cleanOrders.length === 0) return;
+        const cuantos = cleanOrders.length;
+        if (!window.confirm(
+            `Marcar como enviados a cocina ${cuantos} pedido${cuantos === 1 ? '' : 's'} de ${fechas.join(' y ')}.
+
+` +
+            'La próxima hoja de cocina ya NO los va a incluir. Solo hacelo cuando de verdad le hayás mandado esta hoja a Gina.'
+        )) return;
+
+        setGuardandoTanda(true);
+        try {
+            await setDoc(doc(collection(db, COLECCION_TANDAS)), {
+                clave: claveDeTanda,
+                fechas,
+                soloRecurrentes,
+                pedidos: cleanOrders.map(claveDePedido),
+                cuantos,
+                enviada: new Date().toISOString()
+            });
+            const previas = [...tandasPrevias, { pedidos: cleanOrders.map(claveDePedido) }];
+            setTandasPrevias(previas);
+            setYaEnviados(acumularEnviados(previas));
+        } catch (err) {
+            console.error('[Cocina] No se pudo guardar la tanda:', err);
+            alert(err?.code === 'permission-denied'
+                ? 'Firebase no deja guardar las tandas todavía. Falta publicar la regla de `tandas_cocina`.'
+                : 'No se pudo guardar. Revisá la conexión e intentá de nuevo.');
+        }
+        setGuardandoTanda(false);
+    };
 
     const guardarAjuste = async (nombre, unidad, cambio) => {
         const previos = ajustesCocina;
@@ -205,7 +260,7 @@ export default function PrintProductionView() {
     useEffect(() => {
         if (!date) return;
         setLoading(true);
-        const targetDate = new Date(date + "T12:00:00");
+        const targetDate = new Date(primeraFecha + "T12:00:00");
         const pastDate = new Date(targetDate);
         pastDate.setDate(pastDate.getDate() - 40); // Buscar hasta 40 días atrás para mensualidades
         const pastDateStr = pastDate.toISOString().split('T')[0];
@@ -227,7 +282,7 @@ export default function PrintProductionView() {
                 if (!ESTADOS_QUE_IMPRIMEN.includes(status)) return false;
 
                 const schedule = getScheduleFromOrder(order);
-                return schedule.includes(date);
+                return schedule.some(f => fechas.includes(f));
             });
 
             rawOrders.sort((a, b) => (a.cliente || '').localeCompare(b.cliente || ''));
@@ -242,8 +297,24 @@ export default function PrintProductionView() {
         return () => unsubscribe();
     }, [date]);
 
+    // Que pedidos ya se le mandaron a la cocina en tandas anteriores. Sin esto
+    // la hoja del viernes repetiria lo del miercoles y se cocinaria dos veces.
+    useEffect(() => {
+        if (!claveDeTanda) return;
+        let vigente = true;
+        getDocs(query(collection(db, COLECCION_TANDAS), where('clave', '==', claveDeTanda)))
+            .then(snap => {
+                if (!vigente) return;
+                const previas = snap.docs.map(d => d.data());
+                setTandasPrevias(previas);
+                setYaEnviados(acumularEnviados(previas));
+            })
+            .catch(err => console.error('[Cocina] No se pudieron leer las tandas:', err));
+        return () => { vigente = false; };
+    }, [claveDeTanda]);
 
-    if (!date) return <div className="p-8 text-center text-xl">Falta la fecha en la URL</div>;
+
+    if (!fechas.length) return <div className="p-8 text-center text-xl">Falta la fecha en la URL</div>;
     if (loading) return <div className="p-8 text-center text-xl">Cargando datos para impresión...</div>;
     if (orders.length === 0) return (
         <div className="p-8 text-center text-xl space-y-6 max-w-2xl mx-auto mt-12 bg-white p-6 rounded-2xl shadow-xl border border-gray-100">
@@ -267,9 +338,23 @@ export default function PrintProductionView() {
     // que se descartaron por parecerse a otro. La revision tiene que mirar lo
     // que se cocina, no lo que entro: antes contaba `orders` y el panel decia
     // "21 pedidos" cuando a la cocina llegaban 18.
-    const { pedidos: cleanOrders, fusionados } = deduplicateOrdersByClient(orders);
+    const { pedidos: todosLosPedidos, fusionados } = deduplicateOrdersByClient(orders);
+
+    // La COCINA recibe la hoja por tandas: el miercoles los mensuales y
+    // quincenales, el viernes y el sabado lo que fue entrando. Cada hoja lleva
+    // SOLO lo que no se mando antes, o se cocina dos veces.
+    //
+    // El EMPAQUE y las etiquetas no se tocan: esos siguen saliendo completos
+    // por fecha de entrega, que es como se reparten.
+    const { nuevos: cleanOrders, repetidos: yaEnLaCocina } = pedidosDeLaTanda(
+        todosLosPedidos,
+        yaEnviados,
+        { soloRecurrentes, calendario: (p) => getScheduleFromOrder(p.rawPedido || p) }
+    );
+    const canceladosYaCocinados = canceladosDespuesDeEnviar(yaEnviados, todosLosPedidos);
+
     const kitchenData = buildKitchenSheetData(cleanOrders, {});
-    const packagingData = buildPackagingSheetData(cleanOrders, {}, null);
+    const packagingData = buildPackagingSheetData(todosLosPedidos, {}, null);
 
     // Group packaging data by Pack
     const packsMap = {};
@@ -1631,6 +1716,36 @@ export default function PrintProductionView() {
                 </p>
 
                 {renderKitchenConfig()}
+
+                {/* Estado de la tanda: que lleva esta hoja y que ya se mando antes */}
+                <div className="mb-6 border-2 border-black print:border rounded overflow-hidden">
+                    <div className="bg-gray-900 text-white px-4 py-2 font-bold uppercase tracking-wide text-sm">
+                        Hoja de cocina · {fechas.join('  +  ')}
+                        {soloRecurrentes && ' · SOLO MENSUALES Y QUINCENALES'}
+                    </div>
+                    <div className="p-4 bg-white text-sm">
+                        <b>{cleanOrders.length}</b> pedido{cleanOrders.length === 1 ? '' : 's'} para cocinar en esta hoja.
+                        {yaEnLaCocina.length > 0 && (
+                            <span className="text-gray-600"> · <b>{yaEnLaCocina.length}</b> ya se mandaron antes y no se repiten.</span>
+                        )}
+                        {canceladosYaCocinados.length > 0 && (
+                            <div className="mt-2 text-red-700 font-bold">
+                                Ojo: {canceladosYaCocinados.length} pedido(s) se cancelaron DESPUÉS de mandarse a cocinar
+                                ({canceladosYaCocinados.join(', ')}). Esa comida ya está hecha: no la empaquen.
+                            </div>
+                        )}
+                        <button
+                            onClick={marcarTandaEnviada}
+                            disabled={guardandoTanda || cleanOrders.length === 0}
+                            className="mt-3 px-4 py-2 bg-black text-white text-xs font-bold uppercase rounded disabled:opacity-40 print:hidden"
+                        >
+                            {guardandoTanda ? 'Guardando…' : 'Ya le mandé esta hoja a Gina'}
+                        </button>
+                        <span className="ml-3 text-xs text-gray-500 print:hidden">
+                            Al marcarla, la próxima hoja de cocina ya no incluye estos pedidos.
+                        </span>
+                    </div>
+                </div>
 
                 {/* SECCIÓN 1: PRODUCCIÓN A GRANEL PARA PACKS */}
                 <div className="mb-12">

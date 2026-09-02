@@ -207,6 +207,12 @@ service cloud.firestore {
     // produccion. Sin esta regla la hoja se ve pero no deja guardar nada
     // —"permission-denied"— y el cambio se pierde al recargar.
     match /ajustes_cocina/{fecha} { allow read, write: if isAdmin(); }
+
+    // Las TANDAS: que pedidos ya se le mandaron a la cocina. Gina empieza a
+    // cocinar el jueves y los pedidos siguen entrando, asi que la hoja va por
+    // partes y cada una lleva solo lo que no se mando antes. Sin este registro
+    // la hoja del viernes repetiria lo del miercoles y se cocinaria dos veces.
+    match /tandas_cocina/{id} { allow read, write: if isAdmin(); }
     
     // ==========================================
     // REGLA POR DEFECTO - DENEGAR TODO
