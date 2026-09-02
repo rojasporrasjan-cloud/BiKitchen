@@ -1,4 +1,5 @@
 import { esIndividualEnLaHoja } from './packClassification';
+import { porcionesDelPlato } from './porcionesDelPedido';
 
 // Utilidades de logística para BiKitchen Food
 // - Normalización de pedidos al modelo de platos/ingredientes
@@ -504,7 +505,6 @@ export function buildKitchenSheetData(pedidos, menus, options = {}) {
 
   pedidos.forEach((pedido) => {
     const tipo = pedido.tipoMenu || pedido.plan || 'Desconocido';
-    const cantidadMenus = pedido.cantidadMenus || 1;
 
     if (!porMenu[tipo]) {
       porMenu[tipo] = {
@@ -554,12 +554,11 @@ export function buildKitchenSheetData(pedidos, menus, options = {}) {
 
       const agregado = porMenu[tipo].platos[key];
 
-      // Cuántas porciones de ESTE plato hay que preparar.
-      // cantidadMenus multiplica el pedido entero; plato.cantidad viene de la
-      // cantidad del ítem (ej: 3× Pollo Teriyaki). Antes solo se usaba el primero,
-      // que nunca se escribe en Firestore y siempre valía 1: por eso un ítem
-      // pedido 3 veces se cocinaba una sola vez.
-      const factor = cantidadMenus * (plato.cantidad || 1);
+      // Cuántas porciones de ESTE plato hay que preparar. La regla vive en
+      // un solo lugar porque las etiquetas, el empaque y la cocina tienen que
+      // dar el mismo número: multiplicar cantidadMenus por la cantidad del ítem
+      // contaba dos veces el mismo dato y a quien lleva 3 packs le cocinaba 9.
+      const factor = porcionesDelPlato(pedido, plato);
 
       agregado.totalPlatos += factor;
 

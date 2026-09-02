@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { db } from '../../firebase/config';
-import { collection, query, where, getDocs, onSnapshot, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, onSnapshot, orderBy, doc, getDoc, setDoc } from 'firebase/firestore';
 import {
     mapPedidosFromLegacy,
     buildKitchenSheetData,
@@ -15,6 +15,9 @@ import {
     nombreDeHojaDeEmpaque,
     llevaFilaDeCarbo,
     llevaFilaDeVegetal,
+    porcionesDelPack,
+
+    avisoDeFamilia,
     getDefaultGrams
 } from '../../utils/packClassification';
 import { getOfficialMenus, DEFAULT_MENUS } from '../../utils/firestoreMenus';
@@ -26,17 +29,32 @@ import {
     claveGranel,
     cleanIndividualDishName,
     isMoldOrSpecialDish,
-    isBulkDishCandidate,
     parseQuantityAndUnit,
     textoDeCantidad,
     aplicarSustitucionesAlGranel,
     limpiarGranelVacio
 } from '../../utils/granelKitchen';
+import { buscarRenglonDelMismoPlato, nombreMasCompleto } from '../../utils/mismoPlato';
+import {
+    destinosDeUnion,
+    agregarUnion,
+    quitarUnion,
+    leerUniones,
+    guardarUniones
+} from '../../utils/unionesDePlatos';
+import { separarComponentes, nombreParaAcumular } from '../../utils/platosCompuestos';
+import { separarPorY, cantidadDeGuarnicion } from '../../utils/guarnicionesSeparadas';
+import { agruparArroces } from '../../utils/agruparArroces';
+import { COLECCION_AJUSTES, aplicarAjustes, cantidadFinal, conAjuste } from '../../utils/ajustesDeCocina';
+import { cuantoCocinar, parteDeIndividuales } from '../../utils/cuantoCocinar';
 import RevisionHoja from '../../components/admin/RevisionHoja';
 import { individualesData, getProductUnits } from '../../data/individualesData';
 import ExcelJS from 'exceljs';
 import { agregarHojasGina } from '../../utils/excelHojaProduccion';
 import { packSeParteEnAlmuerzoYCena } from '../../utils/labels/labelDomain';
+import { consolidarCocina, formatearCantidad } from '../../utils/cocinaConsolidada';
+import { repartirPlatillos, sugerirCocinera, TIPO_POR_CATEGORIA } from '../../utils/asignacionCocineras';
+import { COCINERAS } from '../../data/cocineras';
 
 import {
     MARGEN_COCINA,
@@ -67,12 +85,57 @@ export default function PrintProductionView() {
     const [searchParams] = useSearchParams();
     const date = searchParams.get('date');
     const viewMode = searchParams.get('view') || 'all';
+
+    // Lo que Gina corrige a mano sobre la hoja de cocina. Se guarda por fecha y
+    // manda sobre el calculo: ella es la que ve si el numero esta mal.
+    const [ajustesCocina, setAjustesCocina] = useState({});
+    const [guardandoAjuste, setGuardandoAjuste] = useState(false);
+    const [errorDeAjuste, setErrorDeAjuste] = useState('');
+
+    useEffect(() => {
+        if (!date) return;
+        let vigente = true;
+        getDoc(doc(db, COLECCION_AJUSTES, date))
+            .then(d => { if (vigente) setAjustesCocina(d.exists() ? (d.data().renglones || {}) : {}); })
+            .catch(err => console.error('[Cocina] No se pudieron leer los ajustes:', err));
+        return () => { vigente = false; };
+    }, [date]);
+
+    const guardarAjuste = async (nombre, unidad, cambio) => {
+        const previos = ajustesCocina;
+        const siguientes = conAjuste(ajustesCocina, nombre, unidad, cambio);
+        setAjustesCocina(siguientes);
+        setGuardandoAjuste(true);
+        try {
+            await setDoc(doc(db, COLECCION_AJUSTES, date), {
+                fecha: date,
+                renglones: siguientes,
+                actualizado: new Date().toISOString()
+            }, { merge: true });
+            setErrorDeAjuste('');
+        } catch (err) {
+            // Si no se guardo, la hoja NO puede seguir mostrando el numero nuevo:
+            // Gina lo daria por bueno y se cocinaria con un dato que no existe.
+            console.error('[Cocina] No se pudo guardar el ajuste:', err);
+            setAjustesCocina(previos);
+            setErrorDeAjuste(
+                err?.code === 'permission-denied'
+                    ? 'Firebase no deja guardar los cambios de la hoja de cocina todavía. Falta publicar la regla de `ajustes_cocina`.'
+                    : 'No se pudo guardar el cambio. Revisá la conexión e intentá de nuevo.'
+            );
+        }
+        setGuardandoAjuste(false);
+    };
     const [orders, setOrders] = useState([]);
     const [officialMenus, setOfficialMenus] = useState(null);
     const [loading, setLoading] = useState(true);
     const [empaqueTab, setEmpaqueTab] = useState('packs');
     const [kitchenAssignments, setKitchenAssignments] = useState({});
     const [categoryCookInputs, setCategoryCookInputs] = useState({});
+    const [resumenReparto, setResumenReparto] = useState(null);
+    // Platos que Gina dijo que son el mismo. Se guardan en el navegador para
+    // no tener que rehacerlas cada semana.
+    const [unionesDePlatos, setUnionesDePlatos] = useState(() => leerUniones());
     const [selectedKitchenItems, setSelectedKitchenItems] = useState([]);
     const [bulkSelectedCook, setBulkSelectedCook] = useState('');
     const [importingExcel, setImportingExcel] = useState(false);
@@ -791,11 +854,83 @@ export default function PrintProductionView() {
     };
 
     // ==========================================
+    /**
+     * Qué se cocina junto.
+     *
+     * El resto de la hoja está ordenada por menú, que es como se empaca. Para
+     * cocinar sirve al revés: una preparación por renglón, con el total de una
+     * vez, y al lado a cuántos platos de cada menú va para poder repartirla al
+     * salir de la olla.
+     */
+    const renderQueSeCocinaJunto = () => {
+        const merma = Math.round((MARGEN_COCINA - 1) * 100);
+        const { preparaciones } = consolidarCocina(cleanOrders, { marginPercent: merma });
+        if (preparaciones.length === 0) return null;
+
+        const porTipo = preparaciones.reduce((acc, p) => {
+            (acc[p.tipo] = acc[p.tipo] || []).push(p);
+            return acc;
+        }, {});
+
+        return (
+            <div className="mb-10 print:break-after-page print:[page-break-after:always]">
+                <h2 className="bg-black text-white text-center font-bold text-xl p-2 border border-black uppercase tracking-wide">
+                    Qué se cocina junto — {date}
+                </h2>
+                <p className="text-xs text-gray-600 border-x border-b border-black p-2 print:text-[10px]">
+                    Una línea por preparación, sumando todos los menús. La columna de la
+                    derecha dice cómo repartirla cuando salga de la olla.
+                    {merma > 0 && ` Las cantidades ya traen el ${merma}% de merma.`}
+                </p>
+
+                {Object.entries(porTipo).map(([tipo, lista]) => (
+                    <table key={tipo} className="w-full border-collapse border border-black text-sm mb-6 table-fixed">
+                        <thead>
+                            <tr>
+                                <th colSpan="4" className="bg-[#f4b084] border border-black p-1.5 text-left font-bold uppercase">
+                                    {tipo}s — {lista.length} preparacion{lista.length === 1 ? '' : 'es'}
+                                </th>
+                            </tr>
+                            <tr className="bg-[#fce4d6]">
+                                <th className="border border-black p-1.5 text-left w-[38%]">Preparación</th>
+                                <th className="border border-black p-1.5 text-center w-20">Porciones</th>
+                                <th className="border border-black p-1.5 text-center w-28">Cantidad</th>
+                                <th className="border border-black p-1.5 text-left">Cómo repartirlo</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {lista.map(p => (
+                                <tr key={`${p.tipo}-${p.nombre}-${p.unidad}`} className="break-inside-avoid">
+                                    <td className="border border-black p-1.5 font-medium">
+                                        {p.nombre}
+                                        {p.esSustitucion && (
+                                            <span className="ml-2 text-[10px] font-bold text-red-700">CAMBIO</span>
+                                        )}
+                                    </td>
+                                    <td className="border border-black p-1.5 text-center font-bold text-base">
+                                        {p.porcionesCocina}
+                                    </td>
+                                    <td className="border border-black p-1.5 text-center font-bold">
+                                        {p.porPorcion > 0 ? formatearCantidad(p.totalCocina, p.unidad) : '—'}
+                                    </td>
+                                    <td className="border border-black p-1.5 text-xs print:text-[10px]">
+                                        {p.hayQueRepartir
+                                            ? p.desglose.map(d => `${d.porciones} → ${d.origen}`).join('  ·  ')
+                                            : <span className="text-gray-400">todo junto</span>}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                ))}
+            </div>
+        );
+    };
+
     // LOGICA NUEVA DE HOJA DE COCINA GLOBAL
     // ==========================================
     const getAllKitchenItems = () => {
         const bulkItemsMap = {};
-        const individualItemsMap = {};
         const missingMenus = [];
 
         const guessCategory = (name) => {
@@ -805,6 +940,70 @@ export default function PrintProductionView() {
             if (n.includes('arroz') || n.includes('garbanzo') || n.includes('vegetal') || n.includes('picadillo') || n.includes('ayote') || n.includes('brócoli') || n.includes('zuchinni') || n.includes('tomate') || n.includes('lentejas') || n.includes('pasta') || n.includes('spaguetti')) return 'Arroces y Vegetales';
             if (n.includes('papa') || n.includes('camote') || n.includes('yuca') || n.includes('frijol') || n.includes('maduro') || n.includes('puré') || n.includes('coleslaw') || n.includes('plátano') || n.includes('ensalada')) return 'Guarniciones y Tubérculos';
             return 'Otros';
+        };
+
+        // Platos que calzaban con varios renglones y hubo que dejar aparte
+        const avisosDeUnion = [];
+
+        /**
+         * Suma un plato al acumulador, juntandolo con el renglon que ya lo tiene.
+         *
+         * El mismo plato se escribe distinto segun de donde venga: el menu de un
+         * pack, el menu de otro pack, un individual. El acumulador se indexa por
+         * nombre exacto, asi que sin esto sale en varios renglones y la cocina lo
+         * prepara varias veces, cada una con una parte del total. Se veia como
+         * "Milanesa de pollo 196 g" cuando el dia pedia bastante mas.
+         *
+         * La clave del renglon NO cambia al juntar, solo el nombre que se muestra.
+         * Es a proposito: las sustituciones restan por el nombre original y tienen
+         * que seguir encontrando su renglon.
+         */
+        // Lo que Gina marcó como el mismo plato manda sobre el emparejador:
+        // ella sabe que las tres carnes mechadas salen de una sola olla, cosa
+        // que de los nombres no se deduce.
+        const destinos = destinosDeUnion(unionesDePlatos);
+
+        const acumularPlato = (nombreCrudo, cantidad, unidad, platos = 0) => {
+            // Un renglon puede ser varias ollas: "Arroz, frijoles y maduros" son
+            // tres preparaciones. Cada una lleva la MISMA cantidad que traia el
+            // renglon: si decia 4 tazas, son 4 de cada cosa.
+            //
+            // Se parte por coma y tambien por " y " cuando las dos partes son
+            // ingredientes sueltos: "Arroz y frijoles" son dos ollas. Y cada
+            // parte usa SU unidad — los maduros del casadito se cuentan de a dos
+            // por plato, no por taza.
+            const componentes = separarComponentes(nombreCrudo)
+                .flatMap(parte => separarPorY(parte));
+            if (componentes.length > 1) {
+                let primera = null;
+                componentes.forEach(parte => {
+                    const suyo = cantidadDeGuarnicion(parte, cantidad, unidad, platos);
+                    const clave = acumularPlato(parte, suyo.cantidad, suyo.unidad, platos);
+                    if (primera === null) primera = clave;
+                });
+                return primera;
+            }
+
+            // El nombre con el que entra: lo que una persona marco como el mismo
+            // plato, o el nucleo (toda la "carne mechada" es una sola olla).
+            const nombre = nombreParaAcumular(nombreCrudo, destinos);
+            const encontrado = buscarRenglonDelMismoPlato(bulkItemsMap, nombre, unidad);
+
+            if (encontrado.ambiguo.length > 0) {
+                // Calzaba con varios: juntarlo con el que no es seria peor que
+                // dejarlo aparte. Se avisa y se separa.
+                avisosDeUnion.push({ nombre, calzaCon: encontrado.ambiguo });
+            }
+
+            if (encontrado.clave) {
+                const renglon = bulkItemsMap[encontrado.clave];
+                renglon.totalQty += cantidad;
+                renglon.name = nombreMasCompleto(renglon.name, nombre);
+                return encontrado.clave;
+            }
+
+            sumarAGranel(bulkItemsMap, nombre, cantidad, unidad, guessCategory);
+            return claveGranel(nombre, unidad);
         };
 
         // 1. Process regular packs (Granel para ollas)
@@ -822,21 +1021,46 @@ export default function PrintProductionView() {
                 missingMenus.push(packName);
             }
 
+            const porcionDeLaFamilia = porcionesDelPack(packName);
             const platosEmpaque = rawPlatos.map((p, idx) => {
                 const isOfficial = typeof p.proteina === 'string';
+
+                // El menu oficial guarda los platos como texto y no trae gramaje:
+                // ahi el default del nombre del pack es lo unico que hay. Pero un
+                // PERSONALIZADO trae la porcion escrita en el pedido, y esa manda.
+                // Se estaba tirando y se cocinaba con el default del nombre, que
+                // para un pack sin gramos en el titulo son 150 g parejo.
+                // Y si la FAMILIA tiene su propio gramaje, ese le gana al default
+                // del nombre: un plato familiar es una bandeja de 1 kg y se
+                // cocinaba con los 150 g de siempre. Al Paquete Deluxe de Rebeca
+                // Toval —siete platos— le faltaban casi ocho kilos.
+                const gramosDelPlato = Number(p.proteina?.gramosPorPorcion) > 0
+                    ? Number(p.proteina.gramosPorPorcion)
+                    : (porcionesDelPack(packName).proteina || getDefaultGrams(packName));
+
                 return {
                     vecesPorPack: Number(p.vecesPorPack) > 0 ? Number(p.vecesPorPack) : 1,
                     proteina: {
                         nombre: isOfficial ? p.proteina : p.proteina?.nombre,
-                        gramosPorPorcion: getDefaultGrams(packName)
+                        // Tambien para los del menu oficial: ahi se usaba el default
+                        // del NOMBRE y se saltaba el de la familia, asi que un plato
+                        // familiar se cocinaba con 150 g en vez de 1 kg.
+                        gramosPorPorcion: gramosDelPlato
                     },
                     vegetal: {
                         nombre: isOfficial ? p.vegetal : p.vegetal?.nombre,
-                        cantidadPorPorcion: 1
+                        // El granel tenia su propia copia de 1 y 0,5 para todos:
+                        // el keto pedia 1 taza de vegetal cuando lleva 1,5, y los
+                        // casaditos 0,5 de harina cuando llevan 1,5.
+                        cantidadPorPorcion: Number(p.vegetal?.cantidadPorPorcion) > 0
+                            ? Number(p.vegetal.cantidadPorPorcion)
+                            : (porcionDeLaFamilia.vegetal ?? 1)
                     },
                     carbo: {
                         nombre: isOfficial ? p.carbo : p.carbo?.nombre,
-                        cantidadPorPorcion: 0.5
+                        cantidadPorPorcion: Number(p.carbo?.cantidadPorPorcion) > 0
+                            ? Number(p.carbo.cantidadPorPorcion)
+                            : (porcionDeLaFamilia.carbo ?? 0.5)
                     }
                 };
             });
@@ -847,18 +1071,21 @@ export default function PrintProductionView() {
                 // si no, el pack de Christopher pedia 960 g de proteina cuando
                 // sus 20 platos necesitan 2400 g.
                 const totalPlatos = packsDelPack * (p.vecesPorPack || 1);
+                const porcion = porcionesDelPack(packName);
                 if (p.proteina?.nombre && p.proteina.nombre !== '—') {
-                    const grams = (p.proteina.gramosPorPorcion || getDefaultGrams(packName)) * totalPlatos;
-                    sumarAGranel(bulkItemsMap, p.proteina.nombre, grams, 'g', guessCategory);
+                    // Un plato familiar se cocina por KILO: el gramaje de la familia
+                    // manda cuando el plato no trae el suyo.
+                    const grams = (p.proteina.gramosPorPorcion || porcion.proteina || getDefaultGrams(packName)) * totalPlatos;
+                    acumularPlato(p.proteina.nombre, grams, 'g');
                 }
                 if (p.vegetal?.nombre && p.vegetal.nombre !== '—') {
-                    const units = (p.vegetal.cantidadPorPorcion || 1) * totalPlatos;
-                    sumarAGranel(bulkItemsMap, p.vegetal.nombre, units, 'taza(s)', guessCategory);
+                    const units = (p.vegetal.cantidadPorPorcion || porcion.vegetal) * totalPlatos;
+                    acumularPlato(p.vegetal.nombre, units, 'taza(s)');
                 }
                 const showCarbo = menuKey !== 'keto' && menuKey !== 'sinCarbos' && p.carbo?.nombre && p.carbo.nombre !== '—';
                 if (showCarbo) {
-                    const units = (p.carbo.cantidadPorPorcion || 0.5) * totalPlatos;
-                    sumarAGranel(bulkItemsMap, p.carbo.nombre, units, 'taza(s)', guessCategory);
+                    const units = (p.carbo.cantidadPorPorcion || porcion.carbo) * totalPlatos;
+                    acumularPlato(p.carbo.nombre, units, 'taza(s)', totalPlatos);
                 }
             });
 
@@ -873,7 +1100,8 @@ export default function PrintProductionView() {
                     platos: platosEmpaque,
                     porciones: cantidadDePacks(c),
                     gramosPorPorcion: getDefaultGrams(packName),
-                    categoria: guessCategory
+                    categoria: guessCategory,
+                    acumular: acumularPlato
                 });
             });
         });
@@ -893,46 +1121,29 @@ export default function PrintProductionView() {
                     const portionGrams = pGrams || parsed.portionGrams;
                     const nameLower = cleanName.toLowerCase();
 
-                    const existsInBulk = !!bulkItemsMap[claveGranel(cleanName, parsed.unit)]
-                        || !!bulkItemsMap[claveGranel(cleanName, 'g')]
-                        || !!bulkItemsMap[claveGranel(cleanName, 'taza(s)')];
+                    // Un individual va SIEMPRE al mismo lugar que los packs.
+                    // Antes se partía en dos tablas y el mismo plato terminaba en
+                    // las dos: "Albóndigas de res" por el pack y "Albóndigas de
+                    // res artesanales" por el individual, cocinadas dos veces.
+                    //
+                    // El renglón se busca por plato, no por nombre exacto, porque
+                    // el pack y el individual casi nunca lo escriben igual.
+                    const clave = acumularPlato(cleanName, parsed.totalQty, parsed.unit);
+                    const renglon = bulkItemsMap[clave];
+                    if (renglon) {
+                        // Este plato lo empaca cocina, no Empaque: hay que decirlo
+                        // en la hoja o se empaca dos veces o ninguna.
+                        renglon.empacaCocina = true;
+                        if (!renglon.portionGrams && portionGrams) renglon.portionGrams = portionGrams;
+                        if (!renglon.portionSpec && specStr) renglon.portionSpec = specStr;
+                        if (isMoldOrSpecialDish(nameLower)) renglon.esMolde = true;
 
-                    const isBulkCandidate = isBulkDishCandidate(nameLower, existsInBulk);
-
-                    if (isBulkCandidate) {
-                        // UNIFY INTO SECTION 1 (BULK POT COOKING)
-                        sumarAGranel(bulkItemsMap, cleanName, parsed.totalQty, parsed.unit, guessCategory);
-
-                        // Track individual entries for clean consolidated kitchen notes
-                        const clave = claveGranel(cleanName, parsed.unit);
-                        if (bulkItemsMap[clave]) {
-                            if (!bulkItemsMap[clave].individualEntries) bulkItemsMap[clave].individualEntries = [];
-                            bulkItemsMap[clave].individualEntries.push({
-                                qty: parsed.totalQty,
-                                unit: parsed.unit,
-                                portionGrams: portionGrams
-                            });
-                        }
-                    } else {
-                        // KEEP IN SECTION 2 (SPECIAL INDIVIDUALS & MOLDS)
-                        const key = cleanName;
-
-                        if (!individualItemsMap[key]) {
-                            individualItemsMap[key] = {
-                                name: cleanName,
-                                category: guessCategory(cleanName),
-                                totalQty: 0,
-                                unit: parsed.unit,
-                                portionGrams: portionGrams,
-                                portionSpec: specStr,
-                                isIndividual: true
-                            };
-                        } else if (parsed.unit === 'g' && individualItemsMap[key].unit !== 'g') {
-                            individualItemsMap[key].unit = 'g';
-                            if (portionGrams) individualItemsMap[key].portionGrams = portionGrams;
-                        }
-
-                        individualItemsMap[key].totalQty += parsed.totalQty;
+                        if (!renglon.individualEntries) renglon.individualEntries = [];
+                        renglon.individualEntries.push({
+                            qty: parsed.totalQty,
+                            unit: parsed.unit,
+                            portionGrams: portionGrams
+                        });
                     }
                 };
 
@@ -1025,36 +1236,45 @@ export default function PrintProductionView() {
         });
 
         const bulkItems = Object.values(bulkItemsMap).sort((a, b) => a.name.localeCompare(b.name));
-        const individualItems = Object.values(individualItemsMap).sort((a, b) => a.name.localeCompare(b.name));
 
-        return {
-            bulkItems,
-            individualItems,
-            items: [...bulkItems, ...individualItems],
-            missingMenus
-        };
+        return { bulkItems, missingMenus, avisosDeUnion };
     };
+
+    /**
+     * Cuánto hay que poner a cocinar.
+     *
+     * La merma es lo que se encoge o se pierde al cocinar, así que va sobre lo
+     * que se pesa o se mide. A las unidades NO se les aplica: no se puede
+     * cocinar 1,3 canelones, y redondear inventaría comida que nadie pidió.
+     */
+    // La merma es para las ollas de los packs, donde se reparte a ojo. Un
+    // individual se pesa y se empaca: "si son 250 poner 250" (Gina). Y los
+    // gramos se redondean siempre hacia arriba.
+    const cantidadACocinar = (item) => cuantoCocinar(item);
 
     const getKitchenPackingInstruction = (item) => {
         const pGrams = item.portionGrams;
-        const qty = item.totalQty;
+        // Lo que hay que APARTAR es lo de los individuales, no el total: el resto
+        // va a las ollas de los packs. Con el total, el pollo al pesto decia
+        // "empacar 2 porciones de 250g" cuando solo UNA es de individual.
+        const qty = parteDeIndividuales(item) || item.totalQty;
 
         if (pGrams && pGrams > 0) {
             const numTazas = Math.round(qty / pGrams);
             if (numTazas > 1) {
-                return `Empacar ${numTazas} tazas/porciones de ${pGrams}g`;
+                return `Para INDIVIDUALES: apartar ${numTazas} porciones de ${pGrams}g`;
             }
-            return `Empacar 1 taza/porción de ${pGrams}g`;
+            return `Para INDIVIDUALES: apartar 1 porción de ${pGrams}g`;
         }
 
         if (item.unit === 'kg') {
-            return `Empacar en contenedor de ${qty} kg`;
+            return `Para INDIVIDUALES: apartar ${qty} kg en contenedor`;
         }
         if (item.unit === 'taza(s)') {
-            return `Empacar en ${qty} taza(s)`;
+            return `Para INDIVIDUALES: apartar ${qty} taza(s)`;
         }
         if (item.unit === 'unidades') {
-            if (qty > 1) return `Empacar ${qty} unidades por porción`;
+            if (qty > 1) return `Para INDIVIDUALES: apartar ${qty} unidades`;
             return 'Empacar 1 unidad por porción';
         }
 
@@ -1077,7 +1297,7 @@ export default function PrintProductionView() {
     // reconstruyen en cada render, así que cambiarían de identidad siempre.
     // Para memoizar de verdad hay que subir TODO el armado de datos por encima de
     // los returns, no solo esta llamada.
-    const { bulkItems, individualItems, items: allKitchenItems, missingMenus } = getAllKitchenItems();
+    const { bulkItems, missingMenus, avisosDeUnion } = getAllKitchenItems();
 
     const handleAssignCook = (itemName, cookName) => {
         setKitchenAssignments(prev => ({ ...prev, [itemName]: cookName }));
@@ -1104,6 +1324,44 @@ export default function PrintProductionView() {
         setKitchenAssignments(prev => ({ ...prev, ...updates }));
         setSelectedKitchenItems([]);
         setBulkSelectedCook('');
+    };
+
+    /**
+     * Reparte de una vez lo que está en blanco, según lo que hace cada quien.
+     *
+     * Lo ya escrito a mano no se toca: si alguien puso otro nombre fue porque
+     * ese día se repartió distinto, y la máquina no tiene por qué corregirlo.
+     */
+    const handleRepartirAuto = () => {
+        const platillos = bulkItems.map(item => ({
+            name: item.name,
+            tipo: TIPO_POR_CATEGORIA[item.category]
+        }));
+        const { asignaciones, nuevas, sinAsignar } = repartirPlatillos(platillos, kitchenAssignments);
+        setKitchenAssignments(prev => ({ ...prev, ...asignaciones }));
+        setResumenReparto({ nuevas, sinAsignar });
+    };
+
+    /**
+     * Junta los renglones marcados en uno solo.
+     *
+     * El emparejador automático solo une lo que puede probar. Cuando un nombre
+     * calza con varios —"Carne mechada en salsa" contra "de res en salsa" y
+     * "en salsa criolla"— no une ninguno, porque elegir mal sería peor. Acá lo
+     * decide quien cocina, que es quien sabe si es la misma olla.
+     */
+    const handleJuntarSeleccionados = () => {
+        if (selectedKitchenItems.length < 2) return;
+        const nuevas = agregarUnion(unionesDePlatos, selectedKitchenItems);
+        setUnionesDePlatos(nuevas);
+        guardarUniones(nuevas);
+        setSelectedKitchenItems([]);
+    };
+
+    const handleDeshacerUnion = (nombre) => {
+        const nuevas = quitarUnion(unionesDePlatos, nombre);
+        setUnionesDePlatos(nuevas);
+        guardarUniones(nuevas);
     };
 
     const toggleSelectItem = (itemName) => {
@@ -1146,8 +1404,29 @@ export default function PrintProductionView() {
                         <div>
                             <h2 className="text-2xl font-black text-blue-900">Asignación de Plazas por Cocinera (Estaciones)</h2>
                             <p className="text-sm text-blue-800">
-                                Asigna fácilmente por estación completa o marca varias casillas para asignar cocinera de un solo tiro.
+                                Dale a <b>Repartir automáticamente</b> y se llenan solas según lo que hace cada quien.
+                                Lo que ya escribiste a mano no se toca.
                             </p>
+                            <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-[11px] text-blue-900">
+                                {COCINERAS.map(c => (
+                                    <span key={c.id}><b>{c.nombre}</b>: {c.hace}</span>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 flex-shrink-0">
+                            <button
+                                onClick={handleRepartirAuto}
+                                className="bg-green-700 hover:bg-green-800 text-white font-bold text-sm px-4 py-2 rounded shadow transition-colors"
+                            >
+                                Repartir automáticamente
+                            </button>
+                            <button
+                                onClick={() => { setKitchenAssignments({}); setResumenReparto(null); }}
+                                className="text-xs text-gray-600 underline hover:text-gray-900"
+                            >
+                                Borrar todo
+                            </button>
                         </div>
 
                         {selectedKitchenItems.length > 0 && (
@@ -1158,6 +1437,7 @@ export default function PrintProductionView() {
                                 <input
                                     type="text"
                                     placeholder="Nombre Cocinera"
+                                    list="lista-cocineras"
                                     value={bulkSelectedCook}
                                     onChange={(e) => setBulkSelectedCook(e.target.value.toUpperCase())}
                                     className="border border-gray-400 rounded px-2 py-1 text-xs uppercase w-32 focus:ring-2 focus:ring-blue-500"
@@ -1168,6 +1448,15 @@ export default function PrintProductionView() {
                                 >
                                     Asignar
                                 </button>
+                                {selectedKitchenItems.length >= 2 && (
+                                    <button
+                                        onClick={handleJuntarSeleccionados}
+                                        className="bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs px-3 py-1 rounded transition-colors"
+                                        title="Marcar que son el mismo plato: se cocinan en una sola olla"
+                                    >
+                                        Es el mismo plato
+                                    </button>
+                                )}
                                 <button
                                     onClick={() => setSelectedKitchenItems([])}
                                     className="text-gray-500 hover:text-gray-700 text-xs underline ml-1"
@@ -1177,6 +1466,52 @@ export default function PrintProductionView() {
                             </div>
                         )}
                     </div>
+
+                    {unionesDePlatos.length > 0 && (
+                        <div className="mb-5 p-3 rounded border bg-purple-50 border-purple-300 text-sm">
+                            <b className="text-purple-900">Platos que marcaste como el mismo</b>
+                            <p className="text-xs text-purple-800 mt-0.5">
+                                Se cocinan en un solo renglón. Queda guardado para las próximas semanas.
+                            </p>
+                            <ul className="mt-2 space-y-1">
+                                {unionesDePlatos.map((grupo, i) => (
+                                    <li key={i} className="flex items-start gap-2">
+                                        <button
+                                            onClick={() => handleDeshacerUnion(grupo[0])}
+                                            className="text-[11px] text-purple-700 underline hover:text-purple-900 flex-shrink-0"
+                                        >
+                                            separar
+                                        </button>
+                                        <span className="text-purple-900">{grupo.join('  =  ')}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+
+                    {resumenReparto && (
+                        <div className="mb-5 p-3 rounded border bg-green-50 border-green-300 text-sm">
+                            <b className="text-green-900">
+                                {resumenReparto.nuevas === 0
+                                    ? 'No quedaba nada en blanco.'
+                                    : `Se repartieron ${resumenReparto.nuevas} platillos.`}
+                            </b>
+                            {resumenReparto.sinAsignar.length > 0 && (
+                                <div className="mt-2 text-amber-900">
+                                    Estos quedaron sin dueño, hay que ponerlos a mano:
+                                    <ul className="list-disc ml-6 mt-1">
+                                        {resumenReparto.sinAsignar.map(x => (
+                                            <li key={x.nombre}><b>{x.nombre}</b> — {x.motivo}</li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    <datalist id="lista-cocineras">
+                        {COCINERAS.map(c => <option key={c.id} value={c.nombre} />)}
+                    </datalist>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {categories.map(cat => {
@@ -1208,6 +1543,7 @@ export default function PrintProductionView() {
                                             <input
                                                 type="text"
                                                 placeholder="Ej. ROSA"
+                                                list="lista-cocineras"
                                                 value={categoryCookInputs[cat] || ''}
                                                 onChange={(e) => setCategoryCookInputs(prev => ({ ...prev, [cat]: e.target.value.toUpperCase() }))}
                                                 className="border border-gray-300 rounded px-2 py-1 text-xs uppercase w-full focus:ring-1 focus:ring-blue-500"
@@ -1225,6 +1561,7 @@ export default function PrintProductionView() {
                                             {itemsInCat.map(item => {
                                                 const isSelected = selectedKitchenItems.includes(item.name);
                                                 const currentCook = kitchenAssignments[item.name] || '';
+                                                const sugerencia = sugerirCocinera(item.name, TIPO_POR_CATEGORIA[item.category]);
 
                                                 return (
                                                     <div
@@ -1239,13 +1576,21 @@ export default function PrintProductionView() {
                                                                 onChange={() => toggleSelectItem(item.name)}
                                                                 className="w-3.5 h-3.5 rounded text-blue-600 cursor-pointer flex-shrink-0"
                                                             />
-                                                            <span className="font-semibold text-gray-800 truncate" title={item.name}>
-                                                                {item.name}
-                                                            </span>
+                                                            <div className="overflow-hidden">
+                                                                <span className="font-semibold text-gray-800 truncate block" title={item.name}>
+                                                                    {item.name}
+                                                                </span>
+                                                                {!currentCook && (
+                                                                    <span className={`text-[10px] ${sugerencia.cocinera ? 'text-green-700' : 'text-amber-700'}`}>
+                                                                        {sugerencia.cocinera ? `sugerido: ${sugerencia.cocinera}` : sugerencia.motivo}
+                                                                    </span>
+                                                                )}
+                                                            </div>
                                                         </div>
                                                         <input
                                                             type="text"
                                                             placeholder="Cocinera"
+                                                            list="lista-cocineras"
                                                             value={currentCook}
                                                             onChange={(e) => handleAssignCook(item.name, e.target.value.toUpperCase())}
                                                             className="border border-gray-300 rounded p-1 w-24 text-right uppercase text-[11px] font-bold text-blue-900 focus:ring-1 focus:ring-blue-500 flex-shrink-0"
@@ -1290,9 +1635,15 @@ export default function PrintProductionView() {
                 {/* SECCIÓN 1: PRODUCCIÓN A GRANEL PARA PACKS */}
                 <div className="mb-12">
                     <div className="bg-gray-900 text-white p-3 font-bold text-base uppercase tracking-wide rounded-t border-2 border-black flex justify-between items-center">
-                        <span>🥘 1. PRODUCCIÓN A GRANEL PARA PACKS E INDIVIDUALES (Ollas / Contenedores de Empaque) — CANTIDADES CON 30% DE MERMA YA INCLUIDO</span>
-                        <span className="text-xs font-normal bg-gray-800 px-3 py-1 rounded">Se cocina a granel para que Empaque pese las porciones</span>
+                        <span>🥘 PRODUCCIÓN DEL DÍA — TODO LO QUE HAY QUE COCINAR (los packs con 30% de merma; los individuales van exactos)</span>
+                        <span className="text-xs font-normal bg-gray-800 px-3 py-1 rounded">Lo marcado COCINA se empaca ahí mismo; el resto baja a Empaque</span>
                     </div>
+
+                    {errorDeAjuste && (
+                        <div className="border-2 border-red-600 bg-red-50 text-red-900 p-3 text-sm font-bold print:hidden">
+                            {errorDeAjuste}
+                        </div>
+                    )}
 
                     <div className="space-y-8 mt-4">
                         {cookNames.map(cook => {
@@ -1304,31 +1655,100 @@ export default function PrintProductionView() {
                                     <table className="w-full text-sm border-collapse border-2 border-black mb-2">
                                         <thead>
                                             <tr>
-                                                <th colSpan="3" className="border-2 border-black p-2.5 font-bold text-center text-xl uppercase tracking-widest bg-gray-100 text-gray-900">
+                                                <th colSpan="4" className="border-2 border-black p-2.5 font-bold text-center text-xl uppercase tracking-widest bg-gray-100 text-gray-900">
                                                     {cook}
                                                 </th>
                                             </tr>
                                             <tr className="bg-gray-200 text-gray-800 text-xs uppercase font-bold">
-                                                <th className="border border-black p-2 text-left w-1/2">Ingrediente / Platillo</th>
-                                                <th className="border border-black p-2 text-center w-1/4">Cantidad Total (+30% Merma)</th>
-                                                <th className="border border-black p-2 text-left w-1/4">Nota de Empaque en Cocina</th>
+                                                <th className="border border-black p-2 text-left w-2/5">Ingrediente / Platillo</th>
+                                                <th className="border border-black p-2 text-center w-[15%]">Cantidad a cocinar</th>
+                                                <th className="border border-black p-2 text-center w-[15%]">¿Quién empaca?</th>
+                                                <th className="border border-black p-2 text-left w-[30%]">Nota de Empaque en Cocina</th>
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {items.map((item, idx) => {
+                                            {agruparArroces(aplicarAjustes(items, ajustesCocina), cantidadACocinar).map((fila, idx) => {
+                                                // El arroz se cocina TODO JUNTO: va el total y debajo
+                                                // en cuanto hay que dividirlo.
+                                                if (fila.tipo === 'grupo') {
+                                                    return (
+                                                        <tr key={`arroz-${idx}`} className="border-b border-black bg-gray-900 text-white">
+                                                            <td className="border-r border-black p-2.5 font-bold uppercase tracking-wide">
+                                                                {fila.nombre}
+                                                            </td>
+                                                            <td className="border-r border-black p-2.5 text-center font-extrabold text-lg">
+                                                                {fila.total} {fila.unit === 'g' ? 'g' : fila.unit.toUpperCase()}
+                                                            </td>
+                                                            <td className="border-r border-black p-2.5 text-center text-[11px] font-semibold uppercase">Cocina</td>
+                                                            <td className="p-2.5 text-left text-xs font-bold">
+                                                                Una sola olla. Dividir en los {fila.cuantos} arroces de abajo.
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                }
+                                                const item = fila.item;
+                                                const esHijo = fila.tipo === 'hijo';
                                                 const hasNotes = item.kitchenNotes && item.kitchenNotes.length > 0;
+                                                // Lo que empaca cocina va marcado: si se confunde con lo
+                                                // que baja a Empaque, se empaca dos veces o ninguna.
+                                                const empacaCocina = !!item.empacaCocina;
                                                 return (
-                                                    <tr key={idx} className="border-b border-black last:border-b-0 bg-white">
-                                                        <td className="border-r border-black p-2.5 font-bold text-gray-900">{item.name}</td>
-                                                        <td className="border-r border-black p-2.5 text-center font-extrabold text-lg text-gray-900">
-                                                            {conMargen(item.totalQty)} {item.unit === 'g' ? 'g' : item.unit.toUpperCase()}
+                                                    <tr key={idx} className={`border-b border-black last:border-b-0 ${empacaCocina ? 'bg-[#fffbe6]' : 'bg-white'}`}>
+                                                        <td className={`border-r border-black p-2.5 font-bold text-gray-900 ${esHijo ? 'pl-8' : ''}`}>
+                                                            {esHijo && <span className="text-gray-400 mr-1">└</span>}
+                                                            {item.name}
+                                                            {item.esMolde && (
+                                                                <span className="ml-2 text-[10px] font-bold text-gray-600">(molde / se arma entero)</span>
+                                                            )}
+                                                        </td>
+                                                        <td className={`border-r border-black p-2.5 text-center font-extrabold text-lg text-gray-900 ${item.ajustado ? 'bg-sky-50' : ''}`}>
+                                                            {/* Gina corrige el numero aca mismo cuando el calculo se
+                                                                equivoca. Se guarda para esta fecha y manda sobre el calculo. */}
+                                                            <input
+                                                                type="number"
+                                                                step="any"
+                                                                className="w-20 text-center font-extrabold text-lg bg-transparent border-b border-dashed border-gray-400 focus:border-solid focus:border-sky-600 focus:outline-none print:border-none"
+                                                                value={cantidadFinal(item, cantidadACocinar(item))}
+                                                                onChange={(e) => {
+                                                                    const v = e.target.value;
+                                                                    guardarAjuste(item.name, item.unit, {
+                                                                        cantidad: v === '' ? null : Number(v)
+                                                                    });
+                                                                }}
+                                                                aria-label={`Cantidad a cocinar de ${item.name}`}
+                                                            />{' '}
+                                                            {item.unit === 'g' ? 'g' : item.unit.toUpperCase()}
+                                                            {item.ajustado && (
+                                                                <span className="block text-[9px] font-bold text-sky-700 uppercase print:hidden">corregido a mano</span>
+                                                            )}
+                                                            {item.unit === 'unidades' && (
+                                                                <span className="block text-[9px] font-normal text-gray-500">sin merma</span>
+                                                            )}
+                                                        </td>
+                                                        <td className="border-r border-black p-2.5 text-center">
+                                                            {empacaCocina ? (
+                                                                <span className="inline-block bg-black text-white text-[10px] font-bold px-2 py-1 rounded uppercase">
+                                                                    Cocina
+                                                                </span>
+                                                            ) : (
+                                                                <span className="text-gray-500 text-[11px] font-semibold uppercase">Empaque</span>
+                                                            )}
                                                         </td>
                                                         <td className="p-2.5 text-left text-xs font-bold text-amber-900 bg-amber-50">
-                                                            {hasNotes ? (
-                                                                <span>{item.kitchenNotes.join(' | ')}</span>
-                                                            ) : (
-                                                                <span className="text-gray-400 font-normal italic">Olla a granel (Packs)</span>
-                                                            )}
+                                                            {/* La nota tambien se puede corregir: es la instruccion de
+                                                                empaque y a veces el calculo la escribe mal. */}
+                                                            <textarea
+                                                                rows={2}
+                                                                className="w-full bg-transparent text-xs font-bold text-amber-900 resize-none border-b border-dashed border-amber-300 focus:border-solid focus:border-sky-600 focus:outline-none print:border-none"
+                                                                value={item.notaAjustada ?? (
+                                                                    empacaCocina ? `👉 ${getKitchenPackingInstruction(item)}`
+                                                                        : hasNotes ? item.kitchenNotes.join(' | ')
+                                                                        : ''
+                                                                )}
+                                                                placeholder="Olla a granel (Packs)"
+                                                                onChange={(e) => guardarAjuste(item.name, item.unit, { nota: e.target.value })}
+                                                                aria-label={`Nota de empaque de ${item.name}`}
+                                                            />
                                                         </td>
                                                     </tr>
                                                 );
@@ -1341,41 +1761,18 @@ export default function PrintProductionView() {
                     </div>
                 </div>
 
-                {/* SECCIÓN 2: PRODUCTOS INDIVIDUALES (EMPACADOS DIRECTAMENTE EN COCINA) */}
-                {individualItems.length > 0 && (
-                    <div className="mt-8 break-inside-avoid print:break-inside-avoid">
-                        <div className="bg-[#ffd966] text-black border-2 border-black p-3 font-bold text-base uppercase tracking-wide rounded-t flex justify-between items-center">
-                            <span>📦 2. PRODUCTOS INDIVIDUALES Y MOLDES (Empacados Directamente en Cocina)</span>
-                            <span className="text-xs font-bold bg-black text-white px-3 py-1 rounded">Se cocinan, dividen y empacan en cocina</span>
-                        </div>
-
-                        <table className="w-full text-sm border-collapse border-2 border-black border-t-0">
-                            <thead>
-                                <tr className="bg-yellow-100">
-                                    <th className="border border-black p-2.5 text-left w-1/2">Producto / Platillo Individual</th>
-                                    <th className="border border-black p-2.5 text-center w-1/4">Cantidad Total a Preparar</th>
-                                    <th className="border border-black p-2.5 text-left w-1/4">Instrucción de Empaque en Cocina</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {individualItems.map((item, idx) => {
-                                    const packInstruction = getKitchenPackingInstruction(item);
-                                    const displayQty = `${item.totalQty} ${item.unit === 'g' ? 'g' : item.unit.toUpperCase()}`;
-
-                                    return (
-                                        <tr key={idx} className="border-b border-black last:border-b-0 bg-white">
-                                            <td className="border-r border-black p-3 font-bold text-gray-900">{item.name}</td>
-                                            <td className="border-r border-black p-3 text-center font-bold text-lg text-blue-900">
-                                                {displayQty}
-                                            </td>
-                                            <td className="p-3 text-gray-900 font-bold italic bg-amber-50">
-                                                👉 {packInstruction}
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
+                {avisosDeUnion.length > 0 && (
+                    <div className="mt-8 p-4 border-2 border-amber-500 bg-amber-50 rounded print:break-inside-avoid">
+                        <b className="text-amber-900">Revisar antes de cocinar</b>
+                        <p className="text-sm text-amber-900 mt-1">
+                            Estos platos calzaban con más de un renglón, así que se dejaron
+                            aparte en vez de adivinar. Si son el mismo, hay que juntarlos a mano:
+                        </p>
+                        <ul className="list-disc ml-6 mt-2 text-sm text-amber-900">
+                            {avisosDeUnion.map((a, i) => (
+                                <li key={i}><b>{a.nombre}</b> — calza con: {a.calzaCon.join(', ')}</li>
+                            ))}
+                        </ul>
                     </div>
                 )}
             </div>
@@ -1484,6 +1881,7 @@ export default function PrintProductionView() {
                 const rawPlatos = resolvePlatosForPack(packName, packData);
                 const base = rawPlatos.length > 0 ? rawPlatos : (packData.platosBase || []);
                 const gramosPack = getDefaultGrams(packName);
+                const porcion = porcionesDelPack(packName);
 
                 return base.map((p, idx) => {
                     const original = (packData.platosBase || [])[idx] || {};
@@ -1496,18 +1894,21 @@ export default function PrintProductionView() {
                             : 1,
                         proteina: {
                             nombre: esOficial ? p.proteina : (p.proteina?.nombre || original.proteina?.nombre || '—'),
-                            gramosPorPorcion: esOficial ? gramosPack
-                                : (p.proteina?.gramosPorPorcion || original.proteina?.gramosPorPorcion || gramosPack)
+                            // En un familiar el plato es una bandeja entera: el numero
+                            // por persona no significa nada y confunde a quien empaca.
+                            gramosPorPorcion: porcion.textoPorcion ? null
+                                : (esOficial ? gramosPack
+                                    : (p.proteina?.gramosPorPorcion || original.proteina?.gramosPorPorcion || gramosPack))
                         },
                         vegetal: {
                             nombre: esOficial ? p.vegetal : (p.vegetal?.nombre || original.vegetal?.nombre || '—'),
-                            cantidadPorPorcion: esOficial ? 1
-                                : (p.vegetal?.cantidadPorPorcion || original.vegetal?.cantidadPorPorcion || 1)
+                            cantidadPorPorcion: esOficial ? porcion.vegetal
+                                : (p.vegetal?.cantidadPorPorcion || original.vegetal?.cantidadPorPorcion || porcion.vegetal)
                         },
                         carbo: {
                             nombre: esOficial ? p.carbo : (p.carbo?.nombre || original.carbo?.nombre || '—'),
-                            cantidadPorPorcion: esOficial ? 0.5
-                                : (p.carbo?.cantidadPorPorcion || original.carbo?.cantidadPorPorcion || 0.5)
+                            cantidadPorPorcion: esOficial ? porcion.carbo
+                                : (p.carbo?.cantidadPorPorcion || original.carbo?.cantidadPorPorcion || porcion.carbo)
                         }
                     };
                 });
@@ -1524,11 +1925,15 @@ export default function PrintProductionView() {
                 // llevan vegetal aparte: la fila salia en blanco.
                 const llevaVegetal = llevaFilaDeVegetal(platos);
 
-                const porciones = [
-                    `${platos[0]?.proteina?.gramosPorPorcion || getDefaultGrams(packName)} GRAMOS DE PROTEINA`
-                ];
-                if (llevaVegetal) porciones.push(`${platos[0]?.vegetal?.cantidadPorPorcion || 1} TAZA(S) DE VEGETALES`);
-                if (llevaCarbo) porciones.push(`${platos[0]?.carbo?.cantidadPorPorcion || 0.5} TAZA(S) DE HARINA`);
+                // Un pack familiar no se mide en gramos por persona: el plato es una
+                // bandeja entera. "es por kg o 4 tazas la porcion" — Gina.
+                const porcionDelPack = porcionesDelPack(packName);
+                const aviso = avisoDeFamilia(packName);
+                const porciones = porcionDelPack.textoPorcion
+                    ? [porcionDelPack.textoPorcion]
+                    : [`${platos[0]?.proteina?.gramosPorPorcion || getDefaultGrams(packName)} GRAMOS DE PROTEINA`];
+                if (llevaVegetal) porciones.push(`${platos[0]?.vegetal?.cantidadPorPorcion ?? porcionDelPack.vegetal} TAZA(S) DE VEGETALES`);
+                if (llevaCarbo) porciones.push(`${platos[0]?.carbo?.cantidadPorPorcion ?? porcionDelPack.carbo} TAZA(S) DE HARINA`);
 
                 return {
                     // "Menú #2" ya dice que es la cena: repetir el prefijo sobra
@@ -1537,6 +1942,12 @@ export default function PrintProductionView() {
                     platos,
                     llevaCarbo,
                     llevaVegetal,
+                    // "KETO — SE COCINA APARTE". Va en su propia linea y no como una
+                    // "CANTIDAD POR PLATO", que no es.
+                    aviso,
+                    // Como se nombra la porcion cuando el plato no se mide en gramos
+                    // por persona (bandejas familiares). Lo usa el Resumen por Menu.
+                    porcionPlato: porcionDelPack.porcionCorta || null,
                     totalPlatos: packData.totalPacks || 0,
                     clientes: (packData.clientes || []).map(c => ({
                         etiqueta: etiquetaDeCliente(c),
@@ -1724,7 +2135,7 @@ export default function PrintProductionView() {
                 wsCocina.getRow(cRowIdx).height = 24;
                 cRowIdx++;
 
-                const cHeaders = ['Ingrediente / Platillo', 'Cantidad Total (+30% Merma)', 'Unidad', 'Nota de Empaque en Cocina'];
+                const cHeaders = ['Ingrediente / Platillo', 'Cantidad a cocinar (+30% merma)', 'Unidad', 'Nota de Empaque en Cocina'];
                 const cHeaderRow = wsCocina.getRow(cRowIdx);
                 cHeaderRow.height = 22;
                 cHeaders.forEach((h, colI) => {
@@ -1739,14 +2150,18 @@ export default function PrintProductionView() {
 
                 items.forEach(item => {
                     const hasNotes = item.kitchenNotes && item.kitchenNotes.length > 0;
-                    const noteStr = hasNotes ? item.kitchenNotes.join(' | ') : '';
+                    // Igual que en pantalla: quien lea el Excel tiene que ver lo
+                    // mismo que quien lea la hoja impresa.
+                    const noteStr = item.empacaCocina
+                        ? `COCINA EMPACA → ${getKitchenPackingInstruction(item)}`
+                        : (hasNotes ? item.kitchenNotes.join(' | ') : '');
 
                     const row = wsCocina.getRow(cRowIdx);
                     const estimatedLines = Math.max(1, Math.ceil(noteStr.length / 55));
                     row.height = Math.max(22, estimatedLines * 16);
 
                     row.getCell(1).value = item.name;
-                    row.getCell(2).value = conMargen(item.totalQty);
+                    row.getCell(2).value = cantidadACocinar(item);
                     row.getCell(3).value = item.unit === 'g' ? 'g' : item.unit.toUpperCase();
                     row.getCell(4).value = noteStr;
 
@@ -1758,7 +2173,7 @@ export default function PrintProductionView() {
                         if (c === 2) cell.font = { name: 'Calibri', size: 10, bold: true };
                         if (c === 4) {
                             cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
-                            if (hasNotes) cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FF78350F' } };
+                            if (noteStr) cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FF78350F' } };
                         }
                     }
                     cRowIdx++;
@@ -1767,51 +2182,6 @@ export default function PrintProductionView() {
                 cRowIdx += 2; // Blank spacing
             });
 
-            if (individualItems.length > 0) {
-                wsCocina.mergeCells(`A${cRowIdx}:D${cRowIdx}`);
-                const indivTitle = wsCocina.getCell(`A${cRowIdx}`);
-                indivTitle.value = '2. PRODUCTOS INDIVIDUALES Y MOLDES (EMPACADOS DIRECTAMENTE EN COCINA)';
-                indivTitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF08A' } };
-                indivTitle.font = { name: 'Calibri', size: 12, bold: true };
-                wsCocina.getRow(cRowIdx).height = 24;
-                cRowIdx++;
-
-                const indHeaders = ['Producto / Platillo Individual', 'Cantidad Total', 'Unidad', 'Instrucción de Empaque en Cocina'];
-                const indHeaderRow = wsCocina.getRow(cRowIdx);
-                indHeaderRow.height = 22;
-                indHeaders.forEach((h, colI) => {
-                    const cell = indHeaderRow.getCell(colI + 1);
-                    cell.value = h;
-                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF374151' } };
-                    cell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
-                    cell.alignment = { horizontal: 'center', vertical: 'middle' };
-                    cell.border = thinBorder;
-                });
-                cRowIdx++;
-
-                individualItems.forEach(item => {
-                    const packInst = getKitchenPackingInstruction(item);
-                    const displayQty = item.totalQty;
-                    const displayUnit = item.unit === 'g' ? 'g' : item.unit.toUpperCase();
-
-                    const row = wsCocina.getRow(cRowIdx);
-                    row.height = 22;
-                    row.getCell(1).value = item.name;
-                    row.getCell(2).value = displayQty;
-                    row.getCell(3).value = displayUnit;
-                    row.getCell(4).value = packInst;
-
-                    for (let c = 1; c <= 4; c++) {
-                        const cell = row.getCell(c);
-                        cell.border = thinBorder;
-                        cell.font = { name: 'Calibri', size: 10 };
-                        if (c === 2 || c === 3) cell.alignment = { horizontal: 'center', vertical: 'middle' };
-                        if (c === 2) cell.font = { name: 'Calibri', size: 10, bold: true };
-                        if (c === 4) cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
-                    }
-                    cRowIdx++;
-                });
-            }
 
             // ═════════════════════════════════════════════════════════════════
             // PESTAÑA EXTRA: RESUMEN DE PEDIDOS
@@ -2032,6 +2402,7 @@ export default function PrintProductionView() {
                                 { numero: 5, proteina: { nombre: 'Proteína' }, vegetal: { nombre: 'Vegetales' }, carbo: { nombre: 'Harinas' } }
                             ]);
 
+                            const porcion = porcionesDelPack(packName);
                             const platosEmpaque = effectivePlatos.map((p, idx) => {
                                 const original = packData.platosBase[idx] || {};
                                 const isOfficial = typeof p.proteina === 'string';
@@ -2042,15 +2413,16 @@ export default function PrintProductionView() {
                                         : 1,
                                     proteina: {
                                         nombre: isOfficial ? p.proteina : (p.proteina?.nombre || original.proteina?.nombre || '—'),
-                                        gramosPorPorcion: isOfficial ? getDefaultGrams(packName) : (p.proteina?.gramosPorPorcion || original.proteina?.gramosPorPorcion || getDefaultGrams(packName))
+                                        gramosPorPorcion: porcion.textoPorcion ? null
+                                            : (isOfficial ? getDefaultGrams(packName) : (p.proteina?.gramosPorPorcion || original.proteina?.gramosPorPorcion || getDefaultGrams(packName)))
                                     },
                                     vegetal: {
                                         nombre: isOfficial ? p.vegetal : (p.vegetal?.nombre || original.vegetal?.nombre || '—'),
-                                        cantidadPorPorcion: isOfficial ? 1 : (p.vegetal?.cantidadPorPorcion || original.vegetal?.cantidadPorPorcion || 1)
+                                        cantidadPorPorcion: isOfficial ? porcion.vegetal : (p.vegetal?.cantidadPorPorcion || original.vegetal?.cantidadPorPorcion || porcion.vegetal)
                                     },
                                     carbo: {
                                         nombre: isOfficial ? p.carbo : (p.carbo?.nombre || original.carbo?.nombre || '—'),
-                                        cantidadPorPorcion: isOfficial ? 0.5 : (p.carbo?.cantidadPorPorcion || original.carbo?.cantidadPorPorcion || 0.5)
+                                        cantidadPorPorcion: isOfficial ? porcion.carbo : (p.carbo?.cantidadPorPorcion || original.carbo?.cantidadPorPorcion || porcion.carbo)
                                     }
                                 };
                             });
@@ -2066,24 +2438,33 @@ export default function PrintProductionView() {
                                         {/* Cabecera Tipo Excel (Amarillo) */}
                                         <div className="bg-yellow-400 text-black font-bold text-lg p-1.5 print:py-1 print:text-base border border-black text-center uppercase tracking-wide">
                                             {packName.replace(/\s*\d{1,3}(?:[.,]\d{3})*\s*(?:colones|col|¢)/i, '')} <span className="text-gray-800 text-base print:text-sm">({packData.totalPacks} Packs)</span>
+                                            {/* "Ojala en la hoja especifique que es keto porque se cocina
+                                                aparte, igual cuando es vegetariano" — Gina. */}
+                                            {avisoDeFamilia(packName) && (
+                                                <div className="mt-1 bg-black text-white text-sm print:text-xs font-bold tracking-wide py-0.5">
+                                                    {avisoDeFamilia(packName)}
+                                                </div>
+                                            )}
                                         </div>
 
                                         {/* CANTIDAD POR PLATO (Estilo Excel) */}
                                         <div className="border-x border-black bg-white flex flex-col text-xs print:text-[10px] font-bold w-full uppercase">
+                                            {/* Un pack familiar no se mide en gramos por persona: el plato
+                                                es una bandeja entera. "es por kg o 4 tazas la porcion" — Gina. */}
                                             <div className="flex border-b border-black">
                                                 <div className="w-48 p-0.5 px-1 border-r border-black">CANTIDAD POR PLATO</div>
-                                                <div className="flex-1 p-0.5 px-1">{platosEmpaque[0]?.proteina?.gramosPorPorcion ? `${platosEmpaque[0].proteina.gramosPorPorcion} GRAMOS DE PROTEINA` : `${getDefaultGrams(packName)} GRAMOS DE PROTEINA`}</div>
+                                                <div className="flex-1 p-0.5 px-1">{porcion.textoPorcion || (platosEmpaque[0]?.proteina?.gramosPorPorcion ? `${platosEmpaque[0].proteina.gramosPorPorcion} GRAMOS DE PROTEINA` : `${getDefaultGrams(packName)} GRAMOS DE PROTEINA`)}</div>
                                             </div>
                                             {showVegetales && (
                                                 <div className="flex border-b border-black">
                                                     <div className="w-48 p-0.5 px-1 border-r border-black">CANTIDAD POR PLATO</div>
-                                                    <div className="flex-1 p-0.5 px-1">{platosEmpaque[0]?.vegetal?.cantidadPorPorcion ? `${platosEmpaque[0].vegetal.cantidadPorPorcion} TAZA(S) DE VEGETALES` : '1 TAZA DE VEGETALES'}</div>
+                                                    <div className="flex-1 p-0.5 px-1">{`${platosEmpaque[0]?.vegetal?.cantidadPorPorcion ?? porcion.vegetal} TAZA(S) DE VEGETALES`}</div>
                                                 </div>
                                             )}
                                             {showCarbos && (
                                                 <div className="flex border-b border-black">
                                                     <div className="w-48 p-0.5 px-1 border-r border-black">CANTIDAD POR PLATO</div>
-                                                    <div className="flex-1 p-0.5 px-1">{platosEmpaque[0]?.carbo?.cantidadPorPorcion ? `${platosEmpaque[0].carbo.cantidadPorPorcion} TAZA(S) DE HARINA` : '1/2 TAZA DE HARINA'}</div>
+                                                    <div className="flex-1 p-0.5 px-1">{`${platosEmpaque[0]?.carbo?.cantidadPorPorcion ?? porcion.carbo} TAZA(S) DE HARINA`}</div>
                                                 </div>
                                             )}
                                         </div>
@@ -2241,6 +2622,7 @@ export default function PrintProductionView() {
             )}
 
             {/* SECCIÓN 2: HOJA DE COCINA (Resúmenes) */}
+            {viewMode !== 'empaque' && renderQueSeCocinaJunto()}
             {viewMode !== 'empaque' && renderHojaCocinaGlobal()}
 
             <style>{`

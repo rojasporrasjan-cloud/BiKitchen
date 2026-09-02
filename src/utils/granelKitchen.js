@@ -80,9 +80,16 @@ export const sumarAGranel = (mapa, nombre, cantidad, unidad, categoria) => {
  * @param {(n: string) => string} [opts.categoria]
  */
 export const aplicarSustitucionesAlGranel = (mapa, opts = {}) => {
-    const { sustituciones = [], platos = [], porciones = 1, gramosPorPorcion = 0, categoria } = opts;
+    const { sustituciones = [], platos = [], porciones = 1, gramosPorPorcion = 0, categoria, acumular } = opts;
     const gramos = (Number(gramosPorPorcion) || 0) * (Number(porciones) || 1);
     if (!gramos) return mapa;
+
+    // Quien llama puede pasar su propio acumulador. Hace falta cuando el mapa
+    // junta renglones del mismo plato escrito distinto: si la resta buscara por
+    // nombre exacto, no encontraria el renglon, crearia uno en negativo y
+    // limpiarGranelVacio lo borraria. La resta se perderia en silencio y el
+    // plato original quedaria con la porcion de quien lo cambio.
+    const sumar = acumular || ((nombre, cantidad, unidad) => sumarAGranel(mapa, nombre, cantidad, unidad, categoria));
 
     sustituciones.forEach((s) => {
         if (s.tipo !== 'proteina' && s.tipo !== 'plato') return;
@@ -93,8 +100,8 @@ export const aplicarSustitucionesAlGranel = (mapa, opts = {}) => {
         // el pedido puede traerlo con otra ortografia y no restaria nada.
         const original = platos[idx]?.proteina?.nombre || platos[idx]?.proteina || s.de;
 
-        if (original) sumarAGranel(mapa, original, -gramos, 'g', categoria);
-        sumarAGranel(mapa, s.a, gramos, 'g', categoria);
+        if (original) sumar(original, -gramos, 'g');
+        sumar(s.a, gramos, 'g');
     });
     return mapa;
 };
