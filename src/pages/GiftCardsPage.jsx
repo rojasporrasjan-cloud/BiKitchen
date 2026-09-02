@@ -109,7 +109,7 @@ export default function GiftCardsPage() {
         <PageTransition>
             <SEOHead
                 {...SEO_CONFIG.giftCards}
-                structuredData={getBreadcrumbSchema([{ name: 'Gift Cards', url: 'https://bikitchencr.com/gift-cards' }])}
+                structuredData={getBreadcrumbSchema([{ name: 'Gift Cards', url: 'https://www.bikitchencr.com/gift-cards' }])}
             />
             <div className="min-h-screen bg-gradient-to-b from-bikitchen-beige to-white">
                 <Navbar />

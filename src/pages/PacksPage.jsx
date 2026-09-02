@@ -555,7 +555,7 @@ export default function PacksPage() {
                 {...SEO_CONFIG.packs}
                 structuredData={[
                     getPacksSchema(),
-                    getBreadcrumbSchema([{ name: 'Planes Semanales', url: 'https://bikitchencr.com/packs' }])
+                    getBreadcrumbSchema([{ name: 'Planes Semanales', url: 'https://www.bikitchencr.com/packs' }])
                 ]}
             />
             <div 

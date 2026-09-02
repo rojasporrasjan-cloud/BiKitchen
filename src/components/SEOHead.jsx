@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { WHATSAPP_PHONE, WHATSAPP_PHONE_DISPLAY } from '../config/whatsappMessages';
 
-const BASE_URL = 'https://bikitchencr.com';
+const BASE_URL = 'https://www.bikitchencr.com';
 const PHONE = WHATSAPP_PHONE_DISPLAY;
 
 /**

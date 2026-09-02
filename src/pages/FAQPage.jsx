@@ -114,7 +114,7 @@ export default function FAQPage() {
                 {...SEO_CONFIG.faq}
                 structuredData={[
                     getFAQSchema(),
-                    getBreadcrumbSchema([{ name: 'Preguntas Frecuentes', url: 'https://bikitchencr.com/faq' }])
+                    getBreadcrumbSchema([{ name: 'Preguntas Frecuentes', url: 'https://www.bikitchencr.com/faq' }])
                 ]}
             />
             <div className="min-h-screen bg-gradient-to-b from-bikitchen-beige to-white">

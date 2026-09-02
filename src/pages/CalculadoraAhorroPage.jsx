@@ -121,7 +121,7 @@ export default function CalculadoraAhorroPage() {
         <PageTransition>
             <SEOHead
                 {...SEO_CONFIG.calculadora}
-                structuredData={getBreadcrumbSchema([{ name: 'Calculadora de Ahorro', url: 'https://bikitchencr.com/calculadora' }])}
+                structuredData={getBreadcrumbSchema([{ name: 'Calculadora de Ahorro', url: 'https://www.bikitchencr.com/calculadora' }])}
             />
             <div className="min-h-screen bg-gradient-to-b from-bikitchen-beige to-white">
                 <Navbar />

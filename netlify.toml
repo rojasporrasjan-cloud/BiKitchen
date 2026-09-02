@@ -13,6 +13,79 @@
 [functions."nmi-charge"]
   timeout = 26
 
+# ─────────────────────────────────────────────
+#  404 REALES PARA ARCHIVOS QUE NO EXISTEN
+#  La regla comodín de abajo manda TODO a index.html con estado 200, que es lo
+#  que necesita una app de una sola página para que funcionen las rutas. El
+#  efecto secundario es que un archivo inexistente también contestaba "200 OK"
+#  con la portada: así fue como /videos/hero_optimized.mp4 devolvía HTML después
+#  de borrarlo. Google llama a eso "soft 404" y lo toma como señal de descuido.
+#
+#  Estas reglas van ANTES del comodín. Netlify sirve primero los archivos que sí
+#  existen, así que un .png real se entrega normal y solo los que faltan caen
+#  aquí. No se tocan las rutas sin extensión: esas las maneja React Router con
+#  su propia página de "no encontrado".
+# ─────────────────────────────────────────────
+[[redirects]]
+  from = "/*.mp4"
+  to = "/404.html"
+  status = 404
+
+[[redirects]]
+  from = "/*.webm"
+  to = "/404.html"
+  status = 404
+
+[[redirects]]
+  from = "/*.png"
+  to = "/404.html"
+  status = 404
+
+[[redirects]]
+  from = "/*.jpg"
+  to = "/404.html"
+  status = 404
+
+[[redirects]]
+  from = "/*.jpeg"
+  to = "/404.html"
+  status = 404
+
+[[redirects]]
+  from = "/*.webp"
+  to = "/404.html"
+  status = 404
+
+[[redirects]]
+  from = "/*.avif"
+  to = "/404.html"
+  status = 404
+
+[[redirects]]
+  from = "/*.svg"
+  to = "/404.html"
+  status = 404
+
+[[redirects]]
+  from = "/*.css"
+  to = "/404.html"
+  status = 404
+
+[[redirects]]
+  from = "/*.js"
+  to = "/404.html"
+  status = 404
+
+[[redirects]]
+  from = "/*.woff2"
+  to = "/404.html"
+  status = 404
+
+[[redirects]]
+  from = "/*.pdf"
+  to = "/404.html"
+  status = 404
+
 [[redirects]]
   from = "/*"
   to = "/index.html"

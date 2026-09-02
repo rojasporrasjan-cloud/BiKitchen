@@ -115,7 +115,7 @@ export default function ComoFuncionaPage() {
         <PageTransition>
             <SEOHead
                 {...SEO_CONFIG.comoFunciona}
-                structuredData={getBreadcrumbSchema([{ name: 'Cómo Funciona', url: 'https://bikitchencr.com/como-funciona' }])}
+                structuredData={getBreadcrumbSchema([{ name: 'Cómo Funciona', url: 'https://www.bikitchencr.com/como-funciona' }])}
             />
             <div className="min-h-screen bg-gradient-to-b from-bikitchen-beige to-white">
                 <Navbar />

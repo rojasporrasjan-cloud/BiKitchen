@@ -31,7 +31,7 @@ export default function NosotrosPage() {
         <PageTransition>
             <SEOHead
                 {...SEO_CONFIG.nosotros}
-                structuredData={getBreadcrumbSchema([{ name: 'Quiénes Somos', url: 'https://bikitchencr.com/nosotros' }])}
+                structuredData={getBreadcrumbSchema([{ name: 'Quiénes Somos', url: 'https://www.bikitchencr.com/nosotros' }])}
             />
             <div className="min-h-screen bg-bikitchen-beige">
                 <Navbar />

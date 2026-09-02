@@ -1,11 +1,11 @@
 # BiKitchen Food — robots.txt
-# https://bikitchencr.com
+# https://www.bikitchencr.com
 
 User-agent: *
 Allow: /
 
 # Sitemap
-Sitemap: https://bikitchencr.com/sitemap.xml
+Sitemap: https://www.bikitchencr.com/sitemap.xml
 
 # Admin — nunca indexar
 Disallow: /admin

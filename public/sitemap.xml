@@ -5,124 +5,124 @@
 
   <!-- Página principal — máxima prioridad -->
   <url>
-    <loc>https://bikitchencr.com/</loc>
+    <loc>https://www.bikitchencr.com/</loc>
     <lastmod>2026-05-27</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
-    <xhtml:link rel="alternate" hreflang="es-CR" href="https://bikitchencr.com/" />
-    <xhtml:link rel="alternate" hreflang="es" href="https://bikitchencr.com/" />
+    <xhtml:link rel="alternate" hreflang="es-CR" href="https://www.bikitchencr.com/" />
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.bikitchencr.com/" />
     <image:image>
-      <image:loc>https://bikitchencr.com/assets/logo.png</image:loc>
+      <image:loc>https://www.bikitchencr.com/assets/logo.png</image:loc>
       <image:title>BiKitchen Food - Comida saludable a domicilio en Costa Rica</image:title>
     </image:image>
   </url>
 
   <!-- Planes Semanales — página de conversión principal -->
   <url>
-    <loc>https://bikitchencr.com/packs</loc>
+    <loc>https://www.bikitchencr.com/packs</loc>
     <lastmod>2026-05-27</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.95</priority>
-    <xhtml:link rel="alternate" hreflang="es-CR" href="https://bikitchencr.com/packs" />
+    <xhtml:link rel="alternate" hreflang="es-CR" href="https://www.bikitchencr.com/packs" />
   </url>
 
   <!-- Platos Individuales -->
   <url>
-    <loc>https://bikitchencr.com/individuales</loc>
+    <loc>https://www.bikitchencr.com/individuales</loc>
     <lastmod>2026-05-27</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.90</priority>
-    <xhtml:link rel="alternate" hreflang="es-CR" href="https://bikitchencr.com/individuales" />
+    <xhtml:link rel="alternate" hreflang="es-CR" href="https://www.bikitchencr.com/individuales" />
   </url>
 
   <!-- Catálogo / Menú semanal -->
   <url>
-    <loc>https://bikitchencr.com/menu</loc>
+    <loc>https://www.bikitchencr.com/menu</loc>
     <lastmod>2026-05-27</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.85</priority>
-    <xhtml:link rel="alternate" hreflang="es-CR" href="https://bikitchencr.com/menu" />
+    <xhtml:link rel="alternate" hreflang="es-CR" href="https://www.bikitchencr.com/menu" />
   </url>
 
   <!-- Promociones — contenido dinámico frecuente -->
   <url>
-    <loc>https://bikitchencr.com/promociones</loc>
+    <loc>https://www.bikitchencr.com/promociones</loc>
     <lastmod>2026-05-27</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.85</priority>
-    <xhtml:link rel="alternate" hreflang="es-CR" href="https://bikitchencr.com/promociones" />
+    <xhtml:link rel="alternate" hreflang="es-CR" href="https://www.bikitchencr.com/promociones" />
   </url>
 
   <!-- Cómo Funciona -->
   <url>
-    <loc>https://bikitchencr.com/como-funciona</loc>
+    <loc>https://www.bikitchencr.com/como-funciona</loc>
     <lastmod>2026-05-27</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.75</priority>
-    <xhtml:link rel="alternate" hreflang="es-CR" href="https://bikitchencr.com/como-funciona" />
+    <xhtml:link rel="alternate" hreflang="es-CR" href="https://www.bikitchencr.com/como-funciona" />
   </url>
 
   <!-- FAQ — oportunidad para rich results de Google -->
   <url>
-    <loc>https://bikitchencr.com/faq</loc>
+    <loc>https://www.bikitchencr.com/faq</loc>
     <lastmod>2026-05-27</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.75</priority>
-    <xhtml:link rel="alternate" hreflang="es-CR" href="https://bikitchencr.com/faq" />
+    <xhtml:link rel="alternate" hreflang="es-CR" href="https://www.bikitchencr.com/faq" />
   </url>
 
   <!-- Quiénes Somos -->
   <url>
-    <loc>https://bikitchencr.com/nosotros</loc>
+    <loc>https://www.bikitchencr.com/nosotros</loc>
     <lastmod>2026-05-27</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.65</priority>
-    <xhtml:link rel="alternate" hreflang="es-CR" href="https://bikitchencr.com/nosotros" />
+    <xhtml:link rel="alternate" hreflang="es-CR" href="https://www.bikitchencr.com/nosotros" />
   </url>
 
   <!-- Comparador de Packs -->
   <url>
-    <loc>https://bikitchencr.com/comparador</loc>
+    <loc>https://www.bikitchencr.com/comparador</loc>
     <lastmod>2026-05-27</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.60</priority>
-    <xhtml:link rel="alternate" hreflang="es-CR" href="https://bikitchencr.com/comparador" />
+    <xhtml:link rel="alternate" hreflang="es-CR" href="https://www.bikitchencr.com/comparador" />
   </url>
 
   <!-- Calculadora de Ahorro -->
   <url>
-    <loc>https://bikitchencr.com/calculadora</loc>
+    <loc>https://www.bikitchencr.com/calculadora</loc>
     <lastmod>2026-05-27</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.55</priority>
-    <xhtml:link rel="alternate" hreflang="es-CR" href="https://bikitchencr.com/calculadora" />
+    <xhtml:link rel="alternate" hreflang="es-CR" href="https://www.bikitchencr.com/calculadora" />
   </url>
 
   <!-- Gift Cards -->
   <url>
-    <loc>https://bikitchencr.com/gift-cards</loc>
+    <loc>https://www.bikitchencr.com/gift-cards</loc>
     <lastmod>2026-05-27</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.55</priority>
-    <xhtml:link rel="alternate" hreflang="es-CR" href="https://bikitchencr.com/gift-cards" />
+    <xhtml:link rel="alternate" hreflang="es-CR" href="https://www.bikitchencr.com/gift-cards" />
   </url>
 
   <!-- Programa de Fidelidad -->
   <url>
-    <loc>https://bikitchencr.com/fidelidad</loc>
+    <loc>https://www.bikitchencr.com/fidelidad</loc>
     <lastmod>2026-05-27</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.50</priority>
-    <xhtml:link rel="alternate" hreflang="es-CR" href="https://bikitchencr.com/fidelidad" />
+    <xhtml:link rel="alternate" hreflang="es-CR" href="https://www.bikitchencr.com/fidelidad" />
   </url>
 
   <!-- Referidos -->
   <url>
-    <loc>https://bikitchencr.com/referidos</loc>
+    <loc>https://www.bikitchencr.com/referidos</loc>
     <lastmod>2026-05-27</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.45</priority>
-    <xhtml:link rel="alternate" hreflang="es-CR" href="https://bikitchencr.com/referidos" />
+    <xhtml:link rel="alternate" hreflang="es-CR" href="https://www.bikitchencr.com/referidos" />
   </url>
 
 </urlset>

@@ -1070,7 +1070,7 @@ export default function PromocionesPage() {
         <PageTransition>
             <SEOHead
                 {...SEO_CONFIG.promociones}
-                structuredData={getBreadcrumbSchema([{ name: 'Promociones', url: 'https://bikitchencr.com/promociones' }])}
+                structuredData={getBreadcrumbSchema([{ name: 'Promociones', url: 'https://www.bikitchencr.com/promociones' }])}
             />
             <div className="min-h-screen bg-gradient-to-b from-bikitchen-beige to-white">
                 <Navbar />

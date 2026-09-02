@@ -295,7 +295,7 @@ export default function FidelidadPage() {
         <PageTransition>
             <SEOHead
                 {...SEO_CONFIG.fidelidad}
-                structuredData={getBreadcrumbSchema([{ name: 'BiPuntos — Programa de Fidelidad', url: 'https://bikitchencr.com/fidelidad' }])}
+                structuredData={getBreadcrumbSchema([{ name: 'BiPuntos — Programa de Fidelidad', url: 'https://www.bikitchencr.com/fidelidad' }])}
             />
             <div className="min-h-screen bg-neutral-50 pb-20 selection:bg-orange-100 selection:text-orange-900">
                 <Navbar />

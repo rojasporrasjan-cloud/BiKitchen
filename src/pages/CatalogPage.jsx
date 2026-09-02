@@ -62,7 +62,7 @@ export default function CatalogPage() {
         <PageTransition>
             <SEOHead
                 {...SEO_CONFIG.individuales}
-                structuredData={getBreadcrumbSchema([{ name: 'Platos Individuales', url: 'https://bikitchencr.com/individuales' }])}
+                structuredData={getBreadcrumbSchema([{ name: 'Platos Individuales', url: 'https://www.bikitchencr.com/individuales' }])}
             />
             <div className="min-h-screen bg-gradient-to-b from-bikitchen-beige to-white">
                 <Navbar />

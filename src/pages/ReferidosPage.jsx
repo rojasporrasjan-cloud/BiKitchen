@@ -136,7 +136,7 @@ export default function ReferidosPage() {
         <PageTransition>
             <SEOHead
                 {...SEO_CONFIG.referidos}
-                structuredData={getBreadcrumbSchema([{ name: 'Programa de Referidos', url: 'https://bikitchencr.com/referidos' }])}
+                structuredData={getBreadcrumbSchema([{ name: 'Programa de Referidos', url: 'https://www.bikitchencr.com/referidos' }])}
             />
             <div className="min-h-screen bg-gradient-to-b from-bikitchen-beige to-white">
                 <Navbar />

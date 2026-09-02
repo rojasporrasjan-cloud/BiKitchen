@@ -200,7 +200,7 @@ export default function ComparadorPage() {
         <PageTransition>
             <SEOHead
                 {...SEO_CONFIG.comparador}
-                structuredData={getBreadcrumbSchema([{ name: 'Comparador de Planes', url: 'https://bikitchencr.com/comparador' }])}
+                structuredData={getBreadcrumbSchema([{ name: 'Comparador de Planes', url: 'https://www.bikitchencr.com/comparador' }])}
             />
             <div className="min-h-screen bg-gradient-to-b from-bikitchen-beige to-white">
                 <Navbar />
