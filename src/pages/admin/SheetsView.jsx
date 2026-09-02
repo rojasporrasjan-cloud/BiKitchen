@@ -26,6 +26,7 @@ import {
     buildPackagingSheetData
 } from '../../utils/logisticsUtils';
 import { useOrders } from '../../context/OrdersContext';
+import HojaDeCocinaPorTandas from '../../components/admin/HojaDeCocinaPorTandas';
 
 export default function SheetsView() {
     const { orders: allOrders, updateOrderStatus } = useOrders();
@@ -742,6 +743,10 @@ export default function SheetsView() {
                     </div>
                 </div>
             </div>
+
+            {/* La hoja de cocina de la semana va por tandas: el jueves los
+                mensuales y quincenales, y despues lo que va entrando. */}
+            <HojaDeCocinaPorTandas />
 
             {/* Action Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
