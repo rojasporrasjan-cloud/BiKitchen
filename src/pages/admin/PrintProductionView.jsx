@@ -53,7 +53,6 @@ import { individualesData, getProductUnits } from '../../data/individualesData';
 import ExcelJS from 'exceljs';
 import { agregarHojasGina } from '../../utils/excelHojaProduccion';
 import { packSeParteEnAlmuerzoYCena } from '../../utils/labels/labelDomain';
-import { consolidarCocina, formatearCantidad } from '../../utils/cocinaConsolidada';
 import { repartirPlatillos, sugerirCocinera, TIPO_POR_CATEGORIA } from '../../utils/asignacionCocineras';
 import { COCINERAS } from '../../data/cocineras';
 import { separarDesayunos, separarPersonalizadosDePack } from '../../utils/desayunosPersonalizados';
@@ -1018,70 +1017,6 @@ export default function PrintProductionView() {
      * vez, y al lado a cuántos platos de cada menú va para poder repartirla al
      * salir de la olla.
      */
-    const renderQueSeCocinaJunto = () => {
-        const merma = Math.round((MARGEN_COCINA - 1) * 100);
-        const { preparaciones } = consolidarCocina(cleanOrders, { marginPercent: merma });
-        if (preparaciones.length === 0) return null;
-
-        const porTipo = preparaciones.reduce((acc, p) => {
-            (acc[p.tipo] = acc[p.tipo] || []).push(p);
-            return acc;
-        }, {});
-
-        return (
-            <div className="mb-10 print:break-after-page print:[page-break-after:always]">
-                <h2 className="bg-black text-white text-center font-bold text-xl p-2 border border-black uppercase tracking-wide">
-                    Qué se cocina junto — {date}
-                </h2>
-                <p className="text-xs text-gray-600 border-x border-b border-black p-2 print:text-[10px]">
-                    Una línea por preparación, sumando todos los menús. La columna de la
-                    derecha dice cómo repartirla cuando salga de la olla.
-                    {merma > 0 && ` Las cantidades ya traen el ${merma}% de merma.`}
-                </p>
-
-                {Object.entries(porTipo).map(([tipo, lista]) => (
-                    <table key={tipo} className="w-full border-collapse border border-black text-sm mb-6 table-fixed">
-                        <thead>
-                            <tr>
-                                <th colSpan="4" className="bg-[#f4b084] border border-black p-1.5 text-left font-bold uppercase">
-                                    {tipo}s — {lista.length} preparacion{lista.length === 1 ? '' : 'es'}
-                                </th>
-                            </tr>
-                            <tr className="bg-[#fce4d6]">
-                                <th className="border border-black p-1.5 text-left w-[38%]">Preparación</th>
-                                <th className="border border-black p-1.5 text-center w-20">Porciones</th>
-                                <th className="border border-black p-1.5 text-center w-28">Cantidad</th>
-                                <th className="border border-black p-1.5 text-left">Cómo repartirlo</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {lista.map(p => (
-                                <tr key={`${p.tipo}-${p.nombre}-${p.unidad}`} className="break-inside-avoid">
-                                    <td className="border border-black p-1.5 font-medium">
-                                        {p.nombre}
-                                        {p.esSustitucion && (
-                                            <span className="ml-2 text-[10px] font-bold text-red-700">CAMBIO</span>
-                                        )}
-                                    </td>
-                                    <td className="border border-black p-1.5 text-center font-bold text-base">
-                                        {p.porcionesCocina}
-                                    </td>
-                                    <td className="border border-black p-1.5 text-center font-bold">
-                                        {p.porPorcion > 0 ? formatearCantidad(p.totalCocina, p.unidad) : '—'}
-                                    </td>
-                                    <td className="border border-black p-1.5 text-xs print:text-[10px]">
-                                        {p.hayQueRepartir
-                                            ? p.desglose.map(d => `${d.porciones} → ${d.origen}`).join('  ·  ')
-                                            : <span className="text-gray-400">todo junto</span>}
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                ))}
-            </div>
-        );
-    };
 
     // LOGICA NUEVA DE HOJA DE COCINA GLOBAL
     // ==========================================
@@ -2870,7 +2805,6 @@ export default function PrintProductionView() {
             )}
 
             {/* SECCIÓN 2: HOJA DE COCINA (Resúmenes) */}
-            {viewMode !== 'empaque' && renderQueSeCocinaJunto()}
             {viewMode !== 'empaque' && renderHojaCocinaGlobal()}
 
             <style>{`
