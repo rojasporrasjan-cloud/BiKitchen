@@ -56,6 +56,7 @@ import { packSeParteEnAlmuerzoYCena } from '../../utils/labels/labelDomain';
 import { consolidarCocina, formatearCantidad } from '../../utils/cocinaConsolidada';
 import { repartirPlatillos, sugerirCocinera, TIPO_POR_CATEGORIA } from '../../utils/asignacionCocineras';
 import { COCINERAS } from '../../data/cocineras';
+import { separarDesayunos } from '../../utils/desayunosPersonalizados';
 
 import {
     MARGEN_COCINA,
@@ -385,6 +386,11 @@ export default function PrintProductionView() {
                 observaciones: cData.observaciones || '',
                 platos: overridePlates !== null ? overridePlates : (cData.platos || []),
                 zona_envio: cData.zona_envio || cData.rawPedido?.zona_envio || '',
+                // La nota SIN filtrar para empaque. `observaciones` ya paso por
+                // notaParaEmpaque, que la parte en las rayas y bota lo que parece
+                // apunte interno; eso se comia cambios de plato de verdad —a Allan
+                // Quesada le borraba "cambiar gallo pinto por burritos"—.
+                observacionesOriginales: cData.observacionesOriginales || cData.observaciones || '',
                 incluyeDesayuno: !!cData.incluyeDesayuno,
                 categoria: cData.categoria || '',
                 categoryLabel: cData.categoryLabel || '',
@@ -548,7 +554,7 @@ export default function PrintProductionView() {
                 // Los packs de desayuno se cuentan aparte: Christopher lleva UN
                 // personalizado de almuerzo y DOS packs de desayunos.
                 const packsDeDesayuno = Number(c.packsDesayuno) > 0 ? Number(c.packsDesayuno) : totalQty;
-                const desClient = { ...clientForPack, observaciones: cleanObs };
+                const desClient = { ...clientForPack, observaciones: cleanObs, observacionesOriginales: c.observaciones || '' };
                 addClientToPackMap('Pack de Desayunos', { ...desClient, cantidadMenus: packsDeDesayuno }, []);
             }
         });
@@ -696,8 +702,16 @@ export default function PrintProductionView() {
     const renderDesayunosTable = (packName, packData, currentDate) => {
         const rawPlatos = resolvePlatosForPack(packName, packData);
 
+        // Quien cambio su desayuno sale de esta tabla y va a la suya.
+        //
+        // Tres de los cinco desayunos son gallo pinto, asi que "cambiar gallo
+        // pinto por burritos" no toca un plato: toca tres. Mientras esa gente
+        // contaba en el total de aca, la cocina hacia gallo pinto para ellos
+        // tambien y sus burritos no los hacia nadie.
+        const { estandar, personalizados, packsEstandar } = separarDesayunos(packData.clientes, rawPlatos);
+
         // No expandir clientes — usar una fila por cliente con (N) al lado del nombre
-        const clientsList = [...packData.clientes];
+        const clientsList = [...estandar];
 
         const rowsPerChunk = 10;
         const totalChunks = Math.ceil(clientsList.length / rowsPerChunk) || 1;
@@ -758,7 +772,7 @@ export default function PrintProductionView() {
                     <tr key={i} className="border border-black bg-white break-inside-avoid print:break-inside-avoid">
                         <td className="border border-black p-2 text-center">{dish ? (i + 1) : ''}</td>
                         <td className="border border-black p-2 text-left">{dishDesc}</td>
-                        <td className="border border-black p-2 text-center font-bold">{dish ? packData.totalPacks : ''}</td>
+                        <td className="border border-black p-2 text-center font-bold">{dish ? packsEstandar : ''}</td>
                         <td className="border border-black p-2 text-xs text-center">{clientNote}</td>
                         <td className={`border border-black p-2 text-center ${client ? 'bg-[#e2f0d9]' : ''}`}>{clientName}</td>
                     </tr>
@@ -789,6 +803,63 @@ export default function PrintProductionView() {
                 </div>
             );
         }
+
+        // Un bloque por cliente que no come el menu de la semana. Va con SUS
+        // platos y con el original tachado al lado, para que la cocina vea de
+        // que se cambio y no tenga que ir a buscarlo en la nota.
+        personalizados.forEach((cliente) => {
+            const zona = cliente.zona_envio && cliente.zona_envio !== 'No especificada'
+                ? `, ${cliente.zona_envio}` : '';
+            const cuantos = Number(cliente.cantidad) > 0 ? Number(cliente.cantidad) : 1;
+
+            tables.push(
+                <div key={`desayuno-propio-${cliente.nombre}`} className="mb-12 print:mb-0 print:break-after-page print:[page-break-after:always]">
+                    <table className="w-full border-collapse border border-black text-sm table-fixed">
+                        <thead>
+                            <tr>
+                                <th colSpan="4" className="bg-[#f4b084] text-black font-bold text-2xl p-2 border border-black text-center uppercase tracking-wide">
+                                    Desayunos de {cliente.nombre}{zona}{cuantos > 1 ? ` (${cuantos})` : ''}
+                                </th>
+                            </tr>
+                            <tr>
+                                <th colSpan="4" className="bg-[#fff2cc] text-black p-2 border border-black text-left text-sm font-normal">
+                                    No lleva el menú de la semana. Pidió: <strong>{cliente.cambio.texto}</strong>
+                                </th>
+                            </tr>
+                            <tr className="bg-[#fce4d6]">
+                                <th className="border border-black p-2 w-16 text-center">Plato</th>
+                                <th className="border border-black p-2 text-center">Qué se le hace</th>
+                                <th className="border border-black p-2 w-24 text-center">Cantidad</th>
+                                <th className="border border-black p-2 w-64 text-center">En vez de</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {cliente.platos.map((plato) => (
+                                <tr key={plato.numero} className="border border-black bg-white break-inside-avoid print:break-inside-avoid">
+                                    <td className="border border-black p-2 text-center">{plato.numero}</td>
+                                    <td className={`border border-black p-2 text-left ${plato.estado === 'quitado' ? 'line-through text-gray-500' : ''} ${plato.estado === 'cambiado' ? 'font-bold bg-[#e2f0d9]' : ''}`}>
+                                        {plato.estado === 'quitado' ? 'NO LLEVA' : plato.nombre}
+                                    </td>
+                                    <td className="border border-black p-2 text-center font-bold">
+                                        {plato.estado === 'quitado' ? '—' : cuantos}
+                                    </td>
+                                    <td className="border border-black p-2 text-xs text-center text-gray-600">
+                                        {plato.original || ''}
+                                    </td>
+                                </tr>
+                            ))}
+                            {cliente.observaciones ? (
+                                <tr className="border border-black bg-[#fff2cc]">
+                                    <td colSpan="4" className="border border-black p-2 text-xs text-left">
+                                        <strong>Nota del pedido:</strong> {cliente.observaciones}
+                                    </td>
+                                </tr>
+                            ) : null}
+                        </tbody>
+                    </table>
+                </div>
+            );
+        });
 
         return (
             <div key={`empaque-${packName}`} className="print:break-after-page print:[page-break-after:always]">
