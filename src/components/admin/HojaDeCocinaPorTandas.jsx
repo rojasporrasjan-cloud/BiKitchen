@@ -50,8 +50,11 @@ export default function HojaDeCocinaPorTandas() {
     const yaEnviados = acumularEnviados(tandas);
     const esLaPrimera = tandas.length === 0;
 
+    // `view=cocina` no es opcional: sin el, la vista arranca en 'all' y lo
+    // primero que sale es la hoja de EMPAQUE. Esto es lo que se le manda a la
+    // cocina, asi que tiene que abrir en la de cocina.
     const abrir = (adelanto) => {
-        const url = `/admin/print-production?date=${sabado},${lunes}`
+        const url = `/admin/print-production?date=${sabado},${lunes}&view=cocina`
             + (adelanto ? '&tanda=adelanto' : '');
         abrirHoja(url);
     };

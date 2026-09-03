@@ -78,3 +78,32 @@ describe('abrir la hoja', () => {
         expect(w.open).not.toHaveBeenCalled();
     });
 });
+
+describe('la hoja por tandas abre en COCINA', () => {
+    /**
+     * El boton del adelanto armaba la url sin `view`, y el valor por defecto de
+     * la vista es 'all': lo primero que salia era la hoja de EMPAQUE. Pero esa
+     * hoja es justo la que se le manda a la cocina.
+     */
+    const urlTanda = (adelanto) =>
+        `/admin/print-production?date=2026-09-05,2026-09-07&view=cocina` + (adelanto ? '&tanda=adelanto' : '');
+
+    it('el adelanto pide la vista de cocina', () => {
+        expect(urlTanda(true)).toContain('view=cocina');
+    });
+
+    it('la del viernes tambien', () => {
+        expect(urlTanda(false)).toContain('view=cocina');
+    });
+
+    it('y las dos comparten ventana, que son la misma hoja', () => {
+        expect(nombreDeVentana(urlTanda(true))).toBe('bikitchen-cocina');
+        expect(nombreDeVentana(urlTanda(false))).toBe('bikitchen-cocina');
+    });
+
+    it('sin view, la vista arranca en empaque: por eso no puede faltar', () => {
+        // 'all' muestra las dos y la de empaque va primero.
+        const sinView = '/admin/print-production?date=2026-09-05,2026-09-07&tanda=adelanto';
+        expect(sinView).not.toContain('view=');
+    });
+});
