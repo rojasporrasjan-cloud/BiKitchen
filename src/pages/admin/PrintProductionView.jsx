@@ -56,7 +56,7 @@ import { packSeParteEnAlmuerzoYCena } from '../../utils/labels/labelDomain';
 import { consolidarCocina, formatearCantidad } from '../../utils/cocinaConsolidada';
 import { repartirPlatillos, sugerirCocinera, TIPO_POR_CATEGORIA } from '../../utils/asignacionCocineras';
 import { COCINERAS } from '../../data/cocineras';
-import { separarDesayunos } from '../../utils/desayunosPersonalizados';
+import { separarDesayunos, separarPersonalizadosDePack } from '../../utils/desayunosPersonalizados';
 
 import {
     MARGEN_COCINA,
@@ -2617,6 +2617,15 @@ export default function PrintProductionView() {
                             const showVegetales = llevaFilaDeVegetal(platosEmpaque);
                             const rowsPerPlate = 1 + (showVegetales ? 1 : 0) + (showCarbos ? 1 : 0);
 
+                            // Quien cambio un plato sale de esta tabla y va a la suya.
+                            //
+                            // La columna de platos y la de clientes van por su lado: el
+                            // nombre de Guillermo Vargas caia en la fila del arroz aunque
+                            // su cambio fuera de la tilapia, y el Plato 1 seguia contando
+                            // 4 tilapias — una para el que no come tilapia.
+                            const { estandar: clientesEstandar, personalizados: clientesPropios, packsEstandar } =
+                                separarPersonalizadosDePack(packData.clientes, platosEmpaque);
+
                             return (
                                 <div key={`empaque-${packName}`} className="pack-table-container mb-12 print:mb-0 print:break-after-page print:[page-break-after:always] break-inside-avoid print:break-inside-avoid">
                                     {/* ESTILO EXCEL */}
@@ -2667,12 +2676,12 @@ export default function PrintProductionView() {
                                                 </tr>
                                             </thead>
                                             {platosEmpaque.map((p, idx) => {
-                                                const totalPlatos = (packData.totalPacks || 0) * (p.vecesPorPack || 1);
+                                                const totalPlatos = packsEstandar * (p.vecesPorPack || 1);
 
                                                 // Función para obtener la celda del cliente en base al índice absoluto de la fila
                                                 const renderClientCells = (subRowIndex) => {
                                                     const absoluteRowIndex = idx * rowsPerPlate + subRowIndex;
-                                                    const client = packData.clientes[absoluteRowIndex];
+                                                    const client = clientesEstandar[absoluteRowIndex];
 
                                                     if (client) {
                                                         // Las MISMAS etiquetas que el Excel: si cada salida armara su lista,
@@ -2748,8 +2757,8 @@ export default function PrintProductionView() {
                                             {/* Filas adicionales si hay más clientes que filas de platos disponbles */}
                                             {(() => {
                                                 const totalAvailableRows = platosEmpaque.length * rowsPerPlate;
-                                                if (packData.clientes.length <= totalAvailableRows) return null;
-                                                const extraClients = packData.clientes.slice(totalAvailableRows);
+                                                if (clientesEstandar.length <= totalAvailableRows) return null;
+                                                const extraClients = clientesEstandar.slice(totalAvailableRows);
                                                 return (
                                                     <tbody className="break-inside-avoid print:break-inside-avoid">
                                                         {extraClients.map((client, extraIdx) => {
@@ -2796,6 +2805,59 @@ export default function PrintProductionView() {
                                             })()}
                                         </table>
                                     </div>
+
+                                    {/* Un bloque por cliente que no come el menu tal cual.
+                                        Con SUS platos y el original al lado, para que quien
+                                        empaca no tenga que cruzar la nota con la fila. */}
+                                    {clientesPropios.map((cliente) => {
+                                        const zona = cliente.zona_envio && cliente.zona_envio !== 'No especificada'
+                                            ? `, ${cliente.zona_envio}` : '';
+                                        const cuantos = Number(cliente.cantidad) > 0 ? Number(cliente.cantidad) : 1;
+                                        return (
+                                            <div key={`propio-${packName}-${cliente.nombre}`} className="mt-6 print:mt-4 break-inside-avoid print:break-inside-avoid">
+                                                <div className="bg-yellow-400 text-black font-bold text-base print:text-sm p-1.5 print:py-1 border border-black text-center uppercase tracking-wide">
+                                                    {packName} de {cliente.nombre}{zona} ({cuantos})
+                                                </div>
+                                                <div className="bg-[#fff2cc] text-black text-xs print:text-[10px] p-1.5 border-x border-b border-black">
+                                                    No lleva el menú tal cual. Pidió: <strong>{cliente.cambio.texto}</strong>
+                                                </div>
+                                                <table className="w-full border-collapse border border-black text-xs print:text-[10px] table-fixed">
+                                                    <thead>
+                                                        <tr className="bg-gray-100">
+                                                            <th className="border border-black p-1 w-16 text-center">Plato</th>
+                                                            <th className="border border-black p-1 text-left">Proteína</th>
+                                                            <th className="border border-black p-1 text-left">Vegetal</th>
+                                                            <th className="border border-black p-1 text-left">Carbo</th>
+                                                            <th className="border border-black p-1 w-48 text-left">En vez de</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {cliente.platos.map((plato) => {
+                                                            const marca = (parte) => plato.cambiada === parte
+                                                                ? 'border border-black p-1 font-bold bg-[#e2f0d9]'
+                                                                : 'border border-black p-1';
+                                                            return (
+                                                                <tr key={plato.numero} className="bg-white break-inside-avoid print:break-inside-avoid">
+                                                                    <td className="border border-black p-1 text-center font-bold">{plato.numero}</td>
+                                                                    <td className={marca('proteina')}>{plato.proteina || '—'}</td>
+                                                                    <td className={marca('vegetal')}>{plato.vegetal || '—'}</td>
+                                                                    <td className={marca('carbo')}>{plato.carbo || '—'}</td>
+                                                                    <td className="border border-black p-1 text-gray-600">{plato.original || ''}</td>
+                                                                </tr>
+                                                            );
+                                                        })}
+                                                        {cliente.observaciones ? (
+                                                            <tr className="bg-[#fff2cc]">
+                                                                <td colSpan="5" className="border border-black p-1 text-left">
+                                                                    <strong>Nota:</strong> {cliente.observaciones}
+                                                                </td>
+                                                            </tr>
+                                                        ) : null}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             );
                         })

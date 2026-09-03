@@ -42,26 +42,68 @@ const sinTildes = (t) => String(t || '')
     .trim();
 
 /**
- * Si el texto del cliente nombra un plato, cual de los del menu es.
- * Compara por palabras clave para que "gallo pintos" agarre "Gallo pinto con
- * queso" y "burritos" agarre "Burritos con queso, jamon y frijoles".
+ * Palabras que no distinguen un plato de otro.
+ *
+ * "salsa" y "plato" salen en medio menu; si contaran, "cambiar la tilapia del
+ * primer plato" agarraria cualquier cosa que llevara salsa.
  */
+const PALABRAS_VACIAS = new Set([
+    'salsa', 'plato', 'platos', 'primer', 'primero', 'segundo', 'tercer', 'tercero',
+    'cuarto', 'quinto', 'para', 'todos', 'todas', 'todo', 'este', 'esta', 'esos',
+    'solo', 'solos', 'porfavor', 'favor', 'cambiar', 'cambio', 'poner',
+    // De tres letras, que entran desde que se bajo el umbral
+    'con', 'por', 'del', 'las', 'los', 'una', 'uno', 'sin', 'que', 'mas', 'dos'
+]);
+
+/**
+ * Las palabras con las que un plato se reconoce, ya singularizadas.
+ *
+ * Cuentan desde tres letras: "Mix de vegetales estilo Mediterraneo" se
+ * distingue de "Crema de vegetales" justamente por "Mix", y con el umbral en
+ * cuatro esa palabra se perdia y los dos platos empataban.
+ */
+const palabrasClave = (texto) => new Set(
+    sinTildes(texto)
+        .split(/[^a-z0-9]+/)
+        .filter(w => w.length >= 3 && !PALABRAS_VACIAS.has(w))
+        .map(w => w.replace(/s$/, ''))
+);
+
+/**
+ * Si el texto del cliente nombra un plato, cual de los del menu es.
+ *
+ * Se comparan las palabras y no el principio del nombre: la palabra que
+ * identifica el plato no siempre va adelante. "Filet de tilapia con perejil y
+ * ajo" se reconoce por "tilapia", que va en el medio, y buscando por el
+ * principio no calzaba con "cambiar la TILAPIA del primer plato".
+ */
+/** Cuantas palabras clave comparten el texto del cliente y el nombre del plato. */
+const puntaje = (pedidas, nombre) => {
+    const suyas = palabrasClave(nombre);
+    let n = 0;
+    for (const w of pedidas) if (suyas.has(w)) n++;
+    return n;
+};
+
 export const platosQueMenciona = (texto, platos) => {
-    const t = sinTildes(texto);
-    if (!t) return [];
-    return platos
-        .map((p, i) => ({ i, nombre: nombreDePlato(p) }))
-        .filter(({ nombre }) => {
-            const n = sinTildes(nombre);
-            if (!n) return false;
-            // La primera palabra fuerte del plato: "gallo pinto", "burritos",
-            // "prensadas". Se singulariza para que "pintos" calce con "pinto".
-            const clave = n.split(/\s+(?:con|de|y|en|al|a la)\s+/)[0];
-            if (!clave) return false;
-            const suelto = clave.replace(/s\b/g, '');
-            return t.includes(clave) || t.includes(suelto);
-        })
-        .map(({ i }) => i);
+    const pedidas = palabrasClave(texto);
+    if (pedidas.size === 0) return [];
+
+    const puntajes = platos.map((p) => puntaje(pedidas, nombreDePlato(p)));
+
+    // Gana el que comparte MAS palabras, no cualquiera que comparta una.
+    //
+    // "Relish de vegetales y Mix de vainica" tocaba tres platos porque
+    // "vegetales" sale en medio menu: se le cambiaban tambien la crema de
+    // vegetales y los vegetales mixtos, que el cliente no pidio. Contando,
+    // "Mix de vegetales estilo Mediterraneo" comparte dos palabras y los otros
+    // una, asi que solo ese cambia.
+    //
+    // Y sigue sirviendo cuando el cliente si quiere varios: "gallo pinto"
+    // comparte dos palabras con los TRES gallo pintos del menu de desayunos.
+    const mejor = Math.max(...puntajes);
+    if (mejor === 0) return [];
+    return puntajes.map((n, i) => (n === mejor ? i : -1)).filter(i => i >= 0);
 };
 
 const FRASES = [
@@ -148,6 +190,114 @@ export const platosDeDesayunoDelCliente = (platos, cambio) => {
         }
         return { ...fila, original: fila.nombre, estado: 'quitado' };
     });
+};
+
+// ---------------------------------------------------------------------------
+// Lo mismo, pero para los packs de almuerzo
+// ---------------------------------------------------------------------------
+
+/**
+ * Un plato de pack tiene tres partes; el cambio puede caer en cualquiera.
+ * "cambiar la TILAPIA del primer plato" toca la proteina, "cambiar picadillo
+ * con chayote por papitas" toca el vegetal.
+ */
+export const partesDelPlato = (plato) => ({
+    proteina: plato?.proteina?.nombre ?? (typeof plato?.proteina === 'string' ? plato.proteina : ''),
+    vegetal: plato?.vegetal?.nombre ?? (typeof plato?.vegetal === 'string' ? plato.vegetal : ''),
+    carbo: plato?.carbo?.nombre ?? (typeof plato?.carbo === 'string' ? plato.carbo : '')
+});
+
+/**
+ * Que platos del pack menciona el texto, y en que parte de cada uno.
+ *
+ * Se puntua contra TODO el menu de una vez y gana el puntaje mas alto. Mirar
+ * plato por plato no sirve: "Relish de vegetales y Mix de vainica" comparte una
+ * palabra con la crema de vegetales y otra con los vegetales mixtos, y asi se
+ * le cambiaban tres platos cuando el cliente pidio uno.
+ */
+export const platosDePackQueMenciona = (texto, platos) => {
+    const pedidas = palabrasClave(texto);
+    if (pedidas.size === 0) return [];
+
+    // El mejor calce de cada plato, mirando sus tres partes.
+    const porPlato = platos.map((p, i) => {
+        const partes = partesDelPlato(p);
+        let mejor = { indice: i, parte: null, nombre: '', n: 0 };
+        for (const parte of ['proteina', 'vegetal', 'carbo']) {
+            const nombre = partes[parte];
+            if (!nombre) continue;
+            const n = puntaje(pedidas, nombre);
+            if (n > mejor.n) mejor = { indice: i, parte, nombre, n };
+        }
+        return mejor;
+    });
+
+    const mejorPuntaje = Math.max(...porPlato.map(x => x.n), 0);
+    if (mejorPuntaje === 0) return [];
+    return porPlato.filter(x => x.n === mejorPuntaje)
+        .map(({ indice, parte, nombre }) => ({ indice, parte, nombre }));
+};
+
+/**
+ * El cambio que pidio el cliente sobre su pack.
+ *
+ * Se ignoran las clausulas que hablan de desayunos: esas ya las lee
+ * leerCambioDeDesayuno y su tabla es otra.
+ */
+export const leerCambioDePack = (observaciones, platos) => {
+    const obs = String(observaciones || '');
+    if (!obs || !platos?.length) return null;
+
+    const clausulas = obs
+        .split(/\s*[·|]\s*|(?<=\.)\s+/)
+        .filter(c => c.trim() && !/desayun/i.test(c));
+
+    for (const clausula of clausulas) {
+        const m = clausula.match(/cambiar\s+(?:la\s+|el\s+|los\s+|las\s+)?(.+?)\s+por\s+(.+?)(?:\s*[.;(]|$)/i);
+        if (!m) continue;
+        const toca = platosDePackQueMenciona(m[1], platos);
+        if (!toca.length) continue;
+        return { toca, pone: m[2].trim(), texto: clausula.trim() };
+    }
+    return null;
+};
+
+/** El pack del cliente con su cambio aplicado, plato por plato. */
+export const platosDePackDelCliente = (platos, cambio) =>
+    platos.map((p, i) => {
+        const partes = partesDelPlato(p);
+        const suyo = cambio?.toca.find(t => t.indice === i);
+        return {
+            numero: p?.numero ?? i + 1,
+            ...partes,
+            ...(suyo ? { [suyo.parte]: cambio.pone, original: suyo.nombre, cambiada: suyo.parte } : {})
+        };
+    });
+
+/**
+ * Parte los clientes de un pack: quien come el menu tal cual y quien no.
+ *
+ * Mismo problema que en desayunos. La columna de platos y la de clientes van
+ * por su lado, asi que el nombre de Guillermo Vargas caia en la fila del arroz
+ * aunque su cambio fuera de la tilapia — y el Plato 1 seguia contando 4
+ * tilapias, una de ellas para el que no come tilapia.
+ */
+export const separarPersonalizadosDePack = (clientes, platos) => {
+    const lista = Array.isArray(clientes) ? clientes : [];
+    const menu = Array.isArray(platos) ? platos : [];
+    const estandar = [];
+    const personalizados = [];
+
+    lista.forEach((c) => {
+        const cambio = menu.length ? leerCambioDePack(textoDeObservaciones(c), menu) : null;
+        if (cambio) personalizados.push({ ...c, cambio, platos: platosDePackDelCliente(menu, cambio) });
+        else estandar.push(c);
+    });
+
+    const packsEstandar = estandar.reduce(
+        (n, c) => n + (Number(c?.cantidad) > 0 ? Number(c.cantidad) : 1), 0);
+
+    return { estandar, personalizados, packsEstandar };
 };
 
 /**
