@@ -335,7 +335,17 @@ const NOTA_INTERNA = new RegExp([
     // casilla de sebastian Villegas: "Confirmado por el admin", que no le dice
     // nada a quien empaca y ocupa el lugar de lo que si importa.
     'confirmado por el admin', 'aprobaci[óo]n masiva', 'fechas? corregidas?',
-    'creado por el admin', 'importado (de|desde)'
+    'creado por el admin', 'importado (de|desde)',
+    // Rastro de nuestras propias correcciones. Salio impreso en la casilla de
+    // Marlon Camacho: "Corregido: estaba cargado como cantidad 2 y la hoja lo
+    // contaba como 4 packs" — cierto, pero a quien empaca no le sirve de nada.
+    'reactivado', 'se hab[ií]a anulado', 'no compr[oó] esta semana',
+    'revisar si pag', 'revisar env[ií]o', 'renovaci[óo]n:', 'reemplaza a\\b',
+    'ya cobrado', 'van aparte porque', 'cargadas fila por fila',
+    'es un solo pedido', 'le quedan \\d+ entrega', 'su pedido es del',
+    'la hoja lo contaba', 'tel[ée]fono tomado', 'lo marc[óo] gina',
+    'mensaje de cancelaci[óo]n', 'jan confirm[óo]', 'su pedido original',
+    'ya pas[óo]\\b', 'hay que ped[ií]rsela', 'corregido:'
 ].join('|'), 'i');
 
 /** Un monto en colones metido dentro de una frase: "... (4 tazas) ₡7.500". */
@@ -344,13 +354,41 @@ const PRECIO_EN_FRASE = /\s*[₡¢]\s*\d[\d.,]*/g;
 /** Señales de que la frase sí es una instrucción para la cocina o la entrega. */
 const ES_INSTRUCCION = /cambiar|cambio|no poner|sin\b|quitar|agregar|en vez de|sustitu|entregar|antes de las|despu[ée]s de las|llamar|alerg|solo\b|extra|doble|aparte/i;
 
+/**
+ * Referencias de control metidas DENTRO de una frase útil.
+ *
+ * "Cambiar gallo pinto por BURRITOS (chat 2 set)" es una instrucción con una
+ * referencia pegada. Antes la frase entera se botaba por mencionar el chat, y
+ * a quien empaca no le llegaba el cambio: a Allan Quesada le salía impreso solo
+ * "reemplaza el cambio anterior a flautas)", y a Alexandra Mora y a Daniel
+ * Milanés no les salía nada —y lo de Daniel era que no puede comer mariscos—.
+ * Se quitan del texto en vez de tirar la frase.
+ */
+const REFERENCIA_INTERNA = /\s*\((?:chat|ver)\b[^)]*\)?|\s*#ORD-[A-Za-z0-9-]+/gi;
+
+/** Todo lo que venga después de esta marca es para nosotros, no para empaque. */
+const CORTE_INTERNO = /\bINTERNO\s*:/i;
+
+/** Una frase que ya no dice nada: puros signos, o un resto sin contenido. */
+const SIN_CONTENIDO = /^[\s\W]*$/;
+
 export const notaParaEmpaque = (obs) => {
     if (!obs) return '';
 
-    const frases = String(obs)
-        .split(/\s*[·|—]\s*/)
-        .map(f => f.trim())
-        .filter(Boolean);
+    const texto = String(obs).split(CORTE_INTERNO)[0];
+
+    const frases = texto
+        // Las notas vienen separadas por "·", por raya, y por punto y seguido:
+        // sin cortar en el punto, una instrucción y el apunte interno que le
+        // sigue quedaban en la misma frase y se iban juntos a la basura.
+        .split(/\s*[·|—]\s*|(?<=\.)\s+(?=[A-ZÁÉÍÓÚÑ¿¡])/)
+        .map(f => f.replace(REFERENCIA_INTERNA, '').replace(/\(\s*\)/g, '').trim())
+        // Un parentesis se puede haber abierto en una frase y cerrado en la
+        // siguiente: "…por BURRITOS (chat 2 set — reemplaza lo anterior)". Al
+        // cortar por la raya, la segunda mitad queda huerfana y sin sentido.
+        // Se reconoce porque cierra un parentesis que nunca abrio.
+        .filter(f => f && !SIN_CONTENIDO.test(f)
+            && !(f.includes(')') && !f.includes('(')));
 
     const utiles = frases.filter(frase => {
         if (NOTA_INTERNA.test(frase)) return false;
@@ -378,7 +416,13 @@ export const notaParaEmpaque = (obs) => {
             .replace(/\s{2,}/g, ' ')
             .replace(/\s+([,.])/g, '$1')
             .trim();
-    }).filter(Boolean);
+    }).filter(frase => {
+        if (!frase) return false;
+        // Quitar el precio puede dejar una frase coja. En la casilla de Jenny
+        // Alvarado salio impreso "REVISAR ENVIO: el mensaje dice pero el total
+        // de solo cuadra con": la frase vivia de los numeros que se quitaron.
+        return !/\b(dice|cuadra con|es de|de)\s*$/i.test(frase) && !SIN_CONTENIDO.test(frase);
+    });
 
     return utiles.join(' · ');
 };
