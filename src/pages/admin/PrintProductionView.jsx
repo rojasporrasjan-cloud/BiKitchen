@@ -355,11 +355,24 @@ export default function PrintProductionView() {
 
     const kitchenData = buildKitchenSheetData(cleanOrders, {});
     const packagingData = buildPackagingSheetData(todosLosPedidos, {}, null);
+    // Lo mismo pero solo con los de la tanda, para la tabla de produccion.
+    const cocinaData = buildPackagingSheetData(cleanOrders, {}, null);
 
     // Group packaging data by Pack
+    //
+    // Se arman DOS mapas con la misma logica:
+    //   packsMap        -> todos los pedidos por fecha de entrega. Es el del EMPAQUE.
+    //   packsMapCocina  -> solo los de esta tanda. Es el de la COCINA.
+    //
+    // Antes habia uno solo, hecho con todos los pedidos, y la tabla de produccion
+    // lo usaba: el adelanto del jueves le pedia a Gina las cantidades de la SEMANA
+    // ENTERA aunque el encabezado dijera "54 pedidos". Cocinaba de mas el jueves y
+    // la hoja del viernes se lo volvia a pedir.
     const packsMap = {};
+    const packsMapCocina = {};
 
-    const addClientToPackMap = (pName, cData, overridePlates = null) => {
+    const addClientToPackMap = (mapa, pName, cData, overridePlates = null) => {
+        const packsMap = mapa;
         if (!packsMap[pName]) {
             packsMap[pName] = { name: pName, clientes: [], platosBase: [], totalPacks: 0 };
         }
@@ -417,7 +430,7 @@ export default function PrintProductionView() {
         return true;
     };
 
-    packagingData.clientes.forEach((c) => {
+    const llenarMapaDePacks = (clientes, mapa) => clientes.forEach((c) => {
         // El MISMO criterio que usa el resto de la hoja. Antes acá se pedía que el
         // plan dijera "individual", y el de un pedido de individuales es el nombre
         // del PRIMER plato: el de Larissa Serendero decía "Cochinita pibil". Al no
@@ -529,7 +542,7 @@ export default function PrintProductionView() {
                 // Copia para la tabla de ALMUERZOS → decir que también lleva cena
                 const almuerzoClient = { ...clientForPack };
                 almuerzoClient.observaciones = appendTagUnique(cleanObs, 'Lleva cena');
-                addClientToPackMap(packName, almuerzoClient, filteredPlates.length > 0 ? filteredPlates : null);
+                addClientToPackMap(mapa, packName, almuerzoClient, filteredPlates.length > 0 ? filteredPlates : null);
 
                 // Copia para la tabla de CENAS → decir qué pack de almuerzo lleva (SIN los cambios específicos del menú de almuerzo)
                 const menuKey = mapPackNameToMenuKey(packName);
@@ -537,10 +550,10 @@ export default function PrintProductionView() {
                 const cenaClient = { ...clientForPack };
                 const cleanCenaObs = filterObsForCenas(cleanObs);
                 cenaClient.observaciones = appendTagUnique(cleanCenaObs, `Lleva ${packLabel}`);
-                addClientToPackMap(`CENAS - ${packName}`, cenaClient, null);
+                addClientToPackMap(mapa, `CENAS - ${packName}`, cenaClient, null);
             } else {
                 const normClient = { ...clientForPack, observaciones: cleanObs };
-                addClientToPackMap(packName, normClient, filteredPlates.length > 0 ? filteredPlates : null);
+                addClientToPackMap(mapa, packName, normClient, filteredPlates.length > 0 ? filteredPlates : null);
             }
 
             const menuKey = mapPackNameToMenuKey(packName);
@@ -554,10 +567,15 @@ export default function PrintProductionView() {
                 // personalizado de almuerzo y DOS packs de desayunos.
                 const packsDeDesayuno = Number(c.packsDesayuno) > 0 ? Number(c.packsDesayuno) : totalQty;
                 const desClient = { ...clientForPack, observaciones: cleanObs, observacionesOriginales: c.observaciones || '' };
-                addClientToPackMap('Pack de Desayunos', { ...desClient, cantidadMenus: packsDeDesayuno }, []);
+                addClientToPackMap(mapa, 'Pack de Desayunos', { ...desClient, cantidadMenus: packsDeDesayuno }, []);
             }
         });
     });
+
+    // El empaque lleva TODOS los pedidos de esas fechas: es como se reparte.
+    llenarMapaDePacks(packagingData.clientes, packsMap);
+    // La cocina lleva solo los de esta tanda: es lo que hay que cocinar hoy.
+    llenarMapaDePacks(cocinaData.clientes, packsMapCocina);
 
     const allPackNames = Object.keys(packsMap).sort();
     const isDesayunoPack = (n) => mapPackNameToMenuKey(n) === 'desayuno';
@@ -570,6 +588,27 @@ export default function PrintProductionView() {
 
     const consolidatedPacksMap = {};
     const packNameToConsolidated = {}; // mapea nombre original → nombre consolidado
+
+    // El mismo consolidado pero de la tanda, para la tabla de produccion.
+    const consolidatedPacksMapCocina = {};
+    Object.keys(packsMapCocina).forEach(packName => {
+        if (isActuallyIndividual(packName) || isDesayunoPack(packName)) return;
+        const menuKey = mapPackNameToMenuKey(packName);
+        let nombre = nombreDeHojaDeEmpaque(packName, menuKey ? MENU_LABELS[menuKey] : null);
+        if (packName.startsWith('CENAS -')) nombre = `CENAS - ${nombre.replace('CENAS - ', '')}`;
+        if (!consolidatedPacksMapCocina[nombre]) {
+            consolidatedPacksMapCocina[nombre] = {
+                name: nombre, clientes: [], platosBase: [], totalPacks: 0,
+                sourcePackNames: [], menuKey
+            };
+        }
+        const destino = consolidatedPacksMapCocina[nombre];
+        const origen = packsMapCocina[packName];
+        origen.clientes.forEach(c => destino.clientes.push({ ...c }));
+        destino.totalPacks += origen.totalPacks;
+        if (destino.platosBase.length === 0 && origen.platosBase.length > 0) destino.platosBase = origen.platosBase;
+        if (!destino.sourcePackNames.includes(packName)) destino.sourcePackNames.push(packName);
+    });
 
     allPackNames.forEach(packName => {
         if (isActuallyIndividual(packName) || isDesayunoPack(packName)) return;
@@ -1098,8 +1137,8 @@ export default function PrintProductionView() {
         };
 
         // 1. Process regular packs (Granel para ollas)
-        regularPackNames.forEach(packName => {
-            const packData = consolidatedPacksMap[packName];
+        Object.keys(consolidatedPacksMapCocina).forEach(packName => {
+            const packData = consolidatedPacksMapCocina[packName];
             if (!packData || packData.totalPacks === 0) return;
 
             const isCenaSheet = packName.startsWith('CENAS -');
@@ -1198,8 +1237,8 @@ export default function PrintProductionView() {
         });
 
         // 2. Process Individuales (Pre-empacados directamente en cocina)
-        individualPackNames.forEach(packName => {
-            const packData = packsMap[packName];
+        Object.keys(packsMapCocina).filter(n => isActuallyIndividual(n) && !isDesayunoPack(n)).forEach(packName => {
+            const packData = packsMapCocina[packName];
             if (!packData || !packData.clientes) return;
 
             packData.clientes.forEach(c => {
