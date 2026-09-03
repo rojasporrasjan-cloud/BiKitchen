@@ -372,6 +372,47 @@ const CORTE_INTERNO = /\bINTERNO\s*:/i;
 /** Una frase que ya no dice nada: puros signos, o un resto sin contenido. */
 const SIN_CONTENIDO = /^[\s\W]*$/;
 
+/**
+ * Frases que la hoja YA imprime en otra parte.
+ *
+ * La casilla de especificaciones es lo único que quien empaca lee con calma, y
+ * cada línea repetida entierra la que sí importa. En la casilla de Dalia
+ * Parrales salían cuatro cosas y tres ya estaban impresas al lado: que lleva 3
+ * packs (el nombre dice "Dalia Parrales (3)"), la regalía de desayunos (la
+ * etiqueta "Lleva desayunos") y el gramaje del pack (el encabezado de la tabla).
+ * De lo suyo, solo "NO CERDO" era información nueva.
+ *
+ * Se compara contra la frase COMPLETA para no morderle un pedazo a una
+ * instrucción: "NO lleva cena" tiene que sobrevivir.
+ */
+const YA_ESTA_IMPRESO = new RegExp('^(?:' + [
+    // La etiqueta "TWO PACK - empacar 2 packs iguales" ya lo dice
+    'two pack\\s*[=:]?\\s*\\d*\\s*packs? del mismo men[uú].*',
+    // La etiqueta "Lleva desayunos" ya lo dice
+    '(?:regal[ií]a (?:de |del |pack de )?)?desayunos?(?: gratis| de regal[ií]a)?',
+    'regal[ií]a (?:de |del |pack de )?desayunos?',
+    'lleva desayunos?',
+    // El nombre del cliente ya trae "(3)" y la columna de cantidad el número
+    '(?:lleva )?\\d+ packs?',
+    // El encabezado de la tabla ya trae el gramaje y las tazas
+    '\\d{2,3}\\s*g prote[ií]na\\s*[/,].*',
+    // El nombre del pack ya lo dice
+    'men[uú] personalizado.*',
+    'personalizado\\s*=.*'
+].join('|') + ')\\.?$', 'i');
+
+/**
+ * Frases que no son asunto de quien empaca: cobros y tareas de oficina.
+ * Siguen guardadas en el pedido; solo no se imprimen en la hoja.
+ */
+const NO_ES_DE_EMPAQUE = new RegExp('^(?:' + [
+    'lleva \\d+\\s*% de descuento.*',
+    '.*\\bdescuento\\b.*',
+    '(?:falta el |sin )tel[ée]fono.*',
+    'pedirlo',
+    'pedir(?:le)? el n[uú]mero.*'
+].join('|') + ')\\.?$', 'i');
+
 export const notaParaEmpaque = (obs) => {
     if (!obs) return '';
 
@@ -392,6 +433,8 @@ export const notaParaEmpaque = (obs) => {
 
     const utiles = frases.filter(frase => {
         if (NOTA_INTERNA.test(frase)) return false;
+        if (YA_ESTA_IMPRESO.test(frase)) return false;
+        if (NO_ES_DE_EMPAQUE.test(frase)) return false;
 
         // Un teléfono solo estorba, salvo que la frase además pida algo
         if (TELEFONO.test(frase)) {
