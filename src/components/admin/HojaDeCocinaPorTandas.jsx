@@ -4,6 +4,7 @@ import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { proximaHornada } from '../../utils/fechasDeCocina';
 import { COLECCION_TANDAS, acumularEnviados } from '../../utils/tandasDeCocina';
+import { abrirHoja } from '../../utils/abrirHoja';
 
 /**
  * De donde se saca la hoja de cocina de la semana.
@@ -52,7 +53,7 @@ export default function HojaDeCocinaPorTandas() {
     const abrir = (adelanto) => {
         const url = `/admin/print-production?date=${sabado},${lunes}`
             + (adelanto ? '&tanda=adelanto' : '');
-        window.open(url, '_blank');
+        abrirHoja(url);
     };
 
     const fechaCorta = (iso) => {

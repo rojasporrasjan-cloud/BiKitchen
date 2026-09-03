@@ -27,6 +27,7 @@ import {
 } from '../../utils/logisticsUtils';
 import { useOrders } from '../../context/OrdersContext';
 import HojaDeCocinaPorTandas from '../../components/admin/HojaDeCocinaPorTandas';
+import { abrirHoja } from '../../utils/abrirHoja';
 
 export default function SheetsView() {
     const { orders: allOrders, updateOrderStatus } = useOrders();
@@ -756,7 +757,7 @@ export default function SheetsView() {
                     className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-8 shadow-sm border border-blue-200 cursor-pointer"
                     onClick={() => {
                         if (orders.length > 0) {
-                            window.open(`/admin/print-production?date=${selectedDate}&view=cocina`, '_blank');
+                            abrirHoja(`/admin/print-production?date=${selectedDate}&view=cocina`);
                         }
                     }}
                 >
@@ -774,7 +775,7 @@ export default function SheetsView() {
                         onClick={(e) => {
                             e.stopPropagation();
                             if (orders.length > 0) {
-                                window.open(`/admin/print-production?date=${selectedDate}&view=cocina`, '_blank');
+                                abrirHoja(`/admin/print-production?date=${selectedDate}&view=cocina`);
                             }
                         }}
                         disabled={orders.length === 0}
@@ -791,7 +792,7 @@ export default function SheetsView() {
                     className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-8 shadow-sm border border-purple-200 cursor-pointer"
                     onClick={() => {
                         if (orders.length > 0) {
-                            window.open(`/admin/print-production?date=${selectedDate}&view=empaque`, '_blank');
+                            abrirHoja(`/admin/print-production?date=${selectedDate}&view=empaque`);
                         }
                     }}
                 >
@@ -809,7 +810,7 @@ export default function SheetsView() {
                         onClick={(e) => {
                             e.stopPropagation();
                             if (orders.length > 0) {
-                                window.open(`/admin/print-production?date=${selectedDate}&view=empaque`, '_blank');
+                                abrirHoja(`/admin/print-production?date=${selectedDate}&view=empaque`);
                             }
                         }}
                         disabled={orders.length === 0}
