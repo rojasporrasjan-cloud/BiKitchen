@@ -48,6 +48,7 @@ import { agruparArroces } from '../../utils/agruparArroces';
 import { COLECCION_AJUSTES, aplicarAjustes, cantidadFinal, conAjuste, claveDeRenglon } from '../../utils/ajustesDeCocina';
 import { unidadesPosibles, convertir, desdeUnidad, UNIDADES } from '../../utils/unidadesDeCocina';
 import { cuantoCocinar, parteDeIndividuales } from '../../utils/cuantoCocinar';
+import { COLECCION_PRODUCCION, claveDeProduccion, acumularCocinado, cocinadoDeLaHoja } from '../../utils/produccionAcumulada';
 import { COLECCION_TANDAS, pedidosDeLaTanda, acumularEnviados, claveDePedido, canceladosDespuesDeEnviar } from '../../utils/tandasDeCocina';
 import RevisionHoja from '../../components/admin/RevisionHoja';
 import { individualesData, getProductUnits } from '../../data/individualesData';
@@ -143,9 +144,23 @@ export default function PrintProductionView() {
                 soloRecurrentes,
                 pedidos: cleanOrders.map(claveDePedido),
                 cuantos,
+                // Cuanto se va a cocinar de cada preparacion, con las
+                // correcciones de Gina ya puestas. Sin esto, cocinar de mas a
+                // proposito —"dejar 5 kg para el sabado"— no se le descuenta a
+                // la hoja siguiente y se cocina dos veces.
+                cocinado: cocinadoDeLaHoja(bulkItems.map(r => ({
+                    name: r.name, unit: r.unit,
+                    aCocinar: cantidadFinal(r, cantidadACocinar(r))
+                }))),
                 enviada: new Date().toISOString()
             });
-            const previas = [...tandasPrevias, { pedidos: cleanOrders.map(claveDePedido) }];
+            const previas = [...tandasPrevias, {
+                pedidos: cleanOrders.map(claveDePedido),
+                cocinado: cocinadoDeLaHoja(bulkItems.map(r => ({
+                    name: r.name, unit: r.unit,
+                    aCocinar: cantidadFinal(r, cantidadACocinar(r))
+                })))
+            }];
             setTandasPrevias(previas);
             setYaEnviados(acumularEnviados(previas));
         } catch (err) {
@@ -1060,7 +1075,11 @@ export default function PrintProductionView() {
 
     // LOGICA NUEVA DE HOJA DE COCINA GLOBAL
     // ==========================================
-    const getAllKitchenItems = () => {
+    /**
+     * Se llama DOS veces: con los mapas de la tanda —lo que hay que cocinar
+     * hoy— y con los de la semana completa, para poder ofrecer adelantar.
+     */
+    const getAllKitchenItems = (mapaConsolidado, mapaPacks) => {
         const bulkItemsMap = {};
         const missingMenus = [];
 
@@ -1139,8 +1158,8 @@ export default function PrintProductionView() {
         };
 
         // 1. Process regular packs (Granel para ollas)
-        Object.keys(consolidatedPacksMapCocina).forEach(packName => {
-            const packData = consolidatedPacksMapCocina[packName];
+        Object.keys(mapaConsolidado).forEach(packName => {
+            const packData = mapaConsolidado[packName];
             if (!packData || packData.totalPacks === 0) return;
 
             const isCenaSheet = packName.startsWith('CENAS -');
@@ -1239,8 +1258,8 @@ export default function PrintProductionView() {
         });
 
         // 2. Process Individuales (Pre-empacados directamente en cocina)
-        Object.keys(packsMapCocina).filter(n => isActuallyIndividual(n) && !isDesayunoPack(n)).forEach(packName => {
-            const packData = packsMapCocina[packName];
+        Object.keys(mapaPacks).filter(n => isActuallyIndividual(n) && !isDesayunoPack(n)).forEach(packName => {
+            const packData = mapaPacks[packName];
             if (!packData || !packData.clientes) return;
 
             packData.clientes.forEach(c => {
@@ -1382,7 +1401,25 @@ export default function PrintProductionView() {
     // La merma es para las ollas de los packs, donde se reparte a ojo. Un
     // individual se pesa y se empaca: "si son 250 poner 250" (Gina). Y los
     // gramos se redondean siempre hacia arriba.
-    const cantidadACocinar = (item) => cuantoCocinar(item);
+    /** Lo ya cocinado en las hojas anteriores de esta misma hornada. */
+    const yaCocinado = acumularCocinado(tandasPrevias);
+
+    /**
+     * Cuanto hay que cocinar HOY de este renglon.
+     *
+     * Es lo que piden los pedidos menos lo que ya se cocino. Sin ese descuento,
+     * cocinar de mas a proposito —"dejar 5 kg de carne para el sabado", que Gina
+     * hace todas las semanas porque se congela— no servia de nada: la hoja
+     * siguiente lo volvia a pedir completo.
+     */
+    const cantidadACocinar = (item) => {
+        const pide = cuantoCocinar(item);
+        const hecho = Number(yaCocinado[claveDeProduccion(item?.name, item?.unit)]) || 0;
+        return Math.max(0, pide - hecho);
+    };
+
+    /** Lo que pide TODA la hornada, para poder adelantar de una vez. */
+    const pideTodaLaSemana = (item) => Number(pideLaSemana[claveDeProduccion(item?.name, item?.unit)]) || 0;
 
     const getKitchenPackingInstruction = (item) => {
         const pGrams = item.portionGrams;
@@ -1429,7 +1466,12 @@ export default function PrintProductionView() {
     // reconstruyen en cada render, así que cambiarían de identidad siempre.
     // Para memoizar de verdad hay que subir TODO el armado de datos por encima de
     // los returns, no solo esta llamada.
-    const { bulkItems, missingMenus, avisosDeUnion } = getAllKitchenItems();
+    const { bulkItems, missingMenus, avisosDeUnion } = getAllKitchenItems(consolidatedPacksMapCocina, packsMapCocina);
+    // Lo mismo pero de TODO el sabado y el lunes: es lo que se ofrece adelantar
+    // cuando la preparacion se congela y no vale la pena prender la olla dos veces.
+    const bulkSemana = getAllKitchenItems(consolidatedPacksMap, packsMap).bulkItems;
+    const pideLaSemana = {};
+    bulkSemana.forEach(r => { pideLaSemana[claveDeProduccion(r.name, r.unit)] = cuantoCocinar(r); });
 
     const handleAssignCook = (itemName, cookName) => {
         setKitchenAssignments(prev => ({ ...prev, [itemName]: cookName }));
@@ -1936,6 +1978,31 @@ export default function PrintProductionView() {
                                                                 return (
                                                                     <span className="block text-[9px] font-normal text-gray-500">
                                                                         = {Math.ceil(v - 0.0001)} {UNIDADES[otra]?.corta || otra}
+                                                                    </span>
+                                                                );
+                                                            })()}
+                                                            {(() => {
+                                                                // Lo ya hecho y lo que pide toda la hornada. Con esto se
+                                                                // decide adelantar: si el sabado y el lunes juntos piden
+                                                                // 20 kg y hoy solo tocan 10, se pueden hacer los 20 de
+                                                                // una y el viernes no los vuelve a pedir.
+                                                                const hecho = Number(yaCocinado[claveDeProduccion(item.name, item.unit)]) || 0;
+                                                                const semana = pideTodaLaSemana(item);
+                                                                const pide = cuantoCocinar(item);
+                                                                const u = item.unit === 'g' ? 'g' : item.unit;
+                                                                if (!hecho && semana <= pide) return null;
+                                                                return (
+                                                                    <span className="block text-[9px] font-normal leading-tight">
+                                                                        {hecho > 0 && (
+                                                                            <span className="block text-green-700 font-bold">
+                                                                                ya hecho: {Math.ceil(hecho)} {u}
+                                                                            </span>
+                                                                        )}
+                                                                        {semana > pide && (
+                                                                            <span className="block text-gray-500">
+                                                                                toda la hornada: {Math.ceil(Math.max(0, semana - hecho))} {u}
+                                                                            </span>
+                                                                        )}
                                                                     </span>
                                                                 );
                                                             })()}
