@@ -295,7 +295,15 @@ describe('una variedad no es una preparación', () => {
     });
 
     it('si las dos lo dicen, siguen siendo el mismo', () => {
-        expect(esElMismoPlato('Frijoles blancos', 'Frijoles blancos guisados con olores')).toBe(true);
+        expect(esElMismoPlato('Frijoles blancos', 'Frijoles blancos guisados')).toBe(true);
+    });
+
+    it('ante la duda, separa: un renglón de más se junta, un plato mal fusionado se lo come alguien', () => {
+        // "con olores" es sazón, no otro ingrediente, así que en rigor son la
+        // misma olla. Pero distinguir sazón de ingrediente pide un diccionario
+        // que no tenemos, y equivocarse separando cuesta un renglón mientras
+        // que equivocarse juntando le cambia el plato a un cliente.
+        expect(esElMismoPlato('Frijoles blancos', 'Frijoles blancos guisados con olores')).toBe(false);
     });
 });
 
@@ -345,5 +353,43 @@ describe('el arroz del casadito queda aparte, no se va al del perejil', () => {
             { 'frijoles blancos guisados|taza(s)': { name: 'Frijoles blancos guisados', unit: 'taza(s)' } },
             'Frijoles', 'taza(s)');
         expect(r.clave).toBeNull();
+    });
+});
+
+describe('el conector dice si es el mismo plato o le ponen algo encima', () => {
+    /**
+     * Las palabras que agrega el nombre largo pueden decir DE QUÉ es el plato o
+     * QUE LE PONEN. El conector es lo único que lo distingue:
+     *
+     *   "de" / "en"  -> de qué es, cómo se cocina   -> el mismo plato
+     *   "y" / "con"  -> además lleva algo           -> otro plato
+     *
+     * Al cliente keto que pidió picadillo de vainica sola le caía zanahoria, y a
+     * los ocho packs de zuchinnis salteados les caían hongos y cebolla.
+     */
+    it('"de" y "en" no cambian el plato', () => {
+        expect(esElMismoPlato('Albóndigas', 'Albóndigas de res artesanales')).toBe(true);
+        expect(esElMismoPlato('Carne mechada', 'Carne mechada en salsa criolla')).toBe(true);
+        expect(esElMismoPlato('Pollo', 'Pollo en salsa de culantro')).toBe(true);
+    });
+
+    it('"y" agrega un ingrediente: es otro plato', () => {
+        expect(esElMismoPlato('Picadillo de vainica', 'Picadillo vainica y zanahoria')).toBe(false);
+    });
+
+    it('"con" también', () => {
+        expect(esElMismoPlato('Zuchinnis salteados', 'Zuchinnis salteados con hongos y cebollas carmelizadas')).toBe(false);
+        expect(esElMismoPlato('Arroz', 'Arroz con maiz dulce')).toBe(false);
+        expect(esElMismoPlato('Tomates asados', 'Tomates asados con cebollas caramelizadas')).toBe(false);
+    });
+
+    it('si los dos lo llevan, siguen siendo el mismo', () => {
+        expect(esElMismoPlato('Zuchinnis con hongos', 'Zuchinnis salteados con hongos')).toBe(true);
+    });
+
+    it('lo que ya funcionaba no se movió', () => {
+        expect(esElMismoPlato('Pollo al ajillo', 'Pollo teriyaki')).toBe(false);
+        expect(esElMismoPlato('Sopa de albóndigas', 'Albóndigas')).toBe(false);
+        expect(esElMismoPlato('Frijoles', 'Frijoles blancos guisados')).toBe(false);
     });
 });

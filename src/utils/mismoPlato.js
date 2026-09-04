@@ -47,6 +47,32 @@ const VARIEDADES = new Set([
     'tierno', 'tiernos', 'tierna', 'tiernas'
 ]);
 
+/**
+ * Lo que agrega el nombre mas largo: ¿dice de QUE es, o dice que le PONEN algo?
+ *
+ * El conector lo distingue, y es lo unico que lo distingue:
+ *
+ *   "Albondigas DE res"                -> de que son. Mismo plato.
+ *   "Carne mechada EN salsa criolla"   -> como se cocina. Mismo plato.
+ *   "Picadillo de vainica Y zanahoria" -> ademas lleva zanahoria. Otro plato.
+ *   "Zuchinnis salteados CON hongos"   -> ademas lleva hongos. Otro plato.
+ *
+ * Sin esto, al cliente keto que pidio picadillo de vainica sola le caia
+ * zanahoria, y a los ocho packs de zuchinnis salteados les caian hongos y
+ * cebolla caramelizada.
+ */
+const agregaIngredientes = (nombreLargo, palabrasDelCorto) => {
+    const palabras = sinTildes(nombreLargo).replace(/[^a-z0-9ñ\s]/g, ' ').split(/\s+/).filter(Boolean);
+    const yaEsta = new Set(palabrasDelCorto);
+    for (let i = 1; i < palabras.length; i++) {
+        if (palabras[i - 1] !== 'y' && palabras[i - 1] !== 'con') continue;
+        const p = palabras[i];
+        if (VACIAS.has(p)) continue;
+        if (!yaEsta.has(p)) return true;   // le suma algo que el otro no tiene
+    }
+    return false;
+};
+
 const sinTildes = (texto) => String(texto || '')
     .normalize('NFD')
     .replace(/\p{Diacritic}/gu, '')
@@ -112,8 +138,12 @@ export const esElMismoPlato = (nombreA, nombreB) => {
     if (soloEnUno.some(p => VARIEDADES.has(p))) return false;
 
     const contenido = (chico, grande) => [...chico].every(p => grande.has(p));
+    if (!contenido(setA, setB) && !contenido(setB, setA)) return false;
 
-    return contenido(setA, setB) || contenido(setB, setA);
+    // El largo contiene al corto. Falta ver si lo que le agrega es como se
+    // cocina —mismo plato— o algo que le ponen encima —otro plato—.
+    const [corto, largo] = a.length <= b.length ? [a, nombreB] : [b, nombreA];
+    return !agregaIngredientes(largo, corto);
 };
 
 /**
