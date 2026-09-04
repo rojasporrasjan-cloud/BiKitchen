@@ -29,7 +29,8 @@ export const claveDeRenglon = (nombre, unidad) =>
 
 /** Un ajuste vacio es no haber tocado nada: no se guarda. */
 const tieneAlgo = (a) =>
-    !!a && (Number.isFinite(a.cantidad) || (a.unidad && a.unidad.trim()) || (a.nota && a.nota.trim()));
+    !!a && (Number.isFinite(a.cantidad) || (a.unidad && a.unidad.trim())
+        || (a.unidadVista && a.unidadVista.trim()) || (a.nota && a.nota.trim()));
 
 /**
  * Aplica los ajustes guardados a los renglones ya calculados.
@@ -38,7 +39,13 @@ const tieneAlgo = (a) =>
  * `ajustado: true` para que la hoja lo pueda marcar.
  *
  * @param {Array}  renglones  lo que calculo la hoja
- * @param {object} ajustes    { [clave]: { cantidad?, unidad?, nota? } }
+ * `unidad` CAMBIA la unidad del renglon (Gina decide que eso va en tazas y no
+ * en gramos). `unidadVista` solo cambia en que unidad se MUESTRA el mismo
+ * numero: el renglon sigue siendo el mismo y el dato guardado tambien. Son dos
+ * cosas distintas y pisarlas hacia que elegir "ver en porciones" convirtiera el
+ * renglon en uno de unidades.
+ *
+ * @param {object} ajustes    { [clave]: { cantidad?, unidad?, unidadVista?, nota? } }
  */
 export const aplicarAjustes = (renglones, ajustes) => {
     const guardados = ajustes || {};
@@ -46,7 +53,12 @@ export const aplicarAjustes = (renglones, ajustes) => {
         const ajuste = guardados[claveDeRenglon(item?.name, item?.unit)];
         if (!tieneAlgo(ajuste)) return item;
 
-        const tocado = { ...item, ajustado: true };
+        // `ajustado` marca el renglon como CORREGIDO A MANO. Elegir en que
+        // unidad mirarlo no es corregirlo: el numero es el mismo.
+        const corregido = Number.isFinite(ajuste.cantidad)
+            || (ajuste.unidad && ajuste.unidad.trim())
+            || (ajuste.nota && ajuste.nota.trim());
+        const tocado = { ...item, ajustado: !!corregido };
         if (Number.isFinite(ajuste.cantidad)) {
             tocado.cantidadAjustada = ajuste.cantidad;
         }
@@ -55,6 +67,9 @@ export const aplicarAjustes = (renglones, ajustes) => {
         }
         if (ajuste.nota && ajuste.nota.trim()) {
             tocado.notaAjustada = ajuste.nota.trim();
+        }
+        if (ajuste.unidadVista && ajuste.unidadVista.trim()) {
+            tocado.unidadVista = ajuste.unidadVista.trim();
         }
         return tocado;
     });
@@ -78,6 +93,7 @@ export const conAjuste = (ajustes, nombre, unidad, cambio) => {
     // Un campo que se deja en blanco vuelve al calculo, no se queda vacio.
     if (combinado.cantidad === null || combinado.cantidad === '') delete combinado.cantidad;
     if (!combinado.unidad) delete combinado.unidad;
+    if (!combinado.unidadVista) delete combinado.unidadVista;
     if (!combinado.nota) delete combinado.nota;
 
     if (!tieneAlgo(combinado)) delete copia[clave];

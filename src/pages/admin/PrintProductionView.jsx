@@ -45,7 +45,8 @@ import {
 import { separarComponentes, nombreParaAcumular } from '../../utils/platosCompuestos';
 import { separarPorY, cantidadDeGuarnicion } from '../../utils/guarnicionesSeparadas';
 import { agruparArroces } from '../../utils/agruparArroces';
-import { COLECCION_AJUSTES, aplicarAjustes, cantidadFinal, conAjuste } from '../../utils/ajustesDeCocina';
+import { COLECCION_AJUSTES, aplicarAjustes, cantidadFinal, conAjuste, claveDeRenglon } from '../../utils/ajustesDeCocina';
+import { unidadesPosibles, convertir, desdeUnidad, UNIDADES } from '../../utils/unidadesDeCocina';
 import { cuantoCocinar, parteDeIndividuales } from '../../utils/cuantoCocinar';
 import { COLECCION_TANDAS, pedidosDeLaTanda, acumularEnviados, claveDePedido, canceladosDespuesDeEnviar } from '../../utils/tandasDeCocina';
 import RevisionHoja from '../../components/admin/RevisionHoja';
@@ -1128,11 +1129,12 @@ export default function PrintProductionView() {
             if (encontrado.clave) {
                 const renglon = bulkItemsMap[encontrado.clave];
                 renglon.totalQty += cantidad;
+                renglon.porciones = (renglon.porciones || 0) + (Number(platos) || 0);
                 renglon.name = nombreMasCompleto(renglon.name, nombre);
                 return encontrado.clave;
             }
 
-            sumarAGranel(bulkItemsMap, nombre, cantidad, unidad, guessCategory);
+            sumarAGranel(bulkItemsMap, nombre, cantidad, unidad, guessCategory, platos);
             return claveGranel(nombre, unidad);
         };
 
@@ -1206,11 +1208,11 @@ export default function PrintProductionView() {
                     // Un plato familiar se cocina por KILO: el gramaje de la familia
                     // manda cuando el plato no trae el suyo.
                     const grams = (p.proteina.gramosPorPorcion || porcion.proteina || getDefaultGrams(packName)) * totalPlatos;
-                    acumularPlato(p.proteina.nombre, grams, 'g');
+                    acumularPlato(p.proteina.nombre, grams, 'g', totalPlatos);
                 }
                 if (p.vegetal?.nombre && p.vegetal.nombre !== '—') {
                     const units = (p.vegetal.cantidadPorPorcion || porcion.vegetal) * totalPlatos;
-                    acumularPlato(p.vegetal.nombre, units, 'taza(s)');
+                    acumularPlato(p.vegetal.nombre, units, 'taza(s)', totalPlatos);
                 }
                 const showCarbo = menuKey !== 'keto' && menuKey !== 'sinCarbos' && p.carbo?.nombre && p.carbo.nombre !== '—';
                 if (showCarbo) {
@@ -1864,20 +1866,79 @@ export default function PrintProductionView() {
                                                         <td className={`border-r border-black p-2.5 text-center font-extrabold text-lg text-gray-900 ${item.ajustado ? 'bg-sky-50' : ''}`}>
                                                             {/* Gina corrige el numero aca mismo cuando el calculo se
                                                                 equivoca. Se guarda para esta fecha y manda sobre el calculo. */}
-                                                            <input
-                                                                type="number"
-                                                                step="any"
-                                                                className="w-20 text-center font-extrabold text-lg bg-transparent border-b border-dashed border-gray-400 focus:border-solid focus:border-sky-600 focus:outline-none print:border-none"
-                                                                value={cantidadFinal(item, cantidadACocinar(item))}
-                                                                onChange={(e) => {
-                                                                    const v = e.target.value;
-                                                                    guardarAjuste(item.name, item.unit, {
-                                                                        cantidad: v === '' ? null : Number(v)
-                                                                    });
-                                                                }}
-                                                                aria-label={`Cantidad a cocinar de ${item.name}`}
-                                                            />{' '}
-                                                            {item.unit === 'g' ? 'g' : item.unit.toUpperCase()}
+                                                            {(() => {
+                                                                // El numero se MUESTRA en la unidad elegida y se GUARDA en la
+                                                                // del renglon. Asi Gina escribe "60 porciones" y el resto de
+                                                                // la hoja —el granel, el Excel, la tanda— sigue leyendo
+                                                                // gramos, sin que nadie tenga que acordarse de en que unidad
+                                                                // estaba mirando.
+                                                                const opciones = unidadesPosibles(item);
+                                                                const guardada = ajustesCocina?.[claveDeRenglon(item.name, item.unit)]?.unidadVista;
+                                                                const vista = opciones.includes(guardada) ? guardada : opciones[0];
+                                                                const enBase = cantidadFinal(item, cantidadACocinar(item));
+                                                                const mostrado = convertir({ ...item, totalQty: enBase }, vista);
+                                                                const valor = mostrado === null ? enBase
+                                                                    : (vista === 'kg' ? Math.round(mostrado * 10) / 10 : Math.ceil(mostrado - 0.0001));
+                                                                return (
+                                                                    <input
+                                                                        type="number"
+                                                                        step="any"
+                                                                        className="w-20 text-center font-extrabold text-lg bg-transparent border-b border-dashed border-gray-400 focus:border-solid focus:border-sky-600 focus:outline-none print:border-none"
+                                                                        value={valor}
+                                                                        onChange={(e) => {
+                                                                            const v = e.target.value;
+                                                                            const enUnidadBase = v === '' ? null : desdeUnidad(item, v, vista);
+                                                                            guardarAjuste(item.name, item.unit, {
+                                                                                cantidad: enUnidadBase === null ? null : Math.round(enUnidadBase * 100) / 100
+                                                                            });
+                                                                        }}
+                                                                        aria-label={`Cantidad a cocinar de ${item.name}`}
+                                                                    />
+                                                                );
+                                                            })()}{' '}
+                                                            {/* La unidad la elige quien lee: Gina manda la lasaña en
+                                                                PORCIONES y la carne en KILOS. Solo se ofrecen las que
+                                                                se pueden convertir de verdad — gramos y tazas no. */}
+                                                            {(() => {
+                                                                const opciones = unidadesPosibles(item);
+                                                                const elegida = ajustesCocina?.[claveDeRenglon(item.name, item.unit)]?.unidadVista;
+                                                                const actual = opciones.includes(elegida) ? elegida : opciones[0];
+                                                                if (opciones.length < 2) {
+                                                                    return item.unit === 'g' ? 'g' : item.unit.toUpperCase();
+                                                                }
+                                                                return (
+                                                                    <select
+                                                                        value={actual}
+                                                                        onChange={(e) => guardarAjuste(item.name, item.unit, { unidadVista: e.target.value })}
+                                                                        className="bg-transparent font-bold uppercase text-sm border-b border-dashed border-gray-400 focus:outline-none print:border-none print:appearance-none"
+                                                                        aria-label={`Unidad de ${item.name}`}
+                                                                    >
+                                                                        {opciones.map(u => (
+                                                                            <option key={u} value={u}>{UNIDADES[u]?.corta || u}</option>
+                                                                        ))}
+                                                                    </select>
+                                                                );
+                                                            })()}
+                                                            {(() => {
+                                                                // El equivalente en la otra unidad, chiquito debajo: sirve
+                                                                // para comparar contra la lista de Gina sin dividir a mano.
+                                                                const opciones = unidadesPosibles(item);
+                                                                const elegida = ajustesCocina?.[claveDeRenglon(item.name, item.unit)]?.unidadVista;
+                                                                const actual = opciones.includes(elegida) ? elegida : opciones[0];
+                                                                const otra = opciones.find(u => u !== actual && u !== 'kg');
+                                                                if (!otra) return null;
+                                                                // El MISMO numero que el de arriba, que ya trae la merma.
+                                                                // Con el crudo, el equivalente decia 5900 g donde la hoja
+                                                                // pedia 7670 y parecian dos renglones distintos.
+                                                                const base = cantidadFinal(item, cantidadACocinar(item));
+                                                                const v = convertir({ ...item, totalQty: base }, otra);
+                                                                if (v === null) return null;
+                                                                return (
+                                                                    <span className="block text-[9px] font-normal text-gray-500">
+                                                                        = {Math.ceil(v - 0.0001)} {UNIDADES[otra]?.corta || otra}
+                                                                    </span>
+                                                                );
+                                                            })()}
                                                             {item.ajustado && (
                                                                 <span className="block text-[9px] font-bold text-sky-700 uppercase print:hidden">corregido a mano</span>
                                                             )}

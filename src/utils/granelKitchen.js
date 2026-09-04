@@ -39,7 +39,7 @@ export const claveGranel = (nombre, unidad) =>
  * @param {string} unidad - 'g' o 'taza(s)'
  * @param {(n: string) => string} [categoria] - para agrupar por estación
  */
-export const sumarAGranel = (mapa, nombre, cantidad, unidad, categoria) => {
+export const sumarAGranel = (mapa, nombre, cantidad, unidad, categoria, porciones = 0) => {
     const limpio = normalizarNombrePlato(nombre);
     if (!limpio || limpio === '—') return mapa;
 
@@ -49,11 +49,18 @@ export const sumarAGranel = (mapa, nombre, cantidad, unidad, categoria) => {
             name: limpio,
             category: categoria ? categoria(limpio) : 'Otros',
             totalQty: 0,
+            // A cuantos PLATOS va este renglon. Se acumula aparte de la cantidad
+            // porque no siempre se puede deducir: "Milanesa de pollo 7670 g" son
+            // 40 platos de 120 g mas 5 de 100 g, y dividir por un solo gramaje
+            // daria un numero que no existe. Contando los platos al sumarlos, la
+            // conversion a porciones es exacta y no una estimacion.
+            porciones: 0,
             unit: unidad,
             isBulk: true
         };
     }
     mapa[clave].totalQty += Number(cantidad) || 0;
+    mapa[clave].porciones += Number(porciones) || 0;
     return mapa;
 };
 
