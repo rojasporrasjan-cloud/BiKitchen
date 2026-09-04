@@ -100,6 +100,21 @@ export const PLANTILLAS_BASE = [
             + '¿Te lo dejamos listo para la próxima semana? Avisanos y lo coordinamos. 🍽️'
     },
     {
+        // El mensaje que Gina manda a mano a los del pack mensual cuando se les
+        // acaba. Pregunta si todo bien y ofrece cambiar hasta DOS platos: el
+        // limite va escrito en el mensaje a proposito, porque si no la gente
+        // pide cinco cambios y el pack deja de ser un pack.
+        id: 'renovacionMensual',
+        nombre: 'Renovación de pack mensual (la de Gina)',
+        nombreMeta: '',
+        texto: '¡Hola {{primerNombre}}! 👋 Ya vas en la {{avance}} de tu {{pack}}, '
+            + 'y tu última entrega es el {{ultimaEntrega}}.\n\n'
+            + '¿Cómo te ha ido? ¿Todo bien con los platos? 🍽️\n\n'
+            + 'Si querés seguir, te lo dejamos listo para la próxima semana. Y si hay algo '
+            + 'que no te encantó, podés cambiar **hasta 2 platos** del menú por otros que te gusten más.\n\n'
+            + 'Contanos y lo coordinamos. 💚'
+    },
+    {
         id: 'menu',
         nombre: 'Menú de la semana',
         nombreMeta: '',

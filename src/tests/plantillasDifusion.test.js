@@ -155,3 +155,45 @@ describe('Variables del avance del pack', () => {
         expect(renderPlantilla('{{avance}}{{semana}}{{proximaEntrega}}', { nombre: 'X' })).toBe('');
     });
 });
+
+describe('la plantilla de renovación que manda Gina', () => {
+    /**
+     * Se la manda a mano a los del pack mensual cuando se les acaba: pregunta si
+     * todo bien y ofrece cambiar hasta DOS platos. El límite va escrito en el
+     * mensaje a propósito — sin él la gente pide cinco cambios y el pack deja de
+     * ser un pack.
+     */
+    const plantilla = PLANTILLAS_BASE.find(p => p.id === 'renovacionMensual');
+
+    it('existe', () => {
+        expect(plantilla).toBeTruthy();
+    });
+
+    it('dice el límite de dos cambios', () => {
+        expect(plantilla.texto).toMatch(/hasta \*?\*?2 platos/i);
+    });
+
+    it('usa el avance del pack y la fecha de la última entrega', () => {
+        expect(plantilla.texto).toContain('{{avance}}');
+        expect(plantilla.texto).toContain('{{ultimaEntrega}}');
+    });
+
+    it('se llena con los datos del cliente', () => {
+        const texto = renderPlantilla(plantilla.texto, {
+            nombre: 'Diana Morera',
+            planes: ['Two Pack Bajo Calorías'],
+            zona: 'Santa Ana',
+            ultimaEntrega: '2026-09-28',
+            diasParaUltimaEntrega: 21,
+            semana: 1,
+            totalSemanas: 4,
+            entregasRestantes: 4,
+            proximaEntrega: '2026-09-07'
+        });
+
+        expect(texto).toContain('Diana');
+        expect(texto).toContain('Two Pack Bajo Calorías');
+        expect(texto).not.toContain('{{');   // no queda ninguna variable sin llenar
+        expect(texto).toMatch(/hasta \*?\*?2 platos/i);
+    });
+});
