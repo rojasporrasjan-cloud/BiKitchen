@@ -29,6 +29,7 @@ import AdminCard from '../../components/admin/AdminCard';
 import { cachedFetch, invalidateCache } from '../../utils/firestoreCache';
 import { useOrders } from '../../context/OrdersContext';
 import { parseFirebaseDate } from '../../utils/dateUtils';
+import { anotarLecturas } from '../../utils/contadorFirestore';
 
 
 /**
@@ -71,6 +72,7 @@ export default function DashboardView() {
             // Cargar pedidos históricos (cache 10 min)
             const pedidos = await cachedFetch('dashboard_pedidos', async () => {
                 const snap = await getDocs(collection(db, 'pedidos'));
+            anotarLecturas(snap.size, 'Dashboard');
                 return snap.docs.map(d => ({ id: d.id, ...d.data() }));
             }, 'dashboard');
             setHistoricalOrders(pedidos || []);

@@ -224,6 +224,7 @@ const FILTER_OPTIONS = [
 
 import { Sparkles } from 'lucide-react';
 import { eliminarPedidosDeGina } from '../../data/masterGinaLoader';
+import { anotarLecturas } from '../../utils/contadorFirestore';
 
 // Filtros de fecha
 const DATE_FILTERS = [
@@ -843,6 +844,7 @@ export default function OrdersView() {
         setIsRepairing(true);
         try {
             const querySnapshot = await getDocs(collection(db, 'pedidos'));
+            anotarLecturas(querySnapshot.size, 'Pedidos');
             let fixedCount = 0;
 
             for (const d of querySnapshot.docs) {

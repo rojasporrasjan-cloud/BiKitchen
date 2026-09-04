@@ -22,6 +22,7 @@ import { confirmarPagoConRespaldo } from '../utils/confirmarPedido';
 import { onAuthStateChanged } from 'firebase/auth';
 import { ADMIN_EMAILS } from '../config/admins';
 import { PUNTOS_REFERIDO, calcularPuntos } from '../config/loyalty';
+import { anotarLecturas } from '../utils/contadorFirestore';
 
 /**
  * Cuántos pedidos mantiene el panel en memoria, del más nuevo al más viejo.
@@ -530,6 +531,7 @@ export const OrdersProvider = ({ children }) => {
     const deleteAllOrders = async () => {
         try {
             const ordersSnapshot = await getDocs(collection(db, "pedidos"));
+            anotarLecturas(ordersSnapshot.size, 'Pedidos');
             const batchSize = 400; // Firestore permite max 500 ops por batch
             let deleted = 0;
 
