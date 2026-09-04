@@ -39,7 +39,7 @@ export const claveGranel = (nombre, unidad) =>
  * @param {string} unidad - 'g' o 'taza(s)'
  * @param {(n: string) => string} [categoria] - para agrupar por estación
  */
-export const sumarAGranel = (mapa, nombre, cantidad, unidad, categoria, porciones = 0) => {
+export const sumarAGranel = (mapa, nombre, cantidad, unidad, categoria, porciones = 0, sueltoDeGuarnicion = false) => {
     const limpio = normalizarNombrePlato(nombre);
     if (!limpio || limpio === '—') return mapa;
 
@@ -56,7 +56,10 @@ export const sumarAGranel = (mapa, nombre, cantidad, unidad, categoria, porcione
             // conversion a porciones es exacta y no una estimacion.
             porciones: 0,
             unit: unidad,
-            isBulk: true
+            isBulk: true,
+            // Salio de partir una guarnicion compuesta: es un ingrediente, no
+            // un plato con nombre propio. No se fusiona con otros renglones.
+            sueltoDeGuarnicion: !!sueltoDeGuarnicion
         };
     }
     mapa[clave].totalQty += Number(cantidad) || 0;

@@ -1113,7 +1113,7 @@ export default function PrintProductionView() {
         // que de los nombres no se deduce.
         const destinos = destinosDeUnion(unionesDePlatos);
 
-        const acumularPlato = (nombreCrudo, cantidad, unidad, platos = 0) => {
+        const acumularPlato = (nombreCrudo, cantidad, unidad, platos = 0, esComponente = false) => {
             // Un renglon puede ser varias ollas: "Arroz, frijoles y maduros" son
             // tres preparaciones. Cada una lleva la MISMA cantidad que traia el
             // renglon: si decia 4 tazas, son 4 de cada cosa.
@@ -1128,7 +1128,7 @@ export default function PrintProductionView() {
                 let primera = null;
                 componentes.forEach(parte => {
                     const suyo = cantidadDeGuarnicion(parte, cantidad, unidad, platos);
-                    const clave = acumularPlato(parte, suyo.cantidad, suyo.unidad, platos);
+                    const clave = acumularPlato(parte, suyo.cantidad, suyo.unidad, platos, true);
                     if (primera === null) primera = clave;
                 });
                 return primera;
@@ -1137,7 +1137,9 @@ export default function PrintProductionView() {
             // El nombre con el que entra: lo que una persona marco como el mismo
             // plato, o el nucleo (toda la "carne mechada" es una sola olla).
             const nombre = nombreParaAcumular(nombreCrudo, destinos);
-            const encontrado = buscarRenglonDelMismoPlato(bulkItemsMap, nombre, unidad);
+            const encontrado = esComponente
+                ? { clave: null, ambiguo: [] }
+                : buscarRenglonDelMismoPlato(bulkItemsMap, nombre, unidad);
 
             if (encontrado.ambiguo.length > 0) {
                 // Calzaba con varios: juntarlo con el que no es seria peor que
@@ -1153,7 +1155,7 @@ export default function PrintProductionView() {
                 return encontrado.clave;
             }
 
-            sumarAGranel(bulkItemsMap, nombre, cantidad, unidad, guessCategory, platos);
+            sumarAGranel(bulkItemsMap, nombre, cantidad, unidad, guessCategory, platos, esComponente);
             return claveGranel(nombre, unidad);
         };
 

@@ -31,6 +31,22 @@ const VACIAS = new Set([
     'un', 'una', 'para', 'sin', 'su', 'lo'
 ]);
 
+/**
+ * Palabras que nombran una VARIEDAD del ingrediente, no una forma de cocinarlo.
+ *
+ * Si una está en un nombre y no en el otro, son platos distintos aunque uno
+ * contenga al otro. Son colores y clases: el frijol blanco y el rojo se compran
+ * aparte y se cocinan aparte.
+ */
+const VARIEDADES = new Set([
+    'blanco', 'blancos', 'blanca', 'blancas',
+    'negro', 'negros', 'negra', 'negras',
+    'rojo', 'rojos', 'roja', 'rojas',
+    'verde', 'verdes',
+    'integral', 'integrales',
+    'tierno', 'tiernos', 'tierna', 'tiernas'
+]);
+
 const sinTildes = (texto) => String(texto || '')
     .normalize('NFD')
     .replace(/\p{Diacritic}/gu, '')
@@ -53,6 +69,24 @@ export const palabraPrincipal = (nombre) => palabrasClave(nombre)[0] || '';
  *
  * No mira la unidad: eso lo decide quien llama, porque depende del acumulador.
  */
+/**
+ * Los dos nombres hablan del mismo ingrediente base, sin mirar la variedad.
+ *
+ * Sirve para saber si un nombre podría confundirse con varios renglones —"Arroz"
+ * con "Arroz blanco" y con "Arroz al perejil"—, que es cuando hay que dejarlo
+ * aparte en vez de adivinar.
+ */
+export const seParecen = (nombreA, nombreB) => {
+    const a = palabrasClave(nombreA);
+    const b = palabrasClave(nombreB);
+    if (a.length === 0 || b.length === 0) return false;
+    if (a[0] !== b[0]) return false;
+    const setA = new Set(a);
+    const setB = new Set(b);
+    const contenido = (chico, grande) => [...chico].every(p => grande.has(p));
+    return contenido(setA, setB) || contenido(setB, setA);
+};
+
 export const esElMismoPlato = (nombreA, nombreB) => {
     const a = palabrasClave(nombreA);
     const b = palabrasClave(nombreB);
@@ -63,6 +97,20 @@ export const esElMismoPlato = (nombreA, nombreB) => {
 
     const setA = new Set(a);
     const setB = new Set(b);
+
+    // Una VARIEDAD no es una preparación.
+    //
+    // "Carne mechada" y "Carne mechada en salsa criolla" son la misma carne
+    // cocinada de una forma: se juntan. Pero "Frijoles" y "Frijoles blancos"
+    // son dos frijoles distintos, y la regla de "uno contiene al otro" los
+    // juntaba. Los frijoles del casadito se estaban sumando al renglón de los
+    // blancos: la hoja pedía 101 tazas donde hacían falta 33, y Gina lo tenía
+    // claro —en su lista manda "frijoles blancos 30 tazas" y "frijoles
+    // arreglado 10 tazas" por separado—.
+    const soloEnUno = [...setA].filter(p => !setB.has(p))
+        .concat([...setB].filter(p => !setA.has(p)));
+    if (soloEnUno.some(p => VARIEDADES.has(p))) return false;
+
     const contenido = (chico, grande) => [...chico].every(p => grande.has(p));
 
     return contenido(setA, setB) || contenido(setB, setA);
@@ -79,15 +127,34 @@ export const esElMismoPlato = (nombreA, nombreB) => {
  *          es que calzaba con varios y hay que preguntar en vez de adivinar.
  */
 export const buscarRenglonDelMismoPlato = (mapa, nombre, unidad) => {
-    const candidatos = Object.entries(mapa || {})
+    // La AMBIGÜEDAD se mide sin mirar variedades, a propósito.
+    //
+    // "Arroz" —el del casadito, que sale de partir "Arroz, frijoles y
+    // maduros"— se parece a "Arroz blanco" y a "Arroz al perejil". Que sean
+    // dos es justamente lo que dice que no se sabe cuál es: queda aparte, que
+    // es lo correcto. Si la variedad se filtrara antes de contar, quedaría uno
+    // solo y las 69 tazas del casadito se irían al arroz al perejil.
+    const parecidos = Object.entries(mapa || {})
         .filter(([, item]) => item.unit === unidad)
-        .filter(([, item]) => esElMismoPlato(item.name, nombre));
+        // Un ingrediente suelto no es un plato: "arroz" y "frijoles" salen de
+        // partir el carbo del casadito, "Arroz, frijoles y maduros". No se
+        // fusionan con nada, ni nada se fusiona con ellos. Sin esto, "Arroz al
+        // perejil" se metia en el renglon del arroz del casadito y se llevaba
+        // su nombre: la hoja pedia 71 tazas de arroz al perejil cuando eran 2.
+        .filter(([, item]) => !item.sueltoDeGuarnicion)
+        .filter(([, item]) => seParecen(item.name, nombre));
 
-    if (candidatos.length === 1) return { clave: candidatos[0][0], ambiguo: [] };
-    if (candidatos.length > 1) {
-        return { clave: null, ambiguo: candidatos.map(([, item]) => item.name) };
+    if (parecidos.length > 1) {
+        return { clave: null, ambiguo: parecidos.map(([, item]) => item.name) };
     }
-    return { clave: null, ambiguo: [] };
+    if (parecidos.length === 0) return { clave: null, ambiguo: [] };
+
+    // Uno solo: se junta salvo que sean variedades distintas del mismo
+    // ingrediente, como los frijoles blancos y los del casadito.
+    const [clave, item] = parecidos[0];
+    return esElMismoPlato(item.name, nombre)
+        ? { clave, ambiguo: [] }
+        : { clave: null, ambiguo: [] };
 };
 
 /**

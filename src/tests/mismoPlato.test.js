@@ -259,3 +259,91 @@ describe('el mismo plato en dos menús distintos', () => {
         expect(Object.values(mapa)[0].totalQty).toBe(1596);
     });
 });
+
+describe('una variedad no es una preparación', () => {
+    /**
+     * Los frijoles del casadito se estaban sumando al renglón de los frijoles
+     * blancos, porque "Frijoles" cabe dentro de "Frijoles blancos guisados". La
+     * hoja pedía 101 tazas donde hacían falta 33 — 68 tazas de frijol blanco de
+     * más, todas las semanas.
+     *
+     * Gina lo tiene claro: en su lista manda "frijoles blancos 30 tazas" y
+     * "frijoles arreglado 10 tazas", por separado.
+     */
+    it('los frijoles del casadito NO son los frijoles blancos', () => {
+        expect(esElMismoPlato('Frijoles', 'Frijoles blancos guisados')).toBe(false);
+        expect(esElMismoPlato('Frijoles arreglados', 'Frijoles blancos guisados')).toBe(false);
+    });
+
+    it('el arroz blanco no es cualquier arroz', () => {
+        expect(esElMismoPlato('Arroz', 'Arroz blanco')).toBe(false);
+    });
+
+    it('el ayote tierno no es el ayote a secas', () => {
+        expect(esElMismoPlato('Ayote', 'Ayote tierno')).toBe(false);
+    });
+
+    // Lo que SÍ se tiene que seguir juntando: la forma de cocinarlo no cambia el plato
+    it('una preparación sí junta: es la misma carne', () => {
+        expect(esElMismoPlato('Carne mechada', 'Carne mechada en salsa criolla')).toBe(true);
+        expect(esElMismoPlato('Albóndigas', 'Albóndigas de res artesanales')).toBe(true);
+        expect(esElMismoPlato('Pollo a la toscana', 'Pollo a la toscana')).toBe(true);
+    });
+
+    it('dos variedades distintas tampoco se juntan entre sí', () => {
+        expect(esElMismoPlato('Frijoles blancos', 'Frijoles negros')).toBe(false);
+    });
+
+    it('si las dos lo dicen, siguen siendo el mismo', () => {
+        expect(esElMismoPlato('Frijoles blancos', 'Frijoles blancos guisados con olores')).toBe(true);
+    });
+});
+
+describe('el arroz del casadito queda aparte, no se va al del perejil', () => {
+    /**
+     * "Arroz" sale de partir el carbo del casadito, "Arroz, frijoles y maduros".
+     * Se parece a "Arroz blanco" Y a "Arroz al perejil": que sean dos es lo que
+     * dice que no se sabe cuál es, y por eso queda aparte.
+     *
+     * Al separar las variedades, "Arroz blanco" dejó de calzar y quedaba uno
+     * solo — las 69 tazas del casadito se iban al arroz al perejil. La
+     * ambigüedad se mide ANTES de filtrar la variedad.
+     */
+    const mapa = () => ({
+        'arroz blanco|taza(s)':    { name: 'Arroz blanco', unit: 'taza(s)' },
+        'arroz al perejil|taza(s)': { name: 'Arroz al perejil', unit: 'taza(s)' }
+    });
+
+    it('no lo mete en ninguno de los dos', () => {
+        const r = buscarRenglonDelMismoPlato(mapa(), 'Arroz', 'taza(s)');
+        expect(r.clave).toBeNull();
+        expect(r.ambiguo).toHaveLength(2);
+    });
+
+    it('y avisa con cuáles calzaba, para que lo decida una persona', () => {
+        const r = buscarRenglonDelMismoPlato(mapa(), 'Arroz', 'taza(s)');
+        expect(r.ambiguo).toContain('Arroz blanco');
+        expect(r.ambiguo).toContain('Arroz al perejil');
+    });
+
+    it('con un solo arroz de variedad distinta, tampoco se junta', () => {
+        const r = buscarRenglonDelMismoPlato(
+            { 'arroz blanco|taza(s)': { name: 'Arroz blanco', unit: 'taza(s)' } }, 'Arroz', 'taza(s)');
+        expect(r.clave).toBeNull();
+        expect(r.ambiguo).toHaveLength(0);
+    });
+
+    it('pero una preparación sí se junta cuando es la única', () => {
+        const r = buscarRenglonDelMismoPlato(
+            { 'carne mechada en salsa criolla|g': { name: 'Carne mechada en salsa criolla', unit: 'g' } },
+            'Carne mechada', 'g');
+        expect(r.clave).toBe('carne mechada en salsa criolla|g');
+    });
+
+    it('los frijoles del casadito no entran a los blancos', () => {
+        const r = buscarRenglonDelMismoPlato(
+            { 'frijoles blancos guisados|taza(s)': { name: 'Frijoles blancos guisados', unit: 'taza(s)' } },
+            'Frijoles', 'taza(s)');
+        expect(r.clave).toBeNull();
+    });
+});
