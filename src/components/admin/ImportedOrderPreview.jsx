@@ -90,8 +90,14 @@ export default function ImportedOrderPreview({
                 </div>
             )}
 
-            {/* Avisos que no bloquean */}
-            {warnings.length > 0 && problems.length === 0 && (
+            {/* Avisos que no bloquean.
+                Se muestran SIEMPRE, aunque falte algo que sí bloquea. Antes se
+                escondían mientras hubiera un problema pendiente, y el aviso más
+                caro de todos —"este pedido ya existe, se cocina y se cobra dos
+                veces"— quedaba tapado justo detrás de un total en cero. Uno
+                corregía el total y recién ahí se enteraba; conviene saberlo
+                antes de ponerse a completar nada. */}
+            {warnings.length > 0 && (
                 <div className="mt-4 p-4 bg-amber-50 border border-amber-100 rounded-xl">
                     <p className="text-sm font-bold text-amber-800 flex items-center gap-2">
                         <AlertTriangle size={16} aria-hidden="true" />

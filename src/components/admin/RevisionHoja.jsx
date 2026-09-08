@@ -6,12 +6,17 @@ import { AlertTriangle, CheckCircle2, Merge } from 'lucide-react';
  *
  * No se imprime (print:hidden): es para la pantalla, para revisar y corregir.
  */
-export default function RevisionHoja({ revision, fusionados = [] }) {
+export default function RevisionHoja({ revision, fusionados = [], extra = [] }) {
     if (!revision) return null;
 
+    // `extra` trae las revisiones que `revisarHoja` no hace: ollas partidas por
+    // un dedazo, quien paga cena y no le sale ninguna, pedidos repetidos y
+    // packs que se acaban. Van en el MISMO recuadro a propósito: dos listas de
+    // avisos en lugares distintos terminan en que no se lee ninguna.
     const { resumen, problemas, graves } = revision;
-    const altas = problemas.filter((p) => p.gravedad === 'alta');
-    const medias = problemas.filter((p) => p.gravedad === 'media');
+    const todos = [...problemas, ...(extra || [])];
+    const altas = todos.filter((p) => p.gravedad === 'alta');
+    const medias = todos.filter((p) => p.gravedad === 'media');
 
     return (
         <div className="print:hidden mb-6 max-w-4xl mx-auto text-left">
@@ -59,7 +64,7 @@ export default function RevisionHoja({ revision, fusionados = [] }) {
                 </div>
             )}
 
-            {graves === 0 && medias.length === 0 && fusionados.length === 0 && (
+            {altas.length === 0 && medias.length === 0 && fusionados.length === 0 && (
                 <p className="text-sm text-green-800 bg-green-50 border border-green-200 rounded-xl px-4 py-3 flex items-center gap-2">
                     <CheckCircle2 size={16} aria-hidden="true" />
                     Todo revisado: los {resumen.total} pedidos salen completos.
@@ -86,12 +91,15 @@ export default function RevisionHoja({ revision, fusionados = [] }) {
             {medias.length > 0 && (
                 <details className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
                     <summary className="text-sm font-bold text-amber-900 cursor-pointer">
-                        {medias.length} con datos faltantes (no impiden cocinar)
+                        {medias.length} para revisar (no impiden cocinar)
                     </summary>
                     <ul className="mt-2 space-y-1">
                         {medias.map((p, i) => (
                             <li key={i} className="text-xs text-amber-900">
                                 <strong>{p.cliente}:</strong> {p.que}
+                                {p.comoSeArregla && (
+                                    <span className="block text-amber-700">→ {p.comoSeArregla}</span>
+                                )}
                             </li>
                         ))}
                     </ul>

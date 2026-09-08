@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { packsPorRenovar, comoSeLee } from '../../utils/packsPorRenovar';
 import { CalendarDays, AlertTriangle, Lock, Search, Info } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useOrders } from '../../context/OrdersContext';
@@ -22,6 +23,11 @@ import { formatFechaLarga, diasHasta } from '../../utils/dateDisplay';
 
 const TABS = [
     { id: 'activas', label: 'En curso' },
+    // Un pack se acaba en silencio. Agrupados por PROXIMA entrega, el que se
+    // queda sin nada la semana entrante se ve igual que el que tiene un mes por
+    // delante: el 8 de setiembre, Kendall Barboza tenia su ULTIMA al dia
+    // siguiente y nadie lo sabia.
+    { id: 'renovar', label: 'Por renovar' },
     { id: 'completadas', label: 'Terminados' },
     { id: 'todas', label: 'Todos' }
 ];
@@ -75,7 +81,15 @@ export default function MonthlyPacksView() {
     const desincronizadas = subscriptions.filter(s => s.progress.cocinaDesincronizada);
     const entregasHoy = activas.filter(s => s.progress.esHoy);
 
-    const base = tab === 'activas' ? activas : tab === 'completadas' ? completadas : subscriptions;
+    const hoyISO = new Date().toISOString().slice(0, 10);
+    const porRenovar = packsPorRenovar(activas, hoyISO);
+    const comoSeLeePorCliente = new Map(
+        porRenovar.map(s => [s.order.id || s.order.cliente, comoSeLee(s.cuerda)])
+    );
+
+    const base = tab === 'activas' ? activas
+        : tab === 'renovar' ? porRenovar
+            : tab === 'completadas' ? completadas : subscriptions;
 
     const termino = busqueda.trim().toLowerCase();
     const visibles = termino
@@ -103,6 +117,7 @@ export default function MonthlyPacksView() {
                 stats={[
                     { value: activas.length, label: 'En curso' },
                     { value: entregasHoy.length, label: 'Entregan hoy' },
+                    { value: porRenovar.length, label: 'Por renovar' },
                     { value: completadas.length, label: 'Terminados' }
                 ]}
                 gradient="from-purple-600 via-indigo-500 to-blue-500"
@@ -148,8 +163,9 @@ export default function MonthlyPacksView() {
                 <div className="flex gap-2 flex-wrap">
                     {TABS.map(t => {
                         const count = t.id === 'activas' ? activas.length
-                            : t.id === 'completadas' ? completadas.length
-                                : subscriptions.length;
+                            : t.id === 'renovar' ? porRenovar.length
+                                : t.id === 'completadas' ? completadas.length
+                                    : subscriptions.length;
                         return (
                             <button
                                 key={t.id}
@@ -164,6 +180,38 @@ export default function MonthlyPacksView() {
                     })}
                 </div>
             </div>
+
+            {/* La lista de renovacion se lee distinto: no importa cuando es la
+                PROXIMA entrega sino cuando es la ULTIMA, que es la fecha
+                despues de la cual el cliente se va si nadie le escribe. */}
+            {tab === 'renovar' && porRenovar.length > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5">
+                    <p className="font-bold text-amber-900 flex items-center gap-2">
+                        <AlertTriangle size={18} aria-hidden="true" />
+                        A {porRenovar.length === 1 ? 'este se le acaba' : `estos ${porRenovar.length} se les acaba`} el pack
+                    </p>
+                    <p className="text-sm text-amber-800 mt-1 mb-3">
+                        Escribiles ANTES de su última entrega. Después ya se fueron.
+                    </p>
+                    <ul className="space-y-1.5">
+                        {porRenovar.map((s, i) => (
+                            <li key={s.order.id || i} className="text-sm text-amber-900 flex flex-wrap gap-x-2">
+                                <strong>{s.order.cliente}</strong>
+                                <span>— {comoSeLeePorCliente.get(s.order.id || s.order.cliente)}</span>
+                                {s.cuerda.ultima && (
+                                    <span className="text-amber-700">({s.cuerda.ultima})</span>
+                                )}
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+
+            {tab === 'renovar' && porRenovar.length === 0 && !loading && (
+                <div className="bg-green-50 border border-green-200 rounded-2xl p-5 text-sm text-green-900">
+                    A nadie se le está acabando el pack esta semana.
+                </div>
+            )}
 
             {loading ? (
                 <div className="flex justify-center py-16">

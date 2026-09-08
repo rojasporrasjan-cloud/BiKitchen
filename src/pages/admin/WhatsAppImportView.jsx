@@ -7,7 +7,8 @@ import { useOrders } from '../../context/OrdersContext';
 import AdminPageHeader from '../../components/admin/AdminPageHeader';
 import ImportedOrderPreview from '../../components/admin/ImportedOrderPreview';
 import { extractOrderNumbers, parseOrderBlock } from '../../utils/parseOrderText';
-import { buildPedidoFromImport, validatePedidoForFirestore, resolverCorreo } from '../../utils/buildPedidoFromImport';
+import { buildPedidoFromImport, validatePedidoForFirestore, avisosDelPedido, resolverCorreo } from '../../utils/buildPedidoFromImport';
+import { avisoDeDuplicado } from '../../utils/pedidoDuplicado';
 import { nivelPorPuntos } from '../../config/loyalty';
 import { upsertClient } from '../../services/clientService';
 import { formatPrice } from '../../utils/formatters';
@@ -25,7 +26,7 @@ import { getOrderStatusLabel, CONFIRMABLE_STATUSES } from '../../config/orderSta
  */
 export default function WhatsAppImportView() {
     const { isSuperAdmin, currentUser } = useAuth();
-    const { updateOrderStatus } = useOrders();
+    const { updateOrderStatus, orders } = useOrders();
 
     const [rawText, setRawText] = useState('');
     const [results, setResults] = useState([]);
@@ -82,8 +83,18 @@ export default function WhatsAppImportView() {
             createdBy: currentUser?.email || 'admin'
         });
 
-        return { merged, pedido, problems: validatePedidoForFirestore(pedido) };
-    }, [draft, edits, currentUser]);
+        // El duplicado se avisa ACA, antes de guardar. Edwin Perez salio
+        // cobrado y cocinado dos veces y lo vimos cuando la comida ya estaba
+        // hecha; en ese punto solo queda devolver la plata. Aca es un clic.
+        const repetido = avisoDeDuplicado(pedido, orders);
+
+        return {
+            merged,
+            pedido,
+            problems: validatePedidoForFirestore(pedido),
+            avisos: [...(repetido ? [repetido] : []), ...avisosDelPedido(pedido)]
+        };
+    }, [draft, edits, currentUser, orders]);
 
     if (!isSuperAdmin()) {
         return (
@@ -318,7 +329,7 @@ export default function WhatsAppImportView() {
                     parsed={draftPedido.merged}
                     pedido={draftPedido.pedido}
                     problems={draftPedido.problems}
-                    warnings={draft.parsed.warnings}
+                    warnings={[...(draft.parsed.warnings || []), ...draftPedido.avisos]}
                     creating={creating}
                     created={created}
                     onCreate={handleCreate}

@@ -20,8 +20,11 @@ Sábado 15 agosto
 Sábado 22 agosto
 Sábado 29 agosto`;
 
-        const parsed = parseOrderBlock(text);
-        console.log("PARSED:", JSON.stringify(parsed, null, 2));
+        // La fecha va FIJA a proposito. Una fecha sin ano que quedo mas de 30
+        // dias atras el parser la manda al ano siguiente, asi que con el reloj
+        // de verdad este test se ponia rojo solo al pasar los dias: el 8 de
+        // setiembre de 2026 empezo a leer "sabado 08 agosto" como 2027.
+        const parsed = parseOrderBlock(text, new Date('2026-08-01T12:00:00'));
 
         expect(parsed.cliente).toBe('Maycol Ávila');
         expect(parsed.telefono).toBe('85152838');
