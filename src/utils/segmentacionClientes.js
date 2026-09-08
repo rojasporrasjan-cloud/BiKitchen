@@ -13,30 +13,15 @@
 
 import { getScheduleFromOrder } from './orderDates';
 import { getSubscriptionProgress } from './subscriptionProgress';
+// La regla de qué teléfono es de nadie vive en un solo archivo, porque la
+// comparten la hoja de producción y las difusiones: src/utils/telefonoRelleno.js
+import { normalizarTelefono, esTelefonoDeRelleno } from './telefonoRelleno';
 import { DOMINIO_SIN_CORREO } from './buildPedidoFromImport';
+
+export { normalizarTelefono, esTelefonoDeRelleno };
 
 /** Pedidos que no cuentan para saber qué le pasa a un cliente. */
 const ESTADOS_MUERTOS = ['cancelled', 'cancelado', 'refunded', 'pending_payment'];
-
-/**
- * Los 8 dígitos finales del teléfono. "8721-6592", "87216592" y "+506 8721 6592"
- * son la misma persona, y si no se normaliza aparece tres veces en la lista.
- */
-export const normalizarTelefono = (telefono) => {
-    const digitos = String(telefono || '').replace(/\D/g, '');
-    return digitos.length > 8 ? digitos.slice(-8) : digitos;
-};
-
-/**
- * Teléfonos de relleno que se pusieron para meter un pedido a la hoja sin tener
- * el número real (por ejemplo los del Excel: 8000-0001 … 8000-0006).
- *
- * Sirven para producción, pero NO son de nadie: si entraran a una difusión se
- * crearían contactos falsos en Kommo y se intentaría escribirle a números que
- * no existen. En Costa Rica los celulares arrancan en 6, 7 u 8, y el bloque
- * 8000-XXXX no está asignado, así que es seguro descartarlo.
- */
-export const esTelefonoDeRelleno = (telefono) => /^8000\d{4}$/.test(normalizarTelefono(telefono));
 
 const aFecha = (valor) => {
     if (!valor) return null;

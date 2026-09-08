@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { parseOrderBlock, parseFechaEspanol } from '../utils/parseOrderText';
-import { buildPedidoFromImport, validatePedidoForFirestore } from '../utils/buildPedidoFromImport';
+import { buildPedidoFromImport, validatePedidoForFirestore, avisosDelPedido } from '../utils/buildPedidoFromImport';
 import { mapPedidosFromLegacy } from '../utils/logisticsUtils';
 
 /**
@@ -57,12 +57,31 @@ describe('Pedido escrito a mano', () => {
         expect(p.items).toHaveLength(1);
     });
 
-    it('pide el teléfono, que es lo único que hace falta de contacto', () => {
+    it('sin teléfono el pedido SE GUARDA igual: es aviso, no bloqueo', () => {
         expect(p.telefono).toBeNull();
         expect(p.correo).toBeNull();
-        expect(validatePedidoForFirestore(buildPedidoFromImport(p)).length).toBeGreaterThan(0);
+        const sinTel = buildPedidoFromImport(p);
+        // Gina manda pedidos sin numero todas las semanas. Antes habia que
+        // inventarle un 8888-8888 para poder guardarlos, y ese relleno repetido
+        // fusionaba clientes distintos en la hoja. Guardar sin telefono es lo
+        // correcto: el pedido se cocina igual y el numero se agrega despues.
+        expect(validatePedidoForFirestore(sinTel)).toEqual([]);
+        expect(avisosDelPedido(sinTel).join(' ')).toMatch(/sin tel[ée]fono/i);
         // El correo NO se reclama: se arma solo
         expect(p.warnings.join(' ')).not.toMatch(/correo/i);
+    });
+
+    it('sin teléfono el correo se arma con el nombre, no queda vacío', () => {
+        const sinTel = buildPedidoFromImport(p);
+        expect(typeof sinTel.correo).toBe('string');
+        expect(sinTel.correo.length).toBeGreaterThan(4);
+        expect(sinTel.correoEsPlaceholder).toBe(true);
+    });
+
+    it('un teléfono de relleno avisa que mejor lo dejen vacío', () => {
+        const relleno = buildPedidoFromImport({ ...p, telefono: '8888-8888' });
+        expect(validatePedidoForFirestore(relleno)).toEqual([]);
+        expect(avisosDelPedido(relleno).join(' ')).toMatch(/relleno/i);
     });
 
     it('con solo el teléfono ya se puede guardar: el correo se arma solo', () => {
