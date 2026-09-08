@@ -88,6 +88,31 @@ describe('la cuenta sobrevive entre rollos', () => {
         expect(gruposQueFaltan(grupos, leerImpresas(fecha))[0].cantidad).toBe(370);
     });
 
+    it('el rollo 2 NO puede salir del lote completo, o repite las mismas', () => {
+        // Esta era la falla: la casilla "solo lo que falta" venia apagada, asi
+        // que el lote seguia siendo el completo y "Solo este rollo" volvia a
+        // mandar las MISMAS 220 del principio. Se imprimian dos veces las
+        // primeras y al final faltaban las ultimas — y eso se descubre en la
+        // mesa de empaque, cuando ya no hay etiqueta para el ultimo cliente.
+        localStorage.clear();
+        const fecha = '2026-09-12';
+        const grupos = [{ id: 'g1', cantidad: 500 }];
+        const todas = tira(500);
+
+        const rollo1 = proximoRollo(todas, 220);
+        anotarImpresas(fecha, contarPorGrupo(rollo1, rollo1.length));
+
+        // MAL: seguir cortando del lote completo devuelve lo mismo otra vez
+        const repetido = proximoRollo(todas, 220);
+        expect(repetido.length).toBe(220);
+        expect(contarPorGrupo(repetido, repetido.length)).toEqual({ g1: 220 });
+
+        // BIEN: se corta de lo que FALTA, y quedan 280 por delante
+        const faltan = gruposQueFaltan(grupos, leerImpresas(fecha));
+        expect(faltan[0].cantidad).toBe(280);
+        expect(faltan[0].yaImpresas).toBe(220);
+    });
+
     it('los divisores gastan papel pero no cuentan como plato', () => {
         localStorage.clear();
         const conDivisor = [

@@ -2,6 +2,7 @@ import React from 'react';
 import { Printer, CheckCircle, XCircle, FlaskConical, Sliders } from 'lucide-react';
 import LabelCalibrator from './LabelCalibrator';
 import { webBluetoothDisponible, puedeReconectarSolo } from '../../services/printing/PhomemoM110Adapter';
+import { motivoSinBluetoothAqui } from '../../services/printing/soporteBluetooth';
 
 /**
  * Panel de impresora: qué se va a usar, en qué estado está y cómo calibrarla.
@@ -108,11 +109,20 @@ export default function PrinterConnectionPanel({
                 </p>
             )}
 
-            {modoReal && !webBluetoothDisponible() && (
-                <p className="text-sm text-red-700 mt-3">
-                    Este navegador no soporta Web Bluetooth. Abrí el panel en Chrome o Edge.
-                </p>
-            )}
+            {/* El mensaje se arma segun el aparato. Antes decia siempre "abri el
+                panel en Chrome o Edge" y en el iPhone eso hace perder la tarde:
+                ahi NINGUN navegador puede, porque Apple los obliga a todos a
+                usar su motor y ese motor no trae Web Bluetooth. */}
+            {modoReal && !webBluetoothDisponible() && (() => {
+                const motivo = motivoSinBluetoothAqui(false);
+                if (!motivo) return null;
+                return (
+                    <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3">
+                        <p className="text-sm font-bold text-red-800">{motivo.titulo}</p>
+                        <p className="text-sm text-red-700 mt-1 leading-relaxed">{motivo.detalle}</p>
+                    </div>
+                );
+            })()}
 
             {modoReal && printerName && (
                 <p className="text-xs text-gray-500 mt-3">

@@ -352,6 +352,18 @@ export default function PrinterView() {
         if (!resultado.isSimulated) {
             const cuentas = contarPorGrupo(labels, resultado.processed);
             setImpresas(anotarImpresas(selectedDate, cuentas));
+
+            // En cuanto sale la primera etiqueta, la hoja pasa SOLA a "lo que
+            // falta".
+            //
+            // Sin esto, sacar de a rollos estaba roto: el lote seguia siendo el
+            // completo, asi que "Solo este rollo" volvia a mandar LAS MISMAS
+            // 220 del principio. Se imprimian dos veces las primeras y al final
+            // faltaban las ultimas, y nadie se enteraba hasta que en la mesa de
+            // empaque no habia etiqueta para el ultimo cliente.
+            //
+            // Se puede desmarcar a mano para reimprimir algo a proposito.
+            setSoloFaltantes(true);
         }
     };
 
