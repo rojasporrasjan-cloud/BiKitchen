@@ -226,6 +226,42 @@ export const datosQueFaltan = (pedidos = []) => {
     )];
 };
 
+/**
+ * 7. Un pack de N proteinas que no dice CUALES.
+ *
+ * El pedido de Diana Gonzalez decia "Pack de 3 proteinas de 250 g" y traia un
+ * solo item con ese mismo nombre: en ninguna parte quedo escrito que tres
+ * proteinas eligio. La hoja necesitaba tres renglones, no tenia los nombres, y
+ * relleno repitiendo el mismo plato — a Gina le salieron tres milanesas de
+ * pollo seguidas y penso que el Excel duplicaba cosas.
+ *
+ * Inventar es peor que avisar: con el aviso se le pregunta al cliente; sin el,
+ * se cocinan tres veces lo mismo y alguien recibe lo que no pidio.
+ */
+export const packsSinDecirCuales = (pedidos = []) => (pedidos || [])
+    .map(p => {
+        const nombre = String(p?.plan || '');
+        const m = nombre.match(/(\d+)\s*prote[ií]nas?/i);
+        if (!m) return null;
+        const cuantas = Number(m[1]);
+        if (!(cuantas > 1)) return null;
+
+        // Los platos de verdad: los que NO son el nombre del pack repetido.
+        const propios = (p?.platos || []).map(x => clave(x)).filter(Boolean);
+        const distintos = new Set(propios.filter(x => x !== clave(nombre)));
+        if (distintos.size >= cuantas) return null;
+
+        return aviso(
+            'alto', 'pack-sin-detalle',
+            'Un pack de proteínas que no dice cuáles',
+            `${p.cliente} lleva "${nombre}" pero en el pedido no quedó escrito qué `
+            + `proteínas eligió (hay ${distintos.size} de ${cuantas}). La hoja rellena `
+            + 'repitiendo un plato, así que se cocinaría lo mismo varias veces.',
+            [p.cliente]
+        );
+    })
+    .filter(Boolean);
+
 const ORDEN_NIVEL = { alto: 0, medio: 1, bajo: 2 };
 
 /**
@@ -245,7 +281,8 @@ export const problemasParaLaHoja = ({ pedidos = [], preparaciones = [], fecha = 
         'sin-cenas': 'Abrí el pedido y revisá que los platos de cena estén cargados.',
         'pack-sin-cocinar': 'Revisá el nombre del pack: no calzó con ninguna familia del menú.',
         repetido: 'Cancelá el que sobra, o marcá los dos como "no fusionar" si de verdad son distintos.',
-        renovacion: 'Escribile antes de la última entrega para renovarle el pack.'
+        renovacion: 'Escribile antes de la última entrega para renovarle el pack.',
+        'pack-sin-detalle': 'Preguntale al cliente qué proteínas quiere y escribilas en el pedido.'
     };
 
     return [
@@ -253,6 +290,7 @@ export const problemasParaLaHoja = ({ pedidos = [], preparaciones = [], fecha = 
         ...cenasQueNoSalen(pedidos),
         ...packsQueNadieCocina(pedidos),
         ...pedidosRepetidos(pedidos),
+        ...packsSinDecirCuales(pedidos),
         ...seLesAcaban(pedidos, fecha)
     ].map(a => ({
         cliente: a.tipo === 'olla-partida' ? 'Cocina' : (a.quienes[0] || a.titulo),
@@ -275,6 +313,7 @@ export const revisarLaHoja = ({ pedidos = [], preparaciones = [], fecha = null }
     ...cenasQueNoSalen(pedidos),
     ...packsQueNadieCocina(pedidos),
     ...pedidosRepetidos(pedidos),
+    ...packsSinDecirCuales(pedidos),
     ...seLesAcaban(pedidos, fecha),
     ...datosQueFaltan(pedidos)
 ].sort((a, b) => ORDEN_NIVEL[a.nivel] - ORDEN_NIVEL[b.nivel]);

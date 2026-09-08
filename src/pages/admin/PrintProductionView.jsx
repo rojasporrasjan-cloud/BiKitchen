@@ -3563,6 +3563,15 @@ export default function PrintProductionView() {
                             zona: p.zona || p.zona_envio || p.rawPedido?.zona_envio || p.rawPedido?.direccion,
                             esPack: !isActuallyIndividual(p.plan || p.tipoMenu || ''),
                             esDesayuno: isDesayunoPack(p.plan || p.tipoMenu || ''),
+                            // Las proteinas elegidas viven DENTRO del item, en
+                            // `proteinas`. Leerlas del nombre del item devolvia el
+                            // nombre del pack y la revision acusaba a todo el mundo
+                            // de no haber elegido nada.
+                            platos: (p.rawPedido?.items || p.items || [])
+                                .flatMap(i => (i?.proteinas?.length
+                                    ? i.proteinas
+                                    : [i?.nombre || i?.name || i?.planName || '']))
+                                .filter(Boolean),
                             familias: familiasDelCliente.get(
                                 String(p.cliente || p.nombre || '').trim().toLowerCase()
                             ) || []

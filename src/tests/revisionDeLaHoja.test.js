@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     revisarLaHoja, distanciaConVolteos, ollasPartidas, cenasQueNoSalen,
-    packsQueNadieCocina, pedidosRepetidos, seLesAcaban, datosQueFaltan
+    packsQueNadieCocina, pedidosRepetidos, seLesAcaban, datosQueFaltan, packsSinDecirCuales
 } from '../utils/revisionDeLaHoja';
 
 /**
@@ -135,6 +135,53 @@ describe('4. el mismo pedido dos veces', () => {
             { cliente: 'Diana Gonzalez', plan: 'PACK MENSUAL BAJO CALORIAS' },
             { cliente: 'Diana Gonzalez', plan: 'Pack de 3 proteinas de 250 g' }
         ])).toEqual([]);
+    });
+});
+
+describe('7. un pack de proteinas que no dice cuales', () => {
+    it('agarra el de Diana Gonzalez, que salio con tres milanesas iguales', () => {
+        // Su pedido decia "Pack de 3 proteinas de 250 g" y traia UN item con
+        // ese mismo nombre: nunca quedo escrito que tres eligio. La hoja
+        // relleno repitiendo un plato y Gina penso que el Excel duplicaba.
+        const avisos = packsSinDecirCuales([{
+            cliente: 'Diana Gonzalez',
+            plan: 'Pack de 3 proteinas de 250 g',
+            platos: ['Pack de 3 proteinas de 250 g']
+        }]);
+        expect(avisos).toHaveLength(1);
+        expect(avisos[0].nivel).toBe('alto');
+        expect(avisos[0].detalle).toMatch(/no qued[oó] escrito/i);
+    });
+
+    it('el de German, que SI trae sus cinco, no se avisa', () => {
+        expect(packsSinDecirCuales([{
+            cliente: 'German',
+            plan: 'Pack 5 Proteinas 500 g',
+            platos: ['Pollo a la naranja', 'Pollo con hongos', 'Lomo de res encebollado',
+                     'Cerdo con chimichurri', 'Cerdo en salsa BBQ']
+        }])).toEqual([]);
+    });
+
+    it('avisa tambien cuando trae MENOS de las que dice', () => {
+        const avisos = packsSinDecirCuales([{
+            cliente: 'Leonel Vindas',
+            plan: 'Pack 5 Proteinas (250g)',
+            platos: ['Pollo a la naranja', 'Fajitas de lomo encebolladas']
+        }]);
+        expect(avisos).toHaveLength(1);
+        expect(avisos[0].detalle).toMatch(/2 de 5/);
+    });
+
+    it('un pack que no habla de proteinas no le interesa', () => {
+        expect(packsSinDecirCuales([
+            { cliente: 'Kendall', plan: 'Pack Regular', platos: [] },
+            { cliente: 'Melany', plan: 'Pack Bajo Calorias', platos: [] }
+        ])).toEqual([]);
+    });
+
+    it('sin datos no revienta', () => {
+        expect(packsSinDecirCuales()).toEqual([]);
+        expect(packsSinDecirCuales([{ cliente: 'X' }])).toEqual([]);
     });
 });
 
