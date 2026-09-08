@@ -11,6 +11,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Trash2, GripVertical, Drumstick, Salad, Wheat } from 'lucide-react';
+import { camposLlenos, platoCompleto } from '../../utils/menuCompletitud';
 
 /**
  * MenuEditor
@@ -59,19 +60,7 @@ export default function MenuEditor({ platos, onChange, menuType = 'regular' }) {
 
   const isSingleField = isFamiliar || isDesayuno;
 
-  // Calcular progreso de completitud
-  const getCompleteness = (plato) => {
-    // Para menús familiares o desayunos, solo verificar que tenga el nombre del platillo
-    if (isSingleField) {
-      return plato.proteina?.trim() ? 1 : 0;
-    }
-    let filled = 0;
-    if (plato.proteina?.trim()) filled++;
-    if (plato.vegetal?.trim()) filled++;
-    // Si es sin carbos, no contar carbohidratos en el progreso
-    if (!isSinCarbos && plato.carbo?.trim()) filled++;
-    return isSinCarbos ? filled : (plato.carbo?.trim() ? filled + 1 : filled);
-  };
+  const getCompleteness = (plato) => camposLlenos(plato, { isSingleField, isSinCarbos });
 
   return (
     <div className="space-y-6">
@@ -81,7 +70,7 @@ export default function MenuEditor({ platos, onChange, menuType = 'regular' }) {
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-gray-700">Progreso del menú</span>
             <span className="text-sm font-bold text-orange-600">
-              {platos.filter(p => isSingleField ? getCompleteness(p) === 1 : (isSinCarbos ? getCompleteness(p) === 2 : getCompleteness(p) === 3)).length} / {platos.length} platos completos
+              {platos.filter(p => platoCompleto(p, { isSingleField, isSinCarbos })).length} / {platos.length} platos completos
             </span>
           </div>
           <div className="h-2 bg-white rounded-full overflow-hidden">
@@ -89,7 +78,7 @@ export default function MenuEditor({ platos, onChange, menuType = 'regular' }) {
               className="h-full bg-gradient-to-r from-orange-400 to-orange-500 rounded-full"
               initial={{ width: 0 }}
               animate={{ 
-                width: `${(platos.filter(p => isSingleField ? getCompleteness(p) === 1 : (isSinCarbos ? getCompleteness(p) === 2 : getCompleteness(p) === 3)).length / Math.max(platos.length, 1)) * 100}%` 
+                width: `${(platos.filter(p => platoCompleto(p, { isSingleField, isSinCarbos })).length / Math.max(platos.length, 1)) * 100}%` 
               }}
               transition={{ duration: 0.5 }}
             />
@@ -102,7 +91,7 @@ export default function MenuEditor({ platos, onChange, menuType = 'regular' }) {
         <AnimatePresence mode="popLayout">
           {platos.map((plato, index) => {
             const completeness = getCompleteness(plato);
-            const isComplete = isSingleField ? completeness === 1 : (isSinCarbos ? completeness === 2 : completeness === 3);
+            const isComplete = platoCompleto(plato, { isSingleField, isSinCarbos });
             
             return (
               <motion.div
