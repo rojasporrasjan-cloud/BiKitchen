@@ -86,6 +86,34 @@ const impresion = (enUnaPagina, titulos) => ({
     ...(titulos ? { printTitlesRow: titulos } : {})
 });
 
+/**
+ * Alto de una fila que lleva texto envuelto.
+ *
+ * Con `wrapText` Excel NO recalcula el alto de una fila a la que ya se le puso
+ * uno fijo: la deja del tamano pedido y corta lo que sobra. En la pestana de
+ * desayunos la fila estaba clavada en 26 y la nota de edwin perez —"Lleva
+ * desayunos | Lleva tambien: PACK SIN CARBOS"— salia partida a la mitad.
+ *
+ * Se estima cuantas lineas ocupa cada celda por su ancho de columna y se cobra
+ * la mas alta. Es una cuenta aproximada, pero errar hacia arriba solo deja un
+ * poco de aire; errar hacia abajo esconde una instruccion.
+ *
+ * @param {Array<[string, number]>} celdas  pares de [texto, ancho de columna]
+ * @param {number} minimo  alto de una sola linea
+ */
+function altoDeFila(celdas, minimo = 26) {
+    const lineas = celdas.reduce((max, [txt, ancho]) => {
+        const largo = String(txt || '').length;
+        if (!largo || !ancho) return max;
+        // ~1,05 caracteres por unidad de ancho, y se respetan los saltos de linea
+        const porLinea = Math.max(1, Math.floor(ancho * 1.05));
+        const propias = String(txt).split(String.fromCharCode(10)).reduce(
+            (n, parte) => n + Math.max(1, Math.ceil(parte.length / porLinea)), 0);
+        return Math.max(max, propias);
+    }, 1);
+    return Math.max(minimo, Math.min(lineas, 12) * 14 + 8);
+}
+
 /** Encabezado naranja + las líneas de "CANTIDAD POR PLATO" + los títulos. */
 function escribirCabecera(ws, col, bloque) {
     const titulo = ws.getRow(3).getCell(col);
@@ -201,6 +229,110 @@ function escribirPlatos(ws, col, bloque) {
     return fila;
 }
 
+/**
+ * Los que NO comen el menú tal cual, en bloques aparte.
+ *
+ * Igual que en pantalla: quien empaca llena en línea los envases del menú
+ * normal, y los que llevan un cambio son OTRA línea, no excepciones sueltas. Si
+ * cinco pidieron puré de papa en vez de arroz, esos cinco van juntos con un
+ * solo cuadro de platos.
+ *
+ * "Poner todos los que no tienen ningún cambio en una hoja, los que tienen
+ * cambios en otra, y los personalizados en otra" — Jan, 7 de setiembre de 2026.
+ *
+ * @returns {number} la siguiente fila libre
+ */
+function escribirAparte(ws, col, filaInicio, bloque) {
+    const grupos = bloque.gruposDeCambio || [];
+    const propios = bloque.personalizados || [];
+    if (grupos.length === 0 && propios.length === 0) return filaInicio;
+
+    let f = filaInicio;
+
+    const titulo = (texto, fondo) => {
+        const c = ws.getRow(f).getCell(col);
+        c.value = texto;
+        c.font = { bold: true, size: 12 };
+        c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fondo } };
+        c.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+        ws.mergeCells(f, col, f, col + 5);
+        f++;
+    };
+
+    const linea = (etiqueta, valor) => {
+        const r = ws.getRow(f);
+        const a = r.getCell(col);
+        a.value = etiqueta;
+        a.font = { bold: true, size: 11 };
+        const b = r.getCell(col + 1);
+        b.value = valor;
+        b.alignment = { wrapText: true, vertical: 'middle' };
+        ws.mergeCells(f, col + 1, f, col + 5);
+        for (let i = 0; i < 6; i++) r.getCell(col + i).border = borde;
+        f++;
+    };
+
+    // Las columnas de la hoja no son todas del mismo ancho: la B mide 70 y la C
+    // apenas 12,9. Escribir el vegetal en la C lo dejaba cortado, asi que el
+    // cuadro se reparte sobre las anchas y la C-D van combinadas.
+    //   col   Plato      col+1 Proteina    col+2..3 Vegetal
+    //   col+4 Carbo      col+5 En vez de
+    const CELDAS = [
+        { off: 0, campo: 'numero' },
+        { off: 1, campo: 'proteina', parte: 'proteina' },
+        { off: 2, campo: 'vegetal', parte: 'vegetal', hasta: 3 },
+        { off: 4, campo: 'carbo', parte: 'carbo' },
+        { off: 5, campo: 'original' }
+    ];
+
+    const platosDe = (platos) => {
+        const h = ws.getRow(f);
+        ['Plato', 'Proteína', 'Vegetal', 'Carbo', 'En vez de'].forEach((v, i) => {
+            const c = h.getCell(col + CELDAS[i].off);
+            c.value = v;
+            c.font = { bold: true, size: 11 };
+            c.border = borde;
+        });
+        if (CELDAS[2].hasta) ws.mergeCells(f, col + 2, f, col + 3);
+        f++;
+
+        (platos || []).forEach(pl => {
+            const r = ws.getRow(f);
+            CELDAS.forEach(({ off, campo, parte, hasta }) => {
+                const valor = campo === 'numero' ? pl.numero : texto(pl[campo]);
+                const c = r.getCell(col + off);
+                c.value = valor === '—' ? '' : valor;
+                c.alignment = { wrapText: true, vertical: 'middle' };
+                // La parte que cambió va resaltada, como en pantalla
+                if (parte && pl.cambiada === parte) {
+                    c.font = { bold: true };
+                    c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2F0D9' } };
+                }
+                if (hasta) ws.mergeCells(f, col + off, f, col + hasta);
+            });
+            for (let i = 0; i < 6; i++) r.getCell(col + i).border = borde;
+            f++;
+        });
+        f++;
+    };
+
+    grupos.forEach(g => {
+        titulo(`CON CAMBIO — ${g.total} ${g.total === 1 ? 'pack' : 'packs'}`, 'FFF8CBAD');
+        linea('Cambio:', g.texto);
+        linea('Para:', (g.clientes || []).map(c => c.etiqueta).join('   ·   '));
+        platosDe(g.platos);
+    });
+
+    propios.forEach(c => {
+        titulo(`MENÚ PROPIO — ${c.etiqueta}`, 'FFFFD966');
+        linea('Pidió:', c.texto || '');
+        if (c.notas) linea('Nota:', c.notas);
+        platosDe(c.platos);
+    });
+
+    return f;
+}
+
 /** "Resumen por Menú": lo que se cocina en total, ingrediente por ingrediente. */
 function escribirResumen(ws, col, filaInicio, bloque) {
     const t = ws.getRow(filaInicio).getCell(col + 1);
@@ -248,9 +380,14 @@ function escribirResumen(ws, col, filaInicio, bloque) {
 
 /** Una pestaña de familia: menú #1 en A-F y, si hay cenas, el #2 en H-M. */
 function agregarPestanaFamilia(wb, usados, familia) {
+    // Con bloques aparte la pestana crece, y forzarla a UNA pagina encoge la
+    // letra hasta que no se lee. Se ajusta el ancho y se dejan las hojas que
+    // hagan falta a lo largo.
+    const traeBloques = [familia.menu1, familia.menu2].some(b =>
+        b && ((b.gruposDeCambio || []).length > 0 || (b.personalizados || []).length > 0));
     const ws = wb.addWorksheet(nombreDePestana(familia.titulo, usados), {
         views: [{ showGridLines: true }],
-        pageSetup: impresion(true)
+        pageSetup: impresion(!traeBloques)
     });
     ANCHOS.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
 
@@ -260,7 +397,8 @@ function agregarPestanaFamilia(wb, usados, familia) {
     // en la misma fila aunque un menú tenga más clientes que el otro.
     const finales = bloques.map(([col, bloque]) => {
         escribirCabecera(ws, col, bloque);
-        return escribirPlatos(ws, col, bloque);
+        const trasLosPlatos = escribirPlatos(ws, col, bloque);
+        return escribirAparte(ws, col, trasLosPlatos + 1, bloque);
     });
 
     const filaResumen = Math.max(...finales) + 2;
@@ -272,14 +410,16 @@ function agregarPestanaEntregas(wb, usados, datos) {
     const ws = wb.addWorksheet(nombreDePestana(datos.etiquetaDia, usados), {
         pageSetup: impresion(false, '1:2')
     });
-    [10, 12, 34, 26, 52, 60].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+    [10, 12, 20, 34, 26, 52, 60].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
 
     const titulo = ws.getRow(1).getCell(2);
     titulo.value = `Entregas del ${datos.etiquetaDia}`;
     titulo.font = { bold: true, size: 16 };
-    ws.mergeCells(1, 2, 1, 6);
+    ws.mergeCells(1, 2, 1, 7);
 
-    ['', 'check', 'Cliente', 'Zona entrega', 'Paquete', 'Cambios'].forEach((h, i) => {
+    // La columna "Dia" hace falta cuando la hoja cubre dos fechas: el sabado se
+    // entrega y el lunes se adelanta, y las dos se empacan el mismo dia.
+    ['', 'check', 'Día', 'Cliente', 'Zona entrega', 'Paquete', 'Cambios'].forEach((h, i) => {
         const c = ws.getRow(2).getCell(i + 1);
         c.value = h;
         if (!h) return;
@@ -290,12 +430,13 @@ function agregarPestanaEntregas(wb, usados, datos) {
 
     datos.entregas.forEach((e, i) => {
         const r = ws.getRow(3 + i);
-        r.getCell(3).value = texto(e.cliente);
-        r.getCell(4).value = texto(e.zona);
-        r.getCell(5).value = texto(e.paquete);
-        r.getCell(6).value = texto(e.cambios);
-        r.getCell(6).alignment = { wrapText: true, vertical: 'top' };
-        for (let c = 2; c <= 6; c++) r.getCell(c).border = borde;
+        r.getCell(3).value = texto(e.dia);
+        r.getCell(4).value = texto(e.cliente);
+        r.getCell(5).value = texto(e.zona);
+        r.getCell(6).value = texto(e.paquete);
+        r.getCell(7).value = texto(e.cambios);
+        r.getCell(7).alignment = { wrapText: true, vertical: 'top' };
+        for (let c = 2; c <= 7; c++) r.getCell(c).border = borde;
     });
 
     const total = ws.getRow(4 + datos.entregas.length);
@@ -377,7 +518,8 @@ function agregarPestanaDesayunos(wb, usados, desayunos) {
             r.getCell(3).font = { bold: true, size: 12 };
             r.getCell(4).alignment = { wrapText: true, vertical: 'middle' };
             r.getCell(5).alignment = { wrapText: true, vertical: 'middle' };
-            r.height = 26;
+            // Los anchos de esta pestana son [10, 56, 13, 40, 46]
+            r.height = altoDeFila([[c && c.notas, 40], [c && c.etiqueta, 46]]);
             for (let col = 1; col <= 5; col++) r.getCell(col).border = borde;
             fila += 1;
         }
@@ -434,6 +576,16 @@ function agregarPestanaIndividuales(wb, usados, individuales) {
         celda.font = { bold: true, size: 11 };
         celda.alignment = { wrapText: true, vertical: 'middle' };
         if (fila - inicio > 1) ws.mergeCells(inicio, 3, fila - 1, 3);
+
+        // La celda del cliente va combinada sobre sus filas, y si la nota no
+        // cabe en ese alto Excel la corta: a Melany Escalante le salia la
+        // instruccion partida a la mitad. Se le da a la primera fila el alto que
+        // falte. La columna del cliente mide 52.
+        const necesita = altoDeFila([[ind.cliente + ' (' + (ind.notas || '') + ')', 52]], 24);
+        const disponible = (fila - inicio) * 24;
+        if (necesita > disponible) {
+            ws.getRow(inicio).height = 24 + (necesita - disponible);
+        }
 
         // Fila en blanco separando un cliente del siguiente
         if (idx < individuales.length - 1) {

@@ -64,6 +64,13 @@ describe('las familias que se cocinan aparte se avisan', () => {
     });
 });
 
+/**
+ * Estas dos cargan ExcelJS —una libreria grande— con un import diferido, y eso
+ * solo se paga la primera vez. Con la suite entera corriendo en paralelo se
+ * pasan de los 5 segundos que vitest da por defecto y fallan por tiempo, no
+ * porque el codigo este mal. Un rojo intermitente ensena a ignorar el rojo, asi
+ * que se les da su propio limite.
+ */
 describe('el aviso llega al Excel', () => {
     it('el titulo del menu keto dice que se cocina aparte', async () => {
         const { construirLibroGina } = await import('../utils/excelHojaProduccion.js');
@@ -86,7 +93,7 @@ describe('el aviso llega al Excel', () => {
         });
         const ws = wb.getWorksheet('Pack Keto');
         expect(String(ws.getCell('A3').value)).toContain('SE COCINA APARTE');
-    });
+    }, 20000);
 
     it('un pack sin aviso conserva su titulo tal cual', async () => {
         const { construirLibroGina } = await import('../utils/excelHojaProduccion.js');
@@ -98,5 +105,5 @@ describe('el aviso llega al Excel', () => {
                 menu2: null }]
         });
         expect(String(wb.getWorksheet('Pack Bajo Calorías').getCell('A3').value)).toBe('Menú #1 Pack Bajo Calorías');
-    });
+    }, 20000);
 });

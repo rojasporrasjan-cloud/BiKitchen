@@ -47,8 +47,57 @@ export const claveDePedido = (pedido) =>
  * @param {Function} opciones.calendario      como leer las fechas de un pedido
  * @returns {{ nuevos: Array, repetidos: Array }}
  */
+/**
+ * El adelanto POR FECHA.
+ *
+ * `soloRecurrentes` recorta la tanda entera. Pero el viernes Gina necesita el
+ * sabado COMPLETO y del lunes solo los mensuales y quincenales, en la misma
+ * hoja: cocina lo del sabado y va adelantando lo del lunes que ya esta pagado.
+ *
+ * Un pedido pasa si entrega en alguna fecha NORMAL de la tanda. Si todas sus
+ * entregas caen en fechas de adelanto, solo pasa si es recurrente.
+ *
+ * @param {object} pedido
+ * @param {object} opciones
+ * @param {Array<string>} opciones.fechas            todas las de la tanda
+ * @param {Set<string>}   opciones.fechasDeAdelanto  cuales van recortadas
+ * @param {Function}      opciones.calendario
+ */
+export const pasaElAdelanto = (pedido, opciones = {}) => {
+    const {
+        fechas = [],
+        fechasDeAdelanto,
+        calendario = (p) => p?.fechasEntrega || [],
+        familiaPermitida = null
+    } = opciones;
+    if (!fechasDeAdelanto || fechasDeAdelanto.size === 0) return true;
+
+    const suyas = (calendario(pedido) || []).filter(f => fechas.includes(f));
+    // Sin entregas en la tanda no hay nada que decidir: lo filtra la fecha
+    if (suyas.length === 0) return true;
+
+    const todasSonAdelanto = suyas.every(f => fechasDeAdelanto.has(f));
+    if (!todasSonAdelanto) return true;
+
+    if (!esRecurrente(pedido, calendario)) return false;
+
+    // Se puede adelantar UNA sola familia. Los bajo calorias son los mas del
+    // lunes y se pueden dejar hechos el viernes; el resto no vale la pena
+    // adelantarlo porque pasa demasiado tiempo guardado.
+    //
+    // Es una funcion y no una lista de nombres para que este archivo no dependa
+    // de como se clasifican los packs: eso vive en packClassification.
+    return familiaPermitida ? !!familiaPermitida(pedido) : true;
+};
+
 export const pedidosDeLaTanda = (pedidos, yaEnviados, opciones = {}) => {
-    const { soloRecurrentes = false, calendario = (p) => p?.fechasEntrega || [] } = opciones;
+    const {
+        soloRecurrentes = false,
+        calendario = (p) => p?.fechasEntrega || [],
+        fechas = [],
+        fechasDeAdelanto = null,
+        familiaPermitida = null
+    } = opciones;
     const enviados = new Set((yaEnviados || []).map(x => String(x).trim()).filter(Boolean));
 
     const nuevos = [];
@@ -56,6 +105,7 @@ export const pedidosDeLaTanda = (pedidos, yaEnviados, opciones = {}) => {
 
     (pedidos || []).forEach(p => {
         if (soloRecurrentes && !esRecurrente(p, calendario)) return;
+        if (!pasaElAdelanto(p, { fechas, fechasDeAdelanto, calendario, familiaPermitida })) return;
         if (enviados.has(claveDePedido(p))) repetidos.push(p);
         else nuevos.push(p);
     });
@@ -80,3 +130,45 @@ export const canceladosDespuesDeEnviar = (yaEnviados, pedidosVigentes) => {
 /** Todas las claves mandadas hasta ahora, sin repetir. */
 export const acumularEnviados = (tandas) =>
     [...new Set((tandas || []).flatMap(t => t?.pedidos || []).map(x => String(x).trim()).filter(Boolean))];
+
+/**
+ * A que CICLO de produccion pertenece esta hoja.
+ *
+ * Se cocina por CICLOS, no por dias sueltos. El sabado y el lunes siguiente se
+ * cocinan juntos —"siempre hay que sumar los sabados y lunes", Jan— repartidos
+ * en tres tandas:
+ *
+ *   jueves   ->  el sabado completo y el adelanto del lunes
+ *   viernes  ->  lo que entro desde el jueves
+ *   sabado   ->  lo que entro desde el viernes
+ *
+ * Las tres hojas se abren distinto: la del jueves lleva `soloPacks`, la del
+ * viernes no, y la del sabado a veces trae una sola fecha. Antes la llave de la
+ * tanda se armaba con la URL —las fechas mas la familia— asi que cada hoja
+ * generaba una llave distinta y NINGUNA veia a la anterior: el viernes se le
+ * volvia a pedir a la cocina todo lo que ya habia hecho el jueves, y las
+ * cantidades no se descontaban.
+ *
+ * La llave tiene que ser la misma las tres veces. Por eso se calcula del
+ * calendario y no de como se abrio la hoja.
+ *
+ * El miercoles es su propio ciclo: se empaca el martes y no se junta con nada.
+ */
+export const cicloDeProduccion = (fechas) => {
+    const lista = [...new Set((fechas || []).map(f => String(f || '').trim()).filter(Boolean))].sort();
+    if (lista.length === 0) return '';
+
+    const primera = lista[0];
+    const d = new Date(`${primera}T12:00:00`);
+    if (Number.isNaN(d.getTime())) return lista.join('_');
+
+    // Se formatea de las partes LOCALES: toISOString pasa a UTC y en Costa Rica
+    // eso puede correr la fecha un dia.
+    const iso = (x) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+    const corrido = (n) => { const x = new Date(d); x.setDate(x.getDate() + n); return iso(x); };
+
+    const dia = d.getDay();               // 0 domingo ... 6 sabado
+    if (dia === 6) return `${primera}_${corrido(2)}`;   // sabado + su lunes
+    if (dia === 1) return `${corrido(-2)}_${primera}`;  // lunes -> vuelve a su sabado
+    return primera;                                      // miercoles y cualquier otro
+};

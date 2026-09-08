@@ -2,6 +2,10 @@
  * Production View Helper Utilities
  */
 
+// Una sola regla para todo el sistema: ver src/utils/telefonoRelleno.js
+import { esTelefonoDeRelleno } from './telefonoRelleno';
+export { esTelefonoDeRelleno };
+
 export const MARGEN_COCINA = 1.30;
 
 export const conMargen = (cantidad) => Math.round((Number(cantidad) || 0) * MARGEN_COCINA);
@@ -34,20 +38,6 @@ export const normalizeClientKey = (name) => {
  * @param {Array} ordersList - pedidos ya normalizados por mapPedidosFromLegacy
  * @returns {{ pedidos: Array, fusionados: Array }}
  */
-/**
- * ¿Es un teléfono de relleno y no uno real?
- *
- * Cuando el pedido llega por WhatsApp sin número se anota 8888-8888. Ese valor
- * NO identifica a nadie: si se usa para fusionar, Luis Carlos Monge y Lizbeth
- * Zeledón —dos clientes sin relación— se convierten en un solo pedido.
- */
-export const esTelefonoDeRelleno = (telefono) => {
-    const d = String(telefono || '').replace(/\D/g, '');
-    if (d.length < 8) return true;
-    if (/^(\d)\1+$/.test(d)) return true;        // 88888888, 00000000
-    if (/^0?12345678/.test(d)) return true;      // 12345678
-    return false;
-};
 
 /**
  * Los dos nombres, la misma persona?
@@ -345,7 +335,27 @@ const NOTA_INTERNA = new RegExp([
     'es un solo pedido', 'le quedan \\d+ entrega', 'su pedido es del',
     'la hoja lo contaba', 'tel[ée]fono tomado', 'lo marc[óo] gina',
     'mensaje de cancelaci[óo]n', 'jan confirm[óo]', 'su pedido original',
-    'ya pas[óo]\\b', 'hay que ped[ií]rsela', 'corregido:'
+    'ya pas[óo]\\b', 'hay que ped[ií]rsela', 'corregido:',
+    // Notas de COBRO. Le dicen a la oficina si el pedido va o no va, pero a
+    // quien empaca no le cambian nada de lo que mete en la bolsa. En la hoja
+    // del miercoles 9 salio impreso, encima de la instruccion de Melany
+    // Escalante, "PAGO CONFIRMADO por Gina el 7 de setiembre: la tarjeta habia
+    // salido rechazada en la web pero pago por otra via".
+    'pago confirmado', 'tarjeta (rechazada|no completada)', 'pag[óo] por otra v[ií]a',
+    'no complet[óo] el pago', 'el precio queda igual',
+    // El PORQUE de un cambio es para nosotros; la instruccion ya va aparte.
+    'porque (en|la) (la )?entrega anterior', 'se le envi[óo] una prote[ií]na de m[áa]s',
+    'corresponden a los lunes',
+    // Contabilidad del pedido. En la hoja del miercoles 9 la casilla de Hazel
+    // Jimenez traia cuatro renglones y ninguno decia que meter en la bolsa:
+    // "PACK 1 DE 2: este es el SIN CARBOS...", "Envio GRATIS", "Los dos son
+    // MENSUALES: 4 entregas" y "Total del pedido completo: 337.220". Que lleva
+    // dos packs ya se lo dice la etiqueta "Lleva tambien: PACK REGULAR".
+    'env[ií]o gratis', 'total del pedido', 'pack \\d+ de \\d+\\s*:',
+    'son (mensuales|quincenales|semanales)',
+    // Como esta CARGADO el dato, no que empacar. La hoja ya imprime sola
+    // "TWO PACK - empacar 2 packs iguales".
+    'la cantidad va en \\d+', 'se empacan \\d+ packs? iguales'
 ].join('|'), 'i');
 
 /** Un monto en colones metido dentro de una frase: "... (4 tazas) ₡7.500". */
@@ -364,7 +374,19 @@ const ES_INSTRUCCION = /cambiar|cambio|no poner|sin\b|quitar|agregar|en vez de|s
  * Milanés no les salía nada —y lo de Daniel era que no puede comer mariscos—.
  * Se quitan del texto en vez de tirar la frase.
  */
-const REFERENCIA_INTERNA = /\s*\((?:chat|ver)\b[^)]*\)?|\s*#ORD-[A-Za-z0-9-]+/gi;
+const REFERENCIA_AL_CHAT = /\s*\((?:chat|ver)\b[^)]*\)?/gi;
+
+/**
+ * El numero de OTRO pedido metido dentro de la frase.
+ *
+ * Este NO se puede limpiar antes de tiempo. `NOTA_INTERNA` reconoce lo interno
+ * justamente por el "#ORD-", asi que quitarselo primero la deja pareciendo una
+ * nota normal y se cuela a la hoja partida por la mitad: en la hoja del
+ * miercoles 9 salio impreso, en la casilla de Hazel Jimenez, "El otro (Sin
+ * Carbos quincenal) va en." — un renglon que no termina. Se quita al final,
+ * por si alguna frase util lo trae pegado.
+ */
+const REFERENCIA_A_PEDIDO = /\s*#ORD-[A-Za-z0-9-]+/gi;
 
 /** Todo lo que venga después de esta marca es para nosotros, no para empaque. */
 const CORTE_INTERNO = /\bINTERNO\s*:/i;
@@ -396,8 +418,17 @@ const YA_ESTA_IMPRESO = new RegExp('^(?:' + [
     '(?:lleva )?\\d+ packs?',
     // El encabezado de la tabla ya trae el gramaje y las tazas
     '\\d{2,3}\\s*g prote[ií]na\\s*[/,].*',
-    // El nombre del pack ya lo dice
-    'men[uú] personalizado.*',
+    // El nombre del pack ya dice que es personalizado y de que familia es, asi
+    // que "Menu personalizado, sin carbohidratos" no agrega nada.
+    //
+    // Pero solo se bota eso: la etiqueta sola, o la etiqueta seguida del nombre
+    // de la familia. Antes terminaba en `.*` y se tragaba lo que viniera
+    // detras, asi que "MENU PERSONALIZADO: no chile dulce" desaparecia entero
+    // —con la unica instruccion que quien empaca necesitaba— sin dejar rastro.
+    'men[uú] personalizado(?:[,:;]?\\s*(?:'
+        + 'sin\\s+carbo(?:s|hidratos?)?|bajo(?:\\s+en)?\\s+calor[ií]as?|keto'
+        + '|vegetarian[oa]|regular|casaditos?|full\\s*pack|familiar'
+    + '))?',
     'personalizado\\s*=.*'
 ].join('|') + ')\\.?$', 'i');
 
@@ -423,7 +454,7 @@ export const notaParaEmpaque = (obs) => {
         // sin cortar en el punto, una instrucción y el apunte interno que le
         // sigue quedaban en la misma frase y se iban juntos a la basura.
         .split(/\s*[·|—]\s*|(?<=\.)\s+(?=[A-ZÁÉÍÓÚÑ¿¡])/)
-        .map(f => f.replace(REFERENCIA_INTERNA, '').replace(/\(\s*\)/g, '').trim())
+        .map(f => f.replace(REFERENCIA_AL_CHAT, '').replace(/\(\s*\)/g, '').trim())
         // Un parentesis se puede haber abierto en una frase y cerrado en la
         // siguiente: "…por BURRITOS (chat 2 set — reemplaza lo anterior)". Al
         // cortar por la raya, la segunda mitad queda huerfana y sin sentido.
@@ -455,6 +486,7 @@ export const notaParaEmpaque = (obs) => {
 
         // A quien empaca le sirve saber QUE guarniciones van; cuanto costaron no.
         return (esInstruccion ? frase : frase.replace(TELEFONO, ''))
+            .replace(REFERENCIA_A_PEDIDO, '')
             .replace(PRECIO_EN_FRASE, '')
             .replace(/\s{2,}/g, ' ')
             .replace(/\s+([,.])/g, '$1')

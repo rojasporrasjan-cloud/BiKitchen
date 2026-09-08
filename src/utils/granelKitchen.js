@@ -217,6 +217,25 @@ const leerCantidadEscrita = (texto, itemQty) => {
         return { totalQty: total, unit: 'taza(s)', portionGrams: null, numPorciones: total };
     }
 
+    // "2 porciones de 250 g" — la porción va con su gramaje.
+    const porcionesDeGramos = t.match(/(\d+)\s*porci[oó]n(?:es)?\s*de\s*(\d+)\s*g\b/i);
+    if (porcionesDeGramos) {
+        const porciones = parseInt(porcionesDeGramos[1], 10) * itemQty;
+        const gramos = parseInt(porcionesDeGramos[2], 10);
+        return { totalQty: porciones * gramos, unit: 'g', portionGrams: gramos, numPorciones: porciones };
+    }
+
+    // "4 porciones" a secas: así escribe Gina los pasteles y las guarniciones
+    // que se cortan. Sin esta línea la medida no se leía y el parser adivinaba
+    // por el tipo de plato: "Pastel de maduro (4 porciones)" salía como 1 TAZA,
+    // y las guarniciones adicionales de Patrick Santamaría como "4 tazas".
+    // Una porción no es una taza y quien empaca no tiene cómo saber cuál es.
+    const porciones = t.match(/(\d+)\s*porci[oó]n(?:es)?\b/i);
+    if (porciones) {
+        const total = parseInt(porciones[1], 10) * itemQty;
+        return { totalQty: total, unit: 'porciones', portionGrams: null, numPorciones: total };
+    }
+
     // "2 de 250" = dos porciones de 250 g
     const xDeY = t.match(/(\d+)\s*de\s*(\d+)/i);
     if (xDeY) {
@@ -309,6 +328,7 @@ export const textoDeCantidad = (nombre, medida, veces, gramos) => {
     }
     if (p.unit === 'g') return `${p.totalQty}g`;
     if (p.unit === 'taza(s)') return `${p.totalQty} taza${p.totalQty > 1 ? 's' : ''}`;
+    if (p.unit === 'porciones') return `${p.totalQty} porci${p.totalQty > 1 ? 'ones' : 'ón'}`;
     if (p.unit === 'kg') return `${p.totalQty} kg`;
     return `${p.totalQty} unidad${p.totalQty > 1 ? 'es' : ''}`;
 };

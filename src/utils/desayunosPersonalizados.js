@@ -26,6 +26,9 @@
  * cuenta para su total; quien lo cambio sale a su propio bloque con SUS platos.
  */
 
+import { PACKS_DATA } from '../data/packsData';
+import { mapPackNameToMenuKey } from './packClassification';
+
 /** Un plato del menu puede venir como texto o como objeto. */
 export const nombreDePlato = (plato) => {
     if (!plato) return '';
@@ -239,12 +242,94 @@ export const platosDePackQueMenciona = (texto, platos) => {
 };
 
 /**
+ * Lo que lleva un envase, leido de un texto.
+ *
+ * "150g proteina + 3 carbos + 2 vegetales" -> { proteina: 150, carbo: 3, vegetal: 2 }
+ *
+ * Hacen falta al menos DOS cifras para darlo por bueno: un "2 vegetales" suelto
+ * en medio de una nota puede ser cualquier apunte, y de ahi no se puede concluir
+ * como se arma el plato.
+ */
+const CIFRAS_DEL_ENVASE = {
+    proteina: /(\d{2,4})\s*g(?:r|rs|ramos)?\.?\s*(?:de\s+)?prote[ií]na/i,
+    vegetal: /(\d+)\s*(?:taza[s]?\s+(?:de\s+)?)?(?:vegetal(?:es)?|ensalada[s]?)\b/i,
+    carbo: /(\d+)\s*(?:taza[s]?\s+(?:de\s+)?)?(?:carbo(?:s|hidratos?)?|harina[s]?)\b/i
+};
+
+export const leerComposicion = (texto) => {
+    const t = String(texto || '');
+    if (!t) return null;
+    const partes = {};
+    Object.entries(CIFRAS_DEL_ENVASE).forEach(([parte, re]) => {
+        const m = t.match(re);
+        if (m) partes[parte] = Number(m[1]);
+    });
+    return Object.keys(partes).length >= 2 ? partes : null;
+};
+
+/** Lo que lleva ese pack segun el catalogo, para saber contra que comparar. */
+export const composicionDelCatalogo = (packName) => {
+    // Se busca por FAMILIA, no por el nombre escrito.
+    //
+    // Antes se comparaba con `includes` contra el nombre del catalogo, y una
+    // palabra de mas rompia todo: la hoja titula el grupo "PACK BAJO EN
+    // CALORIAS" y el catalogo dice "Pack Bajo Calorias" —sobra el "en"— asi que
+    // no calzaba y Jason Barrantes salia como si comiera la porcion estandar,
+    // con sus 100 g escondidos en una nota al lado.
+    //
+    // `mapPackNameToMenuKey` es la misma funcion que usa la hoja para decidir
+    // que menu le toca a cada pack, asi que las dos cosas no se pueden separar.
+    const clave = mapPackNameToMenuKey(packName);
+    if (!clave) return null;
+
+    let desc = null;
+    Object.values(PACKS_DATA).forEach((categoria) => {
+        (categoria?.packs || []).forEach((pack) => {
+            if (!desc && mapPackNameToMenuKey(pack?.name) === clave) desc = pack.desc;
+        });
+    });
+    return desc ? leerComposicion(desc) : null;
+};
+
+const PARTES = ['proteina', 'vegetal', 'carbo'];
+
+/** Solo se comparan las partes que AMBAS mencionan. */
+const difierenLasComposiciones = (suya, estandar) =>
+    PARTES.some(k => suya[k] !== undefined && estandar[k] !== undefined && suya[k] !== estandar[k]);
+
+/**
+ * Solo las partes que DE VERDAD cambian, de las dos composiciones a la vez.
+ *
+ * Jason Barrantes lleva 100 g de proteina y 1 vegetal, igual que el Pack
+ * Regular; lo unico distinto es que pidio 1 carbo en vez de 2. Nombrar las tres
+ * partes obligaria a quien empaca a comparar dos listas casi iguales para
+ * encontrar la unica que importa.
+ */
+const soloLoQueCambia = (suya, estandar) => PARTES.reduce((acc, k) => {
+    if (suya[k] !== undefined && estandar[k] !== undefined && suya[k] !== estandar[k]) {
+        acc.suya[k] = suya[k];
+        acc.estandar[k] = estandar[k];
+    }
+    return acc;
+}, { suya: {}, estandar: {} });
+
+const enPalabras = (comp) => PARTES
+    .filter(k => comp[k] !== undefined)
+    .map(k => {
+        if (k === 'proteina') return `${comp[k]} g de proteina`;
+        const n = comp[k];
+        if (k === 'vegetal') return `${n} ${n === 1 ? 'vegetal' : 'vegetales'}`;
+        return `${n} ${n === 1 ? 'carbo' : 'carbos'}`;
+    })
+    .join(', ');
+
+/**
  * El cambio que pidio el cliente sobre su pack.
  *
  * Se ignoran las clausulas que hablan de desayunos: esas ya las lee
  * leerCambioDeDesayuno y su tabla es otra.
  */
-export const leerCambioDePack = (observaciones, platos) => {
+export const leerCambioDePack = (observaciones, platos, packName = '') => {
     const obs = String(observaciones || '');
     if (!obs || !platos?.length) return null;
 
@@ -258,6 +343,30 @@ export const leerCambioDePack = (observaciones, platos) => {
         const toca = platosDePackQueMenciona(m[1], platos);
         if (!toca.length) continue;
         return { toca, pone: m[2].trim(), texto: clausula.trim() };
+    }
+
+    // No todo cambio es de PLATO. Marianela Alfaro lleva el Full Pack de la
+    // semana —los mismos cinco platos— pero su envase se arma con 3 vegetales y
+    // 1 carbo, cuando el Full Pack del catalogo trae 3 carbos y 2 vegetales.
+    // Quien empaca no tiene como adivinarlo mirando la fila, asi que va al
+    // bloque de personalizados igual que un cambio de plato.
+    //
+    // Se compara contra el catalogo a proposito: cuando la nota REPITE la
+    // composicion estandar no es una personalizacion, es la descripcion del
+    // pack escrita de nuevo, y ahi no hay nada que separar.
+    const estandar = composicionDelCatalogo(packName);
+    const suya = leerComposicion(obs);
+    if (estandar && suya && difierenLasComposiciones(suya, estandar)) {
+        return {
+            toca: [],
+            composicion: suya,
+            estandar,
+            // Solo se nombra lo que de verdad cambia: si la proteina es la misma,
+            // meterla en el "en vez de" la haria parecer parte del cambio.
+            texto: (({ suya: s, estandar: e }) =>
+                `${enPalabras(s)} por plato, en vez de ${enPalabras(e)}`
+            )(soloLoQueCambia(suya, estandar))
+        };
     }
     return null;
 };
@@ -282,14 +391,14 @@ export const platosDePackDelCliente = (platos, cambio) =>
  * aunque su cambio fuera de la tilapia — y el Plato 1 seguia contando 4
  * tilapias, una de ellas para el que no come tilapia.
  */
-export const separarPersonalizadosDePack = (clientes, platos) => {
+export const separarPersonalizadosDePack = (clientes, platos, packName = '') => {
     const lista = Array.isArray(clientes) ? clientes : [];
     const menu = Array.isArray(platos) ? platos : [];
     const estandar = [];
     const personalizados = [];
 
     lista.forEach((c) => {
-        const cambio = menu.length ? leerCambioDePack(textoDeObservaciones(c), menu) : null;
+        const cambio = menu.length ? leerCambioDePack(textoDeObservaciones(c), menu, packName) : null;
         if (cambio) personalizados.push({ ...c, cambio, platos: platosDePackDelCliente(menu, cambio) });
         else estandar.push(c);
     });
@@ -354,4 +463,66 @@ export const separarDesayunos = (clientes, platos) => {
         (n, c) => n + (Number(c?.cantidad) > 0 ? Number(c.cantidad) : 1), 0);
 
     return { estandar, personalizados, packsEstandar };
+};
+
+/**
+ * Los que llevan un cambio, agrupados POR EL CAMBIO que llevan.
+ *
+ * Quien empaca no arma un pack a la vez: pone los 30 envases del menu tal cual
+ * en la mesa y los llena en linea. Los que llevan un cambio rompen esa linea,
+ * pero no de a uno: si cinco personas cambiaron el arroz por pure de papa, esos
+ * cinco son otra linea de cinco, no cinco excepciones sueltas.
+ *
+ * "Poner todos los que no tienen ningun cambio en una hoja y poner los que
+ * tienen cambios en otra hoja, y los personalizados en otra" — Jan, 7 de
+ * setiembre de 2026, despues de empacar 45 packs de un solo el viernes.
+ *
+ * Se parte en dos:
+ *   grupos  -> cambiaron UN ingrediente del menu de la semana. Van juntos los
+ *              que pidieron exactamente el mismo cambio, con un solo cuadro de
+ *              platos porque a todos les queda igual.
+ *   propios -> no es un cambio de plato sino de COMPOSICION —Marianela lleva 3
+ *              vegetales y 1 carbo donde el pack trae 2 y 3—. Ese no se puede
+ *              juntar con nadie: el envase se arma distinto.
+ *
+ * @param {Array} personalizados  la salida de separarPersonalizadosDePack
+ * @returns {{ grupos: Array, propios: Array }}
+ */
+export const agruparCambiosDePack = (personalizados) => {
+    const lista = Array.isArray(personalizados) ? personalizados : [];
+    const porClave = new Map();
+    const propios = [];
+
+    lista.forEach((c) => {
+        const toca = c?.cambio?.toca || [];
+        // Sin plato tocado el cambio es de composicion: va solo.
+        if (toca.length === 0) { propios.push(c); return; }
+
+        const clave = toca.map(t => `${t.indice}:${t.parte}`).sort().join(',')
+            + '=>' + String(c.cambio.pone || '').trim().toLowerCase();
+
+        if (!porClave.has(clave)) {
+            porClave.set(clave, {
+                clave,
+                texto: c.cambio.texto,
+                pone: c.cambio.pone,
+                // Todos los del grupo comen lo mismo, asi que el cuadro de
+                // platos se dibuja UNA vez.
+                platos: c.platos,
+                clientes: []
+            });
+        }
+        porClave.get(clave).clientes.push(c);
+    });
+
+    const grupos = [...porClave.values()].map(g => ({
+        ...g,
+        total: g.clientes.reduce((n, c) => n + (Number(c?.cantidad) > 0 ? Number(c.cantidad) : 1), 0)
+    }));
+
+    // El grupo mas grande primero: es el que conviene armar cuando la gente
+    // todavia esta fresca.
+    grupos.sort((a, b) => b.total - a.total || a.texto.localeCompare(b.texto));
+
+    return { grupos, propios };
 };

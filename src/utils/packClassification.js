@@ -42,8 +42,36 @@ export const mapPackNameToMenuKey = (name) => {
     if (n.includes('vegetariano')) return 'vegetariano';
     if (n.includes('casadito')) return 'casaditos';
     if (n.includes('full pack') || (n.includes('deluxe') && !n.includes('familiar'))) return 'fullPack';
-    if (n.includes('desayuno')) return 'desayuno';
+
+    // REGULAR va ANTES que desayuno, y el orden importa.
+    //
+    // Casi todos los packs llevan los desayunos de regalía, así que el nombre
+    // termina en "con Regalía Desayunos". Las demás familias se salvaban porque
+    // su palabra —bajo calorías, sin carbos, casaditos, full pack— aparece más
+    // arriba; el Regular era el único que llegaba hasta acá y la palabra
+    // "desayuno" se lo llevaba: el pack entero se cocinaba como si fuera de
+    // desayunos y los almuerzos no se hacían.
+    //
+    // Le pasaba a "Pack mensual Regular con desayunos" de Catherine Ordóñez
+    // —entrega del lunes 7 de setiembre— y a los dos packs de Christian Vargas.
     if ((n.includes('regular') || n.includes('estandar') || n.includes('estándar'))) return 'regular';
+
+    // Un pack DE desayunos es el que no nombra ninguna otra familia.
+    if (n.includes('desayuno')) return 'desayuno';
+
+    // Si llegó hasta acá, ninguna familia le calza. Un nombre que solo habla de
+    // PROTEÍNAS son proteínas sueltas, aunque diga "mensual".
+    //
+    // La regla de más arriba pide un número entre "pack" y "proteína" ("Pack 5
+    // Proteínas"), así que "pack mensual proteínas 250 g" se le escapaba y caía
+    // en la línea de abajo por la palabra "mensual". A Xiomara Vílchez le tocaba
+    // el menú Regular de la semana —100 g por plato— en vez de las 5 proteínas
+    // de 250 g que paga.
+    //
+    // Va DESPUÉS de las familias a propósito: un "Pack Bajo Calorías 120g
+    // proteína" ya salió por su familia y no llega acá.
+    if (/prote[ií]na/i.test(n)) return null;
+
     if (n.includes('mensual') || n.includes('quincenal') || n.includes('two pack') || n.includes('2 pack') || n.includes('semanal')) return 'regular';
     return null;
 };

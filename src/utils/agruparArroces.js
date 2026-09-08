@@ -29,13 +29,21 @@
  * linea, pero conviene preguntarle a Gina antes: si dos cosas NO se cocinan
  * juntas, juntarlas en la hoja le pide una olla que no existe.
  */
+/**
+ * `arroz` y `arros` cuentan igual.
+ *
+ * En el menu esta escrito de las dos formas —"Arros con maiz dulce" con S es lo
+ * que manda Gina cada semana— y por esa sola letra el renglon se quedaba fuera
+ * de la olla: 12 tazas del sabado y 36 sumando el lunes cocinandose aparte,
+ * cuando todos los arroces salen del mismo arroz blanco.
+ */
 export const FAMILIAS = [
-    { base: /^arroz\b/i, etiqueta: 'ARROZ — cocinar todo junto y dividir' },
+    { base: /^arro[sz]\b/i, etiqueta: 'ARROZ — cocinar todo junto y dividir' },
     { base: /^zuchinnis?\b/i, etiqueta: 'ZUCHINNI — saltear todo junto y dividir' }
 ];
 
-/** "Arroz blanco" si, "Arroz con pollo" tambien; "Arrocito" no. */
-export const esArroz = (nombre) => /^arroz\b/i.test(String(nombre || '').trim());
+/** "Arroz blanco" si, "Arros con maiz dulce" tambien; "Arrocito" no. */
+export const esArroz = (nombre) => /^arro[sz]\b/i.test(String(nombre || '').trim());
 
 export const ETIQUETA_GRUPO_ARROZ = FAMILIAS[0].etiqueta;
 

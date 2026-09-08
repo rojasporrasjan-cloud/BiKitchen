@@ -81,3 +81,38 @@ describe('que cuenta como arroz', () => {
         expect(esArroz('')).toBe(false);
     });
 });
+
+/**
+ * En el menú el arroz viene escrito de las dos formas. "Arros con maiz dulce"
+ * —con S— es como lo manda Gina cada semana, y por esa letra se quedaba fuera
+ * de la olla común: 12 tazas del sábado cocinándose aparte cuando todos los
+ * arroces salen del mismo arroz blanco.
+ */
+describe('el arroz escrito con S es el mismo arroz', () => {
+    it('"Arros" entra a la familia igual que "Arroz"', () => {
+        expect(esArroz('Arros con maiz dulce')).toBe(true);
+        expect(esArroz('Arroz con maíz dulce')).toBe(true);
+        expect(esArroz('Arroz blanco')).toBe(true);
+        expect(esArroz('Arroz con pollo')).toBe(true);
+    });
+
+    it('no se lleva por delante lo que solo empieza parecido', () => {
+        expect(esArroz('Arrocito')).toBe(false);
+        expect(esArroz('Arrosito')).toBe(false);
+        expect(esArroz('Ensalada de arroz')).toBe(false);
+    });
+
+    it('los dos se juntan en una sola olla', () => {
+        const items = [
+            { name: 'Arros con maiz dulce', unit: 'taza(s)', totalQty: 12 },
+            { name: 'Arroz blanco', unit: 'taza(s)', totalQty: 2 },
+            { name: 'Arroz con maíz dulce', unit: 'taza(s)', totalQty: 2 }
+        ];
+        const filas = agruparArroces(items, (i) => i.totalQty);
+        const grupo = filas.find(f => f.tipo === 'grupo');
+        expect(grupo).toBeDefined();
+        expect(grupo.total).toBe(16);
+        expect(filas.filter(f => f.tipo === 'hijo')).toHaveLength(3);
+        expect(filas.filter(f => f.tipo === 'suelto')).toHaveLength(0);
+    });
+});
