@@ -56,6 +56,7 @@ import { leerAdelanto } from '../../utils/leerAdelantoDeGina';
 import { agregarPestanaDeCocina, agregarPestanaDeEmpaque, agregarPestanaDeAvisos, agregarPestanaDeEmpaquePorPack } from '../../utils/excelCuatroPestanas';
 import RevisionHoja from '../../components/admin/RevisionHoja';
 import { problemasParaLaHoja } from '../../utils/revisionDeLaHoja';
+import { problemasDelMenu } from '../../utils/revisionDeMenus';
 import { individualesData, getProductUnits } from '../../data/individualesData';
 import ExcelJS from 'exceljs';
 import { agregarHojasGina } from '../../utils/excelHojaProduccion';
@@ -3536,7 +3537,15 @@ export default function PrintProductionView() {
                 <RevisionHoja
                     revision={revisarHoja(cleanOrders, officialMenus, date)}
                     fusionados={fusionados}
-                    extra={problemasParaLaHoja({
+                    // El menu tambien se revisa. El 8 de setiembre la hoja salio
+                    // con los pedidos perfectos y el menu equivocado —el Sin
+                    // Carbos con proteinas del pack vegetariano y las cenas con
+                    // el menu de la semana pasada— y eso es igual de caro: se
+                    // cocina lo que no era.
+                    extra={[...problemasDelMenu({
+                        menus: officialMenus,
+                        fecha: fechas[0] || date
+                    }), ...problemasParaLaHoja({
                         fecha: fechas[0] || date,
                         preparaciones: bulkItems,
                         // Los campos crudos viven en `rawPedido`: `cleanOrders`
@@ -3558,7 +3567,7 @@ export default function PrintProductionView() {
                                 String(p.cliente || p.nombre || '').trim().toLowerCase()
                             ) || []
                         }))
-                    })}
+                    })]}
                 />
 
                 {viewMode !== 'cocina' && (
