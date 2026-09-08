@@ -523,10 +523,12 @@ export default function MenusView() {
             <p className="text-xs text-gray-500">Selecciona qué menú deseas editar</p>
           </div>
         </div>
-        <div className="flex gap-3">
+        {/* flex-wrap y basis: con px-6 fijo los tres botones se salian 116px
+            de un celular. Ahora bajan de linea en vez de desbordarse. */}
+        <div className="flex flex-wrap gap-3">
           <button
             onClick={() => setCurrentMealType('desayuno')}
-            className={`relative flex-1 flex flex-col items-center gap-2 px-6 py-4 rounded-2xl text-sm font-semibold transition-all duration-300 ${currentMealType === 'desayuno'
+            className={`relative flex-1 basis-[calc(50%-0.375rem)] sm:basis-0 flex flex-col items-center gap-2 px-3 sm:px-6 py-4 rounded-2xl text-sm font-semibold transition-all duration-300 ${currentMealType === 'desayuno'
               ? 'text-white shadow-2xl scale-105'
               : 'text-gray-600 hover:text-gray-900 hover:bg-white/80 hover:shadow-md hover:scale-102 bg-white/50'
               }`}
@@ -553,7 +555,7 @@ export default function MenusView() {
 
           <button
             onClick={() => setCurrentMealType('almuerzo')}
-            className={`relative flex-1 flex flex-col items-center gap-2 px-6 py-4 rounded-2xl text-sm font-semibold transition-all duration-300 ${currentMealType === 'almuerzo'
+            className={`relative flex-1 basis-[calc(50%-0.375rem)] sm:basis-0 flex flex-col items-center gap-2 px-3 sm:px-6 py-4 rounded-2xl text-sm font-semibold transition-all duration-300 ${currentMealType === 'almuerzo'
               ? 'text-white shadow-2xl scale-105'
               : 'text-gray-600 hover:text-gray-900 hover:bg-white/80 hover:shadow-md hover:scale-102 bg-white/50'
               }`}
@@ -580,7 +582,7 @@ export default function MenusView() {
 
           <button
             onClick={() => setCurrentMealType('cena')}
-            className={`relative flex-1 flex flex-col items-center gap-2 px-6 py-4 rounded-2xl text-sm font-semibold transition-all duration-300 ${currentMealType === 'cena'
+            className={`relative flex-1 basis-[calc(50%-0.375rem)] sm:basis-0 flex flex-col items-center gap-2 px-3 sm:px-6 py-4 rounded-2xl text-sm font-semibold transition-all duration-300 ${currentMealType === 'cena'
               ? 'text-white shadow-2xl scale-105'
               : 'text-gray-600 hover:text-gray-900 hover:bg-white/80 hover:shadow-md hover:scale-102 bg-white/50'
               }`}
@@ -607,7 +609,7 @@ export default function MenusView() {
 
           <button
             onClick={() => setCurrentMealType('proteinas')}
-            className={`relative flex-1 flex flex-col items-center gap-2 px-6 py-4 rounded-2xl text-sm font-semibold transition-all duration-300 ${currentMealType === 'proteinas'
+            className={`relative flex-1 basis-[calc(50%-0.375rem)] sm:basis-0 flex flex-col items-center gap-2 px-3 sm:px-6 py-4 rounded-2xl text-sm font-semibold transition-all duration-300 ${currentMealType === 'proteinas'
               ? 'text-white shadow-2xl scale-105'
               : 'text-gray-600 hover:text-gray-900 hover:bg-white/80 hover:shadow-md hover:scale-102 bg-white/50'
               }`}

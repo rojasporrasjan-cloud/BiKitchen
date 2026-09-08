@@ -341,28 +341,31 @@ export default function DashboardView() {
                         </div>
                     </div>
 
-                <div className="flex items-center bg-gray-100 p-1 rounded-2xl w-full sm:w-auto">
+                {/* flex-wrap: los cuatro no caben en un celular y "PERSONALIZADO"
+                    se salia 60px de la pantalla. En movil se acomodan en dos
+                    filas; de sm para arriba siguen en una sola como antes. */}
+                <div className="flex flex-wrap items-center bg-gray-100 p-1 rounded-2xl w-full sm:w-auto">
                     <button
                         onClick={() => setTimeRange('week')}
-                        className={`flex-1 sm:flex-none px-6 py-2 rounded-xl text-xs font-black transition-all ${timeRange === 'week' ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'}`}
+                        className={`flex-1 sm:flex-none px-3 sm:px-6 py-2 rounded-xl text-xs font-black transition-all ${timeRange === 'week' ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'}`}
                     >
                         SEMANA
                     </button>
                     <button
                         onClick={() => setTimeRange('month')}
-                        className={`flex-1 sm:flex-none px-6 py-2 rounded-xl text-xs font-black transition-all ${timeRange === 'month' ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'}`}
+                        className={`flex-1 sm:flex-none px-3 sm:px-6 py-2 rounded-xl text-xs font-black transition-all ${timeRange === 'month' ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'}`}
                     >
                         MES
                     </button>
                     <button
                         onClick={() => setTimeRange('all')}
-                        className={`flex-1 sm:flex-none px-6 py-2 rounded-xl text-xs font-black transition-all ${timeRange === 'all' ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'}`}
+                        className={`flex-1 sm:flex-none px-3 sm:px-6 py-2 rounded-xl text-xs font-black transition-all ${timeRange === 'all' ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'}`}
                     >
                         TODO
                     </button>
                     <button
                         onClick={() => setTimeRange('custom')}
-                        className={`flex-1 sm:flex-none px-6 py-2 rounded-xl text-xs font-black transition-all ${timeRange === 'custom' ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'}`}
+                        className={`flex-1 sm:flex-none px-3 sm:px-6 py-2 rounded-xl text-xs font-black transition-all ${timeRange === 'custom' ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'}`}
                     >
                         PERSONALIZADO
                     </button>

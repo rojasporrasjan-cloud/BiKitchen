@@ -285,7 +285,7 @@ export default function AdminLayout() {
     );
 
     return (
-        <div className="flex h-screen bg-gray-50 font-sans text-gray-800 overflow-hidden print:h-auto print:overflow-visible">
+        <div className="panel-admin flex h-screen bg-gray-50 font-sans text-gray-800 overflow-hidden print:h-auto print:overflow-visible">
             {/* Desktop Sidebar */}
             <motion.aside
                 initial={false}

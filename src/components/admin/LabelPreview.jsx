@@ -36,7 +36,7 @@ export default function LabelPreview({ label, scale = 2, className = '', setting
     return (
         <div className={className}>
             <div
-                className="inline-block bg-white border-2 border-dashed border-gray-300 rounded-lg p-1 shadow-sm"
+                className="inline-block max-w-full bg-white border-2 border-dashed border-gray-300 rounded-lg p-1 shadow-sm"
                 style={{ lineHeight: 0 }}
             >
                 <canvas
@@ -45,7 +45,14 @@ export default function LabelPreview({ label, scale = 2, className = '', setting
                     height={H}
                     style={{
                         width: anchoMostrado,
-                        height: H * scale / 2,
+                        // En el celular la ampliacion a 3x da 432px sobre una
+                        // pantalla de 375 y la etiqueta se salia por los dos
+                        // lados. El tope solo cambia como se VE: el canvas se
+                        // sigue dibujando a la resolucion real del cabezal, asi
+                        // que lo que no quepa en el papel sigue sin caber aca.
+                        maxWidth: '100%',
+                        height: 'auto',
+                        aspectRatio: `${W} / ${H}`,
                         // `pixelated` solo sirve cuando la etiqueta se AMPLÍA: ahí
                         // muestra el punto real del cabezal. Al reducirla produce
                         // dentado y se ve borrosa, así que ahí conviene suavizar.

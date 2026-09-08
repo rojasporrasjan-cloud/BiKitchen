@@ -2417,8 +2417,11 @@ export default function PrintProductionView() {
                     const nombres = [...new Set(carga.flatMap(c => Object.keys(c.porCocinera)))]
                         .sort((a, b) => (a === 'SIN ASIGNAR' ? 1 : b === 'SIN ASIGNAR' ? -1 : a.localeCompare(b)));
 
+                    // overflow-x-auto en vez de overflow-hidden: con hidden, en el
+                    // celular la tabla de 518px quedaba cortada y no se veia quien
+                    // marca el ritmo de cada tanda. Ahora desliza.
                     return (
-                        <div className="mb-8 border-2 border-black rounded overflow-hidden break-inside-avoid print:break-inside-avoid">
+                        <div className="mb-8 border-2 border-black rounded overflow-x-auto print:overflow-hidden break-inside-avoid print:break-inside-avoid">
                             <div className="bg-gray-900 text-white p-2.5 font-bold uppercase tracking-wide text-sm">
                                 🗓️ Plan del día — nadie pasa a la tanda siguiente hasta que todas terminen la de ahora
                             </div>
@@ -2555,7 +2558,7 @@ export default function PrintProductionView() {
                             if (items.length === 0) return null;
 
                             return (
-                                <div key={cook} className="break-inside-avoid print:break-inside-avoid">
+                                <div key={cook} className="break-inside-avoid print:break-inside-avoid overflow-x-auto print:overflow-visible">
                                     <table className="w-full text-sm border-collapse border-2 border-black mb-2">
                                         <thead>
                                             <tr>
@@ -3559,7 +3562,7 @@ export default function PrintProductionView() {
                 />
 
                 {viewMode !== 'cocina' && (
-                    <div className="mt-4 flex justify-center gap-4">
+                    <div className="mt-4 flex flex-wrap justify-center gap-4">
                         <button
                             onClick={() => setEmpaqueTab('packs')}
                             className={`px-6 py-2 rounded-lg font-bold border-2 transition-all ${empaqueTab === 'packs' ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-purple-600 border-purple-200 hover:border-purple-600'}`}
@@ -3578,7 +3581,7 @@ export default function PrintProductionView() {
                     </div>
                 )}
 
-                <div className="mt-6 flex justify-center gap-4">
+                <div className="mt-6 flex flex-wrap justify-center gap-3 sm:gap-4">
                     <button
                         onClick={() => window.print()}
                         className="px-8 py-3 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition shadow-lg flex items-center gap-2"
@@ -3759,7 +3762,12 @@ export default function PrintProductionView() {
                             return (
                                 <div key={`empaque-${packName}`} className="pack-table-container mb-12 print:mb-0 print:break-after-page print:[page-break-after:always] break-inside-avoid print:break-inside-avoid">
                                     {/* ESTILO EXCEL */}
-                                    <div className="w-full">
+                                    {/* overflow-x-auto: en el celular la tabla mide 513px
+                                        sobre una pantalla de 375 y quedaba CORTADA —no se
+                                        veian ni Especificaciones ni Cliente—. Ahora desliza.
+                                        En impresion vuelve a visible: el papel es apaisado y
+                                        la tabla entra entera. */}
+                                    <div className="w-full overflow-x-auto print:overflow-visible">
                                         {/* Cabecera Tipo Excel (Amarillo) */}
                                         <div className="bg-yellow-400 text-black font-bold text-lg p-1.5 print:py-1 print:text-base border border-black text-center uppercase tracking-wide">
                                             {/* El numero de TANDA, el mismo que usa la cocina.

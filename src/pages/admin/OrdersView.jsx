@@ -2362,7 +2362,11 @@ export default function OrdersView() {
                         <select
                             value={stagedFilters.zoneFilter}
                             onChange={(e) => setStagedFilters(prev => ({ ...prev, zoneFilter: e.target.value }))}
-                            className="px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
+                            /* w-full en el celular: el select se estiraba al largo del
+                               nombre de zona mas largo —"Alajuela - Carrizal / Sabanilla"—
+                               y se iba 13px fuera de una pantalla de 375. min-w-0 para
+                               que pueda achicarse dentro del flex que lo contiene. */
+                            className="w-full sm:w-auto min-w-0 max-w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
                         >
                             <option value="all">🚚 Todas las zonas</option>
                             {uniqueZones.filter(z => z !== 'all').map(zone => (
@@ -2954,7 +2958,7 @@ export default function OrdersView() {
                                                         inputMode="numeric"
                                                         aria-label="Telefono del cliente"
                                                         placeholder="Sin telefono — se puede agregar despues"
-                                                        className="flex-1 px-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-bikitchen-orange"
+                                                        className="flex-1 min-w-0 px-3 py-2.5 sm:py-1.5 text-base sm:text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-bikitchen-orange"
                                                         value={telEditado ?? (selectedOrder.telefono || selectedOrder.details?.phone || '')}
                                                         onChange={(e) => setTelEditado(e.target.value)}
                                                     />
@@ -2962,7 +2966,10 @@ export default function OrdersView() {
                                                         type="button"
                                                         onClick={() => guardarTelefono(selectedOrder)}
                                                         disabled={telEditado === null || guardandoTel}
-                                                        className="px-3 py-1.5 text-sm font-semibold rounded-lg bg-bikitchen-orange text-white disabled:opacity-40 disabled:cursor-not-allowed"
+                                                        /* py-2.5 en el celular: a 32px de alto el dedo le
+                                                           erraba. El input sube a text-base por lo mismo y
+                                                           porque abajo de 16px iOS hace zoom solo al tocarlo. */
+                                                        className="shrink-0 px-4 py-2.5 sm:py-1.5 text-sm font-semibold rounded-lg bg-bikitchen-orange text-white disabled:opacity-40 disabled:cursor-not-allowed"
                                                     >
                                                         {guardandoTel ? 'Guardando…' : 'Guardar'}
                                                     </button>

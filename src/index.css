@@ -670,3 +670,35 @@ aside[class*="overflow-y-auto"]:hover {
 .delay-700 {
   animation-delay: 700ms;
 }
+
+/* ---------------------------------------------------------------------------
+   PANEL ADMIN EN EL CELULAR
+
+   iOS hace ZOOM SOLO sobre cualquier campo con letra menor a 16px apenas uno
+   lo toca, y despues hay que alejar a mano. En el panel casi todos los campos
+   estan en 14px, asi que llenar un telefono o elegir una zona era pelear con
+   la pantalla en cada toque.
+
+   Se sube a 16px SOLO en celular y SOLO dentro del panel: en la computadora y
+   en el sitio publico nada cambia. El alto minimo es para el dedo — 32px de
+   boton se erraba.
+   --------------------------------------------------------------------------- */
+@media (max-width: 767px) {
+    .panel-admin input,
+    .panel-admin select,
+    .panel-admin textarea {
+        font-size: 16px;
+    }
+
+    .panel-admin input:not([type="checkbox"]):not([type="radio"]),
+    .panel-admin select {
+        min-height: 42px;
+    }
+
+    /* Que ningun campo empuje la pagina a lo ancho */
+    .panel-admin input,
+    .panel-admin select,
+    .panel-admin textarea {
+        max-width: 100%;
+    }
+}
