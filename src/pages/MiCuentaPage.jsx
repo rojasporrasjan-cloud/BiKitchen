@@ -7,7 +7,7 @@ import {
     ChevronRight, LogOut, LogIn, ArrowLeft,
     Award, Sparkles, Crown, TrendingUp, Bell, Tag, Copy, Check, Loader2, Ticket, Smartphone, MessageSquare, ExternalLink,
     HelpCircle, Leaf, Zap
-} from 'lucide-react';
+, ClipboardList } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useWhatsApp } from '../hooks/useWhatsApp';
 import useLoyaltyPoints from '../hooks/useLoyaltyPoints';
@@ -23,7 +23,7 @@ import toast from 'react-hot-toast';
 
 export default function MiCuentaPage() {
     const navigate = useNavigate();
-    const { currentUser, logout } = useAuth() || {};
+    const { currentUser, logout, isAdmin } = useAuth() || {};
     const { points, currentLevel, nextLevel, progressToNextLevel } = useLoyaltyPoints();
     const { orders } = useOrderHistory();
     const { applyCoupon, appliedCoupon } = useCart() || {};
@@ -397,6 +397,31 @@ export default function MiCuentaPage() {
                     )}
 
                     {/* CTA rápida: Hacer Pedido */}
+                    {/* Entrada al panel, solo para quien es admin.
+                        Desde el telefono no habia forma de llegar sin escribir
+                        /admin a mano en la barra de direcciones. */}
+                    {currentUser && typeof isAdmin === 'function' && isAdmin() && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.1 }}
+                            className="mb-4"
+                        >
+                            <Link
+                                to="/admin"
+                                className="flex items-center justify-between bg-gray-900 rounded-2xl p-5 shadow-lg group hover:bg-black transition-all"
+                            >
+                                <div>
+                                    <p className="text-white/60 text-sm font-medium">Solo para el equipo</p>
+                                    <p className="text-white text-xl font-black mt-0.5">Panel de Administración</p>
+                                </div>
+                                <div className="w-12 h-12 bg-white/15 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                                    <ClipboardList size={24} className="text-white" aria-hidden="true" />
+                                </div>
+                            </Link>
+                        </motion.div>
+                    )}
+
                     {currentUser && (
                         <motion.div
                             initial={{ opacity: 0, y: 20 }}
