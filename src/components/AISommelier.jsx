@@ -48,8 +48,14 @@ const QUICK_QUESTIONS = [
     { label: '🥗 ¿Tienen opción saludable?', q: '¿Tienen packs para bajar de peso o comer saludable?' },
 ];
 
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`;
+// La llave de Gemini ya NO vive aca.
+//
+// Estaba en VITE_GEMINI_API_KEY, y todo lo que empieza con VITE_ se empaqueta
+// dentro del JavaScript que baja al navegador: el 9 de setiembre de 2026 se
+// comprobo bajando el bundle de bikitchencr.com y ahi estaba, a la vista de
+// cualquiera que abriera el codigo fuente. Ahora vive en el servidor y esta
+// pantalla le habla a nuestra propia funcion.
+const SOMMELIER_URL = '/.netlify/functions/sommelier';
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 export default function AIAssistant() {
@@ -108,16 +114,14 @@ export default function AIAssistant() {
         setMessages((prev) => [...prev, { id: botMsgId, text: '', sender: 'bot', streaming: true }]);
 
         try {
+            // El modelo y los parametros los pone la funcion: aca solo va la
+            // conversacion. Asi no hay dos lugares que haya que mantener iguales.
             const body = {
-                system_instruction: { parts: [{ text: buildBikitchenContext(formatWhatsAppDisplay(whatsappPhone)) }] },
+                systemInstruction: buildBikitchenContext(formatWhatsAppDisplay(whatsappPhone)),
                 contents: conversationHistory.current,
-                generationConfig: {
-                    temperature: 0.7,
-                    maxOutputTokens: 800,
-                },
             };
 
-            const response = await fetch(GEMINI_URL, {
+            const response = await fetch(SOMMELIER_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
