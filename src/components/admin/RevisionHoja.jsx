@@ -6,7 +6,7 @@ import { AlertTriangle, CheckCircle2, Merge } from 'lucide-react';
  *
  * No se imprime (print:hidden): es para la pantalla, para revisar y corregir.
  */
-export default function RevisionHoja({ revision, fusionados = [], extra = [], onArreglar = null }) {
+export default function RevisionHoja({ revision, fusionados = [], extra = [], onArreglar = null, onArreglarMenu = null }) {
     if (!revision) return null;
 
     // `extra` trae las revisiones que `revisarHoja` no hace: ollas partidas por
@@ -82,9 +82,16 @@ export default function RevisionHoja({ revision, fusionados = [], extra = [], on
                             <li key={i} className="text-xs text-red-900">
                                 <strong>{p.cliente}:</strong> {p.que}
                                 <span className="block text-red-700">→ {p.comoSeArregla}</span>
-                                {/* Solo los avisos de un PEDIDO se pueden arreglar aca. Los
-                                    del menu —"Menú sinCarbos"— afectan a todos los clientes
-                                    de ese pack y se corrigen en Menús, no desde una fila. */}
+                                {/* El aviso del MENU abre otro editor, con su propio
+                                    aviso de a cuanta gente le cambia la comida. */}
+                                {onArreglarMenu && /^Menú /.test(p.cliente) && (
+                                    <button
+                                        onClick={() => onArreglarMenu(String(p.cliente).replace(/^Menú\s+/, '').trim())}
+                                        className="mt-1.5 px-3 py-1.5 rounded-lg bg-red-600 text-white font-bold text-[11px] hover:bg-red-700"
+                                    >
+                                        Corregir el menú de la semana
+                                    </button>
+                                )}
                                 {onArreglar && !/^Menú /.test(p.cliente) && (
                                     <button
                                         onClick={() => onArreglar(p.pedidoId, p.cliente)}

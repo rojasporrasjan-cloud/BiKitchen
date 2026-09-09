@@ -60,6 +60,8 @@ import { problemasDelMenu } from '../../utils/revisionDeMenus';
 import { leerAsignaciones, guardarAsignaciones } from '../../utils/asignacionesDeCocina';
 import EditorDePedido from '../../components/admin/EditorDePedido';
 import { cambiosDelPedido, cambioParaCancelar, cuantasProteinasPide } from '../../utils/guardarPedidoDeLaHoja';
+import EditorDeMenu from '../../components/admin/EditorDeMenu';
+import { cambiosDelMenu, platosParaEditar } from '../../utils/guardarMenuDeLaHoja';
 import { individualesData, getProductUnits } from '../../data/individualesData';
 import ExcelJS from 'exceljs';
 import { agregarHojasGina } from '../../utils/excelHojaProduccion';
@@ -314,6 +316,46 @@ export default function PrintProductionView() {
 
     const cancelarPedidoDeLaHoja = async () => {
         await updateDoc(doc(db, 'pedidos', pedidoEnEdicion.id), cambioParaCancelar());
+    };
+
+    // El menu de la semana que se esta corrigiendo, o null.
+    const [menuEnEdicion, setMenuEnEdicion] = useState(null);
+
+    /**
+     * Abre el editor del menu de una familia.
+     *
+     * `familia` es la clave del documento —sinCarbos, regular, fullPack— y no
+     * el titulo que se ve en la hoja, que viene con mayusculas y a veces con el
+     * prefijo "CENAS -".
+     */
+    const abrirMenu = (familia, esCena, titulo, cuantosClientes) => {
+        if (!officialMenus || !familia) return;
+        setMenuEnEdicion({
+            familia, esCena, titulo, cuantosClientes,
+            platos: platosParaEditar(officialMenus, familia, esCena)
+        });
+    };
+
+    const guardarMenuEditado = async (platos) => {
+        const cambios = cambiosDelMenu({
+            familia: menuEnEdicion.familia,
+            esCena: menuEnEdicion.esCena,
+            platos,
+            menus: officialMenus
+        });
+        if (!cambios) return;
+        await updateDoc(doc(db, 'menus_oficial', 'current'), cambios);
+        // La hoja lee de `officialMenus`: sin esto habria que recargar para ver
+        // el cambio que uno acaba de hacer.
+        setOfficialMenus(prev => {
+            const copia = { ...prev };
+            if (menuEnEdicion.esCena) {
+                copia.cena = { ...(copia.cena || {}), [menuEnEdicion.familia]: cambios[`cena.${menuEnEdicion.familia}`] };
+            } else {
+                copia[menuEnEdicion.familia] = cambios[menuEnEdicion.familia];
+            }
+            return copia;
+        });
     };
 
     // Al cambiar de dia se trae el reparto de ESE dia, no el de antes
@@ -3651,6 +3693,10 @@ export default function PrintProductionView() {
                         }))
                     })]}
                     onArreglar={abrirEditor}
+                    onArreglarMenu={(familia) => abrirMenu(
+                        familia, false, `Menú ${familia}`,
+                        cleanOrders.filter(o => mapPackNameToMenuKey(o.plan || o.tipoMenu || '') === familia).length
+                    )}
                 />
 
                 {pedidoEnEdicion && (
@@ -3659,6 +3705,18 @@ export default function PrintProductionView() {
                         onGuardar={guardarEdicion}
                         onCancelarPedido={cancelarPedidoDeLaHoja}
                         onCerrar={() => setPedidoEnEdicion(null)}
+                    />
+                )}
+
+                {menuEnEdicion && (
+                    <EditorDeMenu
+                        familia={menuEnEdicion.familia}
+                        titulo={menuEnEdicion.titulo}
+                        esCena={menuEnEdicion.esCena}
+                        platosIniciales={menuEnEdicion.platos}
+                        cuantosClientes={menuEnEdicion.cuantosClientes}
+                        onGuardar={guardarMenuEditado}
+                        onCerrar={() => setMenuEnEdicion(null)}
                     />
                 )}
 
