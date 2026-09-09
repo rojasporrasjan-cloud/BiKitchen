@@ -63,6 +63,7 @@ import EditorDePedido from '../../components/admin/EditorDePedido';
 import { cambiosDelPedido, cambioParaCancelar, cuantasProteinasPide } from '../../utils/guardarPedidoDeLaHoja';
 import EditorDeMenu from '../../components/admin/EditorDeMenu';
 import { cambiosDelMenu, platosParaEditar, cambioDeUnPlato } from '../../utils/guardarMenuDeLaHoja';
+import { invalidateCacheByType } from '../../utils/firestoreCache';
 import CeldaEditable from '../../components/admin/CeldaEditable';
 import AgregarClienteAlPack from '../../components/admin/AgregarClienteAlPack';
 import { pedidoNuevo, idParaPedidoNuevo } from '../../utils/agregarPedidoDesdeLaHoja';
@@ -337,6 +338,12 @@ export default function PrintProductionView() {
         if (!cambios) return;
 
         await updateDoc(doc(db, 'menus_oficial', 'current'), cambios);
+        // Sin esto la pagina vuelve a servir el menu viejo de su cache la
+        // proxima vez que cargue: el campo `meta.invalidateCache` es solo una
+        // marca en el documento, no borra nada del navegador. Paso de verdad al
+        // corregir el typo de los chayotes: Firestore quedo bien y la hoja
+        // siguio imprimiendo lo anterior.
+        invalidateCacheByType('menus_official');
         setOfficialMenus(prev => {
             const copia = { ...prev };
             if (esCena) copia.cena = { ...(copia.cena || {}), [familia]: cambios[`cena.${familia}`] };
@@ -386,6 +393,7 @@ export default function PrintProductionView() {
         });
         if (!cambios) return;
         await updateDoc(doc(db, 'menus_oficial', 'current'), cambios);
+        invalidateCacheByType('menus_official');
         // La hoja lee de `officialMenus`: sin esto habria que recargar para ver
         // el cambio que uno acaba de hacer.
         setOfficialMenus(prev => {
