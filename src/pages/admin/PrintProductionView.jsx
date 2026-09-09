@@ -3579,13 +3579,19 @@ export default function PrintProductionView() {
                             t: 'MARTES', s: `Empaque y cocina del ${nombreDelDiaCorto(iso(mie))}`,
                             cfg: { date: iso(mie), rebajar: false }
                         },
+                        // El adelanto son TODOS los mensuales y quincenales del lunes,
+                        // no una sola familia. `esRecurrente` ya deja fuera los
+                        // semanales; `soloPacks` era un recorte extra a bajo calorias
+                        // que dejaba sin adelantar dos tercios de la comida del lunes.
+                        // "El adelanto seria los paquetes mensuales y quincenales"
+                        // — Jan, 9 de setiembre de 2026.
                         {
                             t: 'JUEVES', s: `Solo cocina · ${nombreDelDiaCorto(iso(sab))} + adelanto del ${nombreDelDiaCorto(iso(lun))}`,
-                            cfg: { date: ciclo, adelanto: iso(lun), soloPacks: 'bajoCalorias', view: 'cocina', rebajar: false }
+                            cfg: { date: ciclo, adelanto: iso(lun), view: 'cocina', rebajar: false }
                         },
                         {
                             t: 'VIERNES', s: 'Empaque y cocina, descontando lo del jueves',
-                            cfg: { date: ciclo, adelanto: iso(lun), soloPacks: 'bajoCalorias', rebajar: true }
+                            cfg: { date: ciclo, adelanto: iso(lun), rebajar: true }
                         },
                         {
                             t: 'SÁBADO', s: `Empaque del ${nombreDelDiaCorto(iso(lun))} y lo que falte de cocina`,
