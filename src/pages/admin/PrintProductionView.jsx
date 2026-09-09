@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { db } from '../../firebase/config';
+import { useAuth } from '../../context/AuthContext';
 import { collection, query, where, getDocs, onSnapshot, orderBy, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import {
     mapPedidosFromLegacy,
@@ -63,6 +64,8 @@ import { cambiosDelPedido, cambioParaCancelar, cuantasProteinasPide } from '../.
 import EditorDeMenu from '../../components/admin/EditorDeMenu';
 import { cambiosDelMenu, platosParaEditar, cambioDeUnPlato } from '../../utils/guardarMenuDeLaHoja';
 import CeldaEditable from '../../components/admin/CeldaEditable';
+import AgregarClienteAlPack from '../../components/admin/AgregarClienteAlPack';
+import { pedidoNuevo, idParaPedidoNuevo } from '../../utils/agregarPedidoDesdeLaHoja';
 import { individualesData, getProductUnits } from '../../data/individualesData';
 import ExcelJS from 'exceljs';
 import { agregarHojasGina } from '../../utils/excelHojaProduccion';
@@ -98,6 +101,7 @@ const MENU_LABELS = {
 
 export default function PrintProductionView() {
     const [searchParams, setSearchParams] = useSearchParams();
+    const { currentUser } = useAuth();
     const date = searchParams.get('date');
 
     // La hoja de COCINA puede cubrir varios dias: Gina empieza a cocinar el
@@ -339,6 +343,20 @@ export default function PrintProductionView() {
             else copia[familia] = cambios[familia];
             return copia;
         });
+    };
+
+    // El pack al que se le esta agregando un cliente, o null.
+    const [packParaAgregar, setPackParaAgregar] = useState(null);
+
+    const agregarClienteAlPack = async (datos) => {
+        const fecha = fechas[0] || date;
+        const id = idParaPedidoNuevo(fecha, datos.cliente);
+        await setDoc(doc(db, 'pedidos', id), pedidoNuevo({
+            ...datos,
+            plan: packParaAgregar,
+            fecha,
+            quien: currentUser?.email || 'hoja-produccion'
+        }));
     };
 
     // El menu de la semana que se esta corrigiendo, o null.
@@ -3731,6 +3749,15 @@ export default function PrintProductionView() {
                     />
                 )}
 
+                {packParaAgregar && (
+                    <AgregarClienteAlPack
+                        packName={packParaAgregar}
+                        fecha={fechas[0] || date}
+                        onGuardar={agregarClienteAlPack}
+                        onCerrar={() => setPackParaAgregar(null)}
+                    />
+                )}
+
                 {menuEnEdicion && (
                     <EditorDeMenu
                         familia={menuEnEdicion.familia}
@@ -3976,6 +4003,17 @@ export default function PrintProductionView() {
                                                         : `(${suyos})`;
                                                 })()}
                                             </span>
+                                            {/* Meter un cliente que falta, sin salir de la hoja. Carlos H.
+                                                Herrera no salio en la hoja del lunes porque se cargo con la
+                                                entrega ya pasada. No se imprime: es para la pantalla. */}
+                                            <button
+                                                type="button"
+                                                onClick={() => setPackParaAgregar(packName)}
+                                                className="print:hidden ml-3 px-2.5 py-1 rounded-lg border-2 border-gray-800 bg-white text-gray-900 text-[11px] font-bold hover:bg-gray-100 align-middle"
+                                                title={`Agregar un cliente a ${packName}`}
+                                            >
+                                                + Agregar cliente
+                                            </button>
                                             {/* "Ojala en la hoja especifique que es keto porque se cocina
                                                 aparte, igual cuando es vegetariano" — Gina. */}
                                             {avisoDeFamilia(packName) && (
@@ -4054,7 +4092,19 @@ export default function PrintProductionView() {
 
                                                         return (
                                                             <>
-                                                                <td className="border border-black p-1 print:py-0.5 print:px-1 align-middle whitespace-pre-wrap text-xs print:text-[10px] leading-tight print:leading-tight">{notes}</td>
+                                                                {/* La casilla de especificaciones tambien abre el pedido: es lo que
+                                                                    Gina mas necesita cambiar, y buscarlo en otra pantalla era el
+                                                                    camino largo. Se imprime igual que antes. */}
+                                                                <td className="border border-black p-1 print:py-0.5 print:px-1 align-middle whitespace-pre-wrap text-xs print:text-[10px] leading-tight print:leading-tight">
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => abrirEditor(client.rawPedido?.id, client.nombre)}
+                                                                        title={`Cambiar las especificaciones de ${client.nombre}`}
+                                                                        className="text-left w-full whitespace-pre-wrap hover:underline decoration-dotted underline-offset-2 hover:text-blue-700 print:hover:no-underline"
+                                                                    >
+                                                                        {notes || <span className="text-gray-300 print:hidden">+ especificación</span>}
+                                                                    </button>
+                                                                </td>
                                                                 {/* El nombre es un boton: tocarlo abre SU pedido para arreglarlo sin
                                                                     salir de la hoja. Se ve y se imprime como texto; el subrayado
                                                                     solo aparece al pasar el mouse. */}
@@ -4168,7 +4218,19 @@ export default function PrintProductionView() {
                                                                     <td className="border border-black p-1 print:py-0.5 print:px-1 font-medium bg-gray-50 text-gray-400">—</td>
                                                                     <td className="border border-black p-1 print:py-0.5 print:px-1"></td>
                                                                     <td className="border border-black p-1 print:py-0.5 print:px-1"></td>
-                                                                    <td className="border border-black p-1 print:py-0.5 print:px-1 align-middle whitespace-pre-wrap text-xs print:text-[10px] leading-tight print:leading-tight">{notes}</td>
+                                                                    {/* La casilla de especificaciones tambien abre el pedido: es lo que
+                                                                        Gina mas necesita cambiar, y buscarlo en otra pantalla era el
+                                                                        camino largo. Se imprime igual que antes. */}
+                                                                    <td className="border border-black p-1 print:py-0.5 print:px-1 align-middle whitespace-pre-wrap text-xs print:text-[10px] leading-tight print:leading-tight">
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => abrirEditor(client.rawPedido?.id, client.nombre)}
+                                                                            title={`Cambiar las especificaciones de ${client.nombre}`}
+                                                                            className="text-left w-full whitespace-pre-wrap hover:underline decoration-dotted underline-offset-2 hover:text-blue-700 print:hover:no-underline"
+                                                                        >
+                                                                            {notes || <span className="text-gray-300 print:hidden">+ especificación</span>}
+                                                                        </button>
+                                                                    </td>
                                                                     {/* El nombre es un boton: tocarlo abre SU pedido para arreglarlo sin
                                                                         salir de la hoja. Se ve y se imprime como texto; el subrayado
                                                                         solo aparece al pasar el mouse. */}
