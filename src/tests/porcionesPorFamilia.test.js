@@ -70,6 +70,12 @@ describe('las familias que se cocinan aparte se avisan', () => {
  * pasan de los 5 segundos que vitest da por defecto y fallan por tiempo, no
  * porque el codigo este mal. Un rojo intermitente ensena a ignorar el rojo, asi
  * que se les da su propio limite.
+ *
+ * Los 20 segundos tampoco alcanzaron. Corriendo el archivo solo tarda menos de
+ * uno, pero con la suite entera en paralelo la maquina se satura y la carga
+ * diferida de ExcelJS se va larga: fallo dos veces por tiempo con el codigo
+ * intacto. El limite va en el describe —no repetido en cada it— y con aire de
+ * sobra, porque lo que se esta midiendo no es la velocidad sino el contenido.
  */
 describe('el aviso llega al Excel', () => {
     it('el titulo del menu keto dice que se cocina aparte', async () => {
@@ -93,7 +99,7 @@ describe('el aviso llega al Excel', () => {
         });
         const ws = wb.getWorksheet('Pack Keto');
         expect(String(ws.getCell('A3').value)).toContain('SE COCINA APARTE');
-    }, 20000);
+    });
 
     it('un pack sin aviso conserva su titulo tal cual', async () => {
         const { construirLibroGina } = await import('../utils/excelHojaProduccion.js');
@@ -105,5 +111,5 @@ describe('el aviso llega al Excel', () => {
                 menu2: null }]
         });
         expect(String(wb.getWorksheet('Pack Bajo Calorías').getCell('A3').value)).toBe('Menú #1 Pack Bajo Calorías');
-    }, 20000);
-});
+    });
+}, 60000);
