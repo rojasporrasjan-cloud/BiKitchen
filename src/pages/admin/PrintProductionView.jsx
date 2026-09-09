@@ -4032,7 +4032,19 @@ export default function PrintProductionView() {
                                                         return (
                                                             <>
                                                                 <td className="border border-black p-1 print:py-0.5 print:px-1 align-middle whitespace-pre-wrap text-xs print:text-[10px] leading-tight print:leading-tight">{notes}</td>
-                                                                <td className="border border-black p-1 print:py-0.5 print:px-1 align-middle text-xs print:text-[11px] font-medium">{clientDisplayName}</td>
+                                                                {/* El nombre es un boton: tocarlo abre SU pedido para arreglarlo sin
+                                                                    salir de la hoja. Se ve y se imprime como texto; el subrayado
+                                                                    solo aparece al pasar el mouse. */}
+                                                                <td className="border border-black p-1 print:py-0.5 print:px-1 align-middle text-xs print:text-[11px] font-medium">
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => abrirEditor(client.rawPedido?.id, client.nombre)}
+                                                                        title={`Arreglar el pedido de ${client.nombre}`}
+                                                                        className="text-left w-full hover:underline hover:text-blue-700 print:hover:no-underline"
+                                                                    >
+                                                                        {clientDisplayName}
+                                                                    </button>
+                                                                </td>
                                                             </>
                                                         );
                                                     } else {
@@ -4116,7 +4128,19 @@ export default function PrintProductionView() {
                                                                     <td className="border border-black p-1 print:py-0.5 print:px-1"></td>
                                                                     <td className="border border-black p-1 print:py-0.5 print:px-1"></td>
                                                                     <td className="border border-black p-1 print:py-0.5 print:px-1 align-middle whitespace-pre-wrap text-xs print:text-[10px] leading-tight print:leading-tight">{notes}</td>
-                                                                    <td className="border border-black p-1 print:py-0.5 print:px-1 align-middle text-xs print:text-[11px] font-medium">{clientDisplayName}</td>
+                                                                    {/* El nombre es un boton: tocarlo abre SU pedido para arreglarlo sin
+                                                                        salir de la hoja. Se ve y se imprime como texto; el subrayado
+                                                                        solo aparece al pasar el mouse. */}
+                                                                    <td className="border border-black p-1 print:py-0.5 print:px-1 align-middle text-xs print:text-[11px] font-medium">
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => abrirEditor(client.rawPedido?.id, client.nombre)}
+                                                                            title={`Arreglar el pedido de ${client.nombre}`}
+                                                                            className="text-left w-full hover:underline hover:text-blue-700 print:hover:no-underline"
+                                                                        >
+                                                                            {clientDisplayName}
+                                                                        </button>
+                                                                    </td>
                                                                 </tr>
                                                             );
                                                         })}
