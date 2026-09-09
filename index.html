@@ -101,10 +101,15 @@
 
   <!-- Favicon -->
   <link rel="icon" type="image/svg+xml" href="/bikitchen-icon.svg" />
-  <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
-  <link rel="apple-touch-icon" sizes="152x152" href="/icons/icon-152x152.png" />
-  <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-192x192.png" />
-  <link rel="apple-touch-icon" sizes="167x167" href="/icons/icon-192x192.png" />
+  <!-- Estos cuatro apuntaban a PNG que NUNCA EXISTIERON: icon-192x192.png e
+       icon-152x152.png. En public/icons/ solo hay un .svg. Y como netlify.toml
+       manda /icons/* a un 404, CADA visitante generaba esos 404 —los iPhone
+       piden el apple-touch-icon en cada visita—. Eso solo explica buena parte
+       del "54% de errores" del panel de Netlify, y no era ningun bot.
+       Se apunta al SVG que si existe. Nota: iOS no usa SVG para el icono de
+       pantalla de inicio, asi que ahi seguira saliendo una captura hasta que
+       haya un PNG cuadrado de verdad; pero los 404 se acaban. -->
+  <link rel="apple-touch-icon" href="/icons/icon-192x192.svg" />
 
   <!-- SEO -->
   <meta name="description"
