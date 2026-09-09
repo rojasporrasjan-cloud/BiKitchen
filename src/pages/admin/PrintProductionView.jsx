@@ -4264,51 +4264,115 @@ export default function PrintProductionView() {
                                     {/* BLOQUE 2: los que cambiaron UN ingrediente, agrupados por
                                         el cambio. Cinco que pidieron pure de papa se arman de
                                         corrido, como los estandar, no de a uno. */}
-                                    {gruposDeCambio.map((grupo) => (
+                                    {gruposDeCambio.map((grupo) => {
+                                        // El mismo formato que la tabla amarilla: mismas columnas,
+                                        // mismo orden y editable igual.
+                                        //
+                                        // Antes era otra tabla —Plato/Proteina/Vegetal/Carbo/En vez
+                                        // de, todo horizontal— y por eso no tomaba ninguna funcion
+                                        // de edicion: no tenia donde ponerlas. Lo que decia la
+                                        // columna "En vez de" ahora va en Especificaciones, que es
+                                        // donde quien empaca ya busca las instrucciones.
+                                        const filasPorPlato = 1 + (showVegetales ? 1 : 0) + (showCarbos ? 1 : 0);
+                                        const clientesDelGrupo = grupo.clientes;
+                                        return (
                                         <div key={`cambio-${packName}-${grupo.clave}`} className="mt-6 print:mt-4 break-inside-avoid print:break-inside-avoid">
-                                            <div className="bg-orange-300 text-black font-bold text-base print:text-sm p-1.5 print:py-1 border border-black text-center uppercase tracking-wide">
-                                                {packName} — CON CAMBIO <span className="text-gray-800 text-base print:text-sm">({grupo.total} {grupo.total === 1 ? 'pack' : 'packs'})</span>
+                                            <div className="bg-yellow-400 text-black font-bold text-lg p-1.5 print:py-1 print:text-base border border-black text-center uppercase tracking-wide">
+                                                <span className="text-gray-900">TANDA {puestoDeFamilia(packName) + 1}</span>
+                                                {'  —  '}
+                                                {packName} — CON CAMBIO{' '}
+                                                <span className="text-gray-800 text-base print:text-sm">
+                                                    ({grupo.total} {grupo.total === 1 ? 'pack' : 'packs'})
+                                                </span>
                                             </div>
-                                            <div className="bg-[#fce4d6] text-black text-xs print:text-[10px] p-1.5 border-x border-b border-black">
+                                            <div className="bg-[#fff2cc] text-black text-xs print:text-[10px] p-1.5 border-x border-b border-black">
                                                 Todos estos llevan el mismo cambio: <strong>{grupo.texto}</strong>
                                             </div>
-                                            <div className="bg-white text-black text-xs print:text-[10px] p-1.5 border-x border-b border-black">
-                                                <strong>Para:</strong>{' '}
-                                                {grupo.clientes.map((c) => {
-                                                    const zona = c.zona_envio && c.zona_envio !== 'No especificada' ? `, ${c.zona_envio}` : '';
-                                                    const cuantos = Number(c.cantidad) > 0 ? Number(c.cantidad) : 1;
-                                                    return `${c.nombre} (${cuantos})${zona}${diaDelCliente(c)}`;
-                                                }).join('  ·  ')}
-                                            </div>
-                                            <table className="w-full border-collapse border border-black text-xs print:text-[10px] table-fixed">
-                                                <thead>
-                                                    <tr className="bg-gray-100">
-                                                        <th className="border border-black p-1 w-16 text-center">Plato</th>
-                                                        <th className="border border-black p-1 text-left">Proteína</th>
-                                                        <th className="border border-black p-1 text-left">Vegetal</th>
-                                                        <th className="border border-black p-1 text-left">Carbo</th>
-                                                        <th className="border border-black p-1 w-48 text-left">En vez de</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {grupo.platos.map((plato) => {
-                                                        const marca = (parte) => plato.cambiada === parte
-                                                            ? 'border border-black p-1 font-bold bg-[#e2f0d9]'
-                                                            : 'border border-black p-1';
+
+                                            <div className="w-full overflow-x-auto print:overflow-visible">
+                                                <div className="border-x border-black bg-white flex flex-col text-xs print:text-[10px] font-bold w-full uppercase">
+                                                    <div className="flex border-b border-black">
+                                                        <div className="w-48 p-0.5 px-1 border-r border-black">CANTIDAD POR PLATO</div>
+                                                        <div className="flex-1 p-0.5 px-1">{porcion.textoPorcion || `${getDefaultGrams(packName)} GRAMOS DE PROTEINA`}</div>
+                                                    </div>
+                                                    {showVegetales && (
+                                                        <div className="flex border-b border-black">
+                                                            <div className="w-48 p-0.5 px-1 border-r border-black">CANTIDAD POR PLATO</div>
+                                                            <div className="flex-1 p-0.5 px-1">{`${porcion.vegetal} TAZA(S) DE VEGETALES`}</div>
+                                                        </div>
+                                                    )}
+                                                    {showCarbos && (
+                                                        <div className="flex border-b border-black">
+                                                            <div className="w-48 p-0.5 px-1 border-r border-black">CANTIDAD POR PLATO</div>
+                                                            <div className="flex-1 p-0.5 px-1">{`${porcion.carbo} TAZA(S) DE HARINA`}</div>
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                <table className="w-full border-collapse border border-black text-xs print:text-[11px] table-fixed">
+                                                    <thead>
+                                                        <tr className="bg-white">
+                                                            <th className="border border-black p-1 print:py-0.5 print:px-1 w-20 text-center"># de Plato</th>
+                                                            <th className="border border-black p-1 print:py-0.5 print:px-1 w-64 text-left">Descripcion</th>
+                                                            <th className="border border-black p-1 print:py-0.5 print:px-1 w-24 text-center">Cantidad</th>
+                                                            <th className="border border-black p-1 print:py-0.5 print:px-1 w-20 text-center">Platos</th>
+                                                            <th className="border border-black p-1 print:py-0.5 print:px-1 text-left">Especificaciones</th>
+                                                            <th className="border border-black p-1 print:py-0.5 print:px-1 w-64 text-left">Cliente</th>
+                                                        </tr>
+                                                    </thead>
+                                                    {grupo.platos.map((plato, idx) => {
+                                                        // La parte que cambio va resaltada, igual que antes, y en
+                                                        // Especificaciones queda escrito a que reemplaza.
+                                                        const fondo = (parte) => plato.cambiada === parte ? 'bg-[#e2f0d9] font-bold' : '';
+                                                        const enVezDe = plato.original
+                                                            ? `** ${String(plato[plato.cambiada] || '').toUpperCase()} en vez de ${plato.original}`
+                                                            : '';
                                                         return (
-                                                            <tr key={plato.numero} className="bg-white break-inside-avoid print:break-inside-avoid">
-                                                                <td className="border border-black p-1 text-center font-bold">{plato.numero}</td>
-                                                                <td className={marca('proteina')}>{plato.proteina || '—'}</td>
-                                                                <td className={marca('vegetal')}>{plato.vegetal || '—'}</td>
-                                                                <td className={marca('carbo')}>{plato.carbo || '—'}</td>
-                                                                <td className="border border-black p-1 text-gray-600">{plato.original || ''}</td>
-                                                            </tr>
+                                                            <tbody key={plato.numero} className="break-inside-avoid print:break-inside-avoid">
+                                                                <tr>
+                                                                    <td className="border border-black p-1 print:py-0.5 print:px-1 text-center font-bold align-middle" rowSpan={filasPorPlato}>Plato {plato.numero}</td>
+                                                                    <td className={`border border-black p-1 print:py-0.5 print:px-1 font-medium bg-gray-50 ${fondo('proteina')}`}>{plato.proteina || ''}</td>
+                                                                    <td className="border border-black p-1 print:py-0.5 print:px-1 text-center bg-gray-50">{porcion.proteina || ''}</td>
+                                                                    <td className="border border-black p-1 print:py-0.5 print:px-1 text-center font-bold text-base print:text-sm align-middle" rowSpan={filasPorPlato}>{grupo.total}</td>
+                                                                    <td className="border border-black p-1 print:py-0.5 print:px-1 align-middle whitespace-pre-wrap text-xs print:text-[10px] leading-tight" rowSpan={filasPorPlato}>{enVezDe}</td>
+                                                                    <td className="border border-black p-1 print:py-0.5 print:px-1 align-middle whitespace-pre-wrap text-xs print:text-[11px] font-medium" rowSpan={filasPorPlato}>
+                                                                        {idx === 0 && clientesDelGrupo.map((c) => {
+                                                                            const zona = c.zona_envio && c.zona_envio !== 'No especificada' ? `, ${c.zona_envio}` : '';
+                                                                            const cuantos = Number(c.cantidad) > 0 ? Number(c.cantidad) : 1;
+                                                                            return (
+                                                                                <button
+                                                                                    key={c.nombre}
+                                                                                    type="button"
+                                                                                    onClick={() => abrirEditor(c.rawPedido?.id, c.nombre)}
+                                                                                    title={`Arreglar el pedido de ${c.nombre}`}
+                                                                                    className="block text-left w-full hover:underline hover:text-blue-700 print:hover:no-underline"
+                                                                                >
+                                                                                    {`${c.nombre} (${cuantos})${zona}${diaDelCliente(c)}`}
+                                                                                </button>
+                                                                            );
+                                                                        })}
+                                                                    </td>
+                                                                </tr>
+                                                                {showVegetales && (
+                                                                    <tr>
+                                                                        <td className={`border border-black p-1 print:py-0.5 print:px-1 ${fondo('vegetal')}`}>{plato.vegetal || ''}</td>
+                                                                        <td className="border border-black p-1 print:py-0.5 print:px-1 text-center">{porcion.vegetal ?? ''}</td>
+                                                                    </tr>
+                                                                )}
+                                                                {showCarbos && (
+                                                                    <tr>
+                                                                        <td className={`border border-black p-1 print:py-0.5 print:px-1 ${fondo('carbo')}`}>{plato.carbo || ''}</td>
+                                                                        <td className="border border-black p-1 print:py-0.5 print:px-1 text-center">{porcion.carbo ?? ''}</td>
+                                                                    </tr>
+                                                                )}
+                                                            </tbody>
                                                         );
                                                     })}
-                                                </tbody>
-                                            </table>
+                                                </table>
+                                            </div>
                                         </div>
-                                    ))}
+                                        );
+                                    })}
 
                                     {/* BLOQUE 3: menu propio. Uno por cliente, porque el envase
                                         se arma distinto y no se puede juntar con nadie. */}
