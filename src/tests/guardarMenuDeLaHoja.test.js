@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-    rutaDelMenu, platoLimpio, revisarMenuEditado, cambiosDelMenu, platosParaEditar
+    rutaDelMenu, platoLimpio, revisarMenuEditado, cambiosDelMenu, platosParaEditar, cambioDeUnPlato
 } from '../utils/guardarMenuDeLaHoja';
 
 /**
@@ -126,5 +126,45 @@ describe('leer los platos para el editor', () => {
     it('una familia que no existe da lista vacia', () => {
         expect(platosParaEditar(MENUS, 'noExiste')).toEqual([]);
         expect(platosParaEditar(null, 'sinCarbos')).toEqual([]);
+    });
+});
+
+describe('editar UNA celda de la tabla', () => {
+    it('cambia solo esa proteina y deja las otras', () => {
+        const c = cambioDeUnPlato({
+            familia: 'sinCarbos', numeroPlato: 1, campo: 'proteina',
+            valor: 'Pollo en crema ligera de hongos', menus: MENUS
+        });
+        expect(c.sinCarbos[0].proteina).toBe('Pollo en crema ligera de hongos');
+        expect(c.sinCarbos[0].vegetal).toBe('Chayotes salteados al ajillo');
+        expect(c.sinCarbos[1].proteina).toBe('Carne de soya en salsa criolla');
+    });
+
+    it('tambien sirve para el vegetal y el carbo', () => {
+        const v = cambioDeUnPlato({ familia: 'sinCarbos', numeroPlato: 2, campo: 'vegetal', valor: 'Brocoli', menus: MENUS });
+        expect(v.sinCarbos[1].vegetal).toBe('Brocoli');
+        const k = cambioDeUnPlato({ familia: 'sinCarbos', numeroPlato: 2, campo: 'carbo', valor: '', menus: MENUS });
+        expect(k.sinCarbos[1].carbo).toBe('');
+    });
+
+    it('en la cena escribe en la ruta anidada', () => {
+        const c = cambioDeUnPlato({
+            familia: 'regular', esCena: true, numeroPlato: 1, campo: 'proteina',
+            valor: 'Fajitas mixtas encebolladas', menus: MENUS
+        });
+        expect(c['cena.regular'][0].proteina).toBe('Fajitas mixtas encebolladas');
+    });
+
+    it('un plato o un campo que no existe no devuelve cambio', () => {
+        expect(cambioDeUnPlato({ familia: 'sinCarbos', numeroPlato: 99, campo: 'proteina', valor: 'x', menus: MENUS })).toBe(null);
+        expect(cambioDeUnPlato({ familia: 'sinCarbos', numeroPlato: 1, campo: 'precio', valor: 'x', menus: MENUS })).toBe(null);
+        expect(cambioDeUnPlato({ familia: 'noExiste', numeroPlato: 1, campo: 'proteina', valor: 'x', menus: MENUS })).toBe(null);
+    });
+
+    it('escribir lo mismo no gasta una escritura', () => {
+        expect(cambioDeUnPlato({
+            familia: 'sinCarbos', numeroPlato: 1, campo: 'proteina',
+            valor: 'Carne de soya crema ligera de hongos', menus: MENUS
+        })).toBe(null);
     });
 });

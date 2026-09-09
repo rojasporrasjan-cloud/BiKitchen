@@ -61,7 +61,8 @@ import { leerAsignaciones, guardarAsignaciones } from '../../utils/asignacionesD
 import EditorDePedido from '../../components/admin/EditorDePedido';
 import { cambiosDelPedido, cambioParaCancelar, cuantasProteinasPide } from '../../utils/guardarPedidoDeLaHoja';
 import EditorDeMenu from '../../components/admin/EditorDeMenu';
-import { cambiosDelMenu, platosParaEditar } from '../../utils/guardarMenuDeLaHoja';
+import { cambiosDelMenu, platosParaEditar, cambioDeUnPlato } from '../../utils/guardarMenuDeLaHoja';
+import CeldaEditable from '../../components/admin/CeldaEditable';
 import { individualesData, getProductUnits } from '../../data/individualesData';
 import ExcelJS from 'exceljs';
 import { agregarHojasGina } from '../../utils/excelHojaProduccion';
@@ -316,6 +317,28 @@ export default function PrintProductionView() {
 
     const cancelarPedidoDeLaHoja = async () => {
         await updateDoc(doc(db, 'pedidos', pedidoEnEdicion.id), cambioParaCancelar());
+    };
+
+    /**
+     * Guarda UNA celda del menu editada en la tabla de la hoja.
+     *
+     * `packName` es como se ve en la hoja —"CENAS - PACK SIN CARBOS"— y hay que
+     * traducirlo a la clave del documento antes de escribir.
+     */
+    const guardarCeldaDeMenu = async (packName, numeroPlato, campo, valor) => {
+        const esCena = /^CENAS\s*-/i.test(String(packName || ''));
+        const base = String(packName || '').replace(/^CENAS\s*-\s*/i, '').trim();
+        const familia = mapPackNameToMenuKey(base);
+        const cambios = cambioDeUnPlato({ familia, esCena, numeroPlato, campo, valor, menus: officialMenus });
+        if (!cambios) return;
+
+        await updateDoc(doc(db, 'menus_oficial', 'current'), cambios);
+        setOfficialMenus(prev => {
+            const copia = { ...prev };
+            if (esCena) copia.cena = { ...(copia.cena || {}), [familia]: cambios[`cena.${familia}`] };
+            else copia[familia] = cambios[familia];
+            return copia;
+        });
     };
 
     // El menu de la semana que se esta corrigiendo, o null.
@@ -4062,7 +4085,13 @@ export default function PrintProductionView() {
                                                         {/* FILA 1: PROTEÍNA */}
                                                         <tr>
                                                             <td className="border border-black p-1 print:py-0.5 print:px-1 text-center font-bold align-middle" rowSpan={rowsPerPlate}>Plato {p.numero}</td>
-                                                            <td className="border border-black p-1 print:py-0.5 print:px-1 font-medium bg-gray-50">{p.proteina?.nombre || ''}</td>
+                                                            <td className="border border-black p-1 print:py-0.5 print:px-1 font-medium bg-gray-50">
+                                                                <CeldaEditable
+                                                                    valor={p.proteina?.nombre || ''}
+                                                                    titulo={`Proteína del plato ${p.numero} — cambia el menú de todos los que llevan este pack`}
+                                                                    onGuardar={(v) => guardarCeldaDeMenu(packName, p.numero, 'proteina', v)}
+                                                                />
+                                                            </td>
                                                             <td className="border border-black p-1 print:py-0.5 print:px-1 text-center bg-gray-50">{p.proteina?.gramosPorPorcion ? `${p.proteina.gramosPorPorcion}` : ''}</td>
                                                             <td className="border border-black p-1 print:py-0.5 print:px-1 text-center font-bold text-base print:text-sm align-middle" rowSpan={rowsPerPlate}>{totalPlatos}</td>
                                                             {renderClientCells(0)}
@@ -4070,7 +4099,13 @@ export default function PrintProductionView() {
                                                         {/* FILA 2: VEGETALES (el Paquete Deluxe no lleva) */}
                                                         {showVegetales && (
                                                             <tr>
-                                                                <td className="border border-black p-1 print:py-0.5 print:px-1">{p.vegetal?.nombre || ''}</td>
+                                                                <td className="border border-black p-1 print:py-0.5 print:px-1 ">
+                                                                <CeldaEditable
+                                                                    valor={p.vegetal?.nombre || ''}
+                                                                    titulo={`Vegetales del plato ${p.numero} — cambia el menú de todos los que llevan este pack`}
+                                                                    onGuardar={(v) => guardarCeldaDeMenu(packName, p.numero, 'vegetal', v)}
+                                                                />
+                                                            </td>
                                                                 <td className="border border-black p-1 print:py-0.5 print:px-1 text-center">{p.vegetal?.cantidadPorPorcion ? `${p.vegetal.cantidadPorPorcion}` : ''}</td>
                                                                 {renderClientCells(1)}
                                                             </tr>
@@ -4078,7 +4113,13 @@ export default function PrintProductionView() {
                                                         {/* FILA 3: CARBOS (si aplica) */}
                                                         {showCarbos && (
                                                             <tr className="break-inside-avoid">
-                                                                <td className="border border-black p-1 print:py-0.5 print:px-1">{p.carbo?.nombre || ''}</td>
+                                                                <td className="border border-black p-1 print:py-0.5 print:px-1">
+                                                                    <CeldaEditable
+                                                                        valor={p.carbo?.nombre || ''}
+                                                                        titulo={`Carbohidrato del plato ${p.numero} — cambia el menú de todos los que llevan este pack`}
+                                                                        onGuardar={(v) => guardarCeldaDeMenu(packName, p.numero, 'carbo', v)}
+                                                                    />
+                                                                </td>
                                                                 <td className="border border-black p-1 print:py-0.5 print:px-1 text-center">{p.carbo?.cantidadPorPorcion ? `${p.carbo.cantidadPorPorcion}` : ''}</td>
                                                                 {renderClientCells(showVegetales ? 2 : 1)}
                                                             </tr>

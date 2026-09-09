@@ -87,3 +87,31 @@ export const platosParaEditar = (menus, familia, esCena = false) => {
         carbo: String(p?.carbo?.nombre ?? p?.carbo ?? '')
     }));
 };
+
+/**
+ * El cambio de UN solo campo de UN plato, editado en la tabla de la hoja.
+ *
+ * Se arma sobre `cambiosDelMenu` a proposito: el guardado tiene que ser
+ * exactamente el mismo que el del editor completo —misma ruta, misma marca de
+ * cache— o la hoja terminaria con dos formas de escribir el menu que se pisan.
+ *
+ * @param {object} datos
+ * @param {string} datos.familia   clave del menu: sinCarbos, regular, fullPack
+ * @param {boolean} datos.esCena
+ * @param {number} datos.numeroPlato  el "Plato 3" de la hoja
+ * @param {'proteina'|'vegetal'|'carbo'} datos.campo
+ * @param {string} datos.valor
+ * @param {object} datos.menus
+ */
+export const cambioDeUnPlato = ({ familia, esCena = false, numeroPlato, campo, valor, menus }) => {
+    if (!['proteina', 'vegetal', 'carbo'].includes(campo)) return null;
+
+    const platos = platosParaEditar(menus, familia, esCena);
+    if (platos.length === 0) return null;
+
+    const i = platos.findIndex(p => Number(p.numero) === Number(numeroPlato));
+    if (i === -1) return null;
+
+    const siguientes = platos.map((p, j) => (j === i ? { ...p, [campo]: String(valor ?? '') } : p));
+    return cambiosDelMenu({ familia, esCena, platos: siguientes, menus });
+};
