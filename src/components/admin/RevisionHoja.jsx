@@ -6,7 +6,7 @@ import { AlertTriangle, CheckCircle2, Merge } from 'lucide-react';
  *
  * No se imprime (print:hidden): es para la pantalla, para revisar y corregir.
  */
-export default function RevisionHoja({ revision, fusionados = [], extra = [] }) {
+export default function RevisionHoja({ revision, fusionados = [], extra = [], onArreglar = null }) {
     if (!revision) return null;
 
     // `extra` trae las revisiones que `revisarHoja` no hace: ollas partidas por
@@ -82,6 +82,17 @@ export default function RevisionHoja({ revision, fusionados = [], extra = [] }) 
                             <li key={i} className="text-xs text-red-900">
                                 <strong>{p.cliente}:</strong> {p.que}
                                 <span className="block text-red-700">→ {p.comoSeArregla}</span>
+                                {/* Solo los avisos de un PEDIDO se pueden arreglar aca. Los
+                                    del menu —"Menú sinCarbos"— afectan a todos los clientes
+                                    de ese pack y se corrigen en Menús, no desde una fila. */}
+                                {onArreglar && !/^Menú /.test(p.cliente) && (
+                                    <button
+                                        onClick={() => onArreglar(p.pedidoId, p.cliente)}
+                                        className="mt-1.5 px-3 py-1.5 rounded-lg bg-red-600 text-white font-bold text-[11px] hover:bg-red-700"
+                                    >
+                                        Arreglar el pedido de {String(p.cliente).split(' ')[0]}
+                                    </button>
+                                )}
                             </li>
                         ))}
                     </ul>
@@ -99,6 +110,14 @@ export default function RevisionHoja({ revision, fusionados = [], extra = [] }) 
                                 <strong>{p.cliente}:</strong> {p.que}
                                 {p.comoSeArregla && (
                                     <span className="block text-amber-700">→ {p.comoSeArregla}</span>
+                                )}
+                                {onArreglar && !/^Menú /.test(p.cliente) && (
+                                    <button
+                                        onClick={() => onArreglar(p.pedidoId, p.cliente)}
+                                        className="mt-1 px-2.5 py-1 rounded-lg border border-amber-400 text-amber-900 font-bold text-[11px] hover:bg-amber-100"
+                                    >
+                                        Arreglar
+                                    </button>
                                 )}
                             </li>
                         ))}

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { db } from '../../firebase/config';
-import { collection, query, where, getDocs, onSnapshot, orderBy, doc, getDoc, setDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, onSnapshot, orderBy, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import {
     mapPedidosFromLegacy,
     buildKitchenSheetData,
@@ -58,6 +58,8 @@ import RevisionHoja from '../../components/admin/RevisionHoja';
 import { problemasParaLaHoja } from '../../utils/revisionDeLaHoja';
 import { problemasDelMenu } from '../../utils/revisionDeMenus';
 import { leerAsignaciones, guardarAsignaciones } from '../../utils/asignacionesDeCocina';
+import EditorDePedido from '../../components/admin/EditorDePedido';
+import { cambiosDelPedido, cambioParaCancelar, cuantasProteinasPide } from '../../utils/guardarPedidoDeLaHoja';
 import { individualesData, getProductUnits } from '../../data/individualesData';
 import ExcelJS from 'exceljs';
 import { agregarHojasGina } from '../../utils/excelHojaProduccion';
@@ -272,6 +274,47 @@ export default function PrintProductionView() {
         () => leerAsignaciones(String(date || '').split(',')[0].trim())
     );
     const [categoryCookInputs, setCategoryCookInputs] = useState({});
+
+    // El pedido que se esta arreglando desde la hoja, o null.
+    const [pedidoEnEdicion, setPedidoEnEdicion] = useState(null);
+
+    /**
+     * Abre el editor con el pedido crudo, buscado por nombre de cliente.
+     *
+     * Se busca en `cleanOrders` y se usa `rawPedido` porque lo que hay que
+     * escribir es el documento tal cual esta guardado, no la version que la
+     * hoja transformo para mostrar.
+     */
+    const abrirEditor = (pedidoId, nombreCliente) => {
+        // Por id primero: un cliente puede tener dos pedidos el mismo dia y por
+        // nombre se abria el que no era. El nombre queda de respaldo.
+        const enLaHoja = (pedidoId && cleanOrders.find(o => (o.rawPedido?.id || o.id) === pedidoId))
+            || cleanOrders.find(o =>
+                String(o.cliente || o.nombre || '').trim().toLowerCase()
+                === String(nombreCliente || '').trim().toLowerCase());
+        const crudo = enLaHoja?.rawPedido || enLaHoja;
+        if (!crudo?.id) return;
+        const plan = crudo.plan || crudo.tipoMenu || '';
+        setPedidoEnEdicion({
+            id: crudo.id,
+            cliente: crudo.cliente || nombreCliente,
+            plan,
+            observaciones: crudo.observaciones || '',
+            items: crudo.items || [],
+            proteinas: crudo.items?.[0]?.proteinas || [],
+            cuantasProteinas: cuantasProteinasPide(plan)
+        });
+    };
+
+    const guardarEdicion = async (edicion) => {
+        const cambios = cambiosDelPedido(pedidoEnEdicion, edicion);
+        if (!cambios) return;
+        await updateDoc(doc(db, 'pedidos', pedidoEnEdicion.id), cambios);
+    };
+
+    const cancelarPedidoDeLaHoja = async () => {
+        await updateDoc(doc(db, 'pedidos', pedidoEnEdicion.id), cambioParaCancelar());
+    };
 
     // Al cambiar de dia se trae el reparto de ESE dia, no el de antes
     useEffect(() => {
@@ -3582,6 +3625,7 @@ export default function PrintProductionView() {
                         // de arriba devolvia undefined y las revisiones daban
                         // cero sin fallar, que es la peor forma de fallar.
                         pedidos: cleanOrders.map(p => ({
+                            id: p.rawPedido?.id || p.id,
                             cliente: p.cliente || p.nombre || '',
                             plan: p.plan || p.tipoMenu || '',
                             categoryLabel: p.categoryLabel || p.rawPedido?.categoryLabel || '',
@@ -3606,7 +3650,17 @@ export default function PrintProductionView() {
                             ) || []
                         }))
                     })]}
+                    onArreglar={abrirEditor}
                 />
+
+                {pedidoEnEdicion && (
+                    <EditorDePedido
+                        pedido={pedidoEnEdicion}
+                        onGuardar={guardarEdicion}
+                        onCancelarPedido={cancelarPedidoDeLaHoja}
+                        onCerrar={() => setPedidoEnEdicion(null)}
+                    />
+                )}
 
                 {viewMode !== 'cocina' && (
                     <div className="mt-4 flex flex-wrap justify-center gap-4">

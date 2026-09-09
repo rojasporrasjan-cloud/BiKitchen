@@ -62,9 +62,15 @@ export const distanciaConVolteos = (a, b) => {
     return d[m][n];
 };
 
-/** Un aviso, con lo justo para actuar sin ir a buscar nada. */
-const aviso = (nivel, tipo, titulo, detalle, quienes = []) =>
-    ({ nivel, tipo, titulo, detalle, quienes });
+/**
+ * Un aviso, con lo justo para actuar sin ir a buscar nada.
+ *
+ * `pedidoId` importa: un cliente puede tener DOS pedidos el mismo dia —Diana
+ * Gonzalez lleva un pack y unos individuales— y sin el id el boton de arreglar
+ * abria el primero que encontrara por nombre, que no era el del problema.
+ */
+const aviso = (nivel, tipo, titulo, detalle, quienes = [], pedidoId = null) =>
+    ({ nivel, tipo, titulo, detalle, quienes, pedidoId });
 
 /**
  * 1. Dos ollas del mismo plato.
@@ -117,7 +123,7 @@ export const cenasQueNoSalen = (pedidos = []) => (pedidos || [])
         'alto', 'sin-cenas',
         'Paga cena pero no le sale ninguna',
         `${p.cliente} lleva "${p.plan}" y en la hoja no aparece ninguna cena suya.`,
-        [p.cliente]
+        [p.cliente], p.id
     ));
 
 /**
@@ -138,7 +144,7 @@ export const packsQueNadieCocina = (pedidos = []) => (pedidos || [])
         'Un pack que no se va a cocinar',
         `El pack de ${p.cliente} ("${p.plan}") no calzo con ninguna familia del menu, `
         + 'asi que no genero ollas.',
-        [p.cliente]
+        [p.cliente], p.id
     ));
 
 /**
@@ -165,7 +171,8 @@ export const pedidosRepetidos = (pedidos = []) => {
             'El mismo pedido dos veces',
             `${lista[0].cliente} aparece ${lista.length} veces con "${lista[0].plan}". `
             + 'Se va a cocinar y cobrar doble.',
-            lista.map(p => p.numeroOrden || p.id).filter(Boolean)
+            lista.map(p => p.numeroOrden || p.id).filter(Boolean),
+            lista[0].id
         ));
 };
 
@@ -197,7 +204,7 @@ export const seLesAcaban = (pedidos = [], fecha, diasDeAviso = 7) => {
                 // Sin repetir el nombre: el panel ya lo pone como etiqueta.
                 `Le queda la ultima entrega el ${fs[fs.length - 1]}. `
                 + 'Hay que ofrecerle la renovacion antes de esa.',
-                [p.cliente]
+                [p.cliente], p.id
             );
         });
 };
@@ -257,7 +264,7 @@ export const packsSinDecirCuales = (pedidos = []) => (pedidos || [])
             `${p.cliente} lleva "${nombre}" pero en el pedido no quedó escrito qué `
             + `proteínas eligió (hay ${distintos.size} de ${cuantas}). La hoja rellena `
             + 'repitiendo un plato, así que se cocinaría lo mismo varias veces.',
-            [p.cliente]
+            [p.cliente], p.id
         );
     })
     .filter(Boolean);
@@ -293,6 +300,7 @@ export const problemasParaLaHoja = ({ pedidos = [], preparaciones = [], fecha = 
         ...packsSinDecirCuales(pedidos),
         ...seLesAcaban(pedidos, fecha)
     ].map(a => ({
+        pedidoId: a.pedidoId || null,
         cliente: a.tipo === 'olla-partida' ? 'Cocina' : (a.quienes[0] || a.titulo),
         que: a.detalle,
         comoSeArregla: comoArreglar[a.tipo] || '',
