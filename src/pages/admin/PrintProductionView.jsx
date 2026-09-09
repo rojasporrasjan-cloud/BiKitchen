@@ -57,6 +57,7 @@ import { agregarPestanaDeCocina, agregarPestanaDeEmpaque, agregarPestanaDeAvisos
 import RevisionHoja from '../../components/admin/RevisionHoja';
 import { problemasParaLaHoja } from '../../utils/revisionDeLaHoja';
 import { problemasDelMenu } from '../../utils/revisionDeMenus';
+import { leerAsignaciones, guardarAsignaciones } from '../../utils/asignacionesDeCocina';
 import { individualesData, getProductUnits } from '../../data/individualesData';
 import ExcelJS from 'exceljs';
 import { agregarHojasGina } from '../../utils/excelHojaProduccion';
@@ -262,8 +263,36 @@ export default function PrintProductionView() {
     const [officialMenus, setOfficialMenus] = useState(null);
     const [loading, setLoading] = useState(true);
     const [empaqueTab, setEmpaqueTab] = useState('packs');
-    const [kitchenAssignments, setKitchenAssignments] = useState({});
+    // El reparto de estaciones se guarda POR FECHA y se recupera al abrir.
+    //
+    // Antes vivia solo en memoria: se repartian cuarenta platillos, se cerraba
+    // la pagina y se perdia todo. Volver el sabado a la hoja del lunes era
+    // repartir de cero, o imprimir con "SIN ASIGNAR" en media hoja.
+    const [kitchenAssignments, setKitchenAssignments] = useState(
+        () => leerAsignaciones(String(date || '').split(',')[0].trim())
+    );
     const [categoryCookInputs, setCategoryCookInputs] = useState({});
+
+    // Al cambiar de dia se trae el reparto de ESE dia, no el de antes
+    useEffect(() => {
+        setKitchenAssignments(leerAsignaciones(fechas[0]));
+    }, [fechas[0]]);
+
+    /**
+     * Cambia el reparto y lo guarda en el mismo paso.
+     *
+     * Se guarda ACA y no en un useEffect a proposito. Con el efecto habia una
+     * carrera: al cambiar de dia, la fecha cambiaba antes que el estado, asi
+     * que el reparto del miercoles se guardaba encima del sabado y despues se
+     * leia ya pisado.
+     */
+    const cambiarAsignaciones = (cambio) => {
+        setKitchenAssignments(prev => {
+            const siguiente = typeof cambio === 'function' ? cambio(prev) : cambio;
+            guardarAsignaciones(fechas[0], siguiente);
+            return siguiente;
+        });
+    };
     const [resumenReparto, setResumenReparto] = useState(null);
     // Platos que Gina dijo que son el mismo. Se guardan en el navegador para
     // no tener que rehacerlas cada semana.
@@ -2073,7 +2102,7 @@ export default function PrintProductionView() {
     };
 
     const handleAssignCook = (itemName, cookName) => {
-        setKitchenAssignments(prev => ({ ...prev, [itemName]: cookName }));
+        cambiarAsignaciones(prev => ({ ...prev, [itemName]: cookName }));
     };
 
     const handleAssignCategory = (catName) => {
@@ -2084,7 +2113,7 @@ export default function PrintProductionView() {
         itemsInCat.forEach(item => {
             updates[item.name] = cook;
         });
-        setKitchenAssignments(prev => ({ ...prev, ...updates }));
+        cambiarAsignaciones(prev => ({ ...prev, ...updates }));
     };
 
     const handleAssignSelected = () => {
@@ -2094,7 +2123,7 @@ export default function PrintProductionView() {
         selectedKitchenItems.forEach(itemName => {
             updates[itemName] = cook;
         });
-        setKitchenAssignments(prev => ({ ...prev, ...updates }));
+        cambiarAsignaciones(prev => ({ ...prev, ...updates }));
         setSelectedKitchenItems([]);
         setBulkSelectedCook('');
     };
@@ -2111,7 +2140,7 @@ export default function PrintProductionView() {
             tipo: TIPO_POR_CATEGORIA[item.category]
         }));
         const { asignaciones, nuevas, sinAsignar } = repartirPlatillos(platillos, kitchenAssignments);
-        setKitchenAssignments(prev => ({ ...prev, ...asignaciones }));
+        cambiarAsignaciones(prev => ({ ...prev, ...asignaciones }));
         setResumenReparto({ nuevas, sinAsignar });
     };
 
@@ -2195,7 +2224,7 @@ export default function PrintProductionView() {
                                 Repartir automáticamente
                             </button>
                             <button
-                                onClick={() => { setKitchenAssignments({}); setResumenReparto(null); }}
+                                onClick={() => { cambiarAsignaciones({}); setResumenReparto(null); }}
                                 className="text-xs text-gray-600 underline hover:text-gray-900"
                             >
                                 Borrar todo
