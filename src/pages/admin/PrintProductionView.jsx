@@ -4375,53 +4375,96 @@ export default function PrintProductionView() {
                                     })}
 
                                     {/* BLOQUE 3: menu propio. Uno por cliente, porque el envase
-                                        se arma distinto y no se puede juntar con nadie. */}
+                                        se arma distinto y no se puede juntar con nadie.
+                                        Usa el MISMO formato que la tabla amarilla: antes era otra
+                                        tabla horizontal y por eso no se podia editar nada ahi. */}
                                     {clientesDeMenuPropio.map((cliente) => {
                                         const zona = cliente.zona_envio && cliente.zona_envio !== 'No especificada'
                                             ? `, ${cliente.zona_envio}` : '';
                                         const cuantos = Number(cliente.cantidad) > 0 ? Number(cliente.cantidad) : 1;
+                                        const filasPorPlato = 1 + (showVegetales ? 1 : 0) + (showCarbos ? 1 : 0);
                                         return (
                                             <div key={`propio-${packName}-${cliente.nombre}`} className="mt-6 print:mt-4 break-inside-avoid print:break-inside-avoid">
-                                                <div className="bg-yellow-400 text-black font-bold text-base print:text-sm p-1.5 print:py-1 border border-black text-center uppercase tracking-wide">
-                                                    {packName} de {cliente.nombre}{zona} ({cuantos}){diaDelCliente(cliente)}
+                                                <div className="bg-yellow-400 text-black font-bold text-lg p-1.5 print:py-1 print:text-base border border-black text-center uppercase tracking-wide">
+                                                    <span className="text-gray-900">TANDA {puestoDeFamilia(packName) + 1}</span>
+                                                    {'  —  '}
+                                                    {packName} — MENÚ PROPIO{' '}
+                                                    <span className="text-gray-800 text-base print:text-sm">({cuantos} {cuantos === 1 ? 'pack' : 'packs'})</span>
                                                 </div>
                                                 <div className="bg-[#fff2cc] text-black text-xs print:text-[10px] p-1.5 border-x border-b border-black">
-                                                    No lleva el menú tal cual. Pidió: <strong>{cliente.cambio.texto}</strong>
+                                                    No lleva el menú tal cual. Pidió: <strong>{cliente.cambio?.texto || ''}</strong>
                                                 </div>
-                                                <table className="w-full border-collapse border border-black text-xs print:text-[10px] table-fixed">
-                                                    <thead>
-                                                        <tr className="bg-gray-100">
-                                                            <th className="border border-black p-1 w-16 text-center">Plato</th>
-                                                            <th className="border border-black p-1 text-left">Proteína</th>
-                                                            <th className="border border-black p-1 text-left">Vegetal</th>
-                                                            <th className="border border-black p-1 text-left">Carbo</th>
-                                                            <th className="border border-black p-1 w-48 text-left">En vez de</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        {cliente.platos.map((plato) => {
-                                                            const marca = (parte) => plato.cambiada === parte
-                                                                ? 'border border-black p-1 font-bold bg-[#e2f0d9]'
-                                                                : 'border border-black p-1';
-                                                            return (
-                                                                <tr key={plato.numero} className="bg-white break-inside-avoid print:break-inside-avoid">
-                                                                    <td className="border border-black p-1 text-center font-bold">{plato.numero}</td>
-                                                                    <td className={marca('proteina')}>{plato.proteina || '—'}</td>
-                                                                    <td className={marca('vegetal')}>{plato.vegetal || '—'}</td>
-                                                                    <td className={marca('carbo')}>{plato.carbo || '—'}</td>
-                                                                    <td className="border border-black p-1 text-gray-600">{plato.original || ''}</td>
-                                                                </tr>
-                                                            );
-                                                        })}
-                                                        {cliente.observaciones ? (
-                                                            <tr className="bg-[#fff2cc]">
-                                                                <td colSpan="5" className="border border-black p-1 text-left">
-                                                                    <strong>Nota:</strong> {cliente.observaciones}
-                                                                </td>
+
+                                                <div className="w-full overflow-x-auto print:overflow-visible">
+                                                    <div className="border-x border-black bg-white flex flex-col text-xs print:text-[10px] font-bold w-full uppercase">
+                                                        <div className="flex border-b border-black">
+                                                            <div className="w-48 p-0.5 px-1 border-r border-black">CANTIDAD POR PLATO</div>
+                                                            <div className="flex-1 p-0.5 px-1">{porcion.textoPorcion || `${getDefaultGrams(packName)} GRAMOS DE PROTEINA`}</div>
+                                                        </div>
+                                                        {showVegetales && (
+                                                            <div className="flex border-b border-black">
+                                                                <div className="w-48 p-0.5 px-1 border-r border-black">CANTIDAD POR PLATO</div>
+                                                                <div className="flex-1 p-0.5 px-1">{`${porcion.vegetal} TAZA(S) DE VEGETALES`}</div>
+                                                            </div>
+                                                        )}
+                                                        {showCarbos && (
+                                                            <div className="flex border-b border-black">
+                                                                <div className="w-48 p-0.5 px-1 border-r border-black">CANTIDAD POR PLATO</div>
+                                                                <div className="flex-1 p-0.5 px-1">{`${porcion.carbo} TAZA(S) DE HARINA`}</div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    <table className="w-full border-collapse border border-black text-xs print:text-[11px] table-fixed">
+                                                        <thead>
+                                                            <tr className="bg-white">
+                                                                <th className="border border-black p-1 print:py-0.5 print:px-1 w-20 text-center"># de Plato</th>
+                                                                <th className="border border-black p-1 print:py-0.5 print:px-1 w-64 text-left">Descripcion</th>
+                                                                <th className="border border-black p-1 print:py-0.5 print:px-1 w-24 text-center">Cantidad</th>
+                                                                <th className="border border-black p-1 print:py-0.5 print:px-1 w-20 text-center">Platos</th>
+                                                                <th className="border border-black p-1 print:py-0.5 print:px-1 text-left">Especificaciones</th>
+                                                                <th className="border border-black p-1 print:py-0.5 print:px-1 w-64 text-left">Cliente</th>
                                                             </tr>
-                                                        ) : null}
-                                                    </tbody>
-                                                </table>
+                                                        </thead>
+                                                        {(cliente.platos || []).map((plato, idx) => (
+                                                            <tbody key={plato.numero ?? idx} className="break-inside-avoid print:break-inside-avoid">
+                                                                <tr>
+                                                                    <td className="border border-black p-1 print:py-0.5 print:px-1 text-center font-bold align-middle" rowSpan={filasPorPlato}>Plato {plato.numero ?? idx + 1}</td>
+                                                                    <td className="border border-black p-1 print:py-0.5 print:px-1 font-medium bg-gray-50">{plato.proteina || ''}</td>
+                                                                    <td className="border border-black p-1 print:py-0.5 print:px-1 text-center bg-gray-50">{porcion.proteina || ''}</td>
+                                                                    <td className="border border-black p-1 print:py-0.5 print:px-1 text-center font-bold text-base print:text-sm align-middle" rowSpan={filasPorPlato}>{cuantos}</td>
+                                                                    <td className="border border-black p-1 print:py-0.5 print:px-1 align-middle whitespace-pre-wrap text-xs print:text-[10px] leading-tight" rowSpan={filasPorPlato}>
+                                                                        {idx === 0 ? notasDeCliente(cliente, packName) : ''}
+                                                                    </td>
+                                                                    <td className="border border-black p-1 print:py-0.5 print:px-1 align-middle text-xs print:text-[11px] font-medium" rowSpan={filasPorPlato}>
+                                                                        {idx === 0 && (
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => abrirEditor(cliente.rawPedido?.id, cliente.nombre)}
+                                                                                title={`Arreglar el pedido de ${cliente.nombre}`}
+                                                                                className="text-left w-full hover:underline hover:text-blue-700 print:hover:no-underline"
+                                                                            >
+                                                                                {`${cliente.nombre} (${cuantos})${zona}${diaDelCliente(cliente)}`}
+                                                                            </button>
+                                                                        )}
+                                                                    </td>
+                                                                </tr>
+                                                                {showVegetales && (
+                                                                    <tr>
+                                                                        <td className="border border-black p-1 print:py-0.5 print:px-1">{plato.vegetal || ''}</td>
+                                                                        <td className="border border-black p-1 print:py-0.5 print:px-1 text-center">{porcion.vegetal ?? ''}</td>
+                                                                    </tr>
+                                                                )}
+                                                                {showCarbos && (
+                                                                    <tr>
+                                                                        <td className="border border-black p-1 print:py-0.5 print:px-1">{plato.carbo || ''}</td>
+                                                                        <td className="border border-black p-1 print:py-0.5 print:px-1 text-center">{porcion.carbo ?? ''}</td>
+                                                                    </tr>
+                                                                )}
+                                                            </tbody>
+                                                        ))}
+                                                    </table>
+                                                </div>
                                             </div>
                                         );
                                     })}
