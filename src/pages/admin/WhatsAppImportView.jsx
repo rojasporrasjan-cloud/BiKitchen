@@ -9,6 +9,7 @@ import ImportedOrderPreview from '../../components/admin/ImportedOrderPreview';
 import { extractOrderNumbers, parseOrderBlock } from '../../utils/parseOrderText';
 import { buildPedidoFromImport, validatePedidoForFirestore, avisosDelPedido, resolverCorreo } from '../../utils/buildPedidoFromImport';
 import { avisoDeDuplicado } from '../../utils/pedidoDuplicado';
+import { esErrorDeCuota, errorDeCuota } from '../../utils/cuotaDeFirebase';
 import { nivelPorPuntos } from '../../config/loyalty';
 import { upsertClient } from '../../services/clientService';
 import { formatPrice } from '../../utils/formatters';
@@ -172,7 +173,12 @@ export default function WhatsAppImportView() {
             setResults(found);
         } catch (error) {
             console.error('[Importador] Error buscando pedidos:', error);
-            setNotice({ type: 'error', text: 'Error buscando los pedidos. Revisá la conexión e intentá de nuevo.' });
+            setNotice({
+                type: 'error',
+                text: esErrorDeCuota(error)
+                    ? errorDeCuota().message
+                    : 'Error buscando los pedidos. Revisá la conexión e intentá de nuevo.'
+            });
         } finally {
             setSearching(false);
         }
@@ -195,7 +201,12 @@ export default function WhatsAppImportView() {
             console.error('[Importador] Error confirmando pedido:', error);
             patchResult(result.numeroOrden, {
                 confirming: false,
-                error: 'No se pudo confirmar. Revisá los permisos e intentá de nuevo.'
+                // Antes decia siempre "revisa los permisos", y cuando lo que
+                // fallaba era la cuota del dia eso mandaba a buscar por el lado
+                // equivocado. Ahora cada causa dice lo suyo.
+                error: esErrorDeCuota(error)
+                    ? errorDeCuota().message
+                    : 'No se pudo confirmar. Revisá los permisos e intentá de nuevo.'
             });
         }
     };
@@ -277,7 +288,9 @@ export default function WhatsAppImportView() {
             console.error('[Importador] Error creando pedido:', error);
             setNotice({
                 type: 'error',
-                text: 'Firebase rechazó el pedido. Suele ser por las reglas de Firestore: revisá que la regla de create de /pedidos/ permita este documento.'
+                text: esErrorDeCuota(error)
+                    ? errorDeCuota().message
+                    : 'Firebase rechazó el pedido. Suele ser por las reglas de Firestore: revisá que la regla de create de /pedidos/ permita este documento.'
             });
         } finally {
             setCreating(false);

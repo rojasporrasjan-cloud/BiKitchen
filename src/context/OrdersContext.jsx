@@ -19,6 +19,7 @@ import {
     writeBatch
 } from 'firebase/firestore';
 import { confirmarPagoConRespaldo } from '../utils/confirmarPedido';
+import { laCuotaSeAcabo, anotarCuotaAgotada, errorDeCuota } from '../utils/cuotaDeFirebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { ADMIN_EMAILS } from '../config/admins';
 import { PUNTOS_REFERIDO, calcularPuntos } from '../config/loyalty';
@@ -268,15 +269,34 @@ export const OrdersProvider = ({ children }) => {
      *
      * Las transacciones son las primeras en caer porque son la operación más
      * cara, y son justo las que otorgan los BiPuntos.
+     *
+     * PERO hay dos `resource-exhausted` distintos, y confundirlos deja la
+     * pantalla colgada:
+     *
+     *   - Pasarse de RITMO por un segundo. Reintentar sirve.
+     *   - Acabarse las 50.000 lecturas del DIA. Reintentar no sirve: la cuota
+     *     no vuelve hasta la medianoche del Pacífico (1 a.m. en Costa Rica).
+     *
+     * El 9 de setiembre de 2026 pasó lo segundo mientras Jan metía pedidos.
+     * Cada reintento nuestro multiplicaba los que hace `runTransaction` por su
+     * cuenta, y el confirmar se quedó más de 35 segundos dando vueltas contra
+     * una puerta cerrada, sin decir nada. La pantalla solo decía "cargando".
+     *
+     * Por eso, al primer `resource-exhausted` se anota la hora: durante el
+     * minuto siguiente cualquier otra operación falla de una, sin reintentar.
+     * Falla igual —la cuota no está— pero falla en un segundo y con un mensaje
+     * que se puede leer, en vez de colgarse.
      */
     const conReintentos = async (operacion, intentos = 4) => {
         let ultimoError;
         for (let i = 0; i < intentos; i++) {
+            if (laCuotaSeAcabo()) throw errorDeCuota();
             try {
                 return await operacion();
             } catch (error) {
                 const codigo = error?.code || '';
                 if (codigo !== 'resource-exhausted' && codigo !== 'unavailable') throw error;
+                if (codigo === 'resource-exhausted') anotarCuotaAgotada();
                 ultimoError = error;
                 // 400 ms, 800, 1600… le da tiempo a que se libere la cuota
                 await new Promise(r => setTimeout(r, 400 * Math.pow(2, i)));
