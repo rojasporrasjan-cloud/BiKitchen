@@ -18,6 +18,7 @@
 const NARANJA = 'FFFFC000';
 const SALMON = 'FFF4B084';
 const SALMON_CLARO = 'FFFCE4D6';
+const AMBAR = 'FFFDE68A';
 const VERDE = 'FFE2F0D9';
 const GRIS = 'FFF2F2F2';
 
@@ -152,47 +153,43 @@ export const agregarPestanaDeCocina = (wb, opciones) => {
     }
 
     let f = 4;
-    let grupoActual = null;
 
-    // Ordenado de mayor a menor DENTRO de cada grupo de unidad. Mezclarlos no
-    // serviria: 5000 g y 60 tazas no se pueden comparar por el numero pelado, y
-    // ordenarlos juntos pondria las tazas al final siempre.
-    const ordenados = [...renglones].sort((a, b) => {
-        const ga = ORDEN_DE_GRUPO.indexOf(grupoDeUnidad(a.unit));
-        const gb = ORDEN_DE_GRUPO.indexOf(grupoDeUnidad(b.unit));
-        if (ga !== gb) return ga - gb;
-        const va = conDescuento ? (b.falta - a.falta) : (b.pide - a.pide);
-        if (va !== 0) return va;
-        return a.name.localeCompare(b.name);
-    });
-
-    ordenados.forEach(r => {
-        const grupo = grupoDeUnidad(r.unit);
-        if (grupo !== grupoActual) {
-            grupoActual = grupo;
+    // EL MISMO ORDEN QUE LA PANTALLA: por TANDA.
+    //
+    // Antes esta pestana ordenaba por unidad —gramos, tazas, unidades— de mayor
+    // a menor, y la pantalla por tanda. Eran dos hojas distintas de la misma
+    // cosa: en la pantalla la cocina lee "TANDA 1a, empezar por aca"; en el
+    // Excel le llegaba una lista plana donde el orden de coccion no existia.
+    //
+    // Ahora el que manda es quien arma los renglones: vienen ya en orden, con
+    // sus filas de cabecera intercaladas. Aca solo se dibujan.
+    renglones.forEach(r => {
+        // Cabecera de tanda o de olla compartida: ocupa toda la fila
+        if (r.tipo === 'tanda' || r.tipo === 'grupo') {
             ws.mergeCells(`A${f}:${col(ultima)}${f}`);
             const c = ws.getCell(`A${f}`);
-            c.value = `${grupo}  —  de mayor a menor`;
-            c.font = { name: 'Calibri', size: 12, bold: true };
-            c.alignment = { horizontal: 'left', vertical: 'middle' };
+            c.value = r.aviso ? `${r.texto}\n${r.aviso}` : r.texto;
+            c.font = { name: 'Calibri', size: r.tipo === 'tanda' ? 12 : 11, bold: true };
+            c.alignment = { horizontal: 'left', vertical: 'middle', wrapText: !!r.aviso };
             c.border = borde;
-            pintar(c, SALMON_CLARO);
-            ws.getRow(f).height = 20;
+            pintar(c, r.tipo === 'tanda' ? AMBAR : SALMON_CLARO);
+            ws.getRow(f).height = r.aviso ? 30 : 20;
             f++;
+            return;
         }
 
         const suya = r.cocinera || 'SIN ASIGNAR';
         const fila = ws.getRow(f);
         const valores = conDescuento
             ? [
-                r.name,
+                r.hijo ? `    └ ${r.name}` : r.name,
                 suya,
                 cantidadLegible(r.pide, r.unit),
                 r.hecho > 0 ? cantidadLegible(r.hecho, r.unit) : '—',
                 cantidadLegible(r.falta, r.unit),
                 r.nota || ''
             ]
-            : [r.name, suya, cantidadLegible(r.pide, r.unit), r.nota || ''];
+            : [r.hijo ? `    └ ${r.name}` : r.name, suya, cantidadLegible(r.pide, r.unit), r.nota || ''];
 
         valores.forEach((v, i) => {
             const c = fila.getCell(i + 1);

@@ -68,9 +68,10 @@ describe('agregarPestanaDeCocina', () => {
 
         expect(ws.getRow(3).getCell(3).value).toBe('Cantidad a cocinar');
         expect(ws.getRow(3).getCell(5).value).toBeFalsy();
-        // fila 4 = la cocinera, fila 5 = el plato
-        expect(ws.getRow(5).getCell(1).value).toBe('Carne mechada');
-        expect(ws.getRow(5).getCell(3).value).toBe('5 kg');
+        // Los platos arrancan en la fila 4: ya no hay cabecera de unidad
+        // encima. El orden lo manda quien arma los renglones, por TANDA.
+        expect(ws.getRow(4).getCell(1).value).toBe('Carne mechada');
+        expect(ws.getRow(4).getCell(3).value).toBe('5 kg');
     });
 
     it('con descuento separa lo que pide de lo que falta', () => {
@@ -86,7 +87,7 @@ describe('agregarPestanaDeCocina', () => {
         expect(ws.getRow(3).getCell(4).value).toBe('Ya cocinado');
         expect(ws.getRow(3).getCell(5).value).toBe('FALTA COCINAR');
 
-        const fila = ws.getRow(5);
+        const fila = ws.getRow(4);
         expect(fila.getCell(3).value).toBe('5 kg');
         expect(fila.getCell(4).value).toBe('3 kg');
         expect(fila.getCell(5).value).toBe('2 kg');
@@ -99,48 +100,33 @@ describe('agregarPestanaDeCocina', () => {
             renglones: [renglon({ pide: 5000, hecho: 5000, falta: 0 })],
             conDescuento: true
         });
-        expect(ws.getRow(5).getCell(5).fill?.fgColor?.argb).toBe('FFE2F0D9');
+        expect(ws.getRow(4).getCell(5).fill?.fgColor?.argb).toBe('FFE2F0D9');
     });
 
-    it('ordena de mayor a menor dentro de cada grupo', () => {
+    // El orden ya NO lo pone esta pestana.
+    //
+    // Antes ordenaba por unidad —gramos, tazas, unidades— de mayor a menor, y
+    // la pantalla ordenaba por TANDA. Eran dos hojas distintas de la misma
+    // cosa: quien cocina leia el orden de coccion en la pantalla y una lista
+    // plana en el papel. Ahora las dos salen del mismo pipeline y esta pestana
+    // solo dibuja lo que le dan, en el orden en que se lo dan.
+    it('respeta el orden que le dan, sin reordenar por unidad ni por cantidad', () => {
         const wb = new ExcelJS.Workbook();
         const ws = agregarPestanaDeCocina(wb, {
             titulo: 'Orden', explicacion: '',
             renglones: [
                 renglon({ name: 'Poco pedido', pide: 1000 }),
-                renglon({ name: 'La olla grande', pide: 9000 }),
-                renglon({ name: 'Del medio', pide: 4000 })
-            ]
-        });
-
-        // fila 4 = encabezado del grupo, despues los platos
-        expect(String(ws.getRow(4).getCell(1).value)).toMatch(/PROTEINAS/);
-        expect(ws.getRow(5).getCell(1).value).toBe('La olla grande');
-        expect(ws.getRow(6).getCell(1).value).toBe('Del medio');
-        expect(ws.getRow(7).getCell(1).value).toBe('Poco pedido');
-    });
-
-    it('los gramos y las tazas van en bloques distintos', () => {
-        // 60 tazas puede ser la olla mas grande del dia y 5000 g la mas chica:
-        // ordenarlos juntos por el numero pelado no significa nada
-        const wb = new ExcelJS.Workbook();
-        const ws = agregarPestanaDeCocina(wb, {
-            titulo: 'Unidades', explicacion: '',
-            renglones: [
                 renglon({ name: 'Vegetales mixtos', unit: 'taza(s)', pide: 60 }),
-                renglon({ name: 'Carne mechada', unit: 'g', pide: 5000 })
+                renglon({ name: 'La olla grande', pide: 9000 })
             ]
         });
 
-        // Las proteinas primero: es lo que mas tarda
-        expect(String(ws.getRow(4).getCell(1).value)).toMatch(/PROTEINAS/);
-        expect(ws.getRow(5).getCell(1).value).toBe('Carne mechada');
-        expect(String(ws.getRow(6).getCell(1).value)).toMatch(/VEGETALES/);
-        expect(ws.getRow(7).getCell(1).value).toBe('Vegetales mixtos');
+        expect(ws.getRow(4).getCell(1).value).toBe('Poco pedido');
+        expect(ws.getRow(5).getCell(1).value).toBe('Vegetales mixtos');
+        expect(ws.getRow(6).getCell(1).value).toBe('La olla grande');
     });
 
-    it('con descuento ordena por lo que FALTA, no por lo que pide', () => {
-        // Lo que hay que cocinar hoy es lo que falta: eso manda el orden
+    it('con descuento tampoco reordena', () => {
         const wb = new ExcelJS.Workbook();
         const ws = agregarPestanaDeCocina(wb, {
             titulo: 'Falta', explicacion: '',
@@ -151,7 +137,21 @@ describe('agregarPestanaDeCocina', () => {
             conDescuento: true
         });
 
+        expect(ws.getRow(4).getCell(1).value).toBe('Pide mucho pero ya esta');
         expect(ws.getRow(5).getCell(1).value).toBe('Pide menos pero falta todo');
+    });
+
+    it('las cabeceras de tanda se dibujan de lado a lado', () => {
+        const wb = new ExcelJS.Workbook();
+        const ws = agregarPestanaDeCocina(wb, {
+            titulo: 'Tandas', explicacion: '',
+            renglones: [
+                { tipo: 'tanda', texto: 'TANDA 1a — PACK BAJO EN CALORÍAS · MENÚ 1 · 43 packs', aviso: '' },
+                renglon({ name: 'Carne mechada' })
+            ]
+        });
+        expect(String(ws.getRow(4).getCell(1).value)).toMatch(/TANDA 1a/);
+        expect(ws.getRow(5).getCell(1).value).toBe('Carne mechada');
     });
 
     it('la cocinera queda como columna, visible en cada renglon', () => {
@@ -160,7 +160,7 @@ describe('agregarPestanaDeCocina', () => {
             titulo: 'Reparto', explicacion: '',
             renglones: [renglon({ cocinera: 'FERNANDA' })]
         });
-        expect(ws.getRow(5).getCell(2).value).toBe('FERNANDA');
+        expect(ws.getRow(4).getCell(2).value).toBe('FERNANDA');
     });
 
     it('una pestaña vacía lo dice, no sale en blanco', () => {

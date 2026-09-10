@@ -263,3 +263,48 @@ export const cargaPorTanda = (preparaciones, quienLoHace) => {
             return { ...f, cuelloDeBotella: cuello ? { cocinera: cuello[0], cuantas: cuello[1] } : null };
         });
 };
+
+/**
+ * El titulo de una tanda, en texto plano.
+ *
+ * Vive aca y no adentro de la pantalla porque lo usan DOS: la tabla de cocina
+ * en la pagina y la pestana de cocina del Excel. Cuando cada una lo armaba por
+ * su cuenta, el Excel no traia tandas del todo: ordenaba por unidad —gramos,
+ * tazas, unidades— de mayor a menor, y quien cocinaba veia dos hojas distintas
+ * de la misma cosa. La de la pantalla ordenada por tanda y la del Excel plana.
+ *
+ * @param {object} fila  una fila `{ tipo: 'tanda' }` de `conCabecerasDeTanda`
+ */
+export const tituloDeTanda = (fila) => {
+    if (!fila?.familia) return 'AL FINAL — lo que no pertenece a ningún pack';
+    const cenas = fila.menu === 2 ? ' (cenas)' : '';
+    const packs = `${fila.packs} ${fila.packs === 1 ? 'pack' : 'packs'}`;
+    return `TANDA ${fila.numero}${fila.paso} — ${fila.familia} · MENÚ ${fila.menu}${cenas} · ${packs}`;
+};
+
+/** El aviso de las tandas que no aparecen porque sus ollas ya salieron arriba. */
+export const avisoDeTandasSaltadas = (fila) => {
+    const s = fila?.saltadas || [];
+    if (s.length === 0) return '';
+    return `No hay tanda ${s.map(x => x.numero).join(' ni ')}: las ollas de `
+        + `${s.map(x => x.nombre).join(' y ')} ya salieron arriba, se comparten `
+        + 'con una familia más grande.';
+};
+
+/**
+ * Las preparaciones con su tanda puesta y en el orden en que se cocinan.
+ *
+ * Vive aca porque lo usan DOS: la tabla de cocina de la pantalla y la pestana
+ * de cocina del Excel. Cuando el Excel no lo aplicaba, `conCabecerasDeTanda` no
+ * encontraba `item.tanda` en ninguna fila y no dibujaba NI UNA cabecera: el
+ * archivo salia como una lista plana aunque el codigo pidiera tandas.
+ *
+ * El orden: primero por tanda, dentro de cada tanda el menu 1 antes que las
+ * cenas —es lo que Paula empaca al llegar—, despues de mayor a menor.
+ */
+export const ordenarPorTanda = (items, orden = []) =>
+    tandaDeCadaPreparacion(Array.isArray(items) ? items : [], orden)
+        .sort((a, b) => (a.tanda - b.tanda)
+            || (a.soloCena === b.soloCena ? 0 : (a.soloCena ? 1 : -1))
+            || (Number(b.totalQty) || 0) - (Number(a.totalQty) || 0)
+            || String(a.name).localeCompare(String(b.name)));

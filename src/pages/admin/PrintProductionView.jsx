@@ -54,7 +54,7 @@ import { unidadesPosibles, convertir, desdeUnidad, UNIDADES } from '../../utils/
 import { cuantoCocinar, parteDeIndividuales } from '../../utils/cuantoCocinar';
 import { COLECCION_PRODUCCION, claveDeProduccion, acumularCocinado, cocinadoDeLaHoja } from '../../utils/produccionAcumulada';
 import { COLECCION_TANDAS, pedidosDeLaTanda, pasaElAdelanto, esRecurrente, acumularEnviados, claveDePedido, canceladosDespuesDeEnviar, cicloDeProduccion } from '../../utils/tandasDeCocina';
-import { familiasPorVolumen, tandaDeCadaPreparacion, conCabecerasDeTanda, cargaPorTanda } from '../../utils/tandasDeEmpaque';
+import { familiasPorVolumen, tandaDeCadaPreparacion, conCabecerasDeTanda, cargaPorTanda, tituloDeTanda, avisoDeTandasSaltadas, ordenarPorTanda } from '../../utils/tandasDeEmpaque';
 import { leerAdelanto } from '../../utils/leerAdelantoDeGina';
 import { agregarPestanaDeCocina, agregarPestanaDeEmpaque, agregarPestanaDeAvisos, agregarPestanaDeEmpaquePorPack } from '../../utils/excelCuatroPestanas';
 import RevisionHoja from '../../components/admin/RevisionHoja';
@@ -1956,12 +1956,9 @@ export default function PrintProductionView() {
      */
     const bulkItems = sinRebaja ? bulkDeLaTanda : bulkSemana;
 
-    const bulkOrdenado = tandaDeCadaPreparacion(bulkItems, ordenDeFamilias)
-        .sort((a, b) => (a.tanda - b.tanda)
-            // El menu 1 completo primero: es lo que Paula empaca al llegar
-            || (a.soloCena === b.soloCena ? 0 : (a.soloCena ? 1 : -1))
-            || (Number(b.totalQty) || 0) - (Number(a.totalQty) || 0)
-            || String(a.name).localeCompare(String(b.name)));
+    // El mismo orden que usa la pestana de cocina del Excel: si cada una lo
+    // armara por su cuenta, el archivo y la pantalla volverian a discrepar.
+    const bulkOrdenado = ordenarPorTanda(bulkItems, ordenDeFamilias);
 
     /**
      * La hoja de cocina de CUALQUIER grupo de pedidos.
@@ -2053,27 +2050,65 @@ export default function PrintProductionView() {
             });
         };
 
-        const armarRenglones = (bulk) => bulk
-            .map(item => {
-                const pide = cuantoCocinar(item);
-                const hecho = Number(yaCocinado[claveDeProduccion(item.name, item.unit)]) || 0;
-                return {
-                    name: item.name,
-                    unit: item.unit,
-                    pide,
-                    hecho,
-                    falta: Math.max(0, pide - hecho),
-                    cocinera: kitchenAssignments[item.name]?.trim() || 'SIN ASIGNAR',
-                    empacaCocina: !!item.empacaCocina,
-                    nota: item.empacaCocina
-                        ? getKitchenPackingInstruction(item)
-                        : (item.kitchenNotes || []).join(' | ')
-                };
-            })
-            .filter(r => r.pide > 0
-            );
-        // El orden final —por unidad y de mayor a menor— lo pone la pestana:
-        // es una decision de como se lee la hoja, no de que datos lleva.
+        /** Un renglon de la pestana, con sus numeros ya resueltos. */
+        const renglonDe = (item) => {
+            const pide = cuantoCocinar(item);
+            const hecho = Number(yaCocinado[claveDeProduccion(item.name, item.unit)]) || 0;
+            return {
+                name: item.name,
+                unit: item.unit,
+                pide,
+                hecho,
+                falta: Math.max(0, pide - hecho),
+                cocinera: kitchenAssignments[item.name]?.trim() || 'SIN ASIGNAR',
+                empacaCocina: !!item.empacaCocina,
+                nota: item.empacaCocina
+                    ? getKitchenPackingInstruction(item)
+                    : (item.kitchenNotes || []).join(' | ')
+            };
+        };
+
+        /**
+         * Los renglones de la pestana de cocina, EN EL MISMO ORDEN QUE LA PANTALLA.
+         *
+         * La pantalla arma la tabla con `conCabecerasDeTanda(agruparArroces(...))`:
+         * por tanda, con la olla de arroz junta y sus arroces debajo. El Excel
+         * hacia lo suyo —ordenar por unidad, de mayor a menor— y quedaban dos
+         * hojas distintas de la misma cosa. Quien cocina leia el orden de coccion
+         * en la pantalla y una lista plana en el papel.
+         *
+         * Ahora las dos salen del mismo pipeline. Las cabeceras viajan como filas
+         * `{ tipo }` y la pestana solo las dibuja.
+         */
+        const armarRenglones = (bulk) => {
+            const salida = [];
+            // Sin `tandaDeCadaPreparacion` ninguna fila trae `.tanda` y no se
+            // dibuja ni una cabecera: el archivo sale plano.
+            conCabecerasDeTanda(agruparArroces(ordenarPorTanda(bulk, ordenDeFamilias), cuantoCocinar), ordenDeFamilias)
+                .forEach((fila) => {
+                    if (fila.tipo === 'tanda') {
+                        salida.push({
+                            tipo: 'tanda',
+                            texto: tituloDeTanda(fila),
+                            aviso: avisoDeTandasSaltadas(fila)
+                        });
+                        return;
+                    }
+                    if (fila.tipo === 'grupo') {
+                        salida.push({
+                            tipo: 'grupo',
+                            // `fila.nombre` ya dice "ARROZ — cocinar todo junto y
+                            // dividir": repetirlo dejaba la frase dos veces.
+                            texto: `${fila.nombre} · ${fila.total} ${fila.unit} `
+                                + `(se divide en los ${fila.cuantos} de abajo)`
+                        });
+                        return;
+                    }
+                    const r = renglonDe(fila.item);
+                    if (r.pide > 0) salida.push({ ...r, hijo: fila.tipo === 'hijo' });
+                });
+            return salida;
+        };
 
         // La pestana 4 descuenta SIEMPRE, aunque la pantalla este en "sin rebaja":
         // para eso existe. `yaCocinado` sigue el interruptor de la pantalla, asi
@@ -2086,6 +2121,9 @@ export default function PrintProductionView() {
         const hayDescuento = Object.keys(descuento).length > 0;
 
         const armarRenglonesConDescuento = (bulk) => armarRenglones(bulk).map(r => {
+            // Las cabeceras de tanda no llevan numeros: descontarles algo daria
+            // NaN en la columna FALTA COCINAR.
+            if (r.tipo) return r;
             const hecho = Number(descuento[claveDeProduccion(r.name, r.unit)]) || 0;
             return { ...r, hecho, falta: Math.max(0, r.pide - hecho) };
         });
