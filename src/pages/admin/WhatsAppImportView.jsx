@@ -24,6 +24,36 @@ import { getOrderStatusLabel, CONFIRMABLE_STATUSES } from '../../config/orderSta
  * La confirmación pasa por updateOrderStatus() y no por un updateDoc directo,
  * para que se otorguen los BiPuntos y el bono de referido igual que siempre.
  */
+/**
+ * Los ítems que se escribieron a mano en la vista previa.
+ *
+ * El parser solo reconoce un ítem si la línea empieza con un número ("1 Pack
+ * Bajo Calorías") o si trae el precio pegado ("Pack Bajo Calorías - 83.500").
+ * Gina no siempre escribe asi, y cuando no lo hace el pedido quedaba con CERO
+ * items: el aviso decia "El pedido no tiene items" y los dos botones de crear
+ * se apagaban. Sin forma de agregarlo, ahi se terminaba el camino: habia que
+ * volver al texto, reescribirlo con el formato que el parser entiende y pegarlo
+ * de nuevo.
+ *
+ * La vista previa ya dejaba corregir cliente, telefono, zona, direccion, total
+ * y fecha. Faltaba justo lo unico que bloquea.
+ *
+ * Los que quedan sin nombre no se cuentan: una fila recien agregada y todavia
+ * vacia no debe habilitar el boton de crear.
+ */
+export const itemsEscritosAMano = (manuales) => (Array.isArray(manuales) ? manuales : [])
+    .map((m) => ({
+        cantidad: Number(m?.cantidad) > 0 ? Number(m.cantidad) : 1,
+        nombre: String(m?.nombre || '').trim(),
+        precio: (m?.precio !== '' && m?.precio != null) ? Number(m.precio) : null,
+        proteinas: String(m?.proteinas || '')
+            .split(',')
+            .map(x => x.trim())
+            .filter(Boolean),
+        escritoAMano: true
+    }))
+    .filter(m => m.nombre);
+
 export default function WhatsAppImportView() {
     const { isSuperAdmin, currentUser } = useAuth();
     const { updateOrderStatus, orders } = useOrders();
@@ -62,21 +92,25 @@ export default function WhatsAppImportView() {
             ...(edits.total !== undefined && { total: edits.total !== '' ? Number(edits.total) : null }),
             ...(edits.costoEnvio !== undefined && { costoEnvio: edits.costoEnvio !== '' ? Number(edits.costoEnvio) : 0 }),
             ...(edits.fecha && { fechasEntrega: [edits.fecha] }),
-            // Permite corregir precios de ítems e instrucciones/proteínas
-            items: (draft.parsed.items || []).map((item, i) => {
-                const customPrice = edits[`precio_${i}`];
-                const customProt = edits[`proteinas_${i}`];
-                return {
-                    ...item,
-                    ...(customPrice !== undefined && { precio: customPrice !== '' ? Number(customPrice) : item.precio }),
-                    ...(customProt !== undefined && {
-                        proteinas: customProt
-                            .split(',')
-                            .map(s => s.trim())
-                            .filter(Boolean)
-                    })
-                };
-            })
+            // Permite corregir precios de ítems e instrucciones/proteínas, y
+            // sumar los que se escribieron a mano porque el parser no los leyó.
+            items: [
+                ...(draft.parsed.items || []).map((item, i) => {
+                    const customPrice = edits[`precio_${i}`];
+                    const customProt = edits[`proteinas_${i}`];
+                    return {
+                        ...item,
+                        ...(customPrice !== undefined && { precio: customPrice !== '' ? Number(customPrice) : item.precio }),
+                        ...(customProt !== undefined && {
+                            proteinas: customProt
+                                .split(',')
+                                .map(s => s.trim())
+                                .filter(Boolean)
+                        })
+                    };
+                }),
+                ...itemsEscritosAMano(edits.manuales)
+            ]
         };
 
         const pedido = buildPedidoFromImport(merged, {
@@ -329,6 +363,7 @@ export default function WhatsAppImportView() {
                     parsed={draftPedido.merged}
                     pedido={draftPedido.pedido}
                     problems={draftPedido.problems}
+                    manuales={edits.manuales || []}
                     warnings={[...(draft.parsed.warnings || []), ...draftPedido.avisos]}
                     creating={creating}
                     created={created}
