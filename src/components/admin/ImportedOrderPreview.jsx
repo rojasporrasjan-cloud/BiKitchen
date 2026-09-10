@@ -29,6 +29,7 @@ export default function ImportedOrderPreview({
     pedido,
     problems = [],
     warnings = [],
+    manuales = [],
     creating = false,
     created = null,
     onCreate,
@@ -90,8 +91,14 @@ export default function ImportedOrderPreview({
                 </div>
             )}
 
-            {/* Avisos que no bloquean */}
-            {warnings.length > 0 && problems.length === 0 && (
+            {/* Avisos que no bloquean.
+                Se muestran SIEMPRE, aunque falte algo que sí bloquea. Antes se
+                escondían mientras hubiera un problema pendiente, y el aviso más
+                caro de todos —"este pedido ya existe, se cocina y se cobra dos
+                veces"— quedaba tapado justo detrás de un total en cero. Uno
+                corregía el total y recién ahí se enteraba; conviene saberlo
+                antes de ponerse a completar nada. */}
+            {warnings.length > 0 && (
                 <div className="mt-4 p-4 bg-amber-50 border border-amber-100 rounded-xl">
                     <p className="text-sm font-bold text-amber-800 flex items-center gap-2">
                         <AlertTriangle size={16} aria-hidden="true" />
@@ -210,8 +217,10 @@ export default function ImportedOrderPreview({
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
                     Ítems ({pedido.items.length})
                 </p>
-                {pedido.items.length === 0 ? (
-                    <p className="text-sm text-gray-400 italic">No se leyó ningún ítem.</p>
+                {pedido.items.length === 0 && manuales.length === 0 ? (
+                    <p className="text-sm text-gray-400 italic">
+                        No se leyó ningún ítem. Agregalo a mano con el botón de abajo.
+                    </p>
                 ) : (
                     <ul className="space-y-4">
                         {pedido.items.map((item, i) => {
@@ -258,6 +267,99 @@ export default function ImportedOrderPreview({
                         })}
                     </ul>
                 )}
+                {/* Escribir un item que el parser no leyo.
+                    Sin esto, un mensaje de Gina que no arranca con numero ni trae
+                    el precio pegado dejaba el pedido en cero items y los botones
+                    de crear apagados, sin salida. */}
+                {manuales.length > 0 && (
+                    <ul className="mt-4 space-y-3">
+                        {manuales.map((m, i) => (
+                            <li key={i} className="rounded-lg border border-dashed border-orange-300 bg-orange-50/50 p-3">
+                                <div className="flex items-center justify-between mb-2">
+                                    <span className="text-xs font-semibold text-bikitchen-orange uppercase tracking-wider">
+                                        Escrito a mano
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={() => onEdit('manuales', manuales.filter((_, j) => j !== i))}
+                                        className="text-xs font-semibold text-gray-500 hover:text-red-600"
+                                    >
+                                        Quitar
+                                    </button>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                                    <div className="sm:col-span-2">
+                                        <label htmlFor={`man-nom-${i}`} className="block text-xs text-gray-500 mb-1">
+                                            Qué lleva
+                                        </label>
+                                        <input
+                                            id={`man-nom-${i}`}
+                                            type="text"
+                                            value={m.nombre || ''}
+                                            placeholder="Pack Bajo Calorías mensual"
+                                            onChange={(e) => onEdit('manuales', manuales.map((x, j) => (j === i ? { ...x, nombre: e.target.value } : x)))}
+                                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none transition-all focus:ring-4 focus:ring-orange-100 focus:border-bikitchen-orange"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label htmlFor={`man-cant-${i}`} className="block text-xs text-gray-500 mb-1">
+                                            Cuántos
+                                        </label>
+                                        <input
+                                            id={`man-cant-${i}`}
+                                            type="number"
+                                            min="1"
+                                            value={m.cantidad || ''}
+                                            placeholder="1"
+                                            onChange={(e) => onEdit('manuales', manuales.map((x, j) => (j === i ? { ...x, cantidad: e.target.value } : x)))}
+                                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none transition-all focus:ring-4 focus:ring-orange-100 focus:border-bikitchen-orange"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label htmlFor={`man-precio-${i}`} className="block text-xs text-gray-500 mb-1">
+                                            Precio (₡)
+                                        </label>
+                                        <input
+                                            id={`man-precio-${i}`}
+                                            type="number"
+                                            value={m.precio ?? ''}
+                                            placeholder="Ej: 83500"
+                                            onChange={(e) => onEdit('manuales', manuales.map((x, j) => (j === i ? { ...x, precio: e.target.value } : x)))}
+                                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none transition-all focus:ring-4 focus:ring-orange-100 focus:border-bikitchen-orange"
+                                        />
+                                    </div>
+                                    <div className="sm:col-span-4">
+                                        <label htmlFor={`man-prot-${i}`} className="block text-xs text-gray-500 mb-1">
+                                            Proteínas, si son individuales — separalas con coma
+                                        </label>
+                                        <input
+                                            id={`man-prot-${i}`}
+                                            type="text"
+                                            value={m.proteinas || ''}
+                                            placeholder="Carne mechada, Pollo al pesto"
+                                            onChange={(e) => onEdit('manuales', manuales.map((x, j) => (j === i ? { ...x, proteinas: e.target.value } : x)))}
+                                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none transition-all focus:ring-4 focus:ring-orange-100 focus:border-bikitchen-orange"
+                                        />
+                                    </div>
+                                </div>
+                                {!String(m.nombre || '').trim() && (
+                                    <p className="mt-2 text-xs text-gray-500">
+                                        Escribí qué lleva para que cuente. Mientras esté vacío no se puede crear.
+                                    </p>
+                                )}
+                            </li>
+                        ))}
+                    </ul>
+                )}
+
+                <button
+                    type="button"
+                    onClick={() => onEdit('manuales', [...manuales, { nombre: '', cantidad: '1', precio: '', proteinas: '' }])}
+                    className="mt-3 px-4 py-2 border-2 border-dashed border-gray-300 text-gray-600 rounded-lg text-sm font-semibold hover:border-bikitchen-orange hover:text-bikitchen-orange transition-colors"
+                >
+                    + Agregar un ítem a mano
+                </button>
+
                 <p className="mt-3 text-right text-base font-bold text-gray-900">
                     Total: {formatPrice(pedido.total)}
                 </p>

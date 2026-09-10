@@ -2,6 +2,10 @@
  * Production View Helper Utilities
  */
 
+// Una sola regla para todo el sistema: ver src/utils/telefonoRelleno.js
+import { esTelefonoDeRelleno } from './telefonoRelleno';
+export { esTelefonoDeRelleno };
+
 export const MARGEN_COCINA = 1.30;
 
 export const conMargen = (cantidad) => Math.round((Number(cantidad) || 0) * MARGEN_COCINA);
@@ -34,20 +38,6 @@ export const normalizeClientKey = (name) => {
  * @param {Array} ordersList - pedidos ya normalizados por mapPedidosFromLegacy
  * @returns {{ pedidos: Array, fusionados: Array }}
  */
-/**
- * ¿Es un teléfono de relleno y no uno real?
- *
- * Cuando el pedido llega por WhatsApp sin número se anota 8888-8888. Ese valor
- * NO identifica a nadie: si se usa para fusionar, Luis Carlos Monge y Lizbeth
- * Zeledón —dos clientes sin relación— se convierten en un solo pedido.
- */
-export const esTelefonoDeRelleno = (telefono) => {
-    const d = String(telefono || '').replace(/\D/g, '');
-    if (d.length < 8) return true;
-    if (/^(\d)\1+$/.test(d)) return true;        // 88888888, 00000000
-    if (/^0?12345678/.test(d)) return true;      // 12345678
-    return false;
-};
 
 /**
  * Los dos nombres, la misma persona?
@@ -330,7 +320,42 @@ const NOTA_INTERNA = new RegExp([
     'gina confirm[óo]', 'ya pag[óo]', 'ya viene pagado', 'no se cobra',
     'sin cargo', 'reposici[óo]n', 'falta la zona', '\\(chat\\b',
     'que no se entreg', 'agregado al pack', 'pedido para entrega',
-    'segunda entrega de la semana'
+    'segunda entrega de la semana',
+    // Marcas que deja el panel al aprobar pedidos en lote. Salio impreso en la
+    // casilla de sebastian Villegas: "Confirmado por el admin", que no le dice
+    // nada a quien empaca y ocupa el lugar de lo que si importa.
+    'confirmado por el admin', 'aprobaci[óo]n masiva', 'fechas? corregidas?',
+    'creado por el admin', 'importado (de|desde)',
+    // Rastro de nuestras propias correcciones. Salio impreso en la casilla de
+    // Marlon Camacho: "Corregido: estaba cargado como cantidad 2 y la hoja lo
+    // contaba como 4 packs" — cierto, pero a quien empaca no le sirve de nada.
+    'reactivado', 'se hab[ií]a anulado', 'no compr[oó] esta semana',
+    'revisar si pag', 'revisar env[ií]o', 'renovaci[óo]n:', 'reemplaza a\\b',
+    'ya cobrado', 'van aparte porque', 'cargadas fila por fila',
+    'es un solo pedido', 'le quedan \\d+ entrega', 'su pedido es del',
+    'la hoja lo contaba', 'tel[ée]fono tomado', 'lo marc[óo] gina',
+    'mensaje de cancelaci[óo]n', 'jan confirm[óo]', 'su pedido original',
+    'ya pas[óo]\\b', 'hay que ped[ií]rsela', 'corregido:',
+    // Notas de COBRO. Le dicen a la oficina si el pedido va o no va, pero a
+    // quien empaca no le cambian nada de lo que mete en la bolsa. En la hoja
+    // del miercoles 9 salio impreso, encima de la instruccion de Melany
+    // Escalante, "PAGO CONFIRMADO por Gina el 7 de setiembre: la tarjeta habia
+    // salido rechazada en la web pero pago por otra via".
+    'pago confirmado', 'tarjeta (rechazada|no completada)', 'pag[óo] por otra v[ií]a',
+    'no complet[óo] el pago', 'el precio queda igual',
+    // El PORQUE de un cambio es para nosotros; la instruccion ya va aparte.
+    'porque (en|la) (la )?entrega anterior', 'se le envi[óo] una prote[ií]na de m[áa]s',
+    'corresponden a los lunes',
+    // Contabilidad del pedido. En la hoja del miercoles 9 la casilla de Hazel
+    // Jimenez traia cuatro renglones y ninguno decia que meter en la bolsa:
+    // "PACK 1 DE 2: este es el SIN CARBOS...", "Envio GRATIS", "Los dos son
+    // MENSUALES: 4 entregas" y "Total del pedido completo: 337.220". Que lleva
+    // dos packs ya se lo dice la etiqueta "Lleva tambien: PACK REGULAR".
+    'env[ií]o gratis', 'total del pedido', 'pack \\d+ de \\d+\\s*:',
+    'son (mensuales|quincenales|semanales)',
+    // Como esta CARGADO el dato, no que empacar. La hoja ya imprime sola
+    // "TWO PACK - empacar 2 packs iguales".
+    'la cantidad va en \\d+', 'se empacan \\d+ packs? iguales'
 ].join('|'), 'i');
 
 /** Un monto en colones metido dentro de una frase: "... (4 tazas) ₡7.500". */
@@ -339,16 +364,108 @@ const PRECIO_EN_FRASE = /\s*[₡¢]\s*\d[\d.,]*/g;
 /** Señales de que la frase sí es una instrucción para la cocina o la entrega. */
 const ES_INSTRUCCION = /cambiar|cambio|no poner|sin\b|quitar|agregar|en vez de|sustitu|entregar|antes de las|despu[ée]s de las|llamar|alerg|solo\b|extra|doble|aparte/i;
 
+/**
+ * Referencias de control metidas DENTRO de una frase útil.
+ *
+ * "Cambiar gallo pinto por BURRITOS (chat 2 set)" es una instrucción con una
+ * referencia pegada. Antes la frase entera se botaba por mencionar el chat, y
+ * a quien empaca no le llegaba el cambio: a Allan Quesada le salía impreso solo
+ * "reemplaza el cambio anterior a flautas)", y a Alexandra Mora y a Daniel
+ * Milanés no les salía nada —y lo de Daniel era que no puede comer mariscos—.
+ * Se quitan del texto en vez de tirar la frase.
+ */
+const REFERENCIA_AL_CHAT = /\s*\((?:chat|ver)\b[^)]*\)?/gi;
+
+/**
+ * El numero de OTRO pedido metido dentro de la frase.
+ *
+ * Este NO se puede limpiar antes de tiempo. `NOTA_INTERNA` reconoce lo interno
+ * justamente por el "#ORD-", asi que quitarselo primero la deja pareciendo una
+ * nota normal y se cuela a la hoja partida por la mitad: en la hoja del
+ * miercoles 9 salio impreso, en la casilla de Hazel Jimenez, "El otro (Sin
+ * Carbos quincenal) va en." — un renglon que no termina. Se quita al final,
+ * por si alguna frase util lo trae pegado.
+ */
+const REFERENCIA_A_PEDIDO = /\s*#ORD-[A-Za-z0-9-]+/gi;
+
+/** Todo lo que venga después de esta marca es para nosotros, no para empaque. */
+const CORTE_INTERNO = /\bINTERNO\s*:/i;
+
+/** Una frase que ya no dice nada: puros signos, o un resto sin contenido. */
+const SIN_CONTENIDO = /^[\s\W]*$/;
+
+/**
+ * Frases que la hoja YA imprime en otra parte.
+ *
+ * La casilla de especificaciones es lo único que quien empaca lee con calma, y
+ * cada línea repetida entierra la que sí importa. En la casilla de Dalia
+ * Parrales salían cuatro cosas y tres ya estaban impresas al lado: que lleva 3
+ * packs (el nombre dice "Dalia Parrales (3)"), la regalía de desayunos (la
+ * etiqueta "Lleva desayunos") y el gramaje del pack (el encabezado de la tabla).
+ * De lo suyo, solo "NO CERDO" era información nueva.
+ *
+ * Se compara contra la frase COMPLETA para no morderle un pedazo a una
+ * instrucción: "NO lleva cena" tiene que sobrevivir.
+ */
+const YA_ESTA_IMPRESO = new RegExp('^(?:' + [
+    // La etiqueta "TWO PACK - empacar 2 packs iguales" ya lo dice
+    'two pack\\s*[=:]?\\s*\\d*\\s*packs? del mismo men[uú].*',
+    // La etiqueta "Lleva desayunos" ya lo dice
+    '(?:regal[ií]a (?:de |del |pack de )?)?desayunos?(?: gratis| de regal[ií]a)?',
+    'regal[ií]a (?:de |del |pack de )?desayunos?',
+    'lleva desayunos?',
+    // El nombre del cliente ya trae "(3)" y la columna de cantidad el número
+    '(?:lleva )?\\d+ packs?',
+    // El encabezado de la tabla ya trae el gramaje y las tazas
+    '\\d{2,3}\\s*g prote[ií]na\\s*[/,].*',
+    // El nombre del pack ya dice que es personalizado y de que familia es, asi
+    // que "Menu personalizado, sin carbohidratos" no agrega nada.
+    //
+    // Pero solo se bota eso: la etiqueta sola, o la etiqueta seguida del nombre
+    // de la familia. Antes terminaba en `.*` y se tragaba lo que viniera
+    // detras, asi que "MENU PERSONALIZADO: no chile dulce" desaparecia entero
+    // —con la unica instruccion que quien empaca necesitaba— sin dejar rastro.
+    'men[uú] personalizado(?:[,:;]?\\s*(?:'
+        + 'sin\\s+carbo(?:s|hidratos?)?|bajo(?:\\s+en)?\\s+calor[ií]as?|keto'
+        + '|vegetarian[oa]|regular|casaditos?|full\\s*pack|familiar'
+    + '))?',
+    'personalizado\\s*=.*'
+].join('|') + ')\\.?$', 'i');
+
+/**
+ * Frases que no son asunto de quien empaca: cobros y tareas de oficina.
+ * Siguen guardadas en el pedido; solo no se imprimen en la hoja.
+ */
+const NO_ES_DE_EMPAQUE = new RegExp('^(?:' + [
+    'lleva \\d+\\s*% de descuento.*',
+    '.*\\bdescuento\\b.*',
+    '(?:falta el |sin )tel[ée]fono.*',
+    'pedirlo',
+    'pedir(?:le)? el n[uú]mero.*'
+].join('|') + ')\\.?$', 'i');
+
 export const notaParaEmpaque = (obs) => {
     if (!obs) return '';
 
-    const frases = String(obs)
-        .split(/\s*[·|—]\s*/)
-        .map(f => f.trim())
-        .filter(Boolean);
+    const texto = String(obs).split(CORTE_INTERNO)[0];
+
+    const frases = texto
+        // Las notas vienen separadas por "·", por raya, y por punto y seguido:
+        // sin cortar en el punto, una instrucción y el apunte interno que le
+        // sigue quedaban en la misma frase y se iban juntos a la basura.
+        .split(/\s*[·|—]\s*|(?<=\.)\s+(?=[A-ZÁÉÍÓÚÑ¿¡])/)
+        .map(f => f.replace(REFERENCIA_AL_CHAT, '').replace(/\(\s*\)/g, '').trim())
+        // Un parentesis se puede haber abierto en una frase y cerrado en la
+        // siguiente: "…por BURRITOS (chat 2 set — reemplaza lo anterior)". Al
+        // cortar por la raya, la segunda mitad queda huerfana y sin sentido.
+        // Se reconoce porque cierra un parentesis que nunca abrio.
+        .filter(f => f && !SIN_CONTENIDO.test(f)
+            && !(f.includes(')') && !f.includes('(')));
 
     const utiles = frases.filter(frase => {
         if (NOTA_INTERNA.test(frase)) return false;
+        if (YA_ESTA_IMPRESO.test(frase)) return false;
+        if (NO_ES_DE_EMPAQUE.test(frase)) return false;
 
         // Un teléfono solo estorba, salvo que la frase además pida algo
         if (TELEFONO.test(frase)) {
@@ -369,11 +486,18 @@ export const notaParaEmpaque = (obs) => {
 
         // A quien empaca le sirve saber QUE guarniciones van; cuanto costaron no.
         return (esInstruccion ? frase : frase.replace(TELEFONO, ''))
+            .replace(REFERENCIA_A_PEDIDO, '')
             .replace(PRECIO_EN_FRASE, '')
             .replace(/\s{2,}/g, ' ')
             .replace(/\s+([,.])/g, '$1')
             .trim();
-    }).filter(Boolean);
+    }).filter(frase => {
+        if (!frase) return false;
+        // Quitar el precio puede dejar una frase coja. En la casilla de Jenny
+        // Alvarado salio impreso "REVISAR ENVIO: el mensaje dice pero el total
+        // de solo cuadra con": la frase vivia de los numeros que se quitaron.
+        return !/\b(dice|cuadra con|es de|de)\s*$/i.test(frase) && !SIN_CONTENIDO.test(frase);
+    });
 
     return utiles.join(' · ');
 };

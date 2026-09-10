@@ -259,3 +259,137 @@ describe('el mismo plato en dos menús distintos', () => {
         expect(Object.values(mapa)[0].totalQty).toBe(1596);
     });
 });
+
+describe('una variedad no es una preparación', () => {
+    /**
+     * Los frijoles del casadito se estaban sumando al renglón de los frijoles
+     * blancos, porque "Frijoles" cabe dentro de "Frijoles blancos guisados". La
+     * hoja pedía 101 tazas donde hacían falta 33 — 68 tazas de frijol blanco de
+     * más, todas las semanas.
+     *
+     * Gina lo tiene claro: en su lista manda "frijoles blancos 30 tazas" y
+     * "frijoles arreglado 10 tazas", por separado.
+     */
+    it('los frijoles del casadito NO son los frijoles blancos', () => {
+        expect(esElMismoPlato('Frijoles', 'Frijoles blancos guisados')).toBe(false);
+        expect(esElMismoPlato('Frijoles arreglados', 'Frijoles blancos guisados')).toBe(false);
+    });
+
+    it('el arroz blanco no es cualquier arroz', () => {
+        expect(esElMismoPlato('Arroz', 'Arroz blanco')).toBe(false);
+    });
+
+    it('el ayote tierno no es el ayote a secas', () => {
+        expect(esElMismoPlato('Ayote', 'Ayote tierno')).toBe(false);
+    });
+
+    // Lo que SÍ se tiene que seguir juntando: la forma de cocinarlo no cambia el plato
+    it('una preparación sí junta: es la misma carne', () => {
+        expect(esElMismoPlato('Carne mechada', 'Carne mechada en salsa criolla')).toBe(true);
+        expect(esElMismoPlato('Albóndigas', 'Albóndigas de res artesanales')).toBe(true);
+        expect(esElMismoPlato('Pollo a la toscana', 'Pollo a la toscana')).toBe(true);
+    });
+
+    it('dos variedades distintas tampoco se juntan entre sí', () => {
+        expect(esElMismoPlato('Frijoles blancos', 'Frijoles negros')).toBe(false);
+    });
+
+    it('si las dos lo dicen, siguen siendo el mismo', () => {
+        expect(esElMismoPlato('Frijoles blancos', 'Frijoles blancos guisados')).toBe(true);
+    });
+
+    it('ante la duda, separa: un renglón de más se junta, un plato mal fusionado se lo come alguien', () => {
+        // "con olores" es sazón, no otro ingrediente, así que en rigor son la
+        // misma olla. Pero distinguir sazón de ingrediente pide un diccionario
+        // que no tenemos, y equivocarse separando cuesta un renglón mientras
+        // que equivocarse juntando le cambia el plato a un cliente.
+        expect(esElMismoPlato('Frijoles blancos', 'Frijoles blancos guisados con olores')).toBe(false);
+    });
+});
+
+describe('el arroz del casadito queda aparte, no se va al del perejil', () => {
+    /**
+     * "Arroz" sale de partir el carbo del casadito, "Arroz, frijoles y maduros".
+     * Se parece a "Arroz blanco" Y a "Arroz al perejil": que sean dos es lo que
+     * dice que no se sabe cuál es, y por eso queda aparte.
+     *
+     * Al separar las variedades, "Arroz blanco" dejó de calzar y quedaba uno
+     * solo — las 69 tazas del casadito se iban al arroz al perejil. La
+     * ambigüedad se mide ANTES de filtrar la variedad.
+     */
+    const mapa = () => ({
+        'arroz blanco|taza(s)':    { name: 'Arroz blanco', unit: 'taza(s)' },
+        'arroz al perejil|taza(s)': { name: 'Arroz al perejil', unit: 'taza(s)' }
+    });
+
+    it('no lo mete en ninguno de los dos', () => {
+        const r = buscarRenglonDelMismoPlato(mapa(), 'Arroz', 'taza(s)');
+        expect(r.clave).toBeNull();
+        expect(r.ambiguo).toHaveLength(2);
+    });
+
+    it('y avisa con cuáles calzaba, para que lo decida una persona', () => {
+        const r = buscarRenglonDelMismoPlato(mapa(), 'Arroz', 'taza(s)');
+        expect(r.ambiguo).toContain('Arroz blanco');
+        expect(r.ambiguo).toContain('Arroz al perejil');
+    });
+
+    it('con un solo arroz de variedad distinta, tampoco se junta', () => {
+        const r = buscarRenglonDelMismoPlato(
+            { 'arroz blanco|taza(s)': { name: 'Arroz blanco', unit: 'taza(s)' } }, 'Arroz', 'taza(s)');
+        expect(r.clave).toBeNull();
+        expect(r.ambiguo).toHaveLength(0);
+    });
+
+    it('pero una preparación sí se junta cuando es la única', () => {
+        const r = buscarRenglonDelMismoPlato(
+            { 'carne mechada en salsa criolla|g': { name: 'Carne mechada en salsa criolla', unit: 'g' } },
+            'Carne mechada', 'g');
+        expect(r.clave).toBe('carne mechada en salsa criolla|g');
+    });
+
+    it('los frijoles del casadito no entran a los blancos', () => {
+        const r = buscarRenglonDelMismoPlato(
+            { 'frijoles blancos guisados|taza(s)': { name: 'Frijoles blancos guisados', unit: 'taza(s)' } },
+            'Frijoles', 'taza(s)');
+        expect(r.clave).toBeNull();
+    });
+});
+
+describe('el conector dice si es el mismo plato o le ponen algo encima', () => {
+    /**
+     * Las palabras que agrega el nombre largo pueden decir DE QUÉ es el plato o
+     * QUE LE PONEN. El conector es lo único que lo distingue:
+     *
+     *   "de" / "en"  -> de qué es, cómo se cocina   -> el mismo plato
+     *   "y" / "con"  -> además lleva algo           -> otro plato
+     *
+     * Al cliente keto que pidió picadillo de vainica sola le caía zanahoria, y a
+     * los ocho packs de zuchinnis salteados les caían hongos y cebolla.
+     */
+    it('"de" y "en" no cambian el plato', () => {
+        expect(esElMismoPlato('Albóndigas', 'Albóndigas de res artesanales')).toBe(true);
+        expect(esElMismoPlato('Carne mechada', 'Carne mechada en salsa criolla')).toBe(true);
+        expect(esElMismoPlato('Pollo', 'Pollo en salsa de culantro')).toBe(true);
+    });
+
+    it('"y" agrega un ingrediente: es otro plato', () => {
+        expect(esElMismoPlato('Picadillo de vainica', 'Picadillo vainica y zanahoria')).toBe(false);
+    });
+
+    it('"con" también', () => {
+        expect(esElMismoPlato('Zuchinnis salteados', 'Zuchinnis salteados con hongos y cebollas carmelizadas')).toBe(false);
+        expect(esElMismoPlato('Arroz', 'Arroz con maiz dulce')).toBe(false);
+        expect(esElMismoPlato('Tomates asados', 'Tomates asados con cebollas caramelizadas')).toBe(false);
+    });
+
+    it('si los dos lo llevan, siguen siendo el mismo', () => {
+        expect(esElMismoPlato('Zuchinnis con hongos', 'Zuchinnis salteados con hongos')).toBe(true);
+    });
+
+    it('lo que ya funcionaba no se movió', () => {
+        expect(esElMismoPlato('Pollo al ajillo', 'Pollo teriyaki')).toBe(false);
+        expect(esElMismoPlato('Sopa de albóndigas', 'Albóndigas')).toBe(false);
+        expect(esElMismoPlato('Frijoles', 'Frijoles blancos guisados')).toBe(false);
+    });
+});

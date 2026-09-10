@@ -75,3 +75,34 @@ describe('fusión de pedidos por teléfono', () => {
         expect(pedidos).toHaveLength(3);
     });
 });
+
+/**
+ * La misma regla, en las dos partes que la usan.
+ *
+ * Hasta el 4 de setiembre de 2026 había DOS funciones con este nombre y reglas
+ * distintas, cada una ciega a los casos de la otra. La de producción no conocía
+ * el bloque 8000-XXXX del Excel de Gina, y la de difusión no conocía el
+ * 8888-8888 de los pedidos de WhatsApp. Ahora las dos leen el mismo archivo.
+ */
+describe('el relleno del Excel (8000-XXXX) cuenta igual', () => {
+    it('lo reconoce', () => {
+        expect(esTelefonoDeRelleno('8000-0001')).toBe(true);
+        expect(esTelefonoDeRelleno('80000007')).toBe(true);
+        expect(esTelefonoDeRelleno('+506 8000 0006')).toBe(true);
+    });
+
+    it('un 8000 que NO es del bloque de relleno pasa', () => {
+        // 8000-0001 es relleno; 8001-2345 es un celular como cualquier otro.
+        expect(esTelefonoDeRelleno('80012345')).toBe(false);
+    });
+
+    it('la hoja no fusiona dos clientes que comparten el relleno del Excel', () => {
+        const { pedidos, fusionados } = deduplicateOrdersByClient([
+            pedido('Karim Arguedas', '8000-0001', 'Individuales'),
+            pedido('Xiomara Vílchez', '8000-0001', 'Pack Semanal')
+        ]);
+
+        expect(pedidos).toHaveLength(2);
+        expect(fusionados).toHaveLength(0);
+    });
+});

@@ -1,34 +1,41 @@
+// REGLAS DE FIRESTORE — ESTE ARCHIVO ES IGUAL A LO QUE CORRE EN PRODUCCION
+//
+// Se sincronizo el 2 de setiembre de 2026 copiando las reglas publicadas desde
+// la consola de Firebase. Antes de eso el archivo iba por su lado: tenia
+// cambios de mayo y de agosto que nunca se desplegaron, y una advertencia que
+// decia que desplegarlo "podria romper el checkout".
+//
+// Esa advertencia era FALSA, y conviene dejarlo escrito para que nadie vuelva a
+// dudar: se apoyaba en que `allow update: if isAdmin()` de /pedidos/ no podia
+// estar activo porque si no el cliente no podria actualizar su pedido al pagar.
+// Resulta que SI esta activo, y no rompe nada: CheckoutSteps.jsx atrapa el
+// `permission-denied` y crea un pedido nuevo en vez del borrador
+// (src/components/CheckoutSteps.jsx, el catch de updateErr).
+//
+// COMO MANTENERLO ASI:
+// Netlify NO despliega este archivo. Solo cambia si alguien corre
+// `firebase deploy --only firestore:rules` o lo pega en la consola. Si tocas
+// algo aca, desplegalo; si lo cambias en la consola, copialo aca.
+//
+// Hay dos mejoras propuestas que a proposito NO estan en este archivo, porque
+// cada una cambia comportamiento de verdad y necesita su propia decision:
+// que el cliente pueda ver sus BiPuntos (hoy no puede) y validar los pedidos
+// al crearlos. Estan explicadas en REGLAS_PENDIENTES.md, en la raiz.
+
 rules_version = '2';
-
-// ⚠️ ATENCIÓN ANTES DE DESPLEGAR ESTE ARCHIVO
-//
-// Netlify NO despliega estas reglas: solo cambian si alguien corre
-// `firebase deploy --only firestore:rules` o las pega en la consola de Firebase.
-//
-// Hay evidencia fuerte de que este archivo NO refleja las reglas que están
-// corriendo en producción. Si `allow update: if isAdmin()` de /pedidos/ estuviera
-// activo, el navegador del cliente no podría actualizar su propio pedido después
-// de pagar, y CheckoutSteps.jsx terminaría mostrando el alert de
-// "Contáctanos en WhatsApp para confirmar tu pedido" a TODOS los que pagan con
-// tarjeta. Eso no está pasando.
-//
-// Conclusión: desplegar este archivo tal cual podría romper el checkout.
-// Antes de hacerlo, comparalo contra la consola de Firebase y actualizá acá lo
-// que esté distinto.
-
 service cloud.firestore {
   match /databases/{database}/documents {
-    
+
     // ==========================================
     // FUNCIONES DE SEGURIDAD
     // ==========================================
-    
+
     function isAuthenticated() {
       return request.auth != null;
     }
-    
+
     function isAdmin() {
-      return isAuthenticated() && 
+      return isAuthenticated() &&
         request.auth.token.email.lower() in [
           'bikitchenfood@gmail.com',
           'ginamaroli@gmail.com',
@@ -36,7 +43,7 @@ service cloud.firestore {
           'mfcorrales15@gmail.com'
         ];
     }
-    
+
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
     }
@@ -44,11 +51,11 @@ service cloud.firestore {
     function isEmailOwner(email) {
       return isAuthenticated() && request.auth.token.email.lower() == email.lower();
     }
-    
+
     // ==========================================
     // COLECCIONES PÚBLICAS (Solo lectura pública)
     // ==========================================
-    
+
     match /menus_oficial/{doc} {
       allow read: if true;
       allow write: if isAdmin();
@@ -58,17 +65,17 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isAdmin();
     }
-    
+
     match /promociones/{doc} {
       allow read: if true;
       allow write: if isAdmin();
     }
-    
+
     match /promociones_imagenes/{allPaths=**} {
       allow read: if true;
       allow write: if isAdmin();
     }
-    
+
     match /individuales_imagenes/{allPaths=**} {
       allow read: if true;
       allow write: if isAdmin();
@@ -88,7 +95,7 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isAdmin();
     }
-    
+
     match /config/{doc} {
       allow read: if true;
       allow write: if isAdmin();
@@ -98,21 +105,21 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isAdmin();
     }
-    
+
     // ==========================================
     // NOTIFICACIONES Y SUSCRIPCIONES
     // ==========================================
 
     match /push_subscriptions/{userId} {
       allow read: if isAdmin() || isOwner(userId);
-      allow create: if true; // Permitir que cualquiera se suscriba
+      allow create: if true;
       allow update: if isAdmin() || isOwner(userId);
       allow delete: if isAdmin() || isOwner(userId);
     }
 
     match /notifications/{notifId} {
       allow read: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
-      allow create: if true; // Permitir que se generen alertas (ej: al hacer pedido)
+      allow create: if true;
       allow update: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'readAt']));
       allow delete: if isAdmin();
     }
@@ -120,72 +127,49 @@ service cloud.firestore {
     // ==========================================
     // PEDIDOS (Propietario o Admin)
     // ==========================================
-    
+
     match /pedidos/{pedidoId} {
       allow read: if isAdmin() ||
         (isAuthenticated() && resource.data.userId == request.auth.uid) ||
         (isAuthenticated() && resource.data.correo.lower() == request.auth.token.email.lower());
-      // FIX 5: Validar campos mínimos en creación de pedidos
-      // El bypass de isAdmin() permite pedidos creados desde el panel (importador de
-      // WhatsApp, pedidos manuales) sin relajar la validación para el público.
-      // No amplía privilegios: un admin ya tiene `allow update, delete` acá abajo.
-      allow create: if isAdmin() || (
-        request.resource.data.keys().hasAll(['cliente', 'correo', 'telefono', 'items', 'total'])
-        && request.resource.data.total is number
-        && request.resource.data.total > 0
-        && request.resource.data.items is list
-        && request.resource.data.items.size() > 0
-        && request.resource.data.correo is string
-        && request.resource.data.correo.size() > 4
-      );
+      allow create: if true;
       allow update, delete: if isAdmin();
     }
 
-    // Colección legacy: ya nadie escribe acá (todo el sistema usa /pedidos/).
-    // Se mantiene para poder leer el historial viejo.
     match /orders/{orderId} {
       allow read: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
-      // FIX 5: Validar campos mínimos en creación de órdenes
-      allow create: if isAdmin() || (
-        request.resource.data.keys().hasAll(['cliente', 'correo', 'telefono', 'items', 'total'])
-        && request.resource.data.total is number
-        && request.resource.data.total > 0
-        && request.resource.data.items is list
-        && request.resource.data.items.size() > 0
-        && request.resource.data.correo is string
-        && request.resource.data.correo.size() > 4
-      );
+      allow create: if true;
       allow update, delete: if isAdmin();
     }
-    
+
     // ==========================================
     // USUARIOS (Propietario o Admin)
     // ==========================================
-    
+
     match /users/{userId} {
       allow read: if isOwner(userId) || isAdmin();
       allow create: if isOwner(userId) && request.resource.data.role != 'admin';
       allow update: if (isOwner(userId) && request.resource.data.role == resource.data.role) || isAdmin();
       allow delete: if isAdmin();
     }
-    
+
     // ==========================================
     // PUNTOS DE FIDELIDAD
     // ==========================================
 
     match /loyalty/{userId} {
-      allow read, write: if isEmailOwner(userId) || isAdmin();
+      allow read, write: if isOwner(userId) || isAdmin();
     }
-    
+
     match /loyalty_points/{id} {
       allow read: if isAuthenticated();
       allow write: if isAdmin();
     }
-    
+
     // ==========================================
     // RESEÑAS
     // ==========================================
-    
+
     match /reviews/{id} {
       allow read: if true;
       allow create: if isAuthenticated();
@@ -196,22 +180,31 @@ service cloud.firestore {
     // ==========================================
     // GESTIÓN INTERNA (Solo Admin)
     // ==========================================
-    
+
     match /inventario/{doc} { allow read, write: if isAdmin(); }
     match /clientes/{doc} { allow read, write: if isAdmin(); }
     match /stats/{doc} { allow read, write: if isAdmin(); }
     match /admin_config/{doc} { allow read, write: if isAdmin(); }
 
-    // Las correcciones que Gina hace a mano sobre la hoja de cocina: cuanto
-    // cocinar de cada cosa y la nota de empaque. Un documento por fecha de
-    // produccion. Sin esta regla la hoja se ve pero no deja guardar nada
-    // —"permission-denied"— y el cambio se pierde al recargar.
+
+    // ==========================================
+    // HOJA DE COCINA
+    // ==========================================
+
+    // Las correcciones que Gina hace a mano sobre la hoja: cuanto cocinar de
+    // cada cosa y la nota de empaque. Un documento por fecha de produccion.
     match /ajustes_cocina/{fecha} { allow read, write: if isAdmin(); }
-    
+
+    // Que pedidos ya se le mandaron a la cocina. La hoja va por tandas —el
+    // jueves los mensuales y quincenales, despues lo que fue entrando— y cada
+    // una lleva solo lo que no se mando antes. Sin este registro la del viernes
+    // repetiria la del jueves y se cocinaria dos veces.
+    match /tandas_cocina/{id} { allow read, write: if isAdmin(); }
+
     // ==========================================
     // REGLA POR DEFECTO - DENEGAR TODO
     // ==========================================
-    
+
     match /{document=**} {
       allow read, write: if false;
     }

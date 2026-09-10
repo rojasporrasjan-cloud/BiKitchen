@@ -36,6 +36,12 @@ import {
 import { prepareLogo } from '../../utils/labels/labelRenderer';
 import { PrintQueue, JOB_STATUS } from '../../services/printing/printQueue';
 import { appendJobLog, readJobLog, JOB_KIND } from '../../services/printing/printJobLog';
+import { contarPorGrupo, leerImpresas, anotarImpresas, gruposQueFaltan, totalImpresas, olvidarFecha }
+    from '../../services/printing/etiquetasImpresas';
+import {
+    ETIQUETAS_POR_ROLLO, tamanoValido, planDeRollos, proximoRollo
+} from '../../utils/labels/rollosDeEtiquetas';
+import { anotarLecturas } from '../../utils/contadorFirestore';
 
 /**
  * Etiquetas de producción.
@@ -62,6 +68,9 @@ export default function PrinterView() {
     const [loading, setLoading] = useState(false);
     const [loadError, setLoadError] = useState(null);
     const [excluded, setExcluded] = useState(() => new Set());
+    // Lo que ya salio de la impresora para esta fecha, para no repetirlo.
+    const [impresas, setImpresas] = useState({});
+    const [soloFaltantes, setSoloFaltantes] = useState(false);
     const [previewGroupId, setPreviewGroupId] = useState(null);
     const [reprintQty, setReprintQty] = useState({});
     const [confirming, setConfirming] = useState(null);
@@ -222,6 +231,7 @@ export default function PrinterView() {
                     where('fecha_entrega', '>=', desde.toISOString().split('T')[0])
                 ));
                 if (cancelado) return;
+                anotarLecturas(snapshot.size, 'Etiquetas');
                 setRawOrders(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
             } catch (err) {
                 console.error('[Etiquetas] Error leyendo pedidos:', err);
@@ -235,27 +245,66 @@ export default function PrinterView() {
         return () => { cancelado = true; };
     }, [selectedDate]);
 
+    // Cada fecha lleva su propia cuenta: el lunes y el sabado son tiras aparte.
+    useEffect(() => {
+        setImpresas(leerImpresas(selectedDate));
+        setSoloFaltantes(false);
+    }, [selectedDate]);
+
+    // Cuantas etiquetas trae el rollo. Se recuerda porque no cambia de un dia
+    // para otro, pero se puede corregir: no todos los rollos vienen iguales.
+    const [tamanoRollo, setTamanoRollo] = useState(() => {
+        try { return tamanoValido(localStorage.getItem('bikitchen_etiquetas_por_rollo')); }
+        catch { return ETIQUETAS_POR_ROLLO; }
+    });
+    useEffect(() => {
+        try { localStorage.setItem('bikitchen_etiquetas_por_rollo', String(tamanoRollo)); }
+        catch { /* sin storage */ }
+    }, [tamanoRollo]);
+
     const batch = useMemo(
         () => buildLabelBatch(rawOrders, selectedDate, officialMenus),
         [rawOrders, selectedDate, officialMenus]
     );
 
+    // Las etiquetas del lunes se adelantan el sabado. Con "solo lo que falta" el
+    // lote queda recortado a lo que todavia no salio: si el lunes entra un
+    // pedido nuevo se imprime SOLO eso, y no cien etiquetas repetidas que
+    // ademas dejan dos juegos iguales sobre la mesa.
+    const gruposDelLote = useMemo(
+        () => (soloFaltantes ? gruposQueFaltan(batch.groups, impresas) : batch.groups),
+        [batch.groups, impresas, soloFaltantes]
+    );
+
     const selectedGroups = useMemo(
-        () => batch.groups.filter(g => !excluded.has(g.id)),
-        [batch.groups, excluded]
+        () => gruposDelLote.filter(g => !excluded.has(g.id)),
+        [gruposDelLote, excluded]
     );
 
     const totalSeleccionado = selectedGroups.reduce((acc, g) => acc + g.cantidad, 0);
 
+    // La tira DE VERDAD, divisores incluidos: es la que gasta papel, y por lo
+    // tanto la que hay que partir en rollos. `totalSeleccionado` cuenta platos.
+    const etiquetasDelLote = useMemo(
+        () => (expirationDate
+            ? expandGroupsToLabels(selectedGroups, expirationDate, { conDivisores: true })
+            : []),
+        [selectedGroups, expirationDate]
+    );
+    const plan = useMemo(
+        () => planDeRollos(etiquetasDelLote.length, tamanoRollo),
+        [etiquetasDelLote.length, tamanoRollo]
+    );
+
     // El filtro solo cambia lo que se VE. Lo que se imprime sigue siendo lo
     // seleccionado, esté visible o no: ocultar algo no puede sacarlo del lote
     // sin que nadie se entere.
-    const conteoFamilias = useMemo(() => contarPorFamilia(batch.groups), [batch.groups]);
+    const conteoFamilias = useMemo(() => contarPorFamilia(gruposDelLote), [gruposDelLote]);
     const gruposVisibles = useMemo(
         () => familiaFiltro
-            ? batch.groups.filter(g => familiaDeTipo(g.tipo) === familiaFiltro)
-            : batch.groups,
-        [batch.groups, familiaFiltro]
+            ? gruposDelLote.filter(g => familiaDeTipo(g.tipo) === familiaFiltro)
+            : gruposDelLote,
+        [gruposDelLote, familiaFiltro]
     );
     const porTipo = useMemo(() => groupByTipo(gruposVisibles), [gruposVisibles]);
 
@@ -298,11 +347,43 @@ export default function PrinterView() {
             user: currentUser?.email || null
         });
         setJobLog(prev => [registro, ...prev]);
+
+        // Se anota lo que salio DE VERDAD, contando las primeras `processed` de
+        // la tira: si la impresora se traba a la mitad, lo que no salio no puede
+        // darse por hecho. Una simulacion no imprime nada, asi que no cuenta.
+        if (!resultado.isSimulated) {
+            const cuentas = contarPorGrupo(labels, resultado.processed);
+            setImpresas(anotarImpresas(selectedDate, cuentas));
+
+            // En cuanto sale la primera etiqueta, la hoja pasa SOLA a "lo que
+            // falta".
+            //
+            // Sin esto, sacar de a rollos estaba roto: el lote seguia siendo el
+            // completo, asi que "Solo este rollo" volvia a mandar LAS MISMAS
+            // 220 del principio. Se imprimian dos veces las primeras y al final
+            // faltaban las ultimas, y nadie se enteraba hasta que en la mesa de
+            // empaque no habia etiqueta para el ultimo cliente.
+            //
+            // Se puede desmarcar a mano para reimprimir algo a proposito.
+            setSoloFaltantes(true);
+        }
     };
 
-    const prepararLote = () => {
-        const labels = expandGroupsToLabels(selectedGroups, expirationDate, { conDivisores: true });
-        ejecutarLote(labels, JOB_KIND.BATCH, `${selectedGroups.length} grupos`);
+    /**
+     * Manda el lote. Con `soloUnRollo`, solo lo que cabe en el rollo de ahora.
+     *
+     * No hace falta llevar un numero de rollo: lo que sale queda anotado en
+     * `etiquetasImpresas`, asi que al volver, "lo que falta" ya arranca donde
+     * este se quedo. Si la impresora se traba a la mitad, se anota solo lo que
+     * salio de verdad y el siguiente rollo recoge el resto.
+     */
+    const prepararLote = (soloUnRollo = false) => {
+        const todas = etiquetasDelLote;
+        const labels = soloUnRollo ? proximoRollo(todas, tamanoRollo) : todas;
+        const detalle = soloUnRollo
+            ? `1 rollo de ${labels.length} (de ${todas.length})`
+            : `${selectedGroups.length} grupos`;
+        ejecutarLote(labels, JOB_KIND.BATCH, detalle);
     };
 
     const conectarImpresora = async (mostrarTodos = false) => {
@@ -567,10 +648,45 @@ export default function PrinterView() {
                         </div>
                     )}
 
+                    {/* Lo que ya salió de la impresora para esta fecha. Aparece solo
+                        cuando hay algo anotado: antes de imprimir no dice nada. */}
+                    {totalImpresas(impresas) > 0 && (
+                        <div className="flex flex-wrap items-center gap-3 p-3 rounded-xl bg-amber-50 border border-amber-200">
+                            <span className="text-sm text-amber-900">
+                                Ya se imprimieron <strong>{totalImpresas(impresas)}</strong> etiquetas
+                                de esta fecha.
+                            </span>
+                            <label className="flex items-center gap-2 text-sm font-bold text-amber-900 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={soloFaltantes}
+                                    onChange={(e) => setSoloFaltantes(e.target.checked)}
+                                    className="w-4 h-4 accent-bikitchen-orange"
+                                />
+                                Solo lo que falta
+                            </label>
+                            <button
+                                onClick={() => {
+                                    if (!window.confirm(
+                                        'Borrar la cuenta de esta fecha. La lista vuelve a mostrar TODAS '
+                                        + 'las etiquetas como si no se hubiera impreso ninguna. ¿Seguir?'
+                                    )) return;
+                                    olvidarFecha(selectedDate);
+                                    setImpresas({});
+                                    setSoloFaltantes(false);
+                                }}
+                                className="ml-auto px-3 py-1.5 rounded-lg border border-amber-300 font-semibold text-amber-800 hover:bg-amber-100 transition-colors text-xs"
+                            >
+                                Empezar de cero
+                            </button>
+                        </div>
+                    )}
+
                     {batch.groups.length > 0 && (
                         <div className="flex items-center gap-3 text-sm">
                             <span className="text-gray-500">
-                                {selectedGroups.length} de {batch.groups.length} proteínas incluidas
+                                {selectedGroups.length} de {gruposDelLote.length} proteínas incluidas
+                                {soloFaltantes && ' (solo lo que falta)'}
                                 {familiaFiltro && ' (el filtro solo cambia lo que ves)'}
                             </span>
                             <button
@@ -636,6 +752,37 @@ export default function PrinterView() {
                             <p className="flex justify-between"><span>Grupos:</span> <strong>{selectedGroups.length}</strong></p>
                             <p className="flex justify-between text-base"><span>Etiquetas a enviar:</span> <strong>{confirming.total}</strong></p>
                         </div>
+
+                        {/* El rollo se acaba sin avisar: deja de salir papel a la
+                            mitad de un nombre. Verlo partido ANTES evita la
+                            sorpresa, y como lo que sale queda anotado, el rollo
+                            siguiente arranca justo donde este se quedo. */}
+                        <div className="mt-4 border border-gray-200 bg-gray-50 rounded-lg p-3">
+                            <div className="flex items-center justify-between gap-3">
+                                <label htmlFor="tamano-rollo" className="text-xs font-semibold text-gray-700">
+                                    Etiquetas que trae el rollo
+                                </label>
+                                <input
+                                    id="tamano-rollo"
+                                    type="number"
+                                    min="1"
+                                    value={tamanoRollo}
+                                    onChange={(e) => setTamanoRollo(tamanoValido(e.target.value))}
+                                    className="w-24 border border-gray-300 rounded-lg px-2 py-1 text-sm text-right font-bold"
+                                />
+                            </div>
+                            <p className="mt-2 text-xs text-gray-700">
+                                {plan.rollos <= 1
+                                    ? `Caben en un solo rollo (${plan.total} de papel, con divisores).`
+                                    : `Son ${plan.rollos} rollos: ${plan.cortes.join(' + ')} etiquetas de papel.`}
+                            </p>
+                            {plan.rollos > 1 && (
+                                <p className="mt-1 text-xs text-gray-600">
+                                    Sacá uno, cambiá el rollo y volvé: lo que ya salió queda
+                                    anotado y no se repite.
+                                </p>
+                            )}
+                        </div>
                         <p className={`mt-4 text-xs border rounded-lg p-3 ${modoReal ? 'bg-blue-50 border-blue-200 text-blue-900' : 'bg-amber-50 border-amber-200 text-amber-900'}`}>
                             {modoReal
                                 ? `Se van a enviar a ${printerName} de a una etiqueta, esperando a que cada una salga. Va a tardar unos ${duracionEstimada(confirming.total)}. Tené listo el rollo y no cierres la pestaña.`
@@ -648,11 +795,19 @@ export default function PrinterView() {
                             >
                                 Cancelar
                             </button>
+                            {plan.rollos > 1 && (
+                                <button
+                                    onClick={() => prepararLote(true)}
+                                    className="flex-1 py-2.5 rounded-xl border-2 border-bikitchen-orange text-bikitchen-orange font-bold hover:bg-orange-50"
+                                >
+                                    Solo este rollo ({plan.cortes[0]})
+                                </button>
+                            )}
                             <button
-                                onClick={prepararLote}
+                                onClick={() => prepararLote(false)}
                                 className="flex-1 py-2.5 rounded-xl bg-bikitchen-orange text-white font-bold hover:bg-bikitchen-orange-dark"
                             >
-                                Confirmar
+                                {plan.rollos > 1 ? `Todas (${plan.total})` : 'Confirmar'}
                             </button>
                         </div>
                     </div>

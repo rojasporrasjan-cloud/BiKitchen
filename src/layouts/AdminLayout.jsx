@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { useOrders } from '../context/OrdersContext';
 import { getAllCoupons } from '../utils/firestoreCoupons';
 import '../utils/deleteAllData'; // Importar script de eliminación (disponible en consola)
+import ContadorDeCuota from '../components/admin/ContadorDeCuota';
 
 // Hook para detectar si es móvil
 function useIsMobile() {
@@ -254,6 +255,10 @@ export default function AdminLayout() {
                 })}
             </nav>
 
+            {/* Cuanto queda de la cuota diaria de Firebase. El 3 de setiembre se
+                agoto en plena preparacion de la hoja de cocina y nadie lo vio venir. */}
+            {isSuperAdmin() && <ContadorDeCuota colapsado={collapsed} />}
+
             {/* Footer del Sidebar */}
             <div className={`p-3 border-t border-white/10 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 ${collapsed ? 'px-2' : ''}`}>
                 {/* User Info */}
@@ -280,7 +285,7 @@ export default function AdminLayout() {
     );
 
     return (
-        <div className="flex h-screen bg-gray-50 font-sans text-gray-800 overflow-hidden print:h-auto print:overflow-visible">
+        <div className="panel-admin flex h-screen bg-gray-50 font-sans text-gray-800 overflow-hidden print:h-auto print:overflow-visible">
             {/* Desktop Sidebar */}
             <motion.aside
                 initial={false}

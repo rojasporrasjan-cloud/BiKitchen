@@ -224,6 +224,7 @@ const FILTER_OPTIONS = [
 
 import { Sparkles } from 'lucide-react';
 import { eliminarPedidosDeGina } from '../../data/masterGinaLoader';
+import { anotarLecturas } from '../../utils/contadorFirestore';
 
 // Filtros de fecha
 const DATE_FILTERS = [
@@ -843,6 +844,7 @@ export default function OrdersView() {
         setIsRepairing(true);
         try {
             const querySnapshot = await getDocs(collection(db, 'pedidos'));
+            anotarLecturas(querySnapshot.size, 'Pedidos');
             let fixedCount = 0;
 
             for (const d of querySnapshot.docs) {
@@ -1000,6 +1002,8 @@ export default function OrdersView() {
     // distinto de '' (se borraron a propósito).
     const [obsEditada, setObsEditada] = useState(null);
     const [guardandoObs, setGuardandoObs] = useState(false);
+    const [telEditado, setTelEditado] = useState(null);
+    const [guardandoTel, setGuardandoTel] = useState(false);
 
     /**
      * Guarda las observaciones del pedido.
@@ -1013,7 +1017,7 @@ export default function OrdersView() {
      */
     /** Abre/cierra el detalle limpiando el borrador de observaciones: si no, el
      *  siguiente pedido se abriría con la nota a medio escribir del anterior. */
-    const abrirPedido = (pedido) => { setObsEditada(null); setSelectedOrder(pedido); };
+    const abrirPedido = (pedido) => { setObsEditada(null); setTelEditado(null); setSelectedOrder(pedido); };
 
     const guardarObservaciones = async (pedido) => {
         if (obsEditada === null) return;
@@ -1027,6 +1031,37 @@ export default function OrdersView() {
             alert('No se pudieron guardar las observaciones. Revisá la conexión e intentá de nuevo.');
         }
         setGuardandoObs(false);
+    };
+
+    /**
+     * Guarda el telefono del pedido.
+     *
+     * Gina manda pedidos sin numero todas las semanas. El pedido se guarda y se
+     * cocina igual, pero sin telefono no se le puede escribir por WhatsApp ni
+     * llamar al repartidor. Antes completarlo obligaba a entrar a Firebase.
+     *
+     * Escribe SOLO `telefono`: no toca estado, fechas, montos ni puntos. Se
+     * guarda en digitos, como lo hace el resto del sistema, para que
+     * `normalizarTelefono` lo compare bien contra los que ya existen.
+     */
+    const guardarTelefono = async (pedido) => {
+        if (telEditado === null) return;
+        const digitos = String(telEditado).replace(/\D/g, '');
+        if (digitos && digitos.replace(/^506/, '').length !== 8) {
+            alert('El telefono tiene que tener 8 digitos (o dejarse vacio).');
+            return;
+        }
+        const limpio = digitos.replace(/^506/, '');
+        setGuardandoTel(true);
+        try {
+            await updateDoc(doc(db, 'pedidos', pedido.id), { telefono: limpio });
+            setSelectedOrder(prev => prev ? { ...prev, telefono: limpio } : prev);
+            setTelEditado(null);
+        } catch (error) {
+            console.error('[Pedidos] Error guardando el telefono:', error);
+            alert('No se pudo guardar el telefono. Revisa la conexion e intenta de nuevo.');
+        }
+        setGuardandoTel(false);
     };
 
     /**
@@ -2327,7 +2362,11 @@ export default function OrdersView() {
                         <select
                             value={stagedFilters.zoneFilter}
                             onChange={(e) => setStagedFilters(prev => ({ ...prev, zoneFilter: e.target.value }))}
-                            className="px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
+                            /* w-full en el celular: el select se estiraba al largo del
+                               nombre de zona mas largo —"Alajuela - Carrizal / Sabanilla"—
+                               y se iba 13px fuera de una pantalla de 375. min-w-0 para
+                               que pueda achicarse dentro del flex que lo contiene. */
+                            className="w-full sm:w-auto min-w-0 max-w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
                         >
                             <option value="all">🚚 Todas las zonas</option>
                             {uniqueZones.filter(z => z !== 'all').map(zone => (
@@ -2908,12 +2947,40 @@ export default function OrdersView() {
                                             <User size={18} className="text-gray-400" />
                                             <span className="font-medium text-gray-800">{selectedOrder.client}</span>
                                         </div>
-                                        {(selectedOrder.telefono || selectedOrder.details?.phone) && (
-                                            <div className="flex items-center gap-3">
-                                                <Phone size={18} className="text-gray-400" />
-                                                <span className="text-gray-600">{selectedOrder.telefono || selectedOrder.details.phone}</span>
+                                        {/* El telefono se puede completar aca: Gina manda pedidos sin
+                                            numero y antes habia que entrar a Firebase para agregarlo. */}
+                                        <div className="flex items-start gap-3">
+                                            <Phone size={18} className="text-gray-400 mt-2" aria-hidden="true" />
+                                            <div className="flex-1">
+                                                <div className="flex items-center gap-2">
+                                                    <input
+                                                        type="tel"
+                                                        inputMode="numeric"
+                                                        aria-label="Telefono del cliente"
+                                                        placeholder="Sin telefono — se puede agregar despues"
+                                                        className="flex-1 min-w-0 px-3 py-2.5 sm:py-1.5 text-base sm:text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-bikitchen-orange"
+                                                        value={telEditado ?? (selectedOrder.telefono || selectedOrder.details?.phone || '')}
+                                                        onChange={(e) => setTelEditado(e.target.value)}
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => guardarTelefono(selectedOrder)}
+                                                        disabled={telEditado === null || guardandoTel}
+                                                        /* py-2.5 en el celular: a 32px de alto el dedo le
+                                                           erraba. El input sube a text-base por lo mismo y
+                                                           porque abajo de 16px iOS hace zoom solo al tocarlo. */
+                                                        className="shrink-0 px-4 py-2.5 sm:py-1.5 text-sm font-semibold rounded-lg bg-bikitchen-orange text-white disabled:opacity-40 disabled:cursor-not-allowed"
+                                                    >
+                                                        {guardandoTel ? 'Guardando…' : 'Guardar'}
+                                                    </button>
+                                                </div>
+                                                {!(selectedOrder.telefono || selectedOrder.details?.phone) && telEditado === null && (
+                                                    <p className="text-xs text-amber-600 mt-1">
+                                                        Este pedido no tiene telefono. Se cocina y se entrega igual.
+                                                    </p>
+                                                )}
                                             </div>
-                                        )}
+                                        </div>
                                         {(selectedOrder.correo || selectedOrder.details?.email) && (
                                             <div className="flex items-center gap-3">
                                                 <FileText size={18} className="text-gray-400" />

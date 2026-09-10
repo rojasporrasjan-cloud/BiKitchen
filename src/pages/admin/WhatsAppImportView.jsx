@@ -7,7 +7,9 @@ import { useOrders } from '../../context/OrdersContext';
 import AdminPageHeader from '../../components/admin/AdminPageHeader';
 import ImportedOrderPreview from '../../components/admin/ImportedOrderPreview';
 import { extractOrderNumbers, parseOrderBlock } from '../../utils/parseOrderText';
-import { buildPedidoFromImport, validatePedidoForFirestore, resolverCorreo } from '../../utils/buildPedidoFromImport';
+import { buildPedidoFromImport, validatePedidoForFirestore, avisosDelPedido, resolverCorreo } from '../../utils/buildPedidoFromImport';
+import { avisoDeDuplicado } from '../../utils/pedidoDuplicado';
+import { esErrorDeCuota, errorDeCuota } from '../../utils/cuotaDeFirebase';
 import { nivelPorPuntos } from '../../config/loyalty';
 import { upsertClient } from '../../services/clientService';
 import { formatPrice } from '../../utils/formatters';
@@ -23,9 +25,39 @@ import { getOrderStatusLabel, CONFIRMABLE_STATUSES } from '../../config/orderSta
  * La confirmación pasa por updateOrderStatus() y no por un updateDoc directo,
  * para que se otorguen los BiPuntos y el bono de referido igual que siempre.
  */
+/**
+ * Los ítems que se escribieron a mano en la vista previa.
+ *
+ * El parser solo reconoce un ítem si la línea empieza con un número ("1 Pack
+ * Bajo Calorías") o si trae el precio pegado ("Pack Bajo Calorías - 83.500").
+ * Gina no siempre escribe asi, y cuando no lo hace el pedido quedaba con CERO
+ * items: el aviso decia "El pedido no tiene items" y los dos botones de crear
+ * se apagaban. Sin forma de agregarlo, ahi se terminaba el camino: habia que
+ * volver al texto, reescribirlo con el formato que el parser entiende y pegarlo
+ * de nuevo.
+ *
+ * La vista previa ya dejaba corregir cliente, telefono, zona, direccion, total
+ * y fecha. Faltaba justo lo unico que bloquea.
+ *
+ * Los que quedan sin nombre no se cuentan: una fila recien agregada y todavia
+ * vacia no debe habilitar el boton de crear.
+ */
+export const itemsEscritosAMano = (manuales) => (Array.isArray(manuales) ? manuales : [])
+    .map((m) => ({
+        cantidad: Number(m?.cantidad) > 0 ? Number(m.cantidad) : 1,
+        nombre: String(m?.nombre || '').trim(),
+        precio: (m?.precio !== '' && m?.precio != null) ? Number(m.precio) : null,
+        proteinas: String(m?.proteinas || '')
+            .split(',')
+            .map(x => x.trim())
+            .filter(Boolean),
+        escritoAMano: true
+    }))
+    .filter(m => m.nombre);
+
 export default function WhatsAppImportView() {
     const { isSuperAdmin, currentUser } = useAuth();
-    const { updateOrderStatus } = useOrders();
+    const { updateOrderStatus, orders } = useOrders();
 
     const [rawText, setRawText] = useState('');
     const [results, setResults] = useState([]);
@@ -61,29 +93,43 @@ export default function WhatsAppImportView() {
             ...(edits.total !== undefined && { total: edits.total !== '' ? Number(edits.total) : null }),
             ...(edits.costoEnvio !== undefined && { costoEnvio: edits.costoEnvio !== '' ? Number(edits.costoEnvio) : 0 }),
             ...(edits.fecha && { fechasEntrega: [edits.fecha] }),
-            // Permite corregir precios de ítems e instrucciones/proteínas
-            items: (draft.parsed.items || []).map((item, i) => {
-                const customPrice = edits[`precio_${i}`];
-                const customProt = edits[`proteinas_${i}`];
-                return {
-                    ...item,
-                    ...(customPrice !== undefined && { precio: customPrice !== '' ? Number(customPrice) : item.precio }),
-                    ...(customProt !== undefined && {
-                        proteinas: customProt
-                            .split(',')
-                            .map(s => s.trim())
-                            .filter(Boolean)
-                    })
-                };
-            })
+            // Permite corregir precios de ítems e instrucciones/proteínas, y
+            // sumar los que se escribieron a mano porque el parser no los leyó.
+            items: [
+                ...(draft.parsed.items || []).map((item, i) => {
+                    const customPrice = edits[`precio_${i}`];
+                    const customProt = edits[`proteinas_${i}`];
+                    return {
+                        ...item,
+                        ...(customPrice !== undefined && { precio: customPrice !== '' ? Number(customPrice) : item.precio }),
+                        ...(customProt !== undefined && {
+                            proteinas: customProt
+                                .split(',')
+                                .map(s => s.trim())
+                                .filter(Boolean)
+                        })
+                    };
+                }),
+                ...itemsEscritosAMano(edits.manuales)
+            ]
         };
 
         const pedido = buildPedidoFromImport(merged, {
             createdBy: currentUser?.email || 'admin'
         });
 
-        return { merged, pedido, problems: validatePedidoForFirestore(pedido) };
-    }, [draft, edits, currentUser]);
+        // El duplicado se avisa ACA, antes de guardar. Edwin Perez salio
+        // cobrado y cocinado dos veces y lo vimos cuando la comida ya estaba
+        // hecha; en ese punto solo queda devolver la plata. Aca es un clic.
+        const repetido = avisoDeDuplicado(pedido, orders);
+
+        return {
+            merged,
+            pedido,
+            problems: validatePedidoForFirestore(pedido),
+            avisos: [...(repetido ? [repetido] : []), ...avisosDelPedido(pedido)]
+        };
+    }, [draft, edits, currentUser, orders]);
 
     if (!isSuperAdmin()) {
         return (
@@ -127,7 +173,12 @@ export default function WhatsAppImportView() {
             setResults(found);
         } catch (error) {
             console.error('[Importador] Error buscando pedidos:', error);
-            setNotice({ type: 'error', text: 'Error buscando los pedidos. Revisá la conexión e intentá de nuevo.' });
+            setNotice({
+                type: 'error',
+                text: esErrorDeCuota(error)
+                    ? errorDeCuota().message
+                    : 'Error buscando los pedidos. Revisá la conexión e intentá de nuevo.'
+            });
         } finally {
             setSearching(false);
         }
@@ -150,7 +201,12 @@ export default function WhatsAppImportView() {
             console.error('[Importador] Error confirmando pedido:', error);
             patchResult(result.numeroOrden, {
                 confirming: false,
-                error: 'No se pudo confirmar. Revisá los permisos e intentá de nuevo.'
+                // Antes decia siempre "revisa los permisos", y cuando lo que
+                // fallaba era la cuota del dia eso mandaba a buscar por el lado
+                // equivocado. Ahora cada causa dice lo suyo.
+                error: esErrorDeCuota(error)
+                    ? errorDeCuota().message
+                    : 'No se pudo confirmar. Revisá los permisos e intentá de nuevo.'
             });
         }
     };
@@ -232,7 +288,9 @@ export default function WhatsAppImportView() {
             console.error('[Importador] Error creando pedido:', error);
             setNotice({
                 type: 'error',
-                text: 'Firebase rechazó el pedido. Suele ser por las reglas de Firestore: revisá que la regla de create de /pedidos/ permita este documento.'
+                text: esErrorDeCuota(error)
+                    ? errorDeCuota().message
+                    : 'Firebase rechazó el pedido. Suele ser por las reglas de Firestore: revisá que la regla de create de /pedidos/ permita este documento.'
             });
         } finally {
             setCreating(false);
@@ -318,7 +376,8 @@ export default function WhatsAppImportView() {
                     parsed={draftPedido.merged}
                     pedido={draftPedido.pedido}
                     problems={draftPedido.problems}
-                    warnings={draft.parsed.warnings}
+                    manuales={edits.manuales || []}
+                    warnings={[...(draft.parsed.warnings || []), ...draftPedido.avisos]}
                     creating={creating}
                     created={created}
                     onCreate={handleCreate}

@@ -202,12 +202,21 @@ export const textoLlevaCena = (texto) => {
 export const packSeParteEnAlmuerzoYCena = (packName, textoDelPedido) =>
     !esPersonalizado(packName) && textoLlevaCena(textoDelPedido);
 
-/** Misma regla, aplicada a un pedido completo. */
+/**
+ * Misma regla, aplicada a un pedido completo.
+ *
+ * El `categoryLabel` DEL ITEM es donde el checkout de la web guarda "Almuerzo y
+ * Cena", y era el unico lugar que esta funcion no miraba. El plan del pedido
+ * queda en "Full Pack" a secas, asi que el pedido de Diego Andres Flores
+ * —₡223.960, almuerzo y cena mensual, tres entregas por delante— salia en la
+ * hoja del miercoles con cinco almuerzos y NINGUNA cena. Lo mismo le pasaba al
+ * pack de casaditos de Laura Hernandez.
+ */
 export const esPromoCena = (pedido) => {
     const items = pedido?.items || pedido?.rawPedido?.items || [];
     return textoLlevaCena([
         pedido?.plan, pedido?.tipoMenu, pedido?.categoryLabel, pedido?.categoria, pedido?.observaciones,
-        ...items.map(i => `${i?.nombre || ''} ${i?.planLabel || ''}`)
+        ...items.map(i => `${i?.nombre || ''} ${i?.planLabel || ''} ${i?.categoryLabel || ''}`)
     ].join(' '));
 };
 

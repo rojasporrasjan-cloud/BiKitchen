@@ -22,7 +22,7 @@
 import { PRINTER_STATUS } from './PrinterAdapter';
 import {
     BLE_SERVICE_UUID, BLE_ADVERTISED_SERVICE_UUID, BLE_WRITE_UUID, BLE_NOTIFY_UUID,
-    CHUNK_SIZE, CHUNK_DELAY_MS, HEAD_DOTS, HEAD_BYTES,
+    CHUNK_SIZE, CHUNK_MINIMO, CHUNK_DELAY_MS, HEAD_DOTS, HEAD_BYTES, SERVICIOS_CONOCIDOS,
     cmdInit, cmdSpeed, cmdDensity, cmdMediaLabels, cmdRasterHeader, cmdFooter, packRaster
 } from './phomemoProtocol';
 import { renderLabel, canvasToMonochrome, mmToPx } from '../../utils/labels/labelRenderer';
@@ -72,6 +72,10 @@ export class PhomemoM110Adapter {
         this.lastResponses = [];
         this.bytesSent = 0;
         this.labelsPrinted = 0;
+        // Cuanto acepta ESTA impresora de un golpe. Dos unidades del mismo
+        // modelo pueden negociar distinto con el Bluetooth de la maquina, asi
+        // que arranca en lo de siempre y baja sola si se queja.
+        this.maxChunk = CHUNK_SIZE;
     }
 
     /**
@@ -96,8 +100,15 @@ export class PhomemoM110Adapter {
             const conocidos = await navigator.bluetooth.getDevices();
             if (!conocidos || conocidos.length === 0) return null;
 
+            // Si la guardada no esta, NO se agarra la primera que aparezca.
+            //
+            // Con `|| conocidos[0]` la pagina se conectaba en silencio a otra
+            // impresora autorizada antes —la vieja, apagada o dormida— y desde
+            // afuera se veia "conectada" pero cada escritura fallaba con "GATT
+            // operation failed". Mejor pedir que la elija y saber a cual va.
             const guardado = localStorage.getItem(DEVICE_KEY);
-            const elegido = conocidos.find(d => d.id === guardado) || conocidos[0];
+            const elegido = conocidos.find(d => d.id === guardado)
+                || (conocidos.length === 1 ? conocidos[0] : null);
             if (!elegido) return null;
 
             this.device = elegido;
@@ -121,16 +132,23 @@ export class PhomemoM110Adapter {
         // Se filtra por lo que la impresora ANUNCIA (af30 y su número de serie),
         // no por el servicio de impresión ff00: ese solo aparece una vez
         // conectada, así que filtrar por él dejaba el diálogo vacío.
+        // Se piden TODOS los servicios conocidos, no solo los de la M110.
+        //
+        // Chrome unicamente deja mirar lo que se pidio de antemano: con la
+        // lista corta, una impresora que no fuera exactamente la M110 quedaba
+        // muda —ni conectaba ni se le podia diagnosticar nada—. Pedir de mas no
+        // cuesta: los que no existan simplemente no aparecen.
         const opciones = mostrarTodos
-            ? { acceptAllDevices: true, optionalServices: [BLE_SERVICE_UUID] }
+            ? { acceptAllDevices: true, optionalServices: SERVICIOS_CONOCIDOS }
             : {
                 filters: [
                     { services: [BLE_ADVERTISED_SERVICE_UUID] },
                     { namePrefix: 'M110' },
+                    { namePrefix: 'M150' },
                     { namePrefix: 'Phomemo' },
-                    { namePrefix: 'Q' }   // la serie con la que se anuncia esta M110
+                    { namePrefix: 'Q' }   // la serie con la que se anuncian
                 ],
-                optionalServices: [BLE_SERVICE_UUID, BLE_ADVERTISED_SERVICE_UUID]
+                optionalServices: SERVICIOS_CONOCIDOS
             };
 
         this.device = await navigator.bluetooth.requestDevice(opciones);
@@ -175,19 +193,35 @@ export class PhomemoM110Adapter {
             // —que aceptaba todo sin imprimir— era tener esta suscripción
             // abierta. La M110 parece necesitar el canal activo para procesar
             // el trabajo.
-            try {
-                this.notifyChar = await service.getCharacteristic(BLE_NOTIFY_UUID);
-                this.lastResponses = [];
-                this.notifyChar.addEventListener('characteristicvaluechanged', (e) => {
-                    const v = new Uint8Array(e.target.value.buffer);
-                    this.lastResponses.push([...v].map(b => b.toString(16).padStart(2, '0')).join(' '));
-                    if (this.lastResponses.length > 40) this.lastResponses.shift();
-                });
-                await this.notifyChar.startNotifications();
-            } catch (err) {
-                // Si no se puede escuchar, se sigue: mejor intentar imprimir
-                // que bloquear el trabajo por el canal de diagnóstico.
-                console.warn('[M110] No se pudo abrir el canal de estado:', err.message);
+            //
+            // Se reintenta: "Connection Error: Connection attempt failed" al
+            // suscribirse casi siempre es que el aparato todavia no termino de
+            // asentar la conexion. Rendirse al primer intento dejaba la
+            // impresora aceptando bytes sin imprimir ni una etiqueta.
+            this.canalDeEstado = false;
+            for (let intento = 1; intento <= 3; intento += 1) {
+                try {
+                    this.notifyChar = await service.getCharacteristic(BLE_NOTIFY_UUID);
+                    this.lastResponses = [];
+                    this.notifyChar.addEventListener('characteristicvaluechanged', (e) => {
+                        const v = new Uint8Array(e.target.value.buffer);
+                        this.lastResponses.push([...v].map(b => b.toString(16).padStart(2, '0')).join(' '));
+                        if (this.lastResponses.length > 40) this.lastResponses.shift();
+                    });
+                    await this.notifyChar.startNotifications();
+                    this.canalDeEstado = true;
+                    break;
+                } catch (err) {
+                    console.warn(`[M110] Canal de estado, intento ${intento} de 3:`, err.message);
+                    this.ultimoErrorDeCanal = err.message;
+                    if (intento < 3) await esperar(400 * intento);
+                }
+            }
+            if (!this.canalDeEstado) {
+                // Se sigue igual: mejor intentar imprimir que bloquear el
+                // trabajo. Pero queda anotado, porque sin este canal la M110
+                // acepta todo y no imprime nada, y eso hay que poder verlo.
+                console.warn('[M110] Sin canal de estado. La impresora puede aceptar bytes sin imprimir.');
             }
 
             this.status = PRINTER_STATUS.READY;
@@ -210,10 +244,8 @@ export class PhomemoM110Adapter {
         return this.status;
     }
 
-    async #write(bytes) {
-        const c = this.characteristic;
-        if (!c) throw new Error('La impresora se desconectó');
-
+    /** Una sola escritura, con o sin acuse segun la configuracion. */
+    async #escribirUno(c, parte) {
         // Con acuse (writeValue) el navegador espera a que la impresora
         // confirme cada bloque: eso es control de flujo de verdad. Sin acuse es
         // más rápido, pero en un lote largo se le llena el buffer y pierde
@@ -222,13 +254,46 @@ export class PhomemoM110Adapter {
             && c.properties?.writeWithoutResponse
             && c.writeValueWithoutResponse) {
             try {
-                await c.writeValueWithoutResponse(bytes);
+                await c.writeValueWithoutResponse(parte);
                 return;
             } catch {
                 // cae a writeValue
             }
         }
-        await c.writeValue(bytes);
+        await c.writeValue(parte);
+    }
+
+    /**
+     * Manda los bytes, bajando el tamano del bloque si la impresora se queja.
+     *
+     * "GATT operation failed for unknown reason" es lo que contesta el Bluetooth
+     * cuando el bloque va mas grande de lo que esa unidad acepta. Dos impresoras
+     * del MISMO modelo pueden negociar distinto, asi que el 128 que le sirve a
+     * una puede reventarle a la otra.
+     *
+     * Al reintentar se RETOMA donde quedo, nunca desde el principio: reenviar lo
+     * que ya se acepto duplicaria pixeles y la etiqueta saldria corrida.
+     */
+    async #write(bytes) {
+        const c = this.characteristic;
+        if (!c) throw new Error('La impresora se desconectó');
+
+        let i = 0;
+        let fallos = 0;
+        while (i < bytes.length) {
+            const paso = Math.max(CHUNK_MINIMO, this.maxChunk);
+            const parte = bytes.slice(i, i + paso);
+            try {
+                await this.#escribirUno(c, parte);
+                i += parte.length;
+            } catch (err) {
+                if (this.maxChunk <= CHUNK_MINIMO || fallos >= 4) throw err;
+                this.maxChunk = Math.max(CHUNK_MINIMO, Math.floor(this.maxChunk / 2));
+                fallos += 1;
+                console.warn(`[M110] Bloque rechazado; se baja a ${this.maxChunk} bytes.`);
+                await esperar(80);
+            }
+        }
     }
 
     /**
@@ -290,38 +355,53 @@ export class PhomemoM110Adapter {
         return { data: conMargen, widthBytes, lines: lines + lineasArriba };
     }
 
+    /**
+     * Se asegura de que el Bluetooth siga vivo justo ANTES de escribir.
+     *
+     * La M110 se duerme sola despues de un rato sin recibir nada y suelta el
+     * GATT. Entre que se conecta y que arranca la cola pueden pasar minutos
+     * —elegir el vencimiento, revisar la lista, confirmar el lote— y para
+     * entonces la conexion ya no existe: la primera escritura muere con "GATT
+     * Server is disconnected" y salen 0 bytes de 7680.
+     *
+     * Reconectar NO necesita un clic del usuario: eso solo lo exige
+     * `requestDevice`. Asi que se levanta sola y nadie se entera.
+     */
+    async #asegurarConexion() {
+        if (this.device?.gatt?.connected && this.characteristic) return;
+        if (!this.device) {
+            throw new Error('Todavía no elegiste la impresora. Tocá "Conectar impresora" primero.');
+        }
+        // El objeto viejo apunta a una sesion muerta: se descarta para que
+        // `connect()` vuelva a pedir el servicio y la caracteristica.
+        this.characteristic = null;
+        this.status = PRINTER_STATUS.CONNECTING;
+        await this.connect();
+    }
+
     async printLabel(label) {
         if (this.status !== PRINTER_STATUS.READY && this.status !== PRINTER_STATUS.PRINTING) {
             throw new Error('La impresora no está lista');
         }
 
+        await this.#asegurarConexion();
+
         this.status = PRINTER_STATUS.PRINTING;
         this.lastResponses = [];
         this.bytesSent = 0;
         try {
-            const { data, widthBytes, lines } = this.#rasterizar(label);
-
-            await this.#write(cmdInit());                         await esperar(30);
-            await this.#write(cmdSpeed(this.settings.speed));     await esperar(30);
-            await this.#write(cmdDensity(this.settings.density)); await esperar(30);
-            await this.#write(cmdMediaLabels());                  await esperar(30);
-            await this.#write(cmdRasterHeader(widthBytes, lines));
-
-            const pausaBloque = this.#pausaEntreBloques();
-            for (let i = 0; i < data.length; i += CHUNK_SIZE) {
-                const bloque = data.slice(i, i + CHUNK_SIZE);
-                await this.#write(bloque);
-                this.bytesSent += bloque.length;
-                if (pausaBloque) await esperar(pausaBloque);
+            try {
+                await this.#enviarEtiqueta(label);
+            } catch (err) {
+                if (!/disconnect/i.test(String(err?.message || ''))) throw err;
+                // Se cayo A MEDIA etiqueta. Se manda DE NUEVO COMPLETA, no se
+                // retoma: la impresora perdio el encabezado del trabajo y lo
+                // que salga de la mitad para adelante es un cuadro de basura.
+                console.warn('[M110] Se cayó a media etiqueta; se reconecta y se repite.');
+                await this.#asegurarConexion();
+                this.bytesSent = 0;
+                await this.#enviarEtiqueta(label);
             }
-
-            await esperar(120);
-            await this.#write(cmdFooter());
-
-            // Esperar a que el papel TERMINE de salir antes de dar la etiqueta
-            // por hecha. La cola manda la siguiente en cuanto esto resuelve, y
-            // si la impresora sigue ocupada, esa siguiente se pierde.
-            await esperar(this.tiempoDeImpresionMs());
 
             this.labelsPrinted++;
             this.status = PRINTER_STATUS.READY;
@@ -329,5 +409,32 @@ export class PhomemoM110Adapter {
             this.status = PRINTER_STATUS.ERROR;
             throw err;
         }
+    }
+
+    /** El envio de una etiqueta, de principio a fin. */
+    async #enviarEtiqueta(label) {
+        const { data, widthBytes, lines } = this.#rasterizar(label);
+
+        await this.#write(cmdInit());                         await esperar(30);
+        await this.#write(cmdSpeed(this.settings.speed));     await esperar(30);
+        await this.#write(cmdDensity(this.settings.density)); await esperar(30);
+        await this.#write(cmdMediaLabels());                  await esperar(30);
+        await this.#write(cmdRasterHeader(widthBytes, lines));
+
+        const pausaBloque = this.#pausaEntreBloques();
+        for (let i = 0; i < data.length; i += CHUNK_SIZE) {
+            const bloque = data.slice(i, i + CHUNK_SIZE);
+            await this.#write(bloque);
+            this.bytesSent += bloque.length;
+            if (pausaBloque) await esperar(pausaBloque);
+        }
+
+        await esperar(120);
+        await this.#write(cmdFooter());
+
+        // Esperar a que el papel TERMINE de salir antes de dar la etiqueta
+        // por hecha. La cola manda la siguiente en cuanto esto resuelve, y
+        // si la impresora sigue ocupada, esa siguiente se pierde.
+        await esperar(this.tiempoDeImpresionMs());
     }
 }

@@ -64,6 +64,19 @@ describe('las familias que se cocinan aparte se avisan', () => {
     });
 });
 
+/**
+ * Estas dos cargan ExcelJS —una libreria grande— con un import diferido, y eso
+ * solo se paga la primera vez. Con la suite entera corriendo en paralelo se
+ * pasan de los 5 segundos que vitest da por defecto y fallan por tiempo, no
+ * porque el codigo este mal. Un rojo intermitente ensena a ignorar el rojo, asi
+ * que se les da su propio limite.
+ *
+ * Los 20 segundos tampoco alcanzaron. Corriendo el archivo solo tarda menos de
+ * uno, pero con la suite entera en paralelo la maquina se satura y la carga
+ * diferida de ExcelJS se va larga: fallo dos veces por tiempo con el codigo
+ * intacto. El limite va en el describe —no repetido en cada it— y con aire de
+ * sobra, porque lo que se esta midiendo no es la velocidad sino el contenido.
+ */
 describe('el aviso llega al Excel', () => {
     it('el titulo del menu keto dice que se cocina aparte', async () => {
         const { construirLibroGina } = await import('../utils/excelHojaProduccion.js');
@@ -99,4 +112,4 @@ describe('el aviso llega al Excel', () => {
         });
         expect(String(wb.getWorksheet('Pack Bajo Calorías').getCell('A3').value)).toBe('Menú #1 Pack Bajo Calorías');
     });
-});
+}, 60000);

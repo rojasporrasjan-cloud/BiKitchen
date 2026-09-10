@@ -180,7 +180,23 @@ export function mapPedidosFromLegacy(rawPedidos) {
       return `${original} → ${nuevo}`;
     };
 
-    (p.menu || p.items || []).forEach((item) => {
+    // De las dos listas que puede traer un pedido gana la que TIENE los platos.
+    //
+    // `menu` es el formato viejo y en varios pedidos quedo como un resumen de
+    // una linea, sin proteinas. Como antes se leia `p.menu || p.items`, ese
+    // resumen tapaba a `items`. A Xiomara Vilchez —pack mensual de 5 proteinas
+    // de 250 g— la hoja le imprimia UNA fila que decia "pack mensual proteinas
+    // 250 g" en vez de sus cinco proteinas, y en cocina no habia que preparar.
+    //
+    // Si ninguna de las dos trae detalle se respeta el orden de siempre, para
+    // no cambiarle nada a los pedidos que hoy salen bien.
+    const traeDetalle = (lista) => Array.isArray(lista)
+      && lista.some(it => Array.isArray(it?.proteinas) && it.proteinas.length > 0);
+    const lineasDelPedido = traeDetalle(p.menu) ? p.menu
+      : traeDetalle(p.items) ? p.items
+        : (p.menu || p.items || []);
+
+    lineasDelPedido.forEach((item) => {
       const custom = item.customizations || null;
       // Extraer gramos de size o nombre (ej: "500g" o "Pack 5 Proteínas (250g)")
       const sizeMatch = String(item.size || item.nombre || '').match(/([0-9]+(?:\.[0-9]+)?)\s*g/i);

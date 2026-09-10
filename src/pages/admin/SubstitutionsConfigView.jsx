@@ -101,7 +101,9 @@ function GroupSection({ group, items, onChange }) {
                   onChange={(e) => setInputValue(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder={group.placeholder}
-                  className={`flex-1 border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-orange-400 transition-all ${
+                  /* min-w-0: sin esto el input no puede achicarse por debajo de
+                     su ancho natural y empujaba el boton fuera de la pantalla. */
+                  className={`flex-1 min-w-0 border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-orange-400 transition-all ${
                     dupWarning ? 'border-amber-400 bg-amber-50' : 'border-gray-200'
                   }`}
                 />
@@ -109,7 +111,7 @@ function GroupSection({ group, items, onChange }) {
                   type="button"
                   onClick={handleAdd}
                   disabled={!inputValue.trim()}
-                  className="flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 disabled:bg-gray-200 disabled:text-gray-400 text-white px-4 py-2.5 rounded-xl font-semibold text-sm transition-colors"
+                  className="shrink-0 flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 disabled:bg-gray-200 disabled:text-gray-400 text-white px-4 py-2.5 rounded-xl font-semibold text-sm transition-colors"
                 >
                   <Plus size={16} />
                   Añadir

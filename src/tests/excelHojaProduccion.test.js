@@ -188,19 +188,23 @@ describe('construirLibroGina', () => {
     it('la pestaña de entregas lleva las columnas que ella marca al despachar', () => {
         const wb = construirLibroGina(datosBase({
             entregas: [
-                { cliente: 'Diana Gonzalez', zona: 'Alajuela', paquete: 'Pack Bajo Calorías', cambios: 'sin vainicas' },
-                { cliente: 'Keylin Nuñes', zona: 'Guacima', paquete: 'Full Pack', cambios: '' }
+                { dia: 'MIERCOLES 26', cliente: 'Diana Gonzalez', zona: 'Alajuela', paquete: 'Pack Bajo Calorías', cambios: 'sin vainicas' },
+                { dia: 'MIERCOLES 26', cliente: 'Keylin Nuñes', zona: 'Guacima', paquete: 'Full Pack', cambios: '' }
             ]
         }));
         const ws = wb.getWorksheet('MIERCOLES 26 AGOSTO');
 
+        // La columna "Día" se agregó delante del cliente: con dos fechas en la
+        // misma hoja hay que poder ver cuál bolsa sale hoy y cuál se adelanta.
         expect(ws.getCell('B1').value).toBe('Entregas del MIERCOLES 26 AGOSTO');
         expect(ws.getCell('B2').value).toBe('check');
-        expect(ws.getCell('C2').value).toBe('Cliente');
-        expect(ws.getCell('F2').value).toBe('Cambios');
-        expect(ws.getCell('C3').value).toBe('Diana Gonzalez');
-        expect(ws.getCell('F3').value).toBe('sin vainicas');
-        expect(ws.getCell('C4').value).toBe('Keylin Nuñes');
+        expect(ws.getCell('C2').value).toBe('Día');
+        expect(ws.getCell('D2').value).toBe('Cliente');
+        expect(ws.getCell('G2').value).toBe('Cambios');
+        expect(ws.getCell('C3').value).toBe('MIERCOLES 26');
+        expect(ws.getCell('D3').value).toBe('Diana Gonzalez');
+        expect(ws.getCell('G3').value).toBe('sin vainicas');
+        expect(ws.getCell('D4').value).toBe('Keylin Nuñes');
         expect(textosDe(ws)).toContain('TOTAL: 2 entregas');
     });
 

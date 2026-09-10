@@ -237,3 +237,43 @@ describe('Segmento: packs en curso', () => {
         expect(aplicarSegmento(clientes, 'packEnCurso', { dias: 4 }, HOY)).toEqual([]);
     });
 });
+
+/**
+ * Seis clientes tenían anotado el 8888-8888 porque el pedido llegó por WhatsApp
+ * sin teléfono. Las difusiones agrupan por número, así que salían como UN solo
+ * cliente —con la plata de los seis sumada— y el mensaje de renovación de Gina
+ * habría ido a un número que no existe.
+ */
+describe('El relleno no arma un cliente falso', () => {
+    it('no junta a seis personas distintas bajo el 8888-8888', () => {
+        const clientes = construirClientes([
+            pedido({ cliente: 'Monserrat Gutiérrez', telefono: '88888888', totalValue: 93890 }),
+            pedido({ cliente: 'Josef Diermissen', telefono: '88888888', totalValue: 93890 }),
+            pedido({ cliente: 'Paulo Gomes', telefono: '88888888', totalValue: 162000 }),
+            pedido({ cliente: 'Luis López', telefono: '8888-8888', totalValue: 57000 })
+        ], HOY);
+
+        // Nadie: no hay a quién escribirle. Mejor fuera de la lista que un
+        // contacto inventado que suma la plata de cuatro.
+        expect(clientes).toHaveLength(0);
+    });
+
+    it('tampoco con el relleno del Excel', () => {
+        const clientes = construirClientes([
+            pedido({ cliente: 'Karim Arguedas', telefono: '8000-0001' }),
+            pedido({ cliente: 'Xiomara Vílchez', telefono: '8000-0002' })
+        ], HOY);
+
+        expect(clientes).toHaveLength(0);
+    });
+
+    it('el cliente con teléfono de verdad sigue entrando', () => {
+        const clientes = construirClientes([
+            pedido({ cliente: 'Andrés Víquez', telefono: '8721-6592' }),
+            pedido({ cliente: 'Sin Número', telefono: '88888888' })
+        ], HOY);
+
+        expect(clientes).toHaveLength(1);
+        expect(clientes[0].nombre).toBe('Andrés Víquez');
+    });
+});

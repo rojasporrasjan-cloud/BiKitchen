@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { db } from '../../firebase/config';
-import { collection, query, where, getDocs, onSnapshot, orderBy, doc, getDoc, setDoc } from 'firebase/firestore';
+import { useAuth } from '../../context/AuthContext';
+import { collection, query, where, getDocs, onSnapshot, orderBy, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import {
     mapPedidosFromLegacy,
     buildKitchenSheetData,
@@ -23,6 +24,8 @@ import {
 import { getOfficialMenus, DEFAULT_MENUS } from '../../utils/firestoreMenus';
 import { getScheduleFromOrder } from '../../utils/orderDates';
 import { ESTADOS_QUE_IMPRIMEN } from '../../utils/estadosPedido';
+import { inicioDeVentana, ventanaAUsar, pedidosDeLaHoja } from '../../utils/ventanaDeLaHoja';
+import { anotarLecturas } from '../../utils/contadorFirestore';
 import { revisarHoja } from '../../utils/revisarHoja';
 import {
     sumarAGranel,
@@ -45,16 +48,35 @@ import {
 import { separarComponentes, nombreParaAcumular } from '../../utils/platosCompuestos';
 import { separarPorY, cantidadDeGuarnicion } from '../../utils/guarnicionesSeparadas';
 import { agruparArroces } from '../../utils/agruparArroces';
-import { COLECCION_AJUSTES, aplicarAjustes, cantidadFinal, conAjuste } from '../../utils/ajustesDeCocina';
+import { COLECCION_AJUSTES, aplicarAjustes, cantidadFinal, conAjuste, claveDeRenglon } from '../../utils/ajustesDeCocina';
+import { unidadesPosibles, convertir, desdeUnidad, UNIDADES } from '../../utils/unidadesDeCocina';
 import { cuantoCocinar, parteDeIndividuales } from '../../utils/cuantoCocinar';
+import { COLECCION_PRODUCCION, claveDeProduccion, acumularCocinado, cocinadoDeLaHoja } from '../../utils/produccionAcumulada';
+import { COLECCION_TANDAS, pedidosDeLaTanda, pasaElAdelanto, esRecurrente, acumularEnviados, claveDePedido, canceladosDespuesDeEnviar, cicloDeProduccion } from '../../utils/tandasDeCocina';
+import { familiasPorVolumen, tandaDeCadaPreparacion, conCabecerasDeTanda, cargaPorTanda } from '../../utils/tandasDeEmpaque';
+import { leerAdelanto } from '../../utils/leerAdelantoDeGina';
+import { agregarPestanaDeCocina, agregarPestanaDeEmpaque, agregarPestanaDeAvisos, agregarPestanaDeEmpaquePorPack } from '../../utils/excelCuatroPestanas';
 import RevisionHoja from '../../components/admin/RevisionHoja';
+import { problemasParaLaHoja } from '../../utils/revisionDeLaHoja';
+import { problemasDelMenu } from '../../utils/revisionDeMenus';
+import { leerAsignaciones, guardarAsignaciones } from '../../utils/asignacionesDeCocina';
+import { apartarCambiosEscritos, packsDe } from '../../utils/cambiosEscritos';
+import { marcasDePedidoRepetido, llaveDeCliente } from '../../utils/clientesRepetidos';
+import EditorDePedido from '../../components/admin/EditorDePedido';
+import { cambiosDelPedido, cambioParaCancelar, cuantasProteinasPide } from '../../utils/guardarPedidoDeLaHoja';
+import EditorDeMenu from '../../components/admin/EditorDeMenu';
+import { cambiosDelMenu, platosParaEditar, cambioDeUnPlato } from '../../utils/guardarMenuDeLaHoja';
+import { invalidateCacheByType } from '../../utils/firestoreCache';
+import CeldaEditable from '../../components/admin/CeldaEditable';
+import AgregarClienteAlPack from '../../components/admin/AgregarClienteAlPack';
+import { pedidoNuevo, idParaPedidoNuevo } from '../../utils/agregarPedidoDesdeLaHoja';
 import { individualesData, getProductUnits } from '../../data/individualesData';
 import ExcelJS from 'exceljs';
 import { agregarHojasGina } from '../../utils/excelHojaProduccion';
 import { packSeParteEnAlmuerzoYCena } from '../../utils/labels/labelDomain';
-import { consolidarCocina, formatearCantidad } from '../../utils/cocinaConsolidada';
 import { repartirPlatillos, sugerirCocinera, TIPO_POR_CATEGORIA } from '../../utils/asignacionCocineras';
 import { COCINERAS } from '../../data/cocineras';
+import { separarDesayunos, separarPersonalizadosDePack, agruparCambiosDePack } from '../../utils/desayunosPersonalizados';
 
 import {
     MARGEN_COCINA,
@@ -82,14 +104,79 @@ const MENU_LABELS = {
 };
 
 export default function PrintProductionView() {
-    const [searchParams] = useSearchParams();
+    const [searchParams, setSearchParams] = useSearchParams();
+    const { currentUser } = useAuth();
     const date = searchParams.get('date');
+
+    // La hoja de COCINA puede cubrir varios dias: Gina empieza a cocinar el
+    // jueves para el sabado y el lunes. Se pasan separadas por coma:
+    //   ?date=2026-09-05,2026-09-07&tanda=adelanto
+    const fechas = String(date || '').split(',').map(f => f.trim()).filter(Boolean);
+    const primeraFecha = fechas[0] || '';
+    // `adelanto` = solo mensuales y quincenales, que son los que ya estan
+    // pagados y no dependen de lo que entre esta semana.
+    const soloRecurrentes = searchParams.get('tanda') === 'adelanto';
+    // Adelanto POR FECHA: el viernes el sabado sale completo y del lunes solo
+    // los mensuales y quincenales, en la misma hoja.
+    //   ?date=2026-09-05,2026-09-07&adelanto=2026-09-07
+    const adelantoEnLaUrl = String(searchParams.get('adelanto') || '')
+        .split(',').map(f => f.trim()).filter(Boolean);
+    // Si no se dice cual fecha va recortada, se asume que la PRIMERA va completa
+    // y las demas de adelanto: es como se usa siempre —el sabado entero y del
+    // lunes solo lo que ya esta pagado—. Sin esto, abrir la hoja con dos fechas
+    // y sin `adelanto` dejaba las pestanas del lunes vacias sin decir por que.
+    const fechasDeAdelanto = new Set(
+        adelantoEnLaUrl.length > 0 ? adelantoEnLaUrl : fechas.slice(1)
+    );
+    // Del dia de adelanto se puede traer UNA sola familia de packs. Los bajo
+    // calorias son los mas del lunes y se pueden dejar hechos el viernes; el
+    // resto pasa demasiado tiempo guardado.
+    //   ?date=2026-09-05,2026-09-07&soloPacks=bajoCalorias
+    const soloPacks = searchParams.get('soloPacks') || '';
+
+    /**
+     * El proximo dia de reparto despues del primero de la hoja.
+     *
+     * Se reparte lunes, miercoles y sabado. Del sabado el que sigue es el
+     * lunes, que es justo el que se adelanta.
+     */
+    /** "lunes 7" — para los textos del control de arriba. */
+    const nombreDelDiaCorto = (f) => {
+        const d = new Date(`${f}T12:00:00`);
+        if (Number.isNaN(d.getTime())) return String(f);
+        const dias = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+        return `${dias[d.getDay()]} ${d.getDate()}`;
+    };
+
+    const proximoDiaDeReparto = (desde) => {
+        const d = new Date(`${desde}T12:00:00`);
+        if (Number.isNaN(d.getTime())) return '';
+        for (let i = 1; i <= 7; i++) {
+            const x = new Date(d);
+            x.setDate(x.getDate() + i);
+            if ([1, 3, 6].includes(x.getDay())) return x.toISOString().split('T')[0];
+        }
+        return '';
+    };
+    // La llave de la tanda NO sale de la URL, sale del CICLO de produccion.
+    //
+    // Las tres hojas del mismo ciclo se abren distinto —la del jueves con
+    // `soloPacks`, la del viernes sin el, la del sabado con una sola fecha— y
+    // cuando la llave se armaba con las fechas mas la familia cada una generaba
+    // una llave propia. Ninguna veia a la anterior: el viernes se le volvia a
+    // pedir a la cocina todo lo que ya habia hecho el jueves y las cantidades
+    // adelantadas no se descontaban.
+    const claveDeTanda = cicloDeProduccion(fechas);
+
+    const [yaEnviados, setYaEnviados] = useState([]);
+    const [tandasPrevias, setTandasPrevias] = useState([]);
     const viewMode = searchParams.get('view') || 'all';
 
     // Lo que Gina corrige a mano sobre la hoja de cocina. Se guarda por fecha y
     // manda sobre el calculo: ella es la que ve si el numero esta mal.
     const [ajustesCocina, setAjustesCocina] = useState({});
     const [guardandoAjuste, setGuardandoAjuste] = useState(false);
+    const [descargando, setDescargando] = useState(false);
     const [errorDeAjuste, setErrorDeAjuste] = useState('');
 
     useEffect(() => {
@@ -100,6 +187,65 @@ export default function PrintProductionView() {
             .catch(err => console.error('[Cocina] No se pudieron leer los ajustes:', err));
         return () => { vigente = false; };
     }, [date]);
+
+    const [guardandoTanda, setGuardandoTanda] = useState(false);
+
+    /**
+     * Deja anotado que ESTOS pedidos ya se le mandaron a la cocina.
+     *
+     * Es lo unico que hace que la hoja del viernes no repita lo del miercoles.
+     * Se guarda al MANDARLA, no al imprimirla: una hoja impresa y descartada no
+     * deberia descontar nada.
+     */
+    const marcarTandaEnviada = async () => {
+        if (cleanOrders.length === 0) return;
+        const cuantos = cleanOrders.length;
+        if (!window.confirm(
+            `Marcar como enviados a cocina ${cuantos} pedido${cuantos === 1 ? '' : 's'} de ${fechas.join(' y ')}.
+
+` +
+            'La próxima hoja de cocina ya NO los va a incluir. Solo hacelo cuando de verdad le hayás mandado esta hoja a Gina.'
+        )) return;
+
+        setGuardandoTanda(true);
+        try {
+            await setDoc(doc(collection(db, COLECCION_TANDAS)), {
+                clave: claveDeTanda,
+                fechas,
+                soloRecurrentes,
+                pedidos: cleanOrders.map(claveDePedido),
+                cuantos,
+                // Cuanto se va a cocinar de cada preparacion, con las
+                // correcciones de Gina ya puestas. Sin esto, cocinar de mas a
+                // proposito —"dejar 5 kg para el sabado"— no se le descuenta a
+                // la hoja siguiente y se cocina dos veces.
+                cocinado: cocinadoDeLaHoja(bulkItems.map(r => ({
+                    name: r.name, unit: r.unit,
+                    aCocinar: cantidadFinal(r, cantidadACocinar(r))
+                }))),
+                enviada: new Date().toISOString()
+            });
+            const previas = [...tandasPrevias, {
+                pedidos: cleanOrders.map(claveDePedido),
+                // La hora tiene que venir tambien en la copia de memoria, o el
+                // recuadro de arriba decia "ya se mando" sin poder decir cuando,
+                // que es justo lo que uno quiere confirmar.
+                enviada: new Date().toISOString(),
+                cocinado: cocinadoDeLaHoja(bulkItems.map(r => ({
+                    name: r.name, unit: r.unit,
+                    aCocinar: cantidadFinal(r, cantidadACocinar(r))
+                })))
+            }];
+            setTandasPrevias(previas);
+            setYaEnviados(acumularEnviados(previas));
+        } catch (err) {
+            console.error('[Cocina] No se pudo guardar la tanda:', err);
+            alert(err?.code === 'permission-denied'
+                ? 'Firebase no deja guardar las tandas todavía. Falta publicar la regla de `tandas_cocina`.'
+                : 'No se pudo guardar. Revisá la conexión e intentá de nuevo.');
+        }
+        setGuardandoTanda(false);
+    };
 
     const guardarAjuste = async (nombre, unidad, cambio) => {
         const previos = ajustesCocina;
@@ -126,19 +272,184 @@ export default function PrintProductionView() {
         }
         setGuardandoAjuste(false);
     };
-    const [orders, setOrders] = useState([]);
+    // Lo que trajo la VENTANA de consulta, sin filtrar por la fecha de la hoja.
+    // Cambiar de fecha ya no vuelve a consultar: se filtra esto en memoria.
+    const [pedidosDeLaVentana, setPedidosDeLaVentana] = useState([]);
+    const [ventanaCargada, setVentanaCargada] = useState('');
     const [officialMenus, setOfficialMenus] = useState(null);
     const [loading, setLoading] = useState(true);
     const [empaqueTab, setEmpaqueTab] = useState('packs');
-    const [kitchenAssignments, setKitchenAssignments] = useState({});
+    // El reparto de estaciones se guarda POR FECHA y se recupera al abrir.
+    //
+    // Antes vivia solo en memoria: se repartian cuarenta platillos, se cerraba
+    // la pagina y se perdia todo. Volver el sabado a la hoja del lunes era
+    // repartir de cero, o imprimir con "SIN ASIGNAR" en media hoja.
+    const [kitchenAssignments, setKitchenAssignments] = useState(
+        () => leerAsignaciones(String(date || '').split(',')[0].trim())
+    );
     const [categoryCookInputs, setCategoryCookInputs] = useState({});
+
+    // El pedido que se esta arreglando desde la hoja, o null.
+    const [pedidoEnEdicion, setPedidoEnEdicion] = useState(null);
+
+    /**
+     * Abre el editor con el pedido crudo, buscado por nombre de cliente.
+     *
+     * Se busca en `cleanOrders` y se usa `rawPedido` porque lo que hay que
+     * escribir es el documento tal cual esta guardado, no la version que la
+     * hoja transformo para mostrar.
+     */
+    const abrirEditor = (pedidoId, nombreCliente) => {
+        // Por id primero: un cliente puede tener dos pedidos el mismo dia y por
+        // nombre se abria el que no era. El nombre queda de respaldo.
+        const enLaHoja = (pedidoId && cleanOrders.find(o => (o.rawPedido?.id || o.id) === pedidoId))
+            || cleanOrders.find(o =>
+                String(o.cliente || o.nombre || '').trim().toLowerCase()
+                === String(nombreCliente || '').trim().toLowerCase());
+        const crudo = enLaHoja?.rawPedido || enLaHoja;
+        if (!crudo?.id) return;
+        const plan = crudo.plan || crudo.tipoMenu || '';
+        setPedidoEnEdicion({
+            id: crudo.id,
+            cliente: crudo.cliente || nombreCliente,
+            plan,
+            observaciones: crudo.observaciones || '',
+            items: crudo.items || [],
+            proteinas: crudo.items?.[0]?.proteinas || [],
+            cuantasProteinas: cuantasProteinasPide(plan)
+        });
+    };
+
+    const guardarEdicion = async (edicion) => {
+        const cambios = cambiosDelPedido(pedidoEnEdicion, edicion);
+        if (!cambios) return;
+        await updateDoc(doc(db, 'pedidos', pedidoEnEdicion.id), cambios);
+    };
+
+    const cancelarPedidoDeLaHoja = async () => {
+        await updateDoc(doc(db, 'pedidos', pedidoEnEdicion.id), cambioParaCancelar());
+    };
+
+    /**
+     * Guarda UNA celda del menu editada en la tabla de la hoja.
+     *
+     * `packName` es como se ve en la hoja —"CENAS - PACK SIN CARBOS"— y hay que
+     * traducirlo a la clave del documento antes de escribir.
+     */
+    const guardarCeldaDeMenu = async (packName, numeroPlato, campo, valor) => {
+        const esCena = /^CENAS\s*-/i.test(String(packName || ''));
+        const base = String(packName || '').replace(/^CENAS\s*-\s*/i, '').trim();
+        const familia = mapPackNameToMenuKey(base);
+        const cambios = cambioDeUnPlato({ familia, esCena, numeroPlato, campo, valor, menus: officialMenus });
+        if (!cambios) return;
+
+        await updateDoc(doc(db, 'menus_oficial', 'current'), cambios);
+        // Sin esto la pagina vuelve a servir el menu viejo de su cache la
+        // proxima vez que cargue: el campo `meta.invalidateCache` es solo una
+        // marca en el documento, no borra nada del navegador. Paso de verdad al
+        // corregir el typo de los chayotes: Firestore quedo bien y la hoja
+        // siguio imprimiendo lo anterior.
+        invalidateCacheByType('menus_official');
+        setOfficialMenus(prev => {
+            const copia = { ...prev };
+            if (esCena) copia.cena = { ...(copia.cena || {}), [familia]: cambios[`cena.${familia}`] };
+            else copia[familia] = cambios[familia];
+            return copia;
+        });
+    };
+
+    // El pack al que se le esta agregando un cliente, o null.
+    const [packParaAgregar, setPackParaAgregar] = useState(null);
+
+    const agregarClienteAlPack = async (datos) => {
+        const fecha = fechas[0] || date;
+        const id = idParaPedidoNuevo(fecha, datos.cliente);
+        await setDoc(doc(db, 'pedidos', id), pedidoNuevo({
+            ...datos,
+            plan: packParaAgregar,
+            fecha,
+            quien: currentUser?.email || 'hoja-produccion'
+        }));
+    };
+
+    // El menu de la semana que se esta corrigiendo, o null.
+    const [menuEnEdicion, setMenuEnEdicion] = useState(null);
+
+    /**
+     * Abre el editor del menu de una familia.
+     *
+     * `familia` es la clave del documento —sinCarbos, regular, fullPack— y no
+     * el titulo que se ve en la hoja, que viene con mayusculas y a veces con el
+     * prefijo "CENAS -".
+     */
+    const abrirMenu = (familia, esCena, titulo, cuantosClientes) => {
+        if (!officialMenus || !familia) return;
+        setMenuEnEdicion({
+            familia, esCena, titulo, cuantosClientes,
+            platos: platosParaEditar(officialMenus, familia, esCena)
+        });
+    };
+
+    const guardarMenuEditado = async (platos) => {
+        const cambios = cambiosDelMenu({
+            familia: menuEnEdicion.familia,
+            esCena: menuEnEdicion.esCena,
+            platos,
+            menus: officialMenus
+        });
+        if (!cambios) return;
+        await updateDoc(doc(db, 'menus_oficial', 'current'), cambios);
+        invalidateCacheByType('menus_official');
+        // La hoja lee de `officialMenus`: sin esto habria que recargar para ver
+        // el cambio que uno acaba de hacer.
+        setOfficialMenus(prev => {
+            const copia = { ...prev };
+            if (menuEnEdicion.esCena) {
+                copia.cena = { ...(copia.cena || {}), [menuEnEdicion.familia]: cambios[`cena.${menuEnEdicion.familia}`] };
+            } else {
+                copia[menuEnEdicion.familia] = cambios[menuEnEdicion.familia];
+            }
+            return copia;
+        });
+    };
+
+    // Al cambiar de dia se trae el reparto de ESE dia, no el de antes
+    useEffect(() => {
+        setKitchenAssignments(leerAsignaciones(fechas[0]));
+    }, [fechas[0]]);
+
+    /**
+     * Cambia el reparto y lo guarda en el mismo paso.
+     *
+     * Se guarda ACA y no en un useEffect a proposito. Con el efecto habia una
+     * carrera: al cambiar de dia, la fecha cambiaba antes que el estado, asi
+     * que el reparto del miercoles se guardaba encima del sabado y despues se
+     * leia ya pisado.
+     */
+    const cambiarAsignaciones = (cambio) => {
+        setKitchenAssignments(prev => {
+            const siguiente = typeof cambio === 'function' ? cambio(prev) : cambio;
+            guardarAsignaciones(fechas[0], siguiente);
+            return siguiente;
+        });
+    };
     const [resumenReparto, setResumenReparto] = useState(null);
     // Platos que Gina dijo que son el mismo. Se guardan en el navegador para
     // no tener que rehacerlas cada semana.
     const [unionesDePlatos, setUnionesDePlatos] = useState(() => leerUniones());
+    // El Excel del adelanto que Gina llena a mano el jueves. Se carga desde la
+    // pantalla porque no vive en Firestore: es un archivo suyo.
+    const [adelantoDeGina, setAdelantoDeGina] = useState(null);
+    const [errorDeAdelanto, setErrorDeAdelanto] = useState('');
+    // Ver la hoja SIN descontar nada: las cantidades completas del dia. Es como
+    // Gina revisa que no falte, antes de mirar cuanto le queda por hacer.
+    const [sinRebaja, setSinRebaja] = useState(true);
+    // Los controles finos —sumar el adelanto, que familia traer— los deja
+    // puestos el boton del dia. Se esconden porque eran cinco botones mas en una
+    // pantalla que ya tenia demasiados: "hay mucho desorden" (Jan).
+    const [verAjustes, setVerAjustes] = useState(false);
     const [selectedKitchenItems, setSelectedKitchenItems] = useState([]);
     const [bulkSelectedCook, setBulkSelectedCook] = useState('');
-    const [importingExcel, setImportingExcel] = useState(false);
 
     const resolvePlatosForPack = (packName, packData) => {
         const isCenaSheet = packName.startsWith('CENAS -');
@@ -187,52 +498,49 @@ export default function PrintProductionView() {
         return rawPlatos || [];
     };
 
-    const handleCargarMenuExcel19Agosto = async () => {
-        if (!window.confirm('¿Deseas cargar los 6 pedidos personalizados del Excel (Carolina Laurito, Christian Vargas, Beatriz González, Mariana Salas, Sonia Oreamuno, Bryan Ocampo) directamente para el 19 de Agosto en la Hoja de Producción?')) return;
-        setImportingExcel(true);
-        try {
-            await cargarPedidosExcel19Agosto(db);
-            alert('¡Los 6 pedidos personalizados del Excel han sido creados e ingresados exitosamente a la Hoja de Producción!');
-            window.location.reload();
-        } catch (err) {
-            console.error('Error al cargar pedidos del Excel:', err);
-            alert('Ocurrió un error al guardar los pedidos en Firestore: ' + err.message);
-        } finally {
-            setImportingExcel(false);
-        }
-    };
 
+    // La ventana solo se amplia hacia ATRAS. Avanzar en la semana —del sabado al
+    // lunes— pide una ventana que empieza DESPUES, y lo que ya esta cargado la
+    // contiene: no hace falta volver a consultar. Antes cada cambio de fecha
+    // bajaba los ~545 pedidos otra vez, y asi se agoto la cuota del 9 de
+    // setiembre de 2026 cambiando de hoja.
+    useEffect(() => {
+        const necesaria = inicioDeVentana(primeraFecha);
+        if (!necesaria) return;
+        setVentanaCargada(prev => ventanaAUsar(prev, necesaria));
+    }, [primeraFecha]);
+
+    // Los menus si dependen de la fecha de la hoja, no de la ventana.
     useEffect(() => {
         if (!date) return;
+        getOfficialMenus().then(menus => setOfficialMenus(menus)).catch(console.error);
+    }, [date]);
+
+    useEffect(() => {
+        if (!ventanaCargada) return;
         setLoading(true);
-        const targetDate = new Date(date + "T12:00:00");
-        const pastDate = new Date(targetDate);
-        pastDate.setDate(pastDate.getDate() - 40); // Buscar hasta 40 días atrás para mensualidades
-        const pastDateStr = pastDate.toISOString().split('T')[0];
 
         const q = query(
             collection(db, "pedidos"),
-            where("fecha_entrega", ">=", pastDateStr)
+            where("fecha_entrega", ">=", ventanaCargada)
         );
-
-        // Cargar menús oficiales
-        getOfficialMenus().then(menus => setOfficialMenus(menus)).catch(console.error);
 
         // Listener en tiempo real: cualquier cambio en observaciones o pedidos se refleja al instante
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            let rawOrders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            // Esta es la pantalla mas cara del panel y la que agoto la cuota el 3
+            // de setiembre de 2026: cada apertura se baja los ~545 pedidos. Sin
+            // anotarlo, el contador de la barra marcaba 0% mientras se gastaba
+            // todo, que fue justo lo que no dejo verlo venir.
+            //
+            // Se cuentan los CAMBIOS y no `snapshot.size`: la primera vez traen
+            // lo mismo —todos los documentos llegan como 'added'—, pero despues
+            // el listener solo cobra lo que cambio, y sumar el total en cada
+            // refresco inflaria la cuenta hasta volverla inservible.
+            anotarLecturas(snapshot.docChanges().length, 'Hoja de producción');
 
-            rawOrders = rawOrders.filter(order => {
-                const status = (order.status || order.estado || '').toLowerCase();
-                if (!ESTADOS_QUE_IMPRIMEN.includes(status)) return false;
-
-                const schedule = getScheduleFromOrder(order);
-                return schedule.includes(date);
-            });
-
-            rawOrders.sort((a, b) => (a.cliente || '').localeCompare(b.cliente || ''));
-
-            setOrders(mapPedidosFromLegacy(rawOrders));
+            // Se guarda CRUDO. El filtro por fecha vive en `orders`, mas abajo:
+            // asi cambiar de dia no cuesta una consulta nueva.
+            setPedidosDeLaVentana(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
             setLoading(false);
         }, (error) => {
             console.error("Error in real-time orders listener:", error);
@@ -240,26 +548,45 @@ export default function PrintProductionView() {
         });
 
         return () => unsubscribe();
-    }, [date]);
+    }, [ventanaCargada]);
+
+    /**
+     * Los pedidos de ESTA hoja, filtrados en memoria.
+     *
+     * Es el mismo filtro que antes corria dentro del `onSnapshot`; lo unico que
+     * cambia es DONDE corre. Al depender de `date` y no de la consulta, pasar de
+     * la hoja del sabado a la del lunes no gasta ni una lectura.
+     */
+    const orders = useMemo(
+        () => mapPedidosFromLegacy(pedidosDeLaHoja(pedidosDeLaVentana, fechas, {
+            estadosQueImprimen: ESTADOS_QUE_IMPRIMEN,
+            calendario: getScheduleFromOrder
+        })),
+        [pedidosDeLaVentana, date]
+    );
+
+    // Que pedidos ya se le mandaron a la cocina en tandas anteriores. Sin esto
+    // la hoja del viernes repetiria lo del miercoles y se cocinaria dos veces.
+    useEffect(() => {
+        if (!claveDeTanda) return;
+        let vigente = true;
+        getDocs(query(collection(db, COLECCION_TANDAS), where('clave', '==', claveDeTanda)))
+            .then(snap => {
+                if (!vigente) return;
+                const previas = snap.docs.map(d => d.data());
+                setTandasPrevias(previas);
+                setYaEnviados(acumularEnviados(previas));
+            })
+            .catch(err => console.error('[Cocina] No se pudieron leer las tandas:', err));
+        return () => { vigente = false; };
+    }, [claveDeTanda]);
 
 
-    if (!date) return <div className="p-8 text-center text-xl">Falta la fecha en la URL</div>;
+    if (!fechas.length) return <div className="p-8 text-center text-xl">Falta la fecha en la URL</div>;
     if (loading) return <div className="p-8 text-center text-xl">Cargando datos para impresión...</div>;
     if (orders.length === 0) return (
         <div className="p-8 text-center text-xl space-y-6 max-w-2xl mx-auto mt-12 bg-white p-6 rounded-2xl shadow-xl border border-gray-100">
             <div className="text-gray-700 font-semibold">No se encontraron pedidos registrados para el: <span className="text-purple-600 font-black">{date}</span></div>
-            {date === '2026-08-19' && (
-                <div className="pt-4 border-t border-gray-100">
-                    <p className="text-sm text-gray-500 mb-4">¿Querés ingresar automáticamente los 6 menús personalizados del Excel a la producción de esta fecha?</p>
-                    <button
-                        onClick={handleCargarMenuExcel19Agosto}
-                        disabled={importingExcel}
-                        className="w-full py-4 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-base rounded-xl font-bold transition shadow-lg flex items-center justify-center gap-3 cursor-pointer"
-                    >
-                        {importingExcel ? '⏳ Cargando pedidos a la base de datos...' : '⚡ Cargar Automáticamente 6 Menús Personalizados Excel (19 Agosto)'}
-                    </button>
-                </div>
-            )}
         </div>
     );
 
@@ -267,14 +594,157 @@ export default function PrintProductionView() {
     // que se descartaron por parecerse a otro. La revision tiene que mirar lo
     // que se cocina, no lo que entro: antes contaba `orders` y el panel decia
     // "21 pedidos" cuando a la cocina llegaban 18.
-    const { pedidos: cleanOrders, fusionados } = deduplicateOrdersByClient(orders);
+    const { pedidos: todosLosPedidos, fusionados } = deduplicateOrdersByClient(orders);
+
+    // La COCINA recibe la hoja por tandas: el miercoles los mensuales y
+    // quincenales, el viernes y el sabado lo que fue entrando. Cada hoja lleva
+    // SOLO lo que no se mando antes, o se cocina dos veces.
+    //
+    // El EMPAQUE y las etiquetas no se tocan: esos siguen saliendo completos
+    // por fecha de entrega, que es como se reparten.
+    const calendarioDelPedido = (p) => getScheduleFromOrder(p.rawPedido || p);
+
+    /** "SÁB 5" / "LUN 7", para marcar de que dia es cada cliente. */
+    const etiquetaDelDia = (f) => {
+        const d = new Date(`${f}T12:00:00`);
+        if (Number.isNaN(d.getTime())) return '';
+        const dias = ['DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB'];
+        return `${dias[d.getDay()]} ${d.getDate()}`;
+    };
+
+    /**
+     * De que dia es la comida de este cliente.
+     *
+     * Cuando la hoja cubre el sabado y el adelanto del lunes, los dos caen en la
+     * misma tabla y no habia como saber cual bolsa sale hoy. Con una sola fecha
+     * no se muestra: el titulo ya lo dice y repetirlo en cada fila es ruido.
+     */
+    /**
+     * La primera fecha de este cliente dentro de la hoja, para poder ordenar.
+     *
+     * Empaque los arma DE CORRIDA por dia: primero todos los del sabado, que se
+     * cierran hoy, y despues los del lunes, que van a refri sin cerrar porque
+     * todavia les faltan cenas y desayunos. Intercalados obligan a leer el dia
+     * en cada nombre y a saltar entre dos montones.
+     *
+     *   "Corrida del sabado, corrida del lunes, y ya los del lunes quedan
+     *    guardados" — Jan, 9 de setiembre de 2026.
+     */
+    const primerDiaDelCliente = (c) => {
+        for (const fuente of [c?.rawPedido?.rawPedido, c?.rawPedido, c]) {
+            if (!fuente) continue;
+            const suyas = (calendarioDelPedido(fuente) || []).filter(f => fechas.includes(f));
+            if (suyas.length > 0) return suyas.slice().sort()[0];
+        }
+        return '';
+    };
+
+    /** Ordena una lista de clientes por dia de entrega, respetando el resto. */
+    const porDiaDeEntrega = (clientes) => (clientes || []).slice().sort((a, b) => {
+        const fa = primerDiaDelCliente(a);
+        const fb = primerDiaDelCliente(b);
+        if (fa === fb) return 0;
+        if (!fa) return 1;
+        if (!fb) return -1;
+        return fa < fb ? -1 : 1;
+    });
+
+    const diaDelCliente = (c) => {
+        if (fechas.length < 2) return '';
+        // El pedido no siempre queda a la misma profundidad: segun por donde
+        // pase —pack normal, pack familiar, bloque de cambios— el cliente trae
+        // el pedido en `rawPedido`, en `rawPedido.rawPedido`, o en el mismo
+        // objeto. Se prueban los tres y gana el primero que tenga fechas de
+        // esta hoja: si no, el dia salia vacio justo en los bloques donde mas
+        // hace falta —Rebeca Toval es del sabado y su bloque no lo decia—.
+        for (const fuente of [c?.rawPedido?.rawPedido, c?.rawPedido, c]) {
+            if (!fuente) continue;
+            const suyas = (calendarioDelPedido(fuente) || []).filter(f => fechas.includes(f));
+            if (suyas.length > 0) return ` · ${suyas.map(etiquetaDelDia).join(' + ')}`;
+        }
+        return '';
+    };
+
+    /** Si se pidio adelantar una sola familia, cual pedido califica. */
+    const familiaPermitida = soloPacks
+        ? (p) => mapPackNameToMenuKey(p.plan || p.tipoMenu || '') === soloPacks
+        : null;
+
+    /** Si TODAS las entregas de este pedido caen en un dia de adelanto. */
+    const esSoloDeAdelanto = (p) => {
+        if (fechasDeAdelanto.size === 0) return false;
+        const suyas = (calendarioDelPedido(p) || []).filter(f => fechas.includes(f));
+        return suyas.length > 0 && suyas.every(f => fechasDeAdelanto.has(f));
+    };
+
+    /**
+     * De un dia de adelanto se alistan los PACKS, pero no los desayunos.
+     *
+     * Un pack de almuerzos se puede dejar hecho; un gallo pinto con huevo no.
+     * Lo confirmo Gina: del lunes no se preparan desayunos. Sin esto, la hoja
+     * pedia 35 desayunos que nadie iba a hacer.
+     *
+     * Se quita el desayuno del pedido, no el pedido: el cliente igual lleva su
+     * pack de almuerzos ese dia.
+     */
+    const sinDesayunosDeAdelanto = (pedidos) => pedidos
+        // Un pack que es SOLO desayunos no se adelanta del todo
+        .filter(p => !(esSoloDeAdelanto(p) && mapPackNameToMenuKey(p.plan || p.tipoMenu || '') === 'desayuno'))
+        .map(p => (esSoloDeAdelanto(p) ? { ...p, incluyeDesayuno: false, packsDesayuno: 0 } : p));
+
+    // "Ver TODO" tiene que apagar los DOS descuentos, no uno solo:
+    //
+    //   `yaEnviados`  saca pedidos ENTEROS que ya se mandaron a cocinar
+    //   `yaCocinado`  resta CANTIDADES que ya estan hechas
+    //
+    // Apagando solo el segundo, la hoja salia casi vacia —solo los individuales
+    // que entraron despues— y parecia que no habia nada que cocinar.
+    const { nuevos: cleanOrders, repetidos: yaEnLaCocina } = pedidosDeLaTanda(
+        sinDesayunosDeAdelanto(todosLosPedidos),
+        sinRebaja ? [] : yaEnviados,
+        { soloRecurrentes, calendario: calendarioDelPedido, fechas, fechasDeAdelanto, familiaPermitida }
+    );
+
+    // El empaque sigue saliendo por fecha de entrega, pero si una fecha va como
+    // adelanto tambien se recorta ahi: de lunes solo se empacan los mensuales y
+    // quincenales, que son los unicos que se cocinaron.
+    const pedidosParaEmpaque = sinDesayunosDeAdelanto(
+        todosLosPedidos.filter(p =>
+            pasaElAdelanto(p, { fechas, fechasDeAdelanto, calendario: calendarioDelPedido, familiaPermitida })
+        )
+    );
+    // El aviso de "se cancelo despues de mandarse" solo tiene sentido si la hoja
+    // cubre el CICLO entero. Abriendo un solo dia —el lunes suelto, cuando la
+    // tanda se mando por sabado y lunes juntos— los pedidos del sabado no estan
+    // cargados y parecian cancelados: salian 15 avisos falsos de una vez y el
+    // aviso de verdad se perdia entre ellos.
+    const cubreElCicloEntero = claveDeTanda
+        ? claveDeTanda.split('_').every(f => fechas.includes(f))
+        : false;
+    const canceladosYaCocinados = cubreElCicloEntero
+        ? canceladosDespuesDeEnviar(yaEnviados, todosLosPedidos)
+        : [];
+
     const kitchenData = buildKitchenSheetData(cleanOrders, {});
-    const packagingData = buildPackagingSheetData(cleanOrders, {}, null);
+    const packagingData = buildPackagingSheetData(pedidosParaEmpaque, {}, null);
+    // Lo mismo pero solo con los de la tanda, para la tabla de produccion.
+    const cocinaData = buildPackagingSheetData(cleanOrders, {}, null);
 
     // Group packaging data by Pack
+    //
+    // Se arman DOS mapas con la misma logica:
+    //   packsMap        -> todos los pedidos por fecha de entrega. Es el del EMPAQUE.
+    //   packsMapCocina  -> solo los de esta tanda. Es el de la COCINA.
+    //
+    // Antes habia uno solo, hecho con todos los pedidos, y la tabla de produccion
+    // lo usaba: el adelanto del jueves le pedia a Gina las cantidades de la SEMANA
+    // ENTERA aunque el encabezado dijera "54 pedidos". Cocinaba de mas el jueves y
+    // la hoja del viernes se lo volvia a pedir.
     const packsMap = {};
+    const packsMapCocina = {};
 
-    const addClientToPackMap = (pName, cData, overridePlates = null) => {
+    const addClientToPackMap = (mapa, pName, cData, overridePlates = null) => {
+        const packsMap = mapa;
         if (!packsMap[pName]) {
             packsMap[pName] = { name: pName, clientes: [], platosBase: [], totalPacks: 0 };
         }
@@ -300,6 +770,11 @@ export default function PrintProductionView() {
                 observaciones: cData.observaciones || '',
                 platos: overridePlates !== null ? overridePlates : (cData.platos || []),
                 zona_envio: cData.zona_envio || cData.rawPedido?.zona_envio || '',
+                // La nota SIN filtrar para empaque. `observaciones` ya paso por
+                // notaParaEmpaque, que la parte en las rayas y bota lo que parece
+                // apunte interno; eso se comia cambios de plato de verdad —a Allan
+                // Quesada le borraba "cambiar gallo pinto por burritos"—.
+                observacionesOriginales: cData.observacionesOriginales || cData.observaciones || '',
                 incluyeDesayuno: !!cData.incluyeDesayuno,
                 categoria: cData.categoria || '',
                 categoryLabel: cData.categoryLabel || '',
@@ -327,7 +802,7 @@ export default function PrintProductionView() {
         return true;
     };
 
-    packagingData.clientes.forEach((c) => {
+    const llenarMapaDePacks = (clientes, mapa) => clientes.forEach((c) => {
         // El MISMO criterio que usa el resto de la hoja. Antes acá se pedía que el
         // plan dijera "individual", y el de un pedido de individuales es el nombre
         // del PRIMER plato: el de Larissa Serendero decía "Cochinita pibil". Al no
@@ -402,7 +877,14 @@ export default function PrintProductionView() {
                 || nameLower.includes('desayuno gratis');
             const obsHasBreakfast = obsLower.includes('desayun') && (obsLower.includes('regalía') || obsLower.includes('regalia') || obsLower.includes('lleva') || obsLower.includes('con desayunos'));
 
-            const orderPlanText = `${c.plan || ''} ${c.tipoMenu || ''} ${c.categoryLabel || ''} ${c.categoria || ''} ${c.rawPedido?.plan || ''} ${c.rawPedido?.tipoMenu || ''}`;
+            // El `categoryLabel` DEL ITEM es donde el checkout de la web guarda
+            // "Almuerzo y Cena". El plan del pedido queda en "Full Pack" a secas,
+            // asi que sin esto el Full Pack mensual de almuerzo y cena de Diego
+            // Andres Flores —₡223.960, tres entregas por delante— salia en la
+            // hoja del miercoles con cinco almuerzos y NINGUNA cena.
+            const categoriasDeItems = ((c.rawPedido?.items || c.items || []))
+                .map(i => i?.categoryLabel || '').filter(Boolean).join(' ');
+            const orderPlanText = `${c.plan || ''} ${c.tipoMenu || ''} ${c.categoryLabel || ''} ${c.categoria || ''} ${c.rawPedido?.plan || ''} ${c.rawPedido?.tipoMenu || ''} ${categoriasDeItems}`;
             const combinedText = `${nameLower} ${obsLower} ${orderPlanText.toLowerCase()}`;
             // La regla vive en labelDomain para que la hoja y las etiquetas no puedan
             // contradecirse: antes esta vista contaba "two pack" como cena y el
@@ -439,7 +921,7 @@ export default function PrintProductionView() {
                 // Copia para la tabla de ALMUERZOS → decir que también lleva cena
                 const almuerzoClient = { ...clientForPack };
                 almuerzoClient.observaciones = appendTagUnique(cleanObs, 'Lleva cena');
-                addClientToPackMap(packName, almuerzoClient, filteredPlates.length > 0 ? filteredPlates : null);
+                addClientToPackMap(mapa, packName, almuerzoClient, filteredPlates.length > 0 ? filteredPlates : null);
 
                 // Copia para la tabla de CENAS → decir qué pack de almuerzo lleva (SIN los cambios específicos del menú de almuerzo)
                 const menuKey = mapPackNameToMenuKey(packName);
@@ -447,10 +929,10 @@ export default function PrintProductionView() {
                 const cenaClient = { ...clientForPack };
                 const cleanCenaObs = filterObsForCenas(cleanObs);
                 cenaClient.observaciones = appendTagUnique(cleanCenaObs, `Lleva ${packLabel}`);
-                addClientToPackMap(`CENAS - ${packName}`, cenaClient, null);
+                addClientToPackMap(mapa, `CENAS - ${packName}`, cenaClient, null);
             } else {
                 const normClient = { ...clientForPack, observaciones: cleanObs };
-                addClientToPackMap(packName, normClient, filteredPlates.length > 0 ? filteredPlates : null);
+                addClientToPackMap(mapa, packName, normClient, filteredPlates.length > 0 ? filteredPlates : null);
             }
 
             const menuKey = mapPackNameToMenuKey(packName);
@@ -463,11 +945,16 @@ export default function PrintProductionView() {
                 // Los packs de desayuno se cuentan aparte: Christopher lleva UN
                 // personalizado de almuerzo y DOS packs de desayunos.
                 const packsDeDesayuno = Number(c.packsDesayuno) > 0 ? Number(c.packsDesayuno) : totalQty;
-                const desClient = { ...clientForPack, observaciones: cleanObs };
-                addClientToPackMap('Pack de Desayunos', { ...desClient, cantidadMenus: packsDeDesayuno }, []);
+                const desClient = { ...clientForPack, observaciones: cleanObs, observacionesOriginales: c.observaciones || '' };
+                addClientToPackMap(mapa, 'Pack de Desayunos', { ...desClient, cantidadMenus: packsDeDesayuno }, []);
             }
         });
     });
+
+    // El empaque lleva TODOS los pedidos de esas fechas: es como se reparte.
+    llenarMapaDePacks(packagingData.clientes, packsMap);
+    // La cocina lleva solo los de esta tanda: es lo que hay que cocinar hoy.
+    llenarMapaDePacks(cocinaData.clientes, packsMapCocina);
 
     const allPackNames = Object.keys(packsMap).sort();
     const isDesayunoPack = (n) => mapPackNameToMenuKey(n) === 'desayuno';
@@ -480,6 +967,39 @@ export default function PrintProductionView() {
 
     const consolidatedPacksMap = {};
     const packNameToConsolidated = {}; // mapea nombre original → nombre consolidado
+
+    // El mismo consolidado pero de la tanda, para la tabla de produccion.
+    /**
+     * Junta los packs que comparten menu bajo un solo nombre.
+     *
+     * Es funcion y no codigo suelto porque la hoja de cocina se calcula VARIAS
+     * veces con distintos pedidos: el sabado completo, el lunes solo mensuales,
+     * y las dos juntas. Cada una necesita su propio mapa consolidado.
+     */
+    const consolidarParaCocina = (mapaDePacks) => {
+        const salida = {};
+        Object.keys(mapaDePacks).forEach(packName => {
+            if (isActuallyIndividual(packName) || isDesayunoPack(packName)) return;
+            const menuKey = mapPackNameToMenuKey(packName);
+            let nombre = nombreDeHojaDeEmpaque(packName, menuKey ? MENU_LABELS[menuKey] : null);
+            if (packName.startsWith('CENAS -')) nombre = `CENAS - ${nombre.replace('CENAS - ', '')}`;
+            if (!salida[nombre]) {
+                salida[nombre] = {
+                    name: nombre, clientes: [], platosBase: [], totalPacks: 0,
+                    sourcePackNames: [], menuKey
+                };
+            }
+            const destino = salida[nombre];
+            const origen = mapaDePacks[packName];
+            origen.clientes.forEach(c => destino.clientes.push({ ...c }));
+            destino.totalPacks += origen.totalPacks;
+            if (destino.platosBase.length === 0 && origen.platosBase.length > 0) destino.platosBase = origen.platosBase;
+            if (!destino.sourcePackNames.includes(packName)) destino.sourcePackNames.push(packName);
+        });
+        return salida;
+    };
+
+    const consolidatedPacksMapCocina = consolidarParaCocina(packsMapCocina);
 
     allPackNames.forEach(packName => {
         if (isActuallyIndividual(packName) || isDesayunoPack(packName)) return;
@@ -533,15 +1053,43 @@ export default function PrintProductionView() {
         return idx === -1 ? MENU_ORDER.length : idx;
     };
 
+    /**
+     * El ORDEN por volumen. Lo usan LAS DOS hojas.
+     *
+     * Las cocineras entran temprano y los de empaque llegan unas dos horas
+     * despues. Arrancando por la familia que mas packs tiene, a esa hora ya hay
+     * treinta bolsas listas y el empaque trabaja de corrido.
+     *
+     * Y la hoja de EMPAQUE tiene que ir en el mismo orden que la de cocina, o se
+     * contradicen: la de Paula empezaba por Pack Regular —5 packs— cuando la
+     * cocina estaba haciendo bajo calorias, que son 30. Llegaba y lo primero de
+     * su hoja todavia no existia.
+     *
+     * La olla NO se parte: una preparacion que ocupan varias familias se cocina
+     * entera cuando le toca a la mas grande.
+     */
+    const familiasDelDia = Object.entries(consolidatedPacksMap)
+        .map(([nombre, datos]) => ({ nombre, packs: datos?.totalPacks || 0 }));
+    const ordenDeFamilias = familiasPorVolumen(familiasDelDia);
+
+    /** En que puesto va una familia. Las CENAS van pegadas a su almuerzo. */
+    const puestoDeFamilia = (nombre) => {
+        const base = String(nombre || '').replace(/^CENAS\s*-\s*/i, '').trim().toLowerCase();
+        const i = ordenDeFamilias.findIndex(f => f.nombre.toLowerCase() === base);
+        return i === -1 ? ordenDeFamilias.length : i;
+    };
+
     const regularPackNames = Object.keys(consolidatedPacksMap).sort((a, b) => {
-        const idxA = getMenuIndex(a);
-        const idxB = getMenuIndex(b);
-        if (idxA !== idxB) return idxA - idxB;
-        const countA = consolidatedPacksMap[a]?.totalPacks || 0;
-        const countB = consolidatedPacksMap[b]?.totalPacks || 0;
-        if (countA !== countB) return countB - countA;
+        const pa = puestoDeFamilia(a);
+        const pb = puestoDeFamilia(b);
+        if (pa !== pb) return pa - pb;
+        // Dentro de la familia: primero el almuerzo, despues su cena
+        const cenaA = /^CENAS\s*-/i.test(a) ? 1 : 0;
+        const cenaB = /^CENAS\s*-/i.test(b) ? 1 : 0;
+        if (cenaA !== cenaB) return cenaA - cenaB;
         return a.localeCompare(b);
     });
+
 
     const sortedIndividualNames = allPackNames.filter(n => isActuallyIndividual(n) && !isDesayunoPack(n));
     const individualPackNames = sortedIndividualNames;
@@ -611,8 +1159,16 @@ export default function PrintProductionView() {
     const renderDesayunosTable = (packName, packData, currentDate) => {
         const rawPlatos = resolvePlatosForPack(packName, packData);
 
+        // Quien cambio su desayuno sale de esta tabla y va a la suya.
+        //
+        // Tres de los cinco desayunos son gallo pinto, asi que "cambiar gallo
+        // pinto por burritos" no toca un plato: toca tres. Mientras esa gente
+        // contaba en el total de aca, la cocina hacia gallo pinto para ellos
+        // tambien y sus burritos no los hacia nadie.
+        const { estandar, personalizados, packsEstandar } = separarDesayunos(packData.clientes, rawPlatos);
+
         // No expandir clientes — usar una fila por cliente con (N) al lado del nombre
-        const clientsList = [...packData.clientes];
+        const clientsList = [...estandar];
 
         const rowsPerChunk = 10;
         const totalChunks = Math.ceil(clientsList.length / rowsPerChunk) || 1;
@@ -673,7 +1229,7 @@ export default function PrintProductionView() {
                     <tr key={i} className="border border-black bg-white break-inside-avoid print:break-inside-avoid">
                         <td className="border border-black p-2 text-center">{dish ? (i + 1) : ''}</td>
                         <td className="border border-black p-2 text-left">{dishDesc}</td>
-                        <td className="border border-black p-2 text-center font-bold">{dish ? packData.totalPacks : ''}</td>
+                        <td className="border border-black p-2 text-center font-bold">{dish ? packsEstandar : ''}</td>
                         <td className="border border-black p-2 text-xs text-center">{clientNote}</td>
                         <td className={`border border-black p-2 text-center ${client ? 'bg-[#e2f0d9]' : ''}`}>{clientName}</td>
                     </tr>
@@ -705,6 +1261,63 @@ export default function PrintProductionView() {
             );
         }
 
+        // Un bloque por cliente que no come el menu de la semana. Va con SUS
+        // platos y con el original tachado al lado, para que la cocina vea de
+        // que se cambio y no tenga que ir a buscarlo en la nota.
+        personalizados.forEach((cliente) => {
+            const zona = cliente.zona_envio && cliente.zona_envio !== 'No especificada'
+                ? `, ${cliente.zona_envio}` : '';
+            const cuantos = Number(cliente.cantidad) > 0 ? Number(cliente.cantidad) : 1;
+
+            tables.push(
+                <div key={`desayuno-propio-${cliente.nombre}`} className="mb-12 print:mb-0 print:break-after-page print:[page-break-after:always]">
+                    <table className="w-full border-collapse border border-black text-sm table-fixed">
+                        <thead>
+                            <tr>
+                                <th colSpan="4" className="bg-[#f4b084] text-black font-bold text-2xl p-2 border border-black text-center uppercase tracking-wide">
+                                    Desayunos de {cliente.nombre}{zona}{cuantos > 1 ? ` (${cuantos})` : ''}
+                                </th>
+                            </tr>
+                            <tr>
+                                <th colSpan="4" className="bg-[#fff2cc] text-black p-2 border border-black text-left text-sm font-normal">
+                                    No lleva el menú de la semana. Pidió: <strong>{cliente.cambio.texto}</strong>
+                                </th>
+                            </tr>
+                            <tr className="bg-[#fce4d6]">
+                                <th className="border border-black p-2 w-16 text-center">Plato</th>
+                                <th className="border border-black p-2 text-center">Qué se le hace</th>
+                                <th className="border border-black p-2 w-24 text-center">Cantidad</th>
+                                <th className="border border-black p-2 w-64 text-center">En vez de</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {cliente.platos.map((plato) => (
+                                <tr key={plato.numero} className="border border-black bg-white break-inside-avoid print:break-inside-avoid">
+                                    <td className="border border-black p-2 text-center">{plato.numero}</td>
+                                    <td className={`border border-black p-2 text-left ${plato.estado === 'quitado' ? 'line-through text-gray-500' : ''} ${plato.estado === 'cambiado' ? 'font-bold bg-[#e2f0d9]' : ''}`}>
+                                        {plato.estado === 'quitado' ? 'NO LLEVA' : plato.nombre}
+                                    </td>
+                                    <td className="border border-black p-2 text-center font-bold">
+                                        {plato.estado === 'quitado' ? '—' : cuantos}
+                                    </td>
+                                    <td className="border border-black p-2 text-xs text-center text-gray-600">
+                                        {plato.original || ''}
+                                    </td>
+                                </tr>
+                            ))}
+                            {cliente.observaciones ? (
+                                <tr className="border border-black bg-[#fff2cc]">
+                                    <td colSpan="4" className="border border-black p-2 text-xs text-left">
+                                        <strong>Nota del pedido:</strong> {cliente.observaciones}
+                                    </td>
+                                </tr>
+                            ) : null}
+                        </tbody>
+                    </table>
+                </div>
+            );
+        });
+
         return (
             <div key={`empaque-${packName}`} className="print:break-after-page print:[page-break-after:always]">
                 {tables}
@@ -720,7 +1333,7 @@ export default function PrintProductionView() {
             packData.clientes.forEach(c => {
                 const zone = c.zona_envio || '';
                 const zoneStr = zone && zone !== 'No especificada' && zone.toLowerCase() !== 'recoge en tienda' ? `, ${zone}` : '';
-                const fullName = `${c.nombre}${zoneStr}`;
+                const fullName = `${c.nombre}${zoneStr}${diaDelCliente(c)}`;
 
                 const otherPacksTag = getOtherPacksTag(c.nombre, packName);
                 const obs = c.observaciones ? `${c.observaciones}` : '';
@@ -782,7 +1395,7 @@ export default function PrintProductionView() {
                         const items = client.items;
 
                         return (
-                            <tbody key={clientName} className="break-inside-avoid print:break-inside-avoid">
+                            <tbody key={`${clientName}-${idx}`} className="break-inside-avoid print:break-inside-avoid">
                                 {items.map((item, itemIdx) => (
                                     <tr key={itemIdx}>
                                         <td className="border border-black p-3 font-medium text-gray-800">{item.name}</td>
@@ -862,74 +1475,14 @@ export default function PrintProductionView() {
      * vez, y al lado a cuántos platos de cada menú va para poder repartirla al
      * salir de la olla.
      */
-    const renderQueSeCocinaJunto = () => {
-        const merma = Math.round((MARGEN_COCINA - 1) * 100);
-        const { preparaciones } = consolidarCocina(cleanOrders, { marginPercent: merma });
-        if (preparaciones.length === 0) return null;
-
-        const porTipo = preparaciones.reduce((acc, p) => {
-            (acc[p.tipo] = acc[p.tipo] || []).push(p);
-            return acc;
-        }, {});
-
-        return (
-            <div className="mb-10 print:break-after-page print:[page-break-after:always]">
-                <h2 className="bg-black text-white text-center font-bold text-xl p-2 border border-black uppercase tracking-wide">
-                    Qué se cocina junto — {date}
-                </h2>
-                <p className="text-xs text-gray-600 border-x border-b border-black p-2 print:text-[10px]">
-                    Una línea por preparación, sumando todos los menús. La columna de la
-                    derecha dice cómo repartirla cuando salga de la olla.
-                    {merma > 0 && ` Las cantidades ya traen el ${merma}% de merma.`}
-                </p>
-
-                {Object.entries(porTipo).map(([tipo, lista]) => (
-                    <table key={tipo} className="w-full border-collapse border border-black text-sm mb-6 table-fixed">
-                        <thead>
-                            <tr>
-                                <th colSpan="4" className="bg-[#f4b084] border border-black p-1.5 text-left font-bold uppercase">
-                                    {tipo}s — {lista.length} preparacion{lista.length === 1 ? '' : 'es'}
-                                </th>
-                            </tr>
-                            <tr className="bg-[#fce4d6]">
-                                <th className="border border-black p-1.5 text-left w-[38%]">Preparación</th>
-                                <th className="border border-black p-1.5 text-center w-20">Porciones</th>
-                                <th className="border border-black p-1.5 text-center w-28">Cantidad</th>
-                                <th className="border border-black p-1.5 text-left">Cómo repartirlo</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {lista.map(p => (
-                                <tr key={`${p.tipo}-${p.nombre}-${p.unidad}`} className="break-inside-avoid">
-                                    <td className="border border-black p-1.5 font-medium">
-                                        {p.nombre}
-                                        {p.esSustitucion && (
-                                            <span className="ml-2 text-[10px] font-bold text-red-700">CAMBIO</span>
-                                        )}
-                                    </td>
-                                    <td className="border border-black p-1.5 text-center font-bold text-base">
-                                        {p.porcionesCocina}
-                                    </td>
-                                    <td className="border border-black p-1.5 text-center font-bold">
-                                        {p.porPorcion > 0 ? formatearCantidad(p.totalCocina, p.unidad) : '—'}
-                                    </td>
-                                    <td className="border border-black p-1.5 text-xs print:text-[10px]">
-                                        {p.hayQueRepartir
-                                            ? p.desglose.map(d => `${d.porciones} → ${d.origen}`).join('  ·  ')
-                                            : <span className="text-gray-400">todo junto</span>}
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                ))}
-            </div>
-        );
-    };
 
     // LOGICA NUEVA DE HOJA DE COCINA GLOBAL
     // ==========================================
-    const getAllKitchenItems = () => {
+    /**
+     * Se llama DOS veces: con los mapas de la tanda —lo que hay que cocinar
+     * hoy— y con los de la semana completa, para poder ofrecer adelantar.
+     */
+    const getAllKitchenItems = (mapaConsolidado, mapaPacks) => {
         const bulkItemsMap = {};
         const missingMenus = [];
 
@@ -963,7 +1516,20 @@ export default function PrintProductionView() {
         // que de los nombres no se deduce.
         const destinos = destinosDeUnion(unionesDePlatos);
 
-        const acumularPlato = (nombreCrudo, cantidad, unidad, platos = 0) => {
+        // De que pack viene lo que se esta sumando ahora. Lo lee `acumularPlato`
+        // para dejar anotado en cada renglon a que familias sirve: sin eso la
+        // hoja no puede saber que el arroz lo ocupa el bajo calorias y por lo
+        // tanto va de primero.
+        let packEnCurso = null;
+
+        const anotarFamilia = (clave) => {
+            const renglon = bulkItemsMap[clave];
+            if (!renglon || !packEnCurso) return;
+            if (!renglon.familias) renglon.familias = [];
+            if (!renglon.familias.includes(packEnCurso)) renglon.familias.push(packEnCurso);
+        };
+
+        const acumularPlato = (nombreCrudo, cantidad, unidad, platos = 0, esComponente = false) => {
             // Un renglon puede ser varias ollas: "Arroz, frijoles y maduros" son
             // tres preparaciones. Cada una lleva la MISMA cantidad que traia el
             // renglon: si decia 4 tazas, son 4 de cada cosa.
@@ -978,7 +1544,7 @@ export default function PrintProductionView() {
                 let primera = null;
                 componentes.forEach(parte => {
                     const suyo = cantidadDeGuarnicion(parte, cantidad, unidad, platos);
-                    const clave = acumularPlato(parte, suyo.cantidad, suyo.unidad, platos);
+                    const clave = acumularPlato(parte, suyo.cantidad, suyo.unidad, platos, true);
                     if (primera === null) primera = clave;
                 });
                 return primera;
@@ -987,7 +1553,9 @@ export default function PrintProductionView() {
             // El nombre con el que entra: lo que una persona marco como el mismo
             // plato, o el nucleo (toda la "carne mechada" es una sola olla).
             const nombre = nombreParaAcumular(nombreCrudo, destinos);
-            const encontrado = buscarRenglonDelMismoPlato(bulkItemsMap, nombre, unidad);
+            const encontrado = esComponente
+                ? { clave: null, ambiguo: [] }
+                : buscarRenglonDelMismoPlato(bulkItemsMap, nombre, unidad);
 
             if (encontrado.ambiguo.length > 0) {
                 // Calzaba con varios: juntarlo con el que no es seria peor que
@@ -998,22 +1566,26 @@ export default function PrintProductionView() {
             if (encontrado.clave) {
                 const renglon = bulkItemsMap[encontrado.clave];
                 renglon.totalQty += cantidad;
+                renglon.porciones = (renglon.porciones || 0) + (Number(platos) || 0);
                 renglon.name = nombreMasCompleto(renglon.name, nombre);
+                anotarFamilia(encontrado.clave);
                 return encontrado.clave;
             }
 
-            sumarAGranel(bulkItemsMap, nombre, cantidad, unidad, guessCategory);
+            sumarAGranel(bulkItemsMap, nombre, cantidad, unidad, guessCategory, platos, esComponente);
+            anotarFamilia(claveGranel(nombre, unidad));
             return claveGranel(nombre, unidad);
         };
 
         // 1. Process regular packs (Granel para ollas)
-        regularPackNames.forEach(packName => {
-            const packData = consolidatedPacksMap[packName];
+        Object.keys(mapaConsolidado).forEach(packName => {
+            const packData = mapaConsolidado[packName];
             if (!packData || packData.totalPacks === 0) return;
 
             const isCenaSheet = packName.startsWith('CENAS -');
             const basePackName = isCenaSheet ? packName.replace(/^CENAS\s*-\s*/i, '') : packName;
             const menuKey = packData.menuKey || mapPackNameToMenuKey(basePackName);
+            packEnCurso = packName;
 
             const rawPlatos = resolvePlatosForPack(packName, packData);
 
@@ -1076,11 +1648,11 @@ export default function PrintProductionView() {
                     // Un plato familiar se cocina por KILO: el gramaje de la familia
                     // manda cuando el plato no trae el suyo.
                     const grams = (p.proteina.gramosPorPorcion || porcion.proteina || getDefaultGrams(packName)) * totalPlatos;
-                    acumularPlato(p.proteina.nombre, grams, 'g');
+                    acumularPlato(p.proteina.nombre, grams, 'g', totalPlatos);
                 }
                 if (p.vegetal?.nombre && p.vegetal.nombre !== '—') {
                     const units = (p.vegetal.cantidadPorPorcion || porcion.vegetal) * totalPlatos;
-                    acumularPlato(p.vegetal.nombre, units, 'taza(s)');
+                    acumularPlato(p.vegetal.nombre, units, 'taza(s)', totalPlatos);
                 }
                 const showCarbo = menuKey !== 'keto' && menuKey !== 'sinCarbos' && p.carbo?.nombre && p.carbo.nombre !== '—';
                 if (showCarbo) {
@@ -1106,12 +1678,36 @@ export default function PrintProductionView() {
             });
         });
 
+        // A que familias de pack pertenece cada cliente.
+        //
+        // Un individual de alguien que TAMBIEN lleva pack no es un plato suelto:
+        // va en la misma bolsa que su pack, y la bolsa no se cierra sin el. Si se
+        // cocina de ultimo --con los individuales de quienes no llevan pack-- esa
+        // bolsa se queda abierta esperando y el empaque se traba, que es justo lo
+        // que las tandas vienen a evitar. Diana Gonzalez lleva bajo calorias y
+        // tres proteinas de 250 g: sus proteinas se cocinan con el bajo calorias.
+        const familiasDelCliente = new Map();
+        Object.keys(mapaConsolidado).forEach(nombreFamilia => {
+            (mapaConsolidado[nombreFamilia]?.clientes || []).forEach(c => {
+                const k = String(c?.nombre || '').trim().toLowerCase();
+                if (!k) return;
+                if (!familiasDelCliente.has(k)) familiasDelCliente.set(k, []);
+                const suyas = familiasDelCliente.get(k);
+                if (!suyas.includes(nombreFamilia)) suyas.push(nombreFamilia);
+            });
+        });
+
         // 2. Process Individuales (Pre-empacados directamente en cocina)
-        individualPackNames.forEach(packName => {
-            const packData = packsMap[packName];
+        Object.keys(mapaPacks).filter(n => isActuallyIndividual(n) && !isDesayunoPack(n)).forEach(packName => {
+            const packData = mapaPacks[packName];
             if (!packData || !packData.clientes) return;
+            packEnCurso = packName;
 
             packData.clientes.forEach(c => {
+                // Si este cliente lleva pack, su individual hereda esa familia y
+                // se cocina cuando le toca a ella, no al final.
+                const familiasSuyas = familiasDelCliente.get(String(c?.nombre || '').trim().toLowerCase());
+                packEnCurso = familiasSuyas && familiasSuyas.length ? familiasSuyas[0] : packName;
                 const processItem = (rawName, pGrams, pDesc, pCount = null) => {
                     const itemCount = pCount || c.cantidad || 1;
                     const specStr = pDesc || c.plan || c.tipoMenu || c.categoryLabel || c.observaciones || '';
@@ -1237,7 +1833,7 @@ export default function PrintProductionView() {
 
         const bulkItems = Object.values(bulkItemsMap).sort((a, b) => a.name.localeCompare(b.name));
 
-        return { bulkItems, missingMenus, avisosDeUnion };
+        return { bulkItems, missingMenus, avisosDeUnion, familiasDelCliente };
     };
 
     /**
@@ -1250,7 +1846,36 @@ export default function PrintProductionView() {
     // La merma es para las ollas de los packs, donde se reparte a ojo. Un
     // individual se pesa y se empaca: "si son 250 poner 250" (Gina). Y los
     // gramos se redondean siempre hacia arriba.
-    const cantidadACocinar = (item) => cuantoCocinar(item);
+    /** Lo ya cocinado en las hojas anteriores de esta misma hornada. */
+    // Lo ya cocinado sale de dos lados y se SUMAN: las hojas anteriores que se
+    // mandaron desde el sistema, y el Excel que Gina llena a mano el jueves.
+    const yaCocinado = (() => {
+        // Sin rebaja no se descuenta nada: la hoja muestra lo que pide el dia
+        // completo. Es un interruptor de la vista, no un cambio de los datos.
+        if (sinRebaja) return {};
+        const total = { ...acumularCocinado(tandasPrevias) };
+        Object.entries(adelantoDeGina?.cocinado || {}).forEach(([clave, cantidad]) => {
+            total[clave] = (total[clave] || 0) + cantidad;
+        });
+        return total;
+    })();
+
+    /**
+     * Cuanto hay que cocinar HOY de este renglon.
+     *
+     * Es lo que piden los pedidos menos lo que ya se cocino. Sin ese descuento,
+     * cocinar de mas a proposito —"dejar 5 kg de carne para el sabado", que Gina
+     * hace todas las semanas porque se congela— no servia de nada: la hoja
+     * siguiente lo volvia a pedir completo.
+     */
+    const cantidadACocinar = (item) => {
+        const pide = cuantoCocinar(item);
+        const hecho = Number(yaCocinado[claveDeProduccion(item?.name, item?.unit)]) || 0;
+        return Math.max(0, pide - hecho);
+    };
+
+    /** Lo que pide TODA la hornada, para poder adelantar de una vez. */
+    const pideTodaLaSemana = (item) => Number(pideLaSemana[claveDeProduccion(item?.name, item?.unit)]) || 0;
 
     const getKitchenPackingInstruction = (item) => {
         const pGrams = item.portionGrams;
@@ -1297,10 +1922,372 @@ export default function PrintProductionView() {
     // reconstruyen en cada render, así que cambiarían de identidad siempre.
     // Para memoizar de verdad hay que subir TODO el armado de datos por encima de
     // los returns, no solo esta llamada.
-    const { bulkItems, missingMenus, avisosDeUnion } = getAllKitchenItems();
+    const { bulkItems: bulkDeLaTanda, missingMenus, avisosDeUnion, familiasDelCliente } = getAllKitchenItems(consolidatedPacksMapCocina, packsMapCocina);
+    // Lo mismo pero de TODO el sabado y el lunes: es lo que se ofrece adelantar
+    // cuando la preparacion se congela y no vale la pena prender la olla dos veces.
+    const bulkSemana = getAllKitchenItems(consolidatedPacksMap, packsMap).bulkItems;
+
+    /**
+     * Sobre que cantidades se trabaja.
+     *
+     * RESTAR DOS VECES ERA EL BUG. Con el interruptor en "lo que FALTA" pasaban
+     * las dos cosas a la vez: los pedidos ya mandados salian de la lista, Y
+     * ADEMAS se le restaba a cada renglon lo que esos mismos pedidos habian
+     * hecho cocinar. La comida quedaba descontada dos veces y la hoja del
+     * viernes pedia casi cero.
+     *
+     * Medido el 7 de setiembre sobre el ciclo del 5 y 7: la hoja completa pide
+     * 193 tazas de arroz, la tanda del jueves cocino 70, y el viernes la
+     * pantalla mostraba 13. Deberia mostrar lo que falta, no 13.
+     *
+     * Cuando se rebaja, la base tiene que ser el ciclo COMPLETO y el descuento
+     * hace el trabajo. Es exactamente lo que ya hacia bien la pestana 4 del
+     * Excel; ahora la pantalla dice lo mismo que el archivo.
+     */
+    const bulkItems = sinRebaja ? bulkDeLaTanda : bulkSemana;
+
+    const bulkOrdenado = tandaDeCadaPreparacion(bulkItems, ordenDeFamilias)
+        .sort((a, b) => (a.tanda - b.tanda)
+            // El menu 1 completo primero: es lo que Paula empaca al llegar
+            || (a.soloCena === b.soloCena ? 0 : (a.soloCena ? 1 : -1))
+            || (Number(b.totalQty) || 0) - (Number(a.totalQty) || 0)
+            || String(a.name).localeCompare(String(b.name)));
+
+    /**
+     * La hoja de cocina de CUALQUIER grupo de pedidos.
+     *
+     * Recorre el mismo camino que la hoja de la pantalla —empaque, mapa de
+     * packs, consolidado, granel— pero arrancando de los pedidos que se le
+     * pasen. Es lo que permite sacar el sabado y el lunes por separado en el
+     * mismo Excel sin recalcular a mano.
+     */
+    const hojaDeCocinaDe = (pedidos) => {
+        if (!pedidos || pedidos.length === 0) return [];
+        const datos = buildPackagingSheetData(pedidos, {}, null);
+        const mapa = {};
+        llenarMapaDePacks(datos.clientes, mapa);
+        return getAllKitchenItems(consolidarParaCocina(mapa), mapa).bulkItems;
+    };
+    const pideLaSemana = {};
+    bulkSemana.forEach(r => { pideLaSemana[claveDeProduccion(r.name, r.unit)] = cuantoCocinar(r); });
+
+    /**
+     * Carga el Excel del adelanto: lo que Gina ya cocino el jueves.
+     *
+     * Se busca la pestana por nombre y, si no aparece, la primera que tenga
+     * pares "plato / cantidad". Lo que no se pueda convertir NO se descuenta:
+     * queda listado para que se resuelva a mano.
+     */
+    const handleCargarAdelanto = async (evento) => {
+        const archivo = evento.target.files?.[0];
+        if (!archivo) return;
+        setErrorDeAdelanto('');
+        try {
+            const wb = new ExcelJS.Workbook();
+            await wb.xlsx.load(await archivo.arrayBuffer());
+
+            const hoja = wb.worksheets.find(w => /desglose/i.test(w.name)) || wb.worksheets[0];
+            if (!hoja) throw new Error('El archivo no tiene ninguna pestana');
+
+            const filas = [];
+            hoja.eachRow((fila) => {
+                const celdas = [];
+                fila.eachCell({ includeEmpty: false }, (celda) => {
+                    const v = celda.value;
+                    const texto = (v && typeof v === 'object' && 'result' in v) ? v.result : v;
+                    if (texto !== null && texto !== undefined && String(texto).trim() !== '') celdas.push(texto);
+                });
+                if (celdas.length > 0) filas.push([String(celdas[0]).trim(), celdas[1] ?? null]);
+            });
+
+            const leido = leerAdelanto(filas);
+            setAdelantoDeGina({ ...leido, archivo: archivo.name, pestana: hoja.name });
+        } catch (err) {
+            console.error('[Adelanto] No se pudo leer el archivo:', err);
+            setErrorDeAdelanto(err.message || 'No se pudo leer el archivo');
+            setAdelantoDeGina(null);
+        }
+    };
+
+    /**
+     * El Excel de cuatro pestanas.
+     *
+     * Las cuatro salen del MISMO calculo, cambiando solo que pedidos entran.
+     * Van separadas porque responden preguntas distintas: dos dicen cuanto pide
+     * el dia y dos cuanto falta poner en la olla hoy. Mezclarlas en una columna
+     * dejaria la duda de si el numero ya trae el descuento, y esa duda se paga
+     * cocinando de mas o de menos.
+     */
+    const handleExportarCuatroPestanas = async (wbCompartido = null) => {
+        const enFecha = (f) => todosLosPedidos.filter(p => (calendarioDelPedido(p) || []).includes(f));
+
+        // Las fechas marcadas como adelanto van recortadas a los recurrentes;
+        // el resto entra completo.
+        const fechasCompletas = fechas.filter(f => !fechasDeAdelanto.has(f));
+        const fechasRecortadas = fechas.filter(f => fechasDeAdelanto.has(f));
+
+        const pedidosCompletos = fechasCompletas.flatMap(enFecha);
+        const pedidosRecortados = fechasRecortadas
+            .flatMap(enFecha)
+            .filter(p => esRecurrente(p, calendarioDelPedido))
+            .filter(p => !familiaPermitida || familiaPermitida(p));
+
+        // Un pedido que entrega en las dos fechas no puede contarse dos veces
+        const sinRepetir = (lista) => {
+            const vistos = new Set();
+            return lista.filter(p => {
+                const k = claveDePedido(p);
+                if (vistos.has(k)) return false;
+                vistos.add(k);
+                return true;
+            });
+        };
+
+        const armarRenglones = (bulk) => bulk
+            .map(item => {
+                const pide = cuantoCocinar(item);
+                const hecho = Number(yaCocinado[claveDeProduccion(item.name, item.unit)]) || 0;
+                return {
+                    name: item.name,
+                    unit: item.unit,
+                    pide,
+                    hecho,
+                    falta: Math.max(0, pide - hecho),
+                    cocinera: kitchenAssignments[item.name]?.trim() || 'SIN ASIGNAR',
+                    empacaCocina: !!item.empacaCocina,
+                    nota: item.empacaCocina
+                        ? getKitchenPackingInstruction(item)
+                        : (item.kitchenNotes || []).join(' | ')
+                };
+            })
+            .filter(r => r.pide > 0
+            );
+        // El orden final —por unidad y de mayor a menor— lo pone la pestana:
+        // es una decision de como se lee la hoja, no de que datos lleva.
+
+        // La pestana 4 descuenta SIEMPRE, aunque la pantalla este en "sin rebaja":
+        // para eso existe. `yaCocinado` sigue el interruptor de la pantalla, asi
+        // que aca se arma el descuento aparte.
+        const descuento = {};
+        Object.entries(acumularCocinado(tandasPrevias)).forEach(([k, v]) => { descuento[k] = v; });
+        Object.entries(adelantoDeGina?.cocinado || {}).forEach(([k, v]) => {
+            descuento[k] = (descuento[k] || 0) + v;
+        });
+        const hayDescuento = Object.keys(descuento).length > 0;
+
+        const armarRenglonesConDescuento = (bulk) => armarRenglones(bulk).map(r => {
+            const hecho = Number(descuento[claveDeProduccion(r.name, r.unit)]) || 0;
+            return { ...r, hecho, falta: Math.max(0, r.pide - hecho) };
+        });
+
+        const bulkCompletos = hojaDeCocinaDe(sinRepetir(pedidosCompletos));
+        const bulkRecortados = hojaDeCocinaDe(sinRepetir(pedidosRecortados));
+        const bulkTodo = hojaDeCocinaDe(sinRepetir([...pedidosCompletos, ...pedidosRecortados]));
+
+        // "SABADO", "LUNES": el nombre del dia solo, para que la pestana se lea
+        // de un vistazo. Excel corta los nombres largos a 31 caracteres.
+        const diaCorto = (lista) => lista
+            .map(f => new Date(f + 'T12:00:00')
+                .toLocaleDateString('es-CR', { weekday: 'long' }).toUpperCase())
+            .join(' y ') || 'SIN FECHA';
+
+        const dia = (f) => {
+            const d = new Date(f + 'T12:00:00');
+            return d.toLocaleDateString('es-CR', { weekday: 'long', day: 'numeric', month: 'long' });
+        };
+        const etiquetaCompletas = fechasCompletas.map(dia).join(' y ') || 'sin fecha';
+        const etiquetaRecortadas = fechasRecortadas.map(dia).join(' y ') || 'sin fecha';
+
+        const wb = wbCompartido || new ExcelJS.Workbook();
+        if (!wbCompartido) { wb.creator = 'BiKitchen'; wb.created = new Date(); }
+
+        // El orden va de lo simple a lo compuesto: primero cada dia por su
+        // cuenta, despues las dos juntas, y de ultimo lo que falta. Asi se puede
+        // cotejar pestana por pestana sin tener que cruzar papeles.
+        agregarPestanaDeCocina(wb, {
+            titulo: `1 COCINA ${diaCorto(fechasCompletas)}`,
+            explicacion: `TODO lo que piden los pedidos de ${etiquetaCompletas}. Cantidades completas, sin rebajar nada.`,
+            renglones: armarRenglones(bulkCompletos)
+        });
+
+        // Las pestanas del adelanto solo existen si hay un dia que adelantar.
+        // La hoja de un solo dia —el miercoles— las sacaba igual y quedaban
+        // vacias y tituladas "2 COCINA SIN FECHA mensuales".
+        const hayAdelanto = fechasRecortadas.length > 0;
+
+        if (hayAdelanto) agregarPestanaDeCocina(wb, {
+            titulo: `2 COCINA ${diaCorto(fechasRecortadas)} mensuales`,
+            explicacion: `De ${etiquetaRecortadas}, SOLO los packs mensuales y quincenales (los de mas de una entrega, que ya estan pagados). Cantidades completas, sin rebajar nada.`,
+            renglones: armarRenglones(bulkRecortados)
+        });
+
+        agregarPestanaDeCocina(wb, {
+            titulo: '3 COCINA TODO JUNTO',
+            explicacion: `Las pestanas 1 y 2 sumadas: ${etiquetaCompletas} completo mas los mensuales y quincenales de ${etiquetaRecortadas}. Cantidades completas, SIN rebajar nada. Esta es la lista entera de lo que hay que tener listo.`,
+            renglones: armarRenglones(bulkTodo)
+        });
+
+        agregarPestanaDeCocina(wb, {
+            titulo: '4 FALTA COCINAR',
+            explicacion: hayDescuento
+                ? 'Lo mismo de la pestana 3, menos lo que Gina ya cocino el jueves. La columna FALTA COCINAR es lo que hay que poner en la olla hoy.'
+                : 'No se cargo el archivo del adelanto, asi que no hay nada que descontar: esta pestana es igual a la 3.',
+            renglones: armarRenglonesConDescuento(bulkTodo),
+            conDescuento: true
+        });
+
+        // ── El EMPAQUE, que es otra pregunta ──────────────────────────────
+        // La cocina dice cuanto hacer de cada cosa; el empaque dice que le va a
+        // cada cliente. Van en pestanas aparte porque se leen distinto y las usa
+        // gente distinta.
+        const paraEmpaque = (pedidos) => sinRepetir(pedidos).map(p => ({
+            cliente: p.cliente,
+            zona: p.zona || p.rawPedido?.zona_envio || '',
+            paquete: p.plan || p.tipoMenu || '',
+            cantidad: p.cantidadMenus || 1,
+            entregas: (calendarioDelPedido(p) || []).length,
+            // El MISMO filtro que las pestanas de packs: sin esto, en la pestana
+            // 5 salia impreso "INTERNO: pago confirmado por Gina" al lado del
+            // cliente, que no le dice a nadie que meter en la bolsa.
+            observaciones: notaParaEmpaque(p.observaciones || p.rawPedido?.observaciones || '')
+        }));
+
+        agregarPestanaDeEmpaque(wb, {
+            titulo: `5 EMPAQUE ${diaCorto(fechasCompletas)}`,
+            explicacion: `Todos los pedidos de ${etiquetaCompletas}. Uno por cliente, con lo que lleva y sus cambios.`,
+            clientes: paraEmpaque(pedidosCompletos)
+        });
+
+        if (hayAdelanto) agregarPestanaDeEmpaque(wb, {
+            titulo: `6 EMPAQUE ${diaCorto(fechasRecortadas)} mensuales`,
+            explicacion: `De ${etiquetaRecortadas}, SOLO los mensuales y quincenales, que son los que se alistan por adelantado. Estos hay que descontarlos de la hoja de ${etiquetaRecortadas} cuando llegue el dia, o se empacan dos veces.`,
+            clientes: paraEmpaque(pedidosRecortados)
+        });
+
+        if (adelantoDeGina) agregarPestanaDeAvisos(wb, adelantoDeGina);
+
+        if (wbCompartido) return;
+        const buffer = await wb.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Hoja de cocina ${fechas.join(' y ')}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    };
+
+    /**
+     * El empaque de lo que se adelanta, en su propio archivo.
+     *
+     * Los mensuales y quincenales del lunes se empacan el sabado, junto con
+     * todo lo del sabado. Quien empaca necesita esa lista SOLA: si va mezclada
+     * con la del dia, se arman bolsas del lunes creyendo que salen hoy.
+     *
+     * Va agrupado por pack y no por cliente porque asi se arman las estaciones.
+     */
+    const handleExportarEmpaqueDelAdelanto = async (wbCompartido = null) => {
+        const fechasRecortadas = fechas.filter(f => fechasDeAdelanto.has(f));
+        if (fechasRecortadas.length === 0) {
+            if (wbCompartido) return;   // en el archivo completo simplemente no va esa pestaña
+            alert('Esta hoja no tiene ningun dia marcado como adelanto. '
+                + 'Abrila con dos fechas —por ejemplo ?date=2026-09-05,2026-09-07— '
+                + 'y del segundo dia se toman solo los mensuales y quincenales.');
+            return;
+        }
+
+        const enAdelanto = new Set(
+            todosLosPedidos
+                .filter(p => (calendarioDelPedido(p) || []).some(f => fechasDeAdelanto.has(f)))
+                .filter(p => esRecurrente(p, calendarioDelPedido))
+                .filter(p => !familiaPermitida || familiaPermitida(p))
+                .map(claveDePedido)
+        );
+
+        // Se usan los MISMOS grupos que muestra la pantalla —almuerzos y cenas
+        // separados— para que el Excel y la hoja digan lo mismo.
+        const grupos = Object.entries(packsMap)
+            .map(([nombre, data]) => ({
+                pack: nombre,
+                clientes: (data.clientes || [])
+                    .filter(c => enAdelanto.has(claveDePedido(c.rawPedido || c)))
+                    .map(c => ({
+                        cliente: c.nombre,
+                        zona: c.zona_envio && c.zona_envio !== 'No especificada' ? c.zona_envio : '',
+                        packs: Number(c.cantidad) > 0 ? Number(c.cantidad) : 1,
+                        nota: notaParaEmpaque(c.observaciones)
+                    }))
+                    .sort((a, b) => String(a.cliente).localeCompare(String(b.cliente)))
+            }))
+            .filter(g => g.clientes.length > 0)
+            .sort((a, b) => a.pack.localeCompare(b.pack));
+
+        const wb = wbCompartido || new ExcelJS.Workbook();
+        if (!wbCompartido) { wb.creator = 'BiKitchen'; wb.created = new Date(); }
+
+        agregarPestanaDeEmpaquePorPack(wb, {
+            titulo: `EMPAQUE ${fechasRecortadas.join(' y ')} (adelanto)`,
+            explicacion: `Se empaca HOY, junto con lo del dia. SOLO los packs mensuales y quincenales de `
+                + `${fechasRecortadas.join(' y ')}, que son los que ya estan pagados. `
+                + `NO van desayunos ni individuales: esos se hacen el mismo dia de la entrega.`,
+            grupos
+        });
+
+        if (wbCompartido) return;
+        const buffer = await wb.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url2 = URL.createObjectURL(blob);
+        const a2 = document.createElement('a');
+        a2.href = url2;
+        a2.download = `Empaque adelanto ${fechasRecortadas.join(' y ')}.xlsx`;
+        document.body.appendChild(a2);
+        a2.click();
+        document.body.removeChild(a2);
+        URL.revokeObjectURL(url2);
+    };
+
+    /**
+     * UN archivo con todo lo de la hoja.
+     *
+     * Antes eran tres botones que sacaban tres Excel distintos —el formato de
+     * Gina, el de cocina y el del empaque del adelanto— y habia que acordarse
+     * de bajar los tres y de cual era cual. Ahora es un solo archivo, con las
+     * pestanas en el orden en que se usan: primero lo que Gina lee para armar,
+     * despues lo que hay que cocinar, y de ultimo lo que se empaca adelantado.
+     */
+    const handleDescargarTodo = async () => {
+        setDescargando(true);
+        try {
+            const wb = new ExcelJS.Workbook();
+            wb.creator = 'BiKitchen';
+            wb.created = new Date();
+
+            await handleExportToExcel(wb);
+            await handleExportarCuatroPestanas(wb);
+            await handleExportarEmpaqueDelAdelanto(wb);
+
+            const buffer = await wb.xlsx.writeBuffer();
+            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Hoja BiKitchen ${fechas.join(' y ')}.xlsx`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error('[Hoja] No se pudo armar el Excel:', err);
+            alert('No se pudo armar el Excel: ' + err.message);
+        } finally {
+            setDescargando(false);
+        }
+    };
 
     const handleAssignCook = (itemName, cookName) => {
-        setKitchenAssignments(prev => ({ ...prev, [itemName]: cookName }));
+        cambiarAsignaciones(prev => ({ ...prev, [itemName]: cookName }));
     };
 
     const handleAssignCategory = (catName) => {
@@ -1311,7 +2298,7 @@ export default function PrintProductionView() {
         itemsInCat.forEach(item => {
             updates[item.name] = cook;
         });
-        setKitchenAssignments(prev => ({ ...prev, ...updates }));
+        cambiarAsignaciones(prev => ({ ...prev, ...updates }));
     };
 
     const handleAssignSelected = () => {
@@ -1321,7 +2308,7 @@ export default function PrintProductionView() {
         selectedKitchenItems.forEach(itemName => {
             updates[itemName] = cook;
         });
-        setKitchenAssignments(prev => ({ ...prev, ...updates }));
+        cambiarAsignaciones(prev => ({ ...prev, ...updates }));
         setSelectedKitchenItems([]);
         setBulkSelectedCook('');
     };
@@ -1338,7 +2325,7 @@ export default function PrintProductionView() {
             tipo: TIPO_POR_CATEGORIA[item.category]
         }));
         const { asignaciones, nuevas, sinAsignar } = repartirPlatillos(platillos, kitchenAssignments);
-        setKitchenAssignments(prev => ({ ...prev, ...asignaciones }));
+        cambiarAsignaciones(prev => ({ ...prev, ...asignaciones }));
         setResumenReparto({ nuevas, sinAsignar });
     };
 
@@ -1422,7 +2409,7 @@ export default function PrintProductionView() {
                                 Repartir automáticamente
                             </button>
                             <button
-                                onClick={() => { setKitchenAssignments({}); setResumenReparto(null); }}
+                                onClick={() => { cambiarAsignaciones({}); setResumenReparto(null); }}
                                 className="text-xs text-gray-600 underline hover:text-gray-900"
                             >
                                 Borrar todo
@@ -1500,8 +2487,8 @@ export default function PrintProductionView() {
                                 <div className="mt-2 text-amber-900">
                                     Estos quedaron sin dueño, hay que ponerlos a mano:
                                     <ul className="list-disc ml-6 mt-1">
-                                        {resumenReparto.sinAsignar.map(x => (
-                                            <li key={x.nombre}><b>{x.nombre}</b> — {x.motivo}</li>
+                                        {resumenReparto.sinAsignar.map((x, iAviso) => (
+                                            <li key={`${x.nombre}-${iAviso}`}><b>{x.nombre}</b> — {x.motivo}</li>
                                         ))}
                                     </ul>
                                 </div>
@@ -1558,14 +2545,14 @@ export default function PrintProductionView() {
                                         </div>
 
                                         <div className="space-y-2.5 max-h-64 overflow-y-auto pr-1">
-                                            {itemsInCat.map(item => {
+                                            {itemsInCat.map((item, iItem) => {
                                                 const isSelected = selectedKitchenItems.includes(item.name);
                                                 const currentCook = kitchenAssignments[item.name] || '';
                                                 const sugerencia = sugerirCocinera(item.name, TIPO_POR_CATEGORIA[item.category]);
 
                                                 return (
                                                     <div
-                                                        key={item.name}
+                                                        key={`${item.name}-${iItem}`}
                                                         className={`flex items-center justify-between p-2 rounded border transition-all text-xs ${isSelected ? 'bg-blue-50 border-blue-400' : 'bg-gray-50/60 border-gray-200 hover:bg-gray-50'
                                                             }`}
                                                     >
@@ -1611,7 +2598,8 @@ export default function PrintProductionView() {
 
     const renderHojaCocinaGlobal = () => {
         const groupedByCook = {};
-        bulkItems.forEach(item => {
+        // Ya viene ordenado por tanda: primero lo de la familia mas grande.
+        bulkOrdenado.forEach(item => {
             const cookName = kitchenAssignments[item.name]?.trim() || 'SIN ASIGNAR';
             if (!groupedByCook[cookName]) groupedByCook[cookName] = [];
             groupedByCook[cookName].push(item);
@@ -1630,7 +2618,141 @@ export default function PrintProductionView() {
                     Resumen de cocción a granel para ollas (Cantidades totales a preparar).
                 </p>
 
+                {/* EL PLAN DEL DIA.
+                    Las cocineras van en paralelo, pero la tanda es un punto de
+                    encuentro: Paula no puede empacar bajo calorias si le falta
+                    el pure de Osmany. Ver quien carga mas ANTES de empezar deja
+                    repartir distinto; verlo despues solo sirve para lamentarse. */}
+                {(() => {
+                    const quien = (item) => kitchenAssignments[item.name]?.trim()
+                        || sugerirCocinera(item.name, TIPO_POR_CATEGORIA[item.category])?.cocinera
+                        || '';
+                    const carga = cargaPorTanda(bulkOrdenado, quien);
+                    if (carga.length === 0) return null;
+                    const nombres = [...new Set(carga.flatMap(c => Object.keys(c.porCocinera)))]
+                        .sort((a, b) => (a === 'SIN ASIGNAR' ? 1 : b === 'SIN ASIGNAR' ? -1 : a.localeCompare(b)));
+
+                    // overflow-x-auto en vez de overflow-hidden: con hidden, en el
+                    // celular la tabla de 518px quedaba cortada y no se veia quien
+                    // marca el ritmo de cada tanda. Ahora desliza.
+                    return (
+                        <div className="mb-8 border-2 border-black rounded overflow-x-auto print:overflow-hidden break-inside-avoid print:break-inside-avoid">
+                            <div className="bg-gray-900 text-white p-2.5 font-bold uppercase tracking-wide text-sm">
+                                🗓️ Plan del día — nadie pasa a la tanda siguiente hasta que todas terminen la de ahora
+                            </div>
+                            <table className="w-full text-sm border-collapse">
+                                <thead>
+                                    <tr className="bg-gray-200 text-xs uppercase font-bold">
+                                        <th className="border border-black p-2 text-left">Tanda</th>
+                                        {nombres.map(n => (
+                                            <th key={n} className="border border-black p-2 text-center">{n}</th>
+                                        ))}
+                                        <th className="border border-black p-2 text-center">Total</th>
+                                        <th className="border border-black p-2 text-left">Marca el ritmo</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {carga.map((c, i) => {
+                                        const fam = ordenDeFamilias[c.tanda];
+                                        const primera = i === 0;
+                                        return (
+                                            <tr key={`${c.tanda}-${c.menu}`} className={primera ? 'bg-amber-100 font-bold' : 'bg-white'}>
+                                                <td className="border border-black p-2">
+                                                    {fam ? `${fam.nombre} · menú ${c.menu}${c.menu === 2 ? ' (cenas)' : ''}` : 'Individuales y desayunos sueltos (nadie espera por ellos)'}
+                                                    {primera && (
+                                                        <div className="text-[11px] font-bold text-amber-800 normal-case">
+                                                            Al terminar esta, Paula empieza a empacar
+                                                        </div>
+                                                    )}
+                                                </td>
+                                                {nombres.map(n => (
+                                                    <td key={n} className="border border-black p-2 text-center">
+                                                        {c.porCocinera[n] || ''}
+                                                    </td>
+                                                ))}
+                                                <td className="border border-black p-2 text-center font-bold">{c.total}</td>
+                                                <td className="border border-black p-2 text-xs">
+                                                    {c.cuelloDeBotella
+                                                        ? `${c.cuelloDeBotella.cocinera} — ${c.cuelloDeBotella.cuantas} preparaciones`
+                                                        : ''}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    );
+                })()}
+
                 {renderKitchenConfig()}
+
+                {/* Estado de la tanda: que lleva esta hoja y que ya se mando antes */}
+                <div className="mb-6 border-2 border-black print:border rounded overflow-hidden">
+                    <div className="bg-gray-900 text-white px-4 py-2 font-bold uppercase tracking-wide text-sm">
+                        Hoja de cocina · {fechas.join('  +  ')}
+                        {soloRecurrentes && ' · SOLO MENSUALES Y QUINCENALES'}
+                    </div>
+                    <div className="p-4 bg-white text-sm">
+                        <b>{cleanOrders.length}</b> pedido{cleanOrders.length === 1 ? '' : 's'} para cocinar en esta hoja.
+                        {yaEnLaCocina.length > 0 && (
+                            <span className="text-gray-600"> · <b>{yaEnLaCocina.length}</b> ya se mandaron antes y no se repiten.</span>
+                        )}
+                        {canceladosYaCocinados.length > 0 && (
+                            <div className="mt-2 text-red-700 font-bold">
+                                Ojo: {canceladosYaCocinados.length} pedido(s) se cancelaron DESPUÉS de mandarse a cocinar
+                                ({canceladosYaCocinados.join(', ')}). Esa comida ya está hecha: no la empaquen.
+                            </div>
+                        )}
+                        {/* El boton se veia IGUAL antes y despues de apretarlo, asi
+                            que no habia forma de saber si ya se habia hecho. Ahora
+                            el recuadro dice en palabras que paso y que falta. */}
+                        {(() => {
+                            const enviadas = (tandasPrevias || [])
+                                .map(t => t?.enviada).filter(Boolean).sort();
+                            const ultima = enviadas[enviadas.length - 1];
+                            const cuando = ultima
+                                ? new Date(ultima).toLocaleString('es-CR', {
+                                    weekday: 'long', day: 'numeric', month: 'long',
+                                    hour: 'numeric', minute: '2-digit'
+                                })
+                                : null;
+                            const nada = cleanOrders.length === 0;
+
+                            return (
+                                <div className="mt-3 print:hidden">
+                                    {enviadas.length > 0 && (
+                                        <div className="mb-2 text-xs text-green-800 bg-green-50 border border-green-300 rounded px-3 py-2">
+                                            ✅ De este ciclo ya {enviadas.length === 1 ? 'mandaste 1 hoja' : `mandaste ${enviadas.length} hojas`}.
+                                            {cuando && <> La última: <b>{cuando}</b>.</>}
+                                            {yaEnLaCocina.length > 0 && <> Esos <b>{yaEnLaCocina.length}</b> pedidos ya no se repiten acá.</>}
+                                        </div>
+                                    )}
+                                    {nada ? (
+                                        <div className="text-xs text-gray-600 bg-gray-100 border border-gray-300 rounded px-3 py-2">
+                                            No hay nada nuevo que cocinar: todo lo de este ciclo ya se le mandó a Gina.
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <button
+                                                onClick={marcarTandaEnviada}
+                                                disabled={guardandoTanda}
+                                                className="px-4 py-2 bg-black text-white text-xs font-bold uppercase rounded disabled:opacity-40"
+                                            >
+                                                {guardandoTanda ? 'Guardando…' : `Listo, ya le pasé estos ${cleanOrders.length} pedidos a Gina`}
+                                            </button>
+                                            <p className="mt-1.5 text-xs text-gray-500 max-w-xl">
+                                                Apretalo <b>después</b> de mandarle la hoja. Sirve para que la hoja del día
+                                                siguiente no le vuelva a pedir lo que ya cocinó. Si no lo apretás, no se
+                                                daña nada: la próxima hoja sale con todo otra vez.
+                                            </p>
+                                        </>
+                                    )}
+                                </div>
+                            );
+                        })()}
+                    </div>
+                </div>
 
                 {/* SECCIÓN 1: PRODUCCIÓN A GRANEL PARA PACKS */}
                 <div className="mb-12">
@@ -1651,7 +2773,7 @@ export default function PrintProductionView() {
                             if (items.length === 0) return null;
 
                             return (
-                                <div key={cook} className="break-inside-avoid print:break-inside-avoid">
+                                <div key={cook} className="break-inside-avoid print:break-inside-avoid overflow-x-auto print:overflow-visible">
                                     <table className="w-full text-sm border-collapse border-2 border-black mb-2">
                                         <thead>
                                             <tr>
@@ -1667,7 +2789,33 @@ export default function PrintProductionView() {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {agruparArroces(aplicarAjustes(items, ajustesCocina), cantidadACocinar).map((fila, idx) => {
+                                            {conCabecerasDeTanda(
+                                                agruparArroces(aplicarAjustes(items, ajustesCocina), cantidadACocinar),
+                                                ordenDeFamilias
+                                            ).map((fila, idx) => {
+                                                // Por donde empezar. Es lo unico que le decia a la
+                                                // cocinera cual es la meta de las primeras dos horas.
+                                                if (fila.tipo === 'tanda') {
+                                                    return (
+                                                        <tr key={`tanda-${idx}`} className="bg-amber-100 border-y-2 border-black">
+                                                            <td colSpan="4" className="p-2 text-sm font-black uppercase tracking-wide text-amber-900">
+                                                                {fila.familia
+                                                                    ? `TANDA ${fila.numero}${fila.paso} — ${fila.familia} · MENÚ ${fila.menu}${fila.menu === 2 ? ' (cenas)' : ''} · ${fila.packs} ${fila.packs === 1 ? 'pack' : 'packs'}`
+                                                                    : 'AL FINAL — lo que no pertenece a ningún pack'}
+                                                                {fila.saltadas?.length > 0 && (
+                                                                    <div className="normal-case text-[11px] font-bold text-amber-800">
+                                                                        {`No hay tanda ${fila.saltadas.map(x => x.numero).join(' ni ')}: las ollas de ${fila.saltadas.map(x => x.nombre).join(' y ')} ya salieron arriba, se comparten con una familia más grande.`}
+                                                                    </div>
+                                                                )}
+                                                                {fila.esLaPrimera && (
+                                                                    <span className="ml-3 font-bold normal-case text-xs text-amber-800">
+                                                                        Empezar por acá. Al terminar el menú 1, Paula ya puede empacar.
+                                                                    </span>
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                }
                                                 // El arroz se cocina TODO JUNTO: va el total y debajo
                                                 // en cuanto hay que dividirlo.
                                                 if (fila.tipo === 'grupo') {
@@ -1704,20 +2852,104 @@ export default function PrintProductionView() {
                                                         <td className={`border-r border-black p-2.5 text-center font-extrabold text-lg text-gray-900 ${item.ajustado ? 'bg-sky-50' : ''}`}>
                                                             {/* Gina corrige el numero aca mismo cuando el calculo se
                                                                 equivoca. Se guarda para esta fecha y manda sobre el calculo. */}
-                                                            <input
-                                                                type="number"
-                                                                step="any"
-                                                                className="w-20 text-center font-extrabold text-lg bg-transparent border-b border-dashed border-gray-400 focus:border-solid focus:border-sky-600 focus:outline-none print:border-none"
-                                                                value={cantidadFinal(item, cantidadACocinar(item))}
-                                                                onChange={(e) => {
-                                                                    const v = e.target.value;
-                                                                    guardarAjuste(item.name, item.unit, {
-                                                                        cantidad: v === '' ? null : Number(v)
-                                                                    });
-                                                                }}
-                                                                aria-label={`Cantidad a cocinar de ${item.name}`}
-                                                            />{' '}
-                                                            {item.unit === 'g' ? 'g' : item.unit.toUpperCase()}
+                                                            {(() => {
+                                                                // El numero se MUESTRA en la unidad elegida y se GUARDA en la
+                                                                // del renglon. Asi Gina escribe "60 porciones" y el resto de
+                                                                // la hoja —el granel, el Excel, la tanda— sigue leyendo
+                                                                // gramos, sin que nadie tenga que acordarse de en que unidad
+                                                                // estaba mirando.
+                                                                const opciones = unidadesPosibles(item);
+                                                                const guardada = ajustesCocina?.[claveDeRenglon(item.name, item.unit)]?.unidadVista;
+                                                                const vista = opciones.includes(guardada) ? guardada : opciones[0];
+                                                                const enBase = cantidadFinal(item, cantidadACocinar(item));
+                                                                const mostrado = convertir({ ...item, totalQty: enBase }, vista);
+                                                                const valor = mostrado === null ? enBase
+                                                                    : (vista === 'kg' ? Math.round(mostrado * 10) / 10 : Math.ceil(mostrado - 0.0001));
+                                                                return (
+                                                                    <input
+                                                                        type="number"
+                                                                        step="any"
+                                                                        className="w-20 text-center font-extrabold text-lg bg-transparent border-b border-dashed border-gray-400 focus:border-solid focus:border-sky-600 focus:outline-none print:border-none"
+                                                                        value={valor}
+                                                                        onChange={(e) => {
+                                                                            const v = e.target.value;
+                                                                            const enUnidadBase = v === '' ? null : desdeUnidad(item, v, vista);
+                                                                            guardarAjuste(item.name, item.unit, {
+                                                                                cantidad: enUnidadBase === null ? null : Math.round(enUnidadBase * 100) / 100
+                                                                            });
+                                                                        }}
+                                                                        aria-label={`Cantidad a cocinar de ${item.name}`}
+                                                                    />
+                                                                );
+                                                            })()}{' '}
+                                                            {/* La unidad la elige quien lee: Gina manda la lasaña en
+                                                                PORCIONES y la carne en KILOS. Solo se ofrecen las que
+                                                                se pueden convertir de verdad — gramos y tazas no. */}
+                                                            {(() => {
+                                                                const opciones = unidadesPosibles(item);
+                                                                const elegida = ajustesCocina?.[claveDeRenglon(item.name, item.unit)]?.unidadVista;
+                                                                const actual = opciones.includes(elegida) ? elegida : opciones[0];
+                                                                if (opciones.length < 2) {
+                                                                    return item.unit === 'g' ? 'g' : item.unit.toUpperCase();
+                                                                }
+                                                                return (
+                                                                    <select
+                                                                        value={actual}
+                                                                        onChange={(e) => guardarAjuste(item.name, item.unit, { unidadVista: e.target.value })}
+                                                                        className="bg-transparent font-bold uppercase text-sm border-b border-dashed border-gray-400 focus:outline-none print:border-none print:appearance-none"
+                                                                        aria-label={`Unidad de ${item.name}`}
+                                                                    >
+                                                                        {opciones.map(u => (
+                                                                            <option key={u} value={u}>{UNIDADES[u]?.corta || u}</option>
+                                                                        ))}
+                                                                    </select>
+                                                                );
+                                                            })()}
+                                                            {(() => {
+                                                                // El equivalente en la otra unidad, chiquito debajo: sirve
+                                                                // para comparar contra la lista de Gina sin dividir a mano.
+                                                                const opciones = unidadesPosibles(item);
+                                                                const elegida = ajustesCocina?.[claveDeRenglon(item.name, item.unit)]?.unidadVista;
+                                                                const actual = opciones.includes(elegida) ? elegida : opciones[0];
+                                                                const otra = opciones.find(u => u !== actual && u !== 'kg');
+                                                                if (!otra) return null;
+                                                                // El MISMO numero que el de arriba, que ya trae la merma.
+                                                                // Con el crudo, el equivalente decia 5900 g donde la hoja
+                                                                // pedia 7670 y parecian dos renglones distintos.
+                                                                const base = cantidadFinal(item, cantidadACocinar(item));
+                                                                const v = convertir({ ...item, totalQty: base }, otra);
+                                                                if (v === null) return null;
+                                                                return (
+                                                                    <span className="block text-[9px] font-normal text-gray-500">
+                                                                        = {Math.ceil(v - 0.0001)} {UNIDADES[otra]?.corta || otra}
+                                                                    </span>
+                                                                );
+                                                            })()}
+                                                            {(() => {
+                                                                // Lo ya hecho y lo que pide toda la hornada. Con esto se
+                                                                // decide adelantar: si el sabado y el lunes juntos piden
+                                                                // 20 kg y hoy solo tocan 10, se pueden hacer los 20 de
+                                                                // una y el viernes no los vuelve a pedir.
+                                                                const hecho = Number(yaCocinado[claveDeProduccion(item.name, item.unit)]) || 0;
+                                                                const semana = pideTodaLaSemana(item);
+                                                                const pide = cuantoCocinar(item);
+                                                                const u = item.unit === 'g' ? 'g' : item.unit;
+                                                                if (!hecho && semana <= pide) return null;
+                                                                return (
+                                                                    <span className="block text-[9px] font-normal leading-tight">
+                                                                        {hecho > 0 && (
+                                                                            <span className="block text-green-700 font-bold">
+                                                                                ya hecho: {Math.ceil(hecho)} {u}
+                                                                            </span>
+                                                                        )}
+                                                                        {semana > pide && (
+                                                                            <span className="block text-gray-500">
+                                                                                toda la hornada: {Math.ceil(Math.max(0, semana - hecho))} {u}
+                                                                            </span>
+                                                                        )}
+                                                                    </span>
+                                                                );
+                                                            })()}
                                                             {item.ajustado && (
                                                                 <span className="block text-[9px] font-bold text-sky-700 uppercase print:hidden">corregido a mano</span>
                                                             )}
@@ -1789,15 +3021,15 @@ export default function PrintProductionView() {
             .replace(/'/g, '&apos;');
     };
 
-    const handleExportToExcel = async () => {
+    const handleExportToExcel = async (wbCompartido = null) => {
         try {
             if (typeof window !== 'undefined' && !window.Buffer) {
                 // Ensuring Uint8Array fallback if Buffer is missing in browser
                 window.Buffer = window.Buffer || Uint8Array;
             }
 
-            const wb = new ExcelJS.Workbook();
-            wb.creator = 'BiKitchen System';
+            const wb = wbCompartido || new ExcelJS.Workbook();
+            wb.creator = wb.creator || 'BiKitchen System';
             wb.lastModifiedBy = 'BiKitchen System';
             wb.created = new Date();
 
@@ -1838,16 +3070,28 @@ export default function PrintProductionView() {
             // para que lo entienda de una y pueda editarlo si algo cambia.
             // ═════════════════════════════════════════════════════════════════
 
-            /** "MIERCOLES 26 AGOSTO", tal como titula ella sus pestañas. */
-            const etiquetaDia = (() => {
-                if (!date) return 'PRODUCCION';
-                const d = new Date(`${date}T12:00:00`);
-                if (Number.isNaN(d.getTime())) return String(date);
-                const dias = ['DOMINGO', 'LUNES', 'MARTES', 'MIERCOLES', 'JUEVES', 'VIERNES', 'SABADO'];
-                const meses = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO',
-                    'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'];
-                return `${dias[d.getDay()]} ${d.getDate()} ${meses[d.getMonth()]}`;
-            })();
+            const DIAS = ['DOMINGO', 'LUNES', 'MARTES', 'MIERCOLES', 'JUEVES', 'VIERNES', 'SABADO'];
+            const MESES = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO',
+                'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'];
+
+            /** "SABADO 5 SEPTIEMBRE", tal como titula ella sus pestañas. */
+            const nombreDelDia = (f, conMes = true) => {
+                const d = new Date(`${f}T12:00:00`);
+                if (Number.isNaN(d.getTime())) return String(f);
+                return conMes
+                    ? `${DIAS[d.getDay()]} ${d.getDate()} ${MESES[d.getMonth()]}`
+                    : `${DIAS[d.getDay()]} ${d.getDate()}`;
+            };
+
+            /**
+             * El titulo de la pestaña del dia.
+             *
+             * Con dos fechas salia el `date` crudo —"Entregas del
+             * 2026-09-05,2026-09-07"—, que no se lee y no dice cual es cual.
+             */
+            const etiquetaDia = fechas.length === 0
+                ? 'PRODUCCION'
+                : fechas.map((f, i) => nombreDelDia(f, i === fechas.length - 1)).join(' + ');
 
             /** Nombre y zona; y la semana cuando el pack tiene varias entregas. */
             const etiquetaDeCliente = (c) => {
@@ -1873,7 +3117,13 @@ export default function PrintProductionView() {
                     esTwoPack: detectIsTwoPack(c.rawPedido || c),
                     otrosPacks: getOtherPacksTag(c.nombre, packName)
                 }),
-                sanitizeNote(sinSustituciones(c.observaciones))
+                // El MISMO filtro que la pestana de entregas. Antes las pestanas de
+                // packs usaban solo `sanitizeNote`, que no bota las notas internas:
+                // en la casilla de especificaciones de Melany Escalante salio
+                // impreso "PAGO CONFIRMADO por Gina... la tarjeta habia salido
+                // rechazada", que no le dice a nadie que meter en el envase y le
+                // roba el espacio a la instruccion de verdad.
+                notaParaEmpaque(sanitizeNote(sinSustituciones(c.observaciones)))
             ].filter(Boolean).join(' | ');
 
             /** Los platos del pack con el gramaje ya resuelto. */
@@ -1929,6 +3179,14 @@ export default function PrintProductionView() {
                 // bandeja entera. "es por kg o 4 tazas la porcion" — Gina.
                 const porcionDelPack = porcionesDelPack(packName);
                 const aviso = avisoDeFamilia(packName);
+
+                const {
+                    estandar: clientesEstandarDelBloque,
+                    personalizados: conCambioDelBloque,
+                    packsEstandar: packsEstandarDelBloque
+                } = separarPersonalizadosDePack(packData.clientes || [], platos, packName);
+                const { grupos: gruposDelBloque, propios: propiosDelBloque } =
+                    agruparCambiosDePack(conCambioDelBloque);
                 const porciones = porcionDelPack.textoPorcion
                     ? [porcionDelPack.textoPorcion]
                     : [`${platos[0]?.proteina?.gramosPorPorcion || getDefaultGrams(packName)} GRAMOS DE PROTEINA`];
@@ -1948,10 +3206,27 @@ export default function PrintProductionView() {
                     // Como se nombra la porcion cuando el plato no se mide en gramos
                     // por persona (bandejas familiares). Lo usa el Resumen por Menu.
                     porcionPlato: porcionDelPack.porcionCorta || null,
-                    totalPlatos: packData.totalPacks || 0,
-                    clientes: (packData.clientes || []).map(c => ({
+                    // Los tres bloques, igual que en pantalla: el menu tal cual,
+                    // los que cambiaron UN ingrediente (juntos los que pidieron el
+                    // mismo cambio) y los de menu propio. Antes el Excel mandaba
+                    // los clientes en una sola lista y quien empacaba tenia que
+                    // cruzar cada nota con su fila.
+                    totalPlatos: packsEstandarDelBloque,
+                    clientes: clientesEstandarDelBloque.map(c => ({
                         etiqueta: etiquetaDeCliente(c),
                         notas: notasDeCliente(c, packName)
+                    })),
+                    gruposDeCambio: gruposDelBloque.map(g => ({
+                        texto: g.texto,
+                        total: g.total,
+                        platos: g.platos,
+                        clientes: g.clientes.map(c => ({ etiqueta: etiquetaDeCliente(c) }))
+                    })),
+                    personalizados: propiosDelBloque.map(c => ({
+                        etiqueta: etiquetaDeCliente(c),
+                        notas: notasDeCliente(c, packName),
+                        texto: c.cambio?.texto || '',
+                        platos: c.platos
                     }))
                 };
             };
@@ -2062,15 +3337,38 @@ export default function PrintProductionView() {
             });
 
             // ── Entregas del día ──
-            const entregas = cleanOrders
+            // Del EMPAQUE, no de la tanda de cocina. La tanda descuenta lo que ya
+            // se mando a cocinar, y esta lista es para despachar: si sale de ahi,
+            // faltan clientes que si aparecen en las pestanas de packs y la misma
+            // hoja se contradice.
+            /**
+             * Para que dia es la comida de este cliente.
+             *
+             * Cuando la hoja cubre el sabado y el lunes se empacan las dos cosas
+             * el mismo dia, y sin esta columna no hay como saber cual bolsa sale
+             * hoy y cual es el adelanto que se guarda.
+             */
+            const diaDelPedido = (o) => {
+                const suyas = (calendarioDelPedido(o) || []).filter(f => fechas.includes(f));
+                if (suyas.length === 0) return '';
+                return suyas
+                    .map(f => nombreDelDia(f, false) + (fechasDeAdelanto.has(f) ? ' (adelanto)' : ''))
+                    .join(' + ');
+            };
+
+            const entregas = pedidosParaEmpaque
                 .map(o => ({
+                    dia: diaDelPedido(o),
                     cliente: o.cliente,
                     zona: o.zona_envio,
                     paquete: o.plan || o.tipoMenu,
                     // Sin teléfonos ni notas de control: esta lista se usa para despachar
                     cambios: notaParaEmpaque(sanitizeNote(o.observaciones))
                 }))
-                .sort((a, b) => String(a.cliente || '').localeCompare(String(b.cliente || '')));
+                // Primero por dia y despues por nombre: asi lo del sabado queda
+                // junto y el adelanto del lunes aparte, que es como se empaca.
+                .sort((a, b) => String(a.dia || '').localeCompare(String(b.dia || ''))
+                    || String(a.cliente || '').localeCompare(String(b.cliente || '')));
 
             agregarHojasGina(wb, { etiquetaDia, entregas, familias, desayunos, individuales });
 
@@ -2107,7 +3405,7 @@ export default function PrintProductionView() {
             let cRowIdx = 5;
 
             const groupedByCook = {};
-            bulkItems.forEach(item => {
+            bulkOrdenado.forEach(item => {
                 const cookName = kitchenAssignments[item.name]?.trim() || 'SIN ASIGNAR';
                 if (!groupedByCook[cookName]) groupedByCook[cookName] = [];
                 groupedByCook[cookName].push(item);
@@ -2269,6 +3567,7 @@ export default function PrintProductionView() {
                 rRowIdx++;
             });
 
+            if (wbCompartido) return;
             // Trigger Download using Uint8Array buffer to be 100% compatible with browser
             const buffer = await wb.xlsx.writeBuffer();
             const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -2291,6 +3590,163 @@ export default function PrintProductionView() {
             {/* Ocultar en impresión pero dar info en pantalla */}
             <div className="mb-4 print:hidden text-center">
                 <h1 className="text-2xl font-bold text-gray-800">Vista de Producción para: {date}</h1>
+
+                {/* LOS CUATRO DIAS.
+                    Cada hoja de la semana necesita una combinacion distinta de
+                    fechas, adelanto, familia, vista y rebaja. Armarlas a mano es
+                    lo que hizo que el 4 de setiembre la hoja saliera con un
+                    tercio de las cantidades y Gina la tuviera que rehacer.
+                    Aca cada boton deja todo puesto de una vez. */}
+                {(() => {
+                    const iso = (x) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+                    const proximo = (dow) => {
+                        const d = new Date(); d.setHours(12, 0, 0, 0);
+                        for (let i = 0; i <= 7; i++) {
+                            const x = new Date(d); x.setDate(x.getDate() + i);
+                            if (x.getDay() === dow) return x;
+                        }
+                        return d;
+                    };
+                    const sab = proximo(6);
+                    const lun = new Date(sab); lun.setDate(lun.getDate() + 2);
+                    const mie = proximo(3);
+                    const ciclo = `${iso(sab)},${iso(lun)}`;
+
+                    const ir = (cfg) => {
+                        const p = new URLSearchParams();
+                        p.set('date', cfg.date);
+                        if (cfg.adelanto) p.set('adelanto', cfg.adelanto);
+                        if (cfg.soloPacks) p.set('soloPacks', cfg.soloPacks);
+                        if (cfg.view) p.set('view', cfg.view);
+                        setSearchParams(p);
+                        // El jueves no hay nada que descontar todavia; el viernes
+                        // y el sabado si, o se le vuelve a pedir a la cocina lo
+                        // que ya hizo.
+                        setSinRebaja(!cfg.rebajar);
+                    };
+
+                    const dias = [
+                        {
+                            t: 'MARTES', s: `Empaque y cocina del ${nombreDelDiaCorto(iso(mie))}`,
+                            cfg: { date: iso(mie), rebajar: false }
+                        },
+                        // El adelanto son TODOS los mensuales y quincenales del lunes,
+                        // no una sola familia. `esRecurrente` ya deja fuera los
+                        // semanales; `soloPacks` era un recorte extra a bajo calorias
+                        // que dejaba sin adelantar dos tercios de la comida del lunes.
+                        // "El adelanto seria los paquetes mensuales y quincenales"
+                        // — Jan, 9 de setiembre de 2026.
+                        {
+                            t: 'JUEVES', s: `Solo cocina · ${nombreDelDiaCorto(iso(sab))} + adelanto del ${nombreDelDiaCorto(iso(lun))}`,
+                            cfg: { date: ciclo, adelanto: iso(lun), view: 'cocina', rebajar: false }
+                        },
+                        {
+                            t: 'VIERNES', s: 'Empaque y cocina, descontando lo del jueves',
+                            cfg: { date: ciclo, adelanto: iso(lun), rebajar: true }
+                        },
+                        {
+                            t: 'SÁBADO', s: `Empaque del ${nombreDelDiaCorto(iso(lun))} y lo que falte de cocina`,
+                            cfg: { date: ciclo, adelanto: iso(lun), rebajar: true }
+                        }
+                    ];
+
+                    return (
+                        <div className="max-w-3xl mx-auto mb-3 p-3 rounded-xl bg-white border-2 border-gray-200 print:hidden">
+                            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">¿Qué hoja vas a sacar hoy?</p>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                {dias.map(d => (
+                                    <button
+                                        key={d.t}
+                                        onClick={() => ir(d.cfg)}
+                                        className="text-left p-2 rounded-lg border-2 border-gray-200 hover:border-bikitchen-orange hover:bg-orange-50 transition-colors"
+                                    >
+                                        <span className="block font-black text-sm text-gray-800">{d.t}</span>
+                                        <span className="block text-[11px] text-gray-500 leading-tight mt-0.5">{d.s}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    );
+                })()}
+
+                {/* Que cubre esta hoja. Antes habia que armar la URL a mano y la
+                    hoja salia con un tercio de las cantidades: Gina tuvo que
+                    rehacerla entera el 4 de setiembre. */}
+                {(() => {
+                    const base = fechas[0];
+                    const siguiente = fechas[1] || proximoDiaDeReparto(base);
+                    if (!base || !siguiente) return null;
+                    const sumado = fechas.length > 1;
+
+                    const cambiar = (conAdelanto, familia) => {
+                        const p = new URLSearchParams(searchParams);
+                        p.set('date', conAdelanto ? `${base},${siguiente}` : base);
+                        if (conAdelanto) p.set('adelanto', siguiente); else p.delete('adelanto');
+                        if (conAdelanto && familia) p.set('soloPacks', familia); else p.delete('soloPacks');
+                        setSearchParams(p);
+                    };
+
+                    // En una linea, lo que cubre la hoja. Los botones para
+                    // cambiarlo solo aparecen si se piden.
+                    const resumen = sumado
+                        ? `${nombreDelDiaCorto(base)} completo + del ${nombreDelDiaCorto(siguiente)} ${soloPacks === 'bajoCalorias' ? 'solo los bajo calorías' : soloPacks === 'sinCarbos' ? 'solo los sin carbos' : 'los mensuales y quincenales'}`
+                        : `solo ${nombreDelDiaCorto(base)}`;
+
+                    return (
+                        <div className="max-w-3xl mx-auto mb-3 p-3 rounded-xl bg-sky-50 border-2 border-sky-300 text-left">
+                            <div className="flex items-start justify-between gap-3">
+                                <p className="text-sm text-sky-900">
+                                    Esta hoja cubre: <b>{resumen}</b>
+                                    {!sinRebaja && <> · <b>descontando</b> lo que ya se cocinó</>}
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={() => setVerAjustes(v => !v)}
+                                    className="shrink-0 text-xs font-bold text-sky-700 underline print:hidden"
+                                >
+                                    {verAjustes ? 'ocultar' : 'ajustar'}
+                                </button>
+                            </div>
+                            <div className={verAjustes ? 'mt-3 pt-3 border-t border-sky-300' : 'hidden'}>
+                            <label className="flex items-center gap-2 font-bold text-sky-900 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={sumado}
+                                    onChange={(e) => cambiar(e.target.checked, soloPacks)}
+                                    className="w-4 h-4 accent-bikitchen-orange"
+                                />
+                                Sumar el adelanto del {nombreDelDiaCorto(siguiente)}
+                            </label>
+                            <p className="text-[11px] text-sky-800 mt-1 ml-6">
+                                Del día que se adelanta van solo los packs mensuales y quincenales,
+                                sin desayunos. Sin esto la hoja cocina únicamente para {nombreDelDiaCorto(base)}.
+                            </p>
+                            {sumado && (
+                                <div className="mt-2 ml-6 flex flex-wrap items-center gap-2 text-sm">
+                                    <span className="text-sky-900">Del {nombreDelDiaCorto(siguiente)} traer:</span>
+                                    {[
+                                        { v: '', t: 'Todos los mensuales y quincenales' },
+                                        { v: 'bajoCalorias', t: 'Solo Bajo Calorías' },
+                                        { v: 'sinCarbos', t: 'Solo Sin Carbos' }
+                                    ].map(o => (
+                                        <button
+                                            key={o.v || 'todos'}
+                                            onClick={() => cambiar(true, o.v)}
+                                            className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors ${
+                                                soloPacks === o.v
+                                                    ? 'bg-bikitchen-orange text-white'
+                                                    : 'bg-white border border-sky-300 text-sky-800 hover:bg-sky-100'
+                                            }`}
+                                        >
+                                            {o.t}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                            </div>
+                        </div>
+                    );
+                })()}
                 <div className="flex flex-wrap items-center justify-center gap-3 mt-2 mb-3">
                     <div className="text-sm font-medium text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
                         {viewMode === 'empaque' && 'Mostrando solo Hoja de Empaque'}
@@ -2298,10 +3754,89 @@ export default function PrintProductionView() {
                     </div>
                 </div>
 
-                <RevisionHoja revision={revisarHoja(cleanOrders, officialMenus, date)} fusionados={fusionados} />
+                <RevisionHoja
+                    revision={revisarHoja(cleanOrders, officialMenus, date)}
+                    fusionados={fusionados}
+                    // El menu tambien se revisa. El 8 de setiembre la hoja salio
+                    // con los pedidos perfectos y el menu equivocado —el Sin
+                    // Carbos con proteinas del pack vegetariano y las cenas con
+                    // el menu de la semana pasada— y eso es igual de caro: se
+                    // cocina lo que no era.
+                    extra={[...problemasDelMenu({
+                        menus: officialMenus,
+                        fecha: fechas[0] || date
+                    }), ...problemasParaLaHoja({
+                        fecha: fechas[0] || date,
+                        preparaciones: bulkItems,
+                        // Los campos crudos viven en `rawPedido`: `cleanOrders`
+                        // ya viene transformado para la hoja. Leerlos del nivel
+                        // de arriba devolvia undefined y las revisiones daban
+                        // cero sin fallar, que es la peor forma de fallar.
+                        pedidos: cleanOrders.map(p => ({
+                            id: p.rawPedido?.id || p.id,
+                            cliente: p.cliente || p.nombre || '',
+                            plan: p.plan || p.tipoMenu || '',
+                            categoryLabel: p.categoryLabel || p.rawPedido?.categoryLabel || '',
+                            numeroOrden: p.numeroOrden || p.rawPedido?.numeroOrden || p.id,
+                            fechas: p.rawPedido?.fechas_entrega
+                                || (p.rawPedido?.fecha_entrega ? [p.rawPedido.fecha_entrega] : []),
+                            telefono: p.telefono || p.rawPedido?.telefono,
+                            zona: p.zona || p.zona_envio || p.rawPedido?.zona_envio || p.rawPedido?.direccion,
+                            esPack: !isActuallyIndividual(p.plan || p.tipoMenu || ''),
+                            esDesayuno: isDesayunoPack(p.plan || p.tipoMenu || ''),
+                            // Las proteinas elegidas viven DENTRO del item, en
+                            // `proteinas`. Leerlas del nombre del item devolvia el
+                            // nombre del pack y la revision acusaba a todo el mundo
+                            // de no haber elegido nada.
+                            platos: (p.rawPedido?.items || p.items || [])
+                                .flatMap(i => (i?.proteinas?.length
+                                    ? i.proteinas
+                                    : [i?.nombre || i?.name || i?.planName || '']))
+                                .filter(Boolean),
+                            familias: familiasDelCliente.get(
+                                String(p.cliente || p.nombre || '').trim().toLowerCase()
+                            ) || []
+                        }))
+                    })]}
+                    onArreglar={abrirEditor}
+                    onArreglarMenu={(familia) => abrirMenu(
+                        familia, false, `Menú ${familia}`,
+                        cleanOrders.filter(o => mapPackNameToMenuKey(o.plan || o.tipoMenu || '') === familia).length
+                    )}
+                />
+
+                {pedidoEnEdicion && (
+                    <EditorDePedido
+                        pedido={pedidoEnEdicion}
+                        onGuardar={guardarEdicion}
+                        onCancelarPedido={cancelarPedidoDeLaHoja}
+                        onCerrar={() => setPedidoEnEdicion(null)}
+                    />
+                )}
+
+                {packParaAgregar && (
+                    <AgregarClienteAlPack
+                        packName={packParaAgregar}
+                        fecha={fechas[0] || date}
+                        onGuardar={agregarClienteAlPack}
+                        onCerrar={() => setPackParaAgregar(null)}
+                    />
+                )}
+
+                {menuEnEdicion && (
+                    <EditorDeMenu
+                        familia={menuEnEdicion.familia}
+                        titulo={menuEnEdicion.titulo}
+                        esCena={menuEnEdicion.esCena}
+                        platosIniciales={menuEnEdicion.platos}
+                        cuantosClientes={menuEnEdicion.cuantosClientes}
+                        onGuardar={guardarMenuEditado}
+                        onCerrar={() => setMenuEnEdicion(null)}
+                    />
+                )}
 
                 {viewMode !== 'cocina' && (
-                    <div className="mt-4 flex justify-center gap-4">
+                    <div className="mt-4 flex flex-wrap justify-center gap-4">
                         <button
                             onClick={() => setEmpaqueTab('packs')}
                             className={`px-6 py-2 rounded-lg font-bold border-2 transition-all ${empaqueTab === 'packs' ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-purple-600 border-purple-200 hover:border-purple-600'}`}
@@ -2320,7 +3855,7 @@ export default function PrintProductionView() {
                     </div>
                 )}
 
-                <div className="mt-6 flex justify-center gap-4">
+                <div className="mt-6 flex flex-wrap justify-center gap-3 sm:gap-4">
                     <button
                         onClick={() => window.print()}
                         className="px-8 py-3 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition shadow-lg flex items-center gap-2"
@@ -2328,19 +3863,67 @@ export default function PrintProductionView() {
                         🖨️ Imprimir Documento
                     </button>
                     <button
-                        onClick={handleExportToExcel}
-                        className="px-8 py-3 bg-emerald-600 text-white rounded-lg font-bold hover:bg-emerald-700 transition shadow-lg flex items-center gap-2"
+                        onClick={handleDescargarTodo}
+                        disabled={descargando}
+                        className="px-8 py-3 bg-emerald-600 text-white rounded-lg font-bold hover:bg-emerald-700 transition shadow-lg flex items-center gap-2 disabled:opacity-60"
+                        title="Un solo archivo: el formato de Gina, lo que hay que cocinar y el empaque del adelanto"
                     >
-                        📊 Descargar Excel (formato de Gina)
+                        {descargando ? '⏳ Armando el archivo…' : '📊 Descargar Excel de la hoja'}
                     </button>
-                    {date === '2026-08-19' && (
-                        <button
-                            onClick={handleCargarMenuExcel19Agosto}
-                            disabled={importingExcel}
-                            className="px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold transition shadow-lg flex items-center gap-2 cursor-pointer"
-                        >
-                            {importingExcel ? '⏳ Cargando...' : '⚡ Cargar 6 Menús Excel (19 Ago)'}
-                        </button>
+
+                    {fechas.length > 1 && (
+                        <div className="w-full px-4 py-2 rounded-lg bg-sky-50 border-2 border-sky-300 text-sm text-sky-900">
+                            <b>Qué trae esta hoja:</b>{' '}
+                            {fechas.filter(f => !fechasDeAdelanto.has(f)).join(', ') || '—'} <b>completo</b>
+                            {' · '}
+                            {fechas.filter(f => fechasDeAdelanto.has(f)).join(', ') || '—'}{' '}
+                            <b>solo mensuales y quincenales, sin desayunos</b>
+                            {adelantoEnLaUrl.length === 0 && (
+                                <span className="block text-[11px] mt-0.5">
+                                    (no se indicó cuál día va recortado, así que se tomó el primero como completo)
+                                </span>
+                            )}
+                        </div>
+                    )}
+
+                    <label className={`px-5 py-3 rounded-lg font-bold shadow cursor-pointer flex items-center gap-3 border-2 transition ${sinRebaja
+                        ? 'bg-amber-100 border-amber-500 text-amber-900'
+                        : 'bg-white border-gray-300 text-gray-700'}`}>
+                        <input
+                            type="checkbox"
+                            checked={sinRebaja}
+                            onChange={(e) => setSinRebaja(e.target.checked)}
+                            className="w-5 h-5 cursor-pointer"
+                        />
+                        <span>
+                            {sinRebaja ? 'Viendo TODO (sin rebajar)' : 'Viendo lo que FALTA'}
+                            <span className="block text-[11px] font-normal">
+                                {sinRebaja
+                                    ? 'Las cantidades completas del dia'
+                                    : 'Ya descontado lo que Gina cocino'}
+                            </span>
+                        </span>
+                    </label>
+
+                    <label className="px-5 py-3 bg-white border-2 border-indigo-300 text-indigo-900 rounded-lg font-bold hover:bg-indigo-50 transition shadow cursor-pointer flex items-center gap-2 text-sm">
+                        📥 Cargar el adelanto de Gina
+                        <input
+                            type="file"
+                            accept=".xlsx,.xls"
+                            onChange={handleCargarAdelanto}
+                            className="hidden"
+                        />
+                    </label>
+
+                    {adelantoDeGina && (
+                        <span className="text-sm text-green-800 font-semibold">
+                            ✓ {adelantoDeGina.descontados.length} preparaciones descontadas
+                            {adelantoDeGina.sinConvertir.length > 0 &&
+                                ` · ${adelantoDeGina.sinConvertir.length} sin descontar (ver pestaña "Revisar a mano")`}
+                        </span>
+                    )}
+                    {errorDeAdelanto && (
+                        <span className="text-sm text-red-700 font-semibold">No se pudo leer: {errorDeAdelanto}</span>
                     )}
                 </div>
             </div>
@@ -2358,7 +3941,20 @@ export default function PrintProductionView() {
                             {renderIndividuales(individualPackNames)}
                         </>
                     ) : (
-                        regularPackNames.map((packName) => {
+                        // Cada familia se dibuja DOS veces: primero los packs que van
+                        // TAL CUAL —de corrida, pum pum pum— y despues los que llevan un
+                        // cambio escrito, que se arman uno por uno.
+                        //
+                        //   "Si son treinta y cuatro packs y treinta no tienen ningun
+                        //    cambio, y cuatro si, se nos pueden enredar y perder esos
+                        //    cuatro" — Jan, 9 de setiembre de 2026.
+                        //
+                        // La segunda pasada devuelve null cuando no hay ninguno, asi que
+                        // una familia sin cambios se sigue viendo igual que siempre.
+                        regularPackNames.flatMap((n) => [
+                            { packName: n, soloConCambio: false },
+                            { packName: n, soloConCambio: true }
+                        ]).map(({ packName, soloConCambio }) => {
                             const packData = consolidatedPacksMap[packName];
                             const kitchenMenuData = kitchenData.porMenu[packName] || (packData.sourcePackNames?.length > 0 ? kitchenData.porMenu[packData.sourcePackNames[0]] : null);
 
@@ -2431,13 +4027,95 @@ export default function PrintProductionView() {
                             const showVegetales = llevaFilaDeVegetal(platosEmpaque);
                             const rowsPerPlate = 1 + (showVegetales ? 1 : 0) + (showCarbos ? 1 : 0);
 
+                            // Quien cambio un plato sale de esta tabla y va a la suya.
+                            //
+                            // La columna de platos y la de clientes van por su lado: el
+                            // nombre de Guillermo Vargas caia en la fila del arroz aunque
+                            // su cambio fuera de la tilapia, y el Plato 1 seguia contando
+                            // 4 tilapias — una para el que no come tilapia.
+                            // El nombre del pack hace falta para saber contra que
+                            // composicion comparar: un "3 vegetales y 1 carbo" solo es
+                            // personalizacion si NO es lo que ese pack lleva de fabrica.
+                            const { estandar: estandarSinOrden, personalizados: clientesPropios } =
+                                separarPersonalizadosDePack(packData.clientes, platosEmpaque, packName);
+                            // De corrida por dia: primero los del sabado, que se cierran
+                            // hoy; despues los del lunes, que van a refri.
+                            const ordenados = porDiaDeEntrega(estandarSinOrden);
+                            // Y aparte los que llevan un cambio ESCRITO en la nota, que la
+                            // hoja no reconocia como cambio y se perdian entre los demas.
+                            const partido = apartarCambiosEscritos(ordenados, (c) => c.observaciones);
+                            const clientesEstandar = soloConCambio ? partido.conCambioEscrito : partido.sinCambio;
+                            if (soloConCambio && clientesEstandar.length === 0) return null;
+                            // MISMA formula que usaba `separarPersonalizadosDePack` para su
+                            // `packsEstandar`, para que partir la familia en dos no cambie
+                            // como se cuenta. `cantidadDePacks` cuenta distinto y bajaba los
+                            // numeros de toda la hoja.
+                            const packsEstandar = packsDe(clientesEstandar);
+                            // Los que cambiaron algo NO son excepciones sueltas: si cinco
+                            // pidieron el mismo cambio, son otra linea de cinco. Se agrupan
+                            // por el cambio para poder armarlos de corrido igual que los
+                            // estandar. Los de composicion propia van solos: su envase se
+                            // arma distinto y no se puede juntar con nadie.
+                            const { grupos: gruposDeCambio, propios: clientesDeMenuPropio } =
+                                agruparCambiosDePack(clientesPropios);
+
                             return (
-                                <div key={`empaque-${packName}`} className="pack-table-container mb-12 print:mb-0 print:break-after-page print:[page-break-after:always] break-inside-avoid print:break-inside-avoid">
+                                <div key={`empaque-${packName}-${soloConCambio ? "cambio" : "tal-cual"}`} className="pack-table-container mb-12 print:mb-0 print:break-after-page print:[page-break-after:always] break-inside-avoid print:break-inside-avoid">
                                     {/* ESTILO EXCEL */}
-                                    <div className="w-full">
+                                    {/* overflow-x-auto: en el celular la tabla mide 513px
+                                        sobre una pantalla de 375 y quedaba CORTADA —no se
+                                        veian ni Especificaciones ni Cliente—. Ahora desliza.
+                                        En impresion vuelve a visible: el papel es apaisado y
+                                        la tabla entra entera. */}
+                                    {/* Sin clientes no se dibuja la tabla. Al partir la familia en dos
+                                        hojas, la de "tal cual" puede quedar vacia —si TODOS llevan
+                                        cambio— y salia una cabecera diciendo "AQUI VAN 0 PACKS"
+                                        encima de una tabla sin nada. Los bloques de cambio y de menu
+                                        propio siguen saliendo igual: son otra cosa. */}
+                                    {clientesEstandar.length > 0 && (
+                                    <div className="w-full overflow-x-auto print:overflow-visible">
                                         {/* Cabecera Tipo Excel (Amarillo) */}
                                         <div className="bg-yellow-400 text-black font-bold text-lg p-1.5 print:py-1 print:text-base border border-black text-center uppercase tracking-wide">
-                                            {packName.replace(/\s*\d{1,3}(?:[.,]\d{3})*\s*(?:colones|col|¢)/i, '')} <span className="text-gray-800 text-base print:text-sm">({packData.totalPacks} Packs)</span>
+                                            {/* El numero de TANDA, el mismo que usa la cocina.
+                                                Sin el, la hoja se lee "4 packs, 3 packs, 4 packs" y
+                                                parece desordenada: cada tabla muestra solo su
+                                                pedacito, pero el orden lo manda el total de la
+                                                familia —almuerzos MAS cenas—. Con la tanda al
+                                                frente, Paula ve que va en el mismo orden que la
+                                                cocina y de mayor a menor. */}
+                                            <span className="text-gray-900">TANDA {puestoDeFamilia(packName) + 1}</span>
+                                            {'  —  '}
+                                            {packName.replace(/\s*\d{1,3}(?:[.,]\d{3})*\s*(?:colones|col|¢)/i, '')}
+                                            {soloConCambio && ' — CON CAMBIO'}
+                                            {' '}
+                                            <span className="text-gray-800 text-base print:text-sm">
+                                                {(() => {
+                                                    const fam = ordenDeFamilias[puestoDeFamilia(packName)];
+                                                    // Los packs DE ESTE BLOQUE, no los de la familia: la
+                                                    // familia se dibuja en dos hojas —los que van tal cual
+                                                    // y los que llevan cambio— y las dos decian el total,
+                                                    // asi que las dos ponian "30 packs" con 13 en una.
+                                                    const suyos = `${packsEstandar} ${packsEstandar === 1 ? 'pack' : 'packs'}`;
+                                                    // El numero que MANDA EL ORDEN va primero. Con el de la
+                                                    // tabla adelante, la hoja se leia "4 packs, 3 packs,
+                                                    // 4 packs" y parecia desordenada. Con el de la familia
+                                                    // adelante se lee 5, 5, 4, 2, 1, 1: de mayor a menor.
+                                                    return fam && fam.packs !== packsEstandar
+                                                        ? `(${fam.packs} en la familia · aquí van ${suyos})`
+                                                        : `(${suyos})`;
+                                                })()}
+                                            </span>
+                                            {/* Meter un cliente que falta, sin salir de la hoja. Carlos H.
+                                                Herrera no salio en la hoja del lunes porque se cargo con la
+                                                entrega ya pasada. No se imprime: es para la pantalla. */}
+                                            <button
+                                                type="button"
+                                                onClick={() => setPackParaAgregar(packName)}
+                                                className="print:hidden ml-3 px-2.5 py-1 rounded-lg border-2 border-gray-800 bg-white text-gray-900 text-[11px] font-bold hover:bg-gray-100 align-middle"
+                                                title={`Agregar un cliente a ${packName}`}
+                                            >
+                                                + Agregar cliente
+                                            </button>
                                             {/* "Ojala en la hoja especifique que es keto porque se cocina
                                                 aparte, igual cuando es vegetariano" — Gina. */}
                                             {avisoDeFamilia(packName) && (
@@ -2481,12 +4159,16 @@ export default function PrintProductionView() {
                                                 </tr>
                                             </thead>
                                             {platosEmpaque.map((p, idx) => {
-                                                const totalPlatos = (packData.totalPacks || 0) * (p.vecesPorPack || 1);
+                                                const totalPlatos = packsEstandar * (p.vecesPorPack || 1);
+                                                // Si alguien sale dos veces en ESTA tabla, cada linea dice
+                                                // cual de sus pedidos es. Christian Vargas tiene dos packs
+                                                // Regular a proposito y salian identicos: se leia duplicado.
+                                                const marcasRepetido = marcasDePedidoRepetido(clientesEstandar);
 
                                                 // Función para obtener la celda del cliente en base al índice absoluto de la fila
                                                 const renderClientCells = (subRowIndex) => {
                                                     const absoluteRowIndex = idx * rowsPerPlate + subRowIndex;
-                                                    const client = packData.clientes[absoluteRowIndex];
+                                                    const client = clientesEstandar[absoluteRowIndex];
 
                                                     if (client) {
                                                         // Las MISMAS etiquetas que el Excel: si cada salida armara su lista,
@@ -2505,7 +4187,7 @@ export default function PrintProductionView() {
 
                                                         const zone = client.zona_envio || '';
                                                         const zoneStr = zone && zone !== 'No especificada' && zone.toLowerCase() !== 'recoge en tienda' ? `, ${zone}` : '';
-                                                        let clientDisplayName = `${client.nombre} (${client.cantidad})${zoneStr}`;
+                                                        let clientDisplayName = `${client.nombre} (${client.cantidad})${zoneStr}${diaDelCliente(client)}`;
                                                         if (client.rawPedido) {
                                                             const schedule = getScheduleFromOrder(client.rawPedido);
                                                             const dateIdx = schedule.indexOf(date);
@@ -2513,11 +4195,36 @@ export default function PrintProductionView() {
                                                                 clientDisplayName = `${client.nombre} (${client.cantidad}) (Semana ${dateIdx + 1})${zoneStr}`;
                                                             }
                                                         }
+                                                        clientDisplayName += marcasRepetido[absoluteRowIndex] || '';
 
                                                         return (
                                                             <>
-                                                                <td className="border border-black p-1 print:py-0.5 print:px-1 align-middle whitespace-pre-wrap text-xs print:text-[10px] leading-tight print:leading-tight">{notes}</td>
-                                                                <td className="border border-black p-1 print:py-0.5 print:px-1 align-middle text-xs print:text-[11px] font-medium">{clientDisplayName}</td>
+                                                                {/* La casilla de especificaciones tambien abre el pedido: es lo que
+                                                                    Gina mas necesita cambiar, y buscarlo en otra pantalla era el
+                                                                    camino largo. Se imprime igual que antes. */}
+                                                                <td className="border border-black p-1 print:py-0.5 print:px-1 align-middle whitespace-pre-wrap text-xs print:text-[10px] leading-tight print:leading-tight">
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => abrirEditor(client.rawPedido?.id, client.nombre)}
+                                                                        title={`Cambiar las especificaciones de ${client.nombre}`}
+                                                                        className="text-left w-full whitespace-pre-wrap hover:underline decoration-dotted underline-offset-2 hover:text-blue-700 print:hover:no-underline"
+                                                                    >
+                                                                        {notes || <span className="text-gray-300 print:hidden">+ especificación</span>}
+                                                                    </button>
+                                                                </td>
+                                                                {/* El nombre es un boton: tocarlo abre SU pedido para arreglarlo sin
+                                                                    salir de la hoja. Se ve y se imprime como texto; el subrayado
+                                                                    solo aparece al pasar el mouse. */}
+                                                                <td className="border border-black p-1 print:py-0.5 print:px-1 align-middle text-xs print:text-[11px] font-medium">
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => abrirEditor(client.rawPedido?.id, client.nombre)}
+                                                                        title={`Arreglar el pedido de ${client.nombre}`}
+                                                                        className="text-left w-full hover:underline hover:text-blue-700 print:hover:no-underline"
+                                                                    >
+                                                                        {clientDisplayName}
+                                                                    </button>
+                                                                </td>
                                                             </>
                                                         );
                                                     } else {
@@ -2535,7 +4242,13 @@ export default function PrintProductionView() {
                                                         {/* FILA 1: PROTEÍNA */}
                                                         <tr>
                                                             <td className="border border-black p-1 print:py-0.5 print:px-1 text-center font-bold align-middle" rowSpan={rowsPerPlate}>Plato {p.numero}</td>
-                                                            <td className="border border-black p-1 print:py-0.5 print:px-1 font-medium bg-gray-50">{p.proteina?.nombre || ''}</td>
+                                                            <td className="border border-black p-1 print:py-0.5 print:px-1 font-medium bg-gray-50">
+                                                                <CeldaEditable
+                                                                    valor={p.proteina?.nombre || ''}
+                                                                    titulo={`Proteína del plato ${p.numero} — cambia el menú de todos los que llevan este pack`}
+                                                                    onGuardar={(v) => guardarCeldaDeMenu(packName, p.numero, 'proteina', v)}
+                                                                />
+                                                            </td>
                                                             <td className="border border-black p-1 print:py-0.5 print:px-1 text-center bg-gray-50">{p.proteina?.gramosPorPorcion ? `${p.proteina.gramosPorPorcion}` : ''}</td>
                                                             <td className="border border-black p-1 print:py-0.5 print:px-1 text-center font-bold text-base print:text-sm align-middle" rowSpan={rowsPerPlate}>{totalPlatos}</td>
                                                             {renderClientCells(0)}
@@ -2543,7 +4256,13 @@ export default function PrintProductionView() {
                                                         {/* FILA 2: VEGETALES (el Paquete Deluxe no lleva) */}
                                                         {showVegetales && (
                                                             <tr>
-                                                                <td className="border border-black p-1 print:py-0.5 print:px-1">{p.vegetal?.nombre || ''}</td>
+                                                                <td className="border border-black p-1 print:py-0.5 print:px-1 ">
+                                                                <CeldaEditable
+                                                                    valor={p.vegetal?.nombre || ''}
+                                                                    titulo={`Vegetales del plato ${p.numero} — cambia el menú de todos los que llevan este pack`}
+                                                                    onGuardar={(v) => guardarCeldaDeMenu(packName, p.numero, 'vegetal', v)}
+                                                                />
+                                                            </td>
                                                                 <td className="border border-black p-1 print:py-0.5 print:px-1 text-center">{p.vegetal?.cantidadPorPorcion ? `${p.vegetal.cantidadPorPorcion}` : ''}</td>
                                                                 {renderClientCells(1)}
                                                             </tr>
@@ -2551,7 +4270,13 @@ export default function PrintProductionView() {
                                                         {/* FILA 3: CARBOS (si aplica) */}
                                                         {showCarbos && (
                                                             <tr className="break-inside-avoid">
-                                                                <td className="border border-black p-1 print:py-0.5 print:px-1">{p.carbo?.nombre || ''}</td>
+                                                                <td className="border border-black p-1 print:py-0.5 print:px-1">
+                                                                    <CeldaEditable
+                                                                        valor={p.carbo?.nombre || ''}
+                                                                        titulo={`Carbohidrato del plato ${p.numero} — cambia el menú de todos los que llevan este pack`}
+                                                                        onGuardar={(v) => guardarCeldaDeMenu(packName, p.numero, 'carbo', v)}
+                                                                    />
+                                                                </td>
                                                                 <td className="border border-black p-1 print:py-0.5 print:px-1 text-center">{p.carbo?.cantidadPorPorcion ? `${p.carbo.cantidadPorPorcion}` : ''}</td>
                                                                 {renderClientCells(showVegetales ? 2 : 1)}
                                                             </tr>
@@ -2562,8 +4287,8 @@ export default function PrintProductionView() {
                                             {/* Filas adicionales si hay más clientes que filas de platos disponbles */}
                                             {(() => {
                                                 const totalAvailableRows = platosEmpaque.length * rowsPerPlate;
-                                                if (packData.clientes.length <= totalAvailableRows) return null;
-                                                const extraClients = packData.clientes.slice(totalAvailableRows);
+                                                if (clientesEstandar.length <= totalAvailableRows) return null;
+                                                const extraClients = clientesEstandar.slice(totalAvailableRows);
                                                 return (
                                                     <tbody className="break-inside-avoid print:break-inside-avoid">
                                                         {extraClients.map((client, extraIdx) => {
@@ -2600,8 +4325,32 @@ export default function PrintProductionView() {
                                                                     <td className="border border-black p-1 print:py-0.5 print:px-1 font-medium bg-gray-50 text-gray-400">—</td>
                                                                     <td className="border border-black p-1 print:py-0.5 print:px-1"></td>
                                                                     <td className="border border-black p-1 print:py-0.5 print:px-1"></td>
-                                                                    <td className="border border-black p-1 print:py-0.5 print:px-1 align-middle whitespace-pre-wrap text-xs print:text-[10px] leading-tight print:leading-tight">{notes}</td>
-                                                                    <td className="border border-black p-1 print:py-0.5 print:px-1 align-middle text-xs print:text-[11px] font-medium">{clientDisplayName}</td>
+                                                                    {/* La casilla de especificaciones tambien abre el pedido: es lo que
+                                                                        Gina mas necesita cambiar, y buscarlo en otra pantalla era el
+                                                                        camino largo. Se imprime igual que antes. */}
+                                                                    <td className="border border-black p-1 print:py-0.5 print:px-1 align-middle whitespace-pre-wrap text-xs print:text-[10px] leading-tight print:leading-tight">
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => abrirEditor(client.rawPedido?.id, client.nombre)}
+                                                                            title={`Cambiar las especificaciones de ${client.nombre}`}
+                                                                            className="text-left w-full whitespace-pre-wrap hover:underline decoration-dotted underline-offset-2 hover:text-blue-700 print:hover:no-underline"
+                                                                        >
+                                                                            {notes || <span className="text-gray-300 print:hidden">+ especificación</span>}
+                                                                        </button>
+                                                                    </td>
+                                                                    {/* El nombre es un boton: tocarlo abre SU pedido para arreglarlo sin
+                                                                        salir de la hoja. Se ve y se imprime como texto; el subrayado
+                                                                        solo aparece al pasar el mouse. */}
+                                                                    <td className="border border-black p-1 print:py-0.5 print:px-1 align-middle text-xs print:text-[11px] font-medium">
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => abrirEditor(client.rawPedido?.id, client.nombre)}
+                                                                            title={`Arreglar el pedido de ${client.nombre}`}
+                                                                            className="text-left w-full hover:underline hover:text-blue-700 print:hover:no-underline"
+                                                                        >
+                                                                            {clientDisplayName}
+                                                                        </button>
+                                                                    </td>
                                                                 </tr>
                                                             );
                                                         })}
@@ -2610,6 +4359,236 @@ export default function PrintProductionView() {
                                             })()}
                                         </table>
                                     </div>
+                                    )}
+
+                                    {/* BLOQUE 2: los que cambiaron UN ingrediente, agrupados por
+                                        el cambio. Cinco que pidieron pure de papa se arman de
+                                        corrido, como los estandar, no de a uno. */}
+                                    {!soloConCambio && gruposDeCambio.map((grupo) => {
+                                        // El mismo formato que la tabla amarilla: mismas columnas,
+                                        // mismo orden y editable igual.
+                                        //
+                                        // Antes era otra tabla —Plato/Proteina/Vegetal/Carbo/En vez
+                                        // de, todo horizontal— y por eso no tomaba ninguna funcion
+                                        // de edicion: no tenia donde ponerlas. Lo que decia la
+                                        // columna "En vez de" ahora va en Especificaciones, que es
+                                        // donde quien empaca ya busca las instrucciones.
+                                        const filasPorPlato = 1 + (showVegetales ? 1 : 0) + (showCarbos ? 1 : 0);
+                                        const clientesDelGrupo = grupo.clientes;
+                                        return (
+                                        <div key={`cambio-${packName}-${grupo.clave}`} className="mt-6 print:mt-4 break-inside-avoid print:break-inside-avoid">
+                                            <div className="bg-yellow-400 text-black font-bold text-lg p-1.5 print:py-1 print:text-base border border-black text-center uppercase tracking-wide">
+                                                <span className="text-gray-900">TANDA {puestoDeFamilia(packName) + 1}</span>
+                                                {'  —  '}
+                                                {packName} — CON CAMBIO{' '}
+                                                <span className="text-gray-800 text-base print:text-sm">
+                                                    ({grupo.total} {grupo.total === 1 ? 'pack' : 'packs'})
+                                                </span>
+                                            </div>
+                                            <div className="bg-[#fff2cc] text-black text-xs print:text-[10px] p-1.5 border-x border-b border-black">
+                                                Todos estos llevan el mismo cambio: <strong>{grupo.texto}</strong>
+                                            </div>
+
+                                            <div className="w-full overflow-x-auto print:overflow-visible">
+                                                <div className="border-x border-black bg-white flex flex-col text-xs print:text-[10px] font-bold w-full uppercase">
+                                                    <div className="flex border-b border-black">
+                                                        <div className="w-48 p-0.5 px-1 border-r border-black">CANTIDAD POR PLATO</div>
+                                                        <div className="flex-1 p-0.5 px-1">{porcion.textoPorcion || `${getDefaultGrams(packName)} GRAMOS DE PROTEINA`}</div>
+                                                    </div>
+                                                    {showVegetales && (
+                                                        <div className="flex border-b border-black">
+                                                            <div className="w-48 p-0.5 px-1 border-r border-black">CANTIDAD POR PLATO</div>
+                                                            <div className="flex-1 p-0.5 px-1">{`${porcion.vegetal} TAZA(S) DE VEGETALES`}</div>
+                                                        </div>
+                                                    )}
+                                                    {showCarbos && (
+                                                        <div className="flex border-b border-black">
+                                                            <div className="w-48 p-0.5 px-1 border-r border-black">CANTIDAD POR PLATO</div>
+                                                            <div className="flex-1 p-0.5 px-1">{`${porcion.carbo} TAZA(S) DE HARINA`}</div>
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                <table className="w-full border-collapse border border-black text-xs print:text-[11px] table-fixed">
+                                                    <thead>
+                                                        <tr className="bg-white">
+                                                            <th className="border border-black p-1 print:py-0.5 print:px-1 w-20 text-center"># de Plato</th>
+                                                            <th className="border border-black p-1 print:py-0.5 print:px-1 w-64 text-left">Descripcion</th>
+                                                            <th className="border border-black p-1 print:py-0.5 print:px-1 w-24 text-center">Cantidad</th>
+                                                            <th className="border border-black p-1 print:py-0.5 print:px-1 w-20 text-center">Platos</th>
+                                                            <th className="border border-black p-1 print:py-0.5 print:px-1 text-left">Especificaciones</th>
+                                                            <th className="border border-black p-1 print:py-0.5 print:px-1 w-64 text-left">Cliente</th>
+                                                        </tr>
+                                                    </thead>
+                                                    {grupo.platos.map((plato, idx) => {
+                                                        // La parte que cambio va resaltada, igual que antes, y en
+                                                        // Especificaciones queda escrito a que reemplaza.
+                                                        const fondo = (parte) => plato.cambiada === parte ? 'bg-[#e2f0d9] font-bold' : '';
+                                                        const enVezDe = plato.original
+                                                            ? `** ${String(plato[plato.cambiada] || '').toUpperCase()} en vez de ${plato.original}`
+                                                            : '';
+                                                        return (
+                                                            <tbody key={plato.numero} className="break-inside-avoid print:break-inside-avoid">
+                                                                <tr>
+                                                                    <td className="border border-black p-1 print:py-0.5 print:px-1 text-center font-bold align-middle" rowSpan={filasPorPlato}>Plato {plato.numero}</td>
+                                                                    <td className={`border border-black p-1 print:py-0.5 print:px-1 font-medium bg-gray-50 ${fondo('proteina')}`}>{plato.proteina || ''}</td>
+                                                                    <td className="border border-black p-1 print:py-0.5 print:px-1 text-center bg-gray-50">{porcion.proteina || ''}</td>
+                                                                    <td className="border border-black p-1 print:py-0.5 print:px-1 text-center font-bold text-base print:text-sm align-middle" rowSpan={filasPorPlato}>{grupo.total}</td>
+                                                                    <td className="border border-black p-1 print:py-0.5 print:px-1 align-middle whitespace-pre-wrap text-xs print:text-[10px] leading-tight" rowSpan={filasPorPlato}>{enVezDe}</td>
+                                                                    <td className="border border-black p-1 print:py-0.5 print:px-1 align-middle whitespace-pre-wrap text-xs print:text-[11px] font-medium" rowSpan={filasPorPlato}>
+                                                                        {idx === 0 && (() => {
+                                                                            // La llave era el NOMBRE, y los dos pedidos de Christian
+                                                                            // Vargas chocaban: React avisa que con llaves repetidas
+                                                                            // puede duplicar U OMITIR elementos. Un cliente que
+                                                                            // desaparece de la hoja es comida que no se empaca.
+                                                                            const marcas = marcasDePedidoRepetido(clientesDelGrupo);
+                                                                            return clientesDelGrupo.map((c, iCli) => {
+                                                                            const zona = c.zona_envio && c.zona_envio !== 'No especificada' ? `, ${c.zona_envio}` : '';
+                                                                            const cuantos = Number(c.cantidad) > 0 ? Number(c.cantidad) : 1;
+                                                                            return (
+                                                                                <button
+                                                                                    key={llaveDeCliente(c, iCli)}
+                                                                                    type="button"
+                                                                                    onClick={() => abrirEditor(c.rawPedido?.id, c.nombre)}
+                                                                                    title={`Arreglar el pedido de ${c.nombre}`}
+                                                                                    className="block text-left w-full hover:underline hover:text-blue-700 print:hover:no-underline"
+                                                                                >
+                                                                                    {`${c.nombre} (${cuantos})${zona}${diaDelCliente(c)}${marcas[iCli] || ''}`}
+                                                                                </button>
+                                                                            );
+                                                                            });
+                                                                        })()}
+                                                                    </td>
+                                                                </tr>
+                                                                {showVegetales && (
+                                                                    <tr>
+                                                                        <td className={`border border-black p-1 print:py-0.5 print:px-1 ${fondo('vegetal')}`}>{plato.vegetal || ''}</td>
+                                                                        <td className="border border-black p-1 print:py-0.5 print:px-1 text-center">{porcion.vegetal ?? ''}</td>
+                                                                    </tr>
+                                                                )}
+                                                                {showCarbos && (
+                                                                    <tr>
+                                                                        <td className={`border border-black p-1 print:py-0.5 print:px-1 ${fondo('carbo')}`}>{plato.carbo || ''}</td>
+                                                                        <td className="border border-black p-1 print:py-0.5 print:px-1 text-center">{porcion.carbo ?? ''}</td>
+                                                                    </tr>
+                                                                )}
+                                                            </tbody>
+                                                        );
+                                                    })}
+                                                </table>
+                                            </div>
+                                        </div>
+                                        );
+                                    })}
+
+                                    {/* BLOQUE 3: menu propio. Uno por cliente, porque el envase
+                                        se arma distinto y no se puede juntar con nadie.
+                                        Usa el MISMO formato que la tabla amarilla: antes era otra
+                                        tabla horizontal y por eso no se podia editar nada ahi. */}
+                                    {!soloConCambio && clientesDeMenuPropio.map((cliente) => {
+                                        const zona = cliente.zona_envio && cliente.zona_envio !== 'No especificada'
+                                            ? `, ${cliente.zona_envio}` : '';
+                                        const cuantos = Number(cliente.cantidad) > 0 ? Number(cliente.cantidad) : 1;
+                                        const filasPorPlato = 1 + (showVegetales ? 1 : 0) + (showCarbos ? 1 : 0);
+                                        return (
+                                            <div key={`propio-${packName}-${cliente.nombre}`} className="mt-6 print:mt-4 break-inside-avoid print:break-inside-avoid">
+                                                <div className="bg-yellow-400 text-black font-bold text-lg p-1.5 print:py-1 print:text-base border border-black text-center uppercase tracking-wide">
+                                                    <span className="text-gray-900">TANDA {puestoDeFamilia(packName) + 1}</span>
+                                                    {'  —  '}
+                                                    {packName} — MENÚ PROPIO{' '}
+                                                    <span className="text-gray-800 text-base print:text-sm">({cuantos} {cuantos === 1 ? 'pack' : 'packs'})</span>
+                                                </div>
+                                                <div className="bg-[#fff2cc] text-black text-xs print:text-[10px] p-1.5 border-x border-b border-black">
+                                                    No lleva el menú tal cual. Pidió: <strong>{cliente.cambio?.texto || ''}</strong>
+                                                </div>
+
+                                                <div className="w-full overflow-x-auto print:overflow-visible">
+                                                    <div className="border-x border-black bg-white flex flex-col text-xs print:text-[10px] font-bold w-full uppercase">
+                                                        <div className="flex border-b border-black">
+                                                            <div className="w-48 p-0.5 px-1 border-r border-black">CANTIDAD POR PLATO</div>
+                                                            <div className="flex-1 p-0.5 px-1">{porcion.textoPorcion || `${getDefaultGrams(packName)} GRAMOS DE PROTEINA`}</div>
+                                                        </div>
+                                                        {showVegetales && (
+                                                            <div className="flex border-b border-black">
+                                                                <div className="w-48 p-0.5 px-1 border-r border-black">CANTIDAD POR PLATO</div>
+                                                                <div className="flex-1 p-0.5 px-1">{`${porcion.vegetal} TAZA(S) DE VEGETALES`}</div>
+                                                            </div>
+                                                        )}
+                                                        {showCarbos && (
+                                                            <div className="flex border-b border-black">
+                                                                <div className="w-48 p-0.5 px-1 border-r border-black">CANTIDAD POR PLATO</div>
+                                                                <div className="flex-1 p-0.5 px-1">{`${porcion.carbo} TAZA(S) DE HARINA`}</div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    <table className="w-full border-collapse border border-black text-xs print:text-[11px] table-fixed">
+                                                        <thead>
+                                                            <tr className="bg-white">
+                                                                <th className="border border-black p-1 print:py-0.5 print:px-1 w-20 text-center"># de Plato</th>
+                                                                <th className="border border-black p-1 print:py-0.5 print:px-1 w-64 text-left">Descripcion</th>
+                                                                <th className="border border-black p-1 print:py-0.5 print:px-1 w-24 text-center">Cantidad</th>
+                                                                <th className="border border-black p-1 print:py-0.5 print:px-1 w-20 text-center">Platos</th>
+                                                                <th className="border border-black p-1 print:py-0.5 print:px-1 text-left">Especificaciones</th>
+                                                                <th className="border border-black p-1 print:py-0.5 print:px-1 w-64 text-left">Cliente</th>
+                                                            </tr>
+                                                        </thead>
+                                                        {(cliente.platos || []).map((plato, idx) => (
+                                                            <tbody key={plato.numero ?? idx} className="break-inside-avoid print:break-inside-avoid">
+                                                                <tr>
+                                                                    <td className="border border-black p-1 print:py-0.5 print:px-1 text-center font-bold align-middle" rowSpan={filasPorPlato}>Plato {plato.numero ?? idx + 1}</td>
+                                                                    <td className="border border-black p-1 print:py-0.5 print:px-1 font-medium bg-gray-50">{plato.proteina || ''}</td>
+                                                                    <td className="border border-black p-1 print:py-0.5 print:px-1 text-center bg-gray-50">{porcion.proteina || ''}</td>
+                                                                    <td className="border border-black p-1 print:py-0.5 print:px-1 text-center font-bold text-base print:text-sm align-middle" rowSpan={filasPorPlato}>{cuantos}</td>
+                                                                    <td className="border border-black p-1 print:py-0.5 print:px-1 align-middle whitespace-pre-wrap text-xs print:text-[10px] leading-tight" rowSpan={filasPorPlato}>
+                                                                        {idx === 0 ? (() => {
+                                                                            // Las mismas etiquetas que arma el bloque estandar.
+                                                                            // `notasDeCliente` NO existe en este alcance: vive dentro
+                                                                            // del armado del Excel, y usarlo aca tumbaba la hoja
+                                                                            // entera con "notasDeCliente is not defined" apenas
+                                                                            // aparecia un cliente con menu propio.
+                                                                            const tags = etiquetasDeEmpaque(cliente, {
+                                                                                esTwoPack: detectIsTwoPack(cliente.rawPedido || cliente),
+                                                                                otrosPacks: getOtherPacksTag(cliente.nombre, packName)
+                                                                            });
+                                                                            const obs = sinSustituciones(cliente.observaciones);
+                                                                            const lineas = tags.map(x => `** ${x}`);
+                                                                            if (obs) lineas.push(`** ${obs}`);
+                                                                            return lineas.join('\n');
+                                                                        })() : ''}
+                                                                    </td>
+                                                                    <td className="border border-black p-1 print:py-0.5 print:px-1 align-middle text-xs print:text-[11px] font-medium" rowSpan={filasPorPlato}>
+                                                                        {idx === 0 && (
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => abrirEditor(cliente.rawPedido?.id, cliente.nombre)}
+                                                                                title={`Arreglar el pedido de ${cliente.nombre}`}
+                                                                                className="text-left w-full hover:underline hover:text-blue-700 print:hover:no-underline"
+                                                                            >
+                                                                                {`${cliente.nombre} (${cuantos})${zona}${diaDelCliente(cliente)}`}
+                                                                            </button>
+                                                                        )}
+                                                                    </td>
+                                                                </tr>
+                                                                {showVegetales && (
+                                                                    <tr>
+                                                                        <td className="border border-black p-1 print:py-0.5 print:px-1">{plato.vegetal || ''}</td>
+                                                                        <td className="border border-black p-1 print:py-0.5 print:px-1 text-center">{porcion.vegetal ?? ''}</td>
+                                                                    </tr>
+                                                                )}
+                                                                {showCarbos && (
+                                                                    <tr>
+                                                                        <td className="border border-black p-1 print:py-0.5 print:px-1">{plato.carbo || ''}</td>
+                                                                        <td className="border border-black p-1 print:py-0.5 print:px-1 text-center">{porcion.carbo ?? ''}</td>
+                                                                    </tr>
+                                                                )}
+                                                            </tbody>
+                                                        ))}
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             );
                         })
@@ -2622,7 +4601,6 @@ export default function PrintProductionView() {
             )}
 
             {/* SECCIÓN 2: HOJA DE COCINA (Resúmenes) */}
-            {viewMode !== 'empaque' && renderQueSeCocinaJunto()}
             {viewMode !== 'empaque' && renderHojaCocinaGlobal()}
 
             <style>{`

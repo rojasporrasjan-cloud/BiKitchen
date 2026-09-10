@@ -81,6 +81,15 @@ export default function PromoMenuModal({
     };
 
     const handleAddToCart = () => {
+        // Ultima linea de defensa antes del carrito. Un pack a ₡0 llega al
+        // checkout como gratis y el pedido entra cobrando solo el envio: le
+        // paso a Daniel Milanes con un mensual de ₡77.500.
+        if (!(Number(promoPrice) > 0)) {
+            console.error('[PromoMenuModal] Precio invalido para', packName, promoPrice);
+            alert('Este pack no tiene precio configurado. Escribinos por WhatsApp y te ayudamos.');
+            return;
+        }
+
         setIsAdding(true);
 
         const cartItem = {
@@ -241,7 +250,7 @@ export default function PromoMenuModal({
                             <div>
                                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Precio promocional</p>
                                 <p className="text-2xl font-black text-slate-900">
-                                    ₡{promoPrice.toLocaleString('es-CR')}
+                                    ₡{Number(promoPrice || 0).toLocaleString('es-CR')}
                                 </p>
                             </div>
                             <div className="flex items-center bg-slate-100 rounded-2xl p-1">

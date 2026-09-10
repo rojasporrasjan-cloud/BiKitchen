@@ -674,6 +674,61 @@ grep -rn "import.*from.*miArchivo" src/
 
 ---
 
+## 🔥 REGLA 17 — LECTURAS DE FIREBASE: LAS MENOS POSIBLES
+
+```
+REGLA ABSOLUTA: antes de consultar Firestore, agotar las otras vías.
+Si igual hay que consultar, que sea UNA vez y dirigida.
+```
+
+BiKitchen está en el plan **Spark**, que da **50.000 lecturas por día** y al
+llegar al tope **deja de contestar**: Firebase responde `429
+RESOURCE_EXHAUSTED` y cualquier pantalla que se recargue sale en blanco.
+
+El 3 de setiembre de 2026 pasó de verdad, en plena preparación de la hoja de
+cocina para el sábado. Se agotó bajando la colección `pedidos` completa —545
+documentos— unas 25 veces en un día para hacer auditorías. La hoja siguió
+funcionando de caché, pero cualquier pestaña nueva salía vacía.
+
+### Orden en que hay que buscar la información
+
+```
+1. LA PANTALLA DEL ADMIN         ← ya tiene los datos cargados. Leer su DOM
+                                   no gasta NI UNA lectura.
+2. LOS CHATS Y ARCHIVOS          ← los .txt de WhatsApp, los Excel de Gina
+3. EL CÓDIGO                     ← menús, precios y reglas viven en el repo
+4. UNA CONSULTA DIRIGIDA         ← `runQuery` con `where`, que trae solo lo que
+                                   hace falta
+5. BAJAR LA COLECCIÓN ENTERA     ← último recurso, y una sola vez: guardar el
+                                   resultado en el scratchpad y reusarlo
+```
+
+**Para ver pedidos, mirar la página.** `/admin/orders`, `/admin/print-production`
+y `/admin/points-audit` ya cargaron todo; leer de ahí sale gratis.
+
+### Escribir es otra cuota
+
+Las escrituras tienen su propio límite (20.000/día) y **siguen funcionando
+aunque las lecturas estén agotadas**. Al escribir, buscar el documento por su
+**id real**, nunca por el `numeroOrden`: un PATCH a un id que no existe no
+falla, crea un documento nuevo. Así aparecieron 13 documentos fantasma el 3 de
+setiembre.
+
+### Lo que gasta cada pantalla
+
+| Pantalla | Lecturas por apertura |
+|---|---|
+| Pedidos | 545 |
+| Panel principal | 545 |
+| Clientes | 1.090 (baja `pedidos` dos veces + `orders`) |
+| Hoja de producción | 545 |
+
+El contador en la barra del panel (`ContadorDeCuota`) lo muestra en vivo. **Al
+agregar una lectura de colección entera, anotarla con `anotarLecturas(snap.size,
+'Motivo')`** — si no, el contador miente y vuelve a agarrarnos por sorpresa.
+
+---
+
 ## 📊 SCORE Y DEUDA TÉCNICA CONOCIDA (28 mayo 2026 — sesión 2)
 
 | Categoría | Score | Peso | Problemas conocidos |

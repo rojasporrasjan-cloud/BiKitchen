@@ -7,6 +7,7 @@ import { ClipboardList, Printer, Calendar, RefreshCw, FileText } from 'lucide-re
 import { mapPedidosFromLegacy } from '../../utils/logisticsUtils';
 import { getScheduleFromOrder } from '../../utils/orderDates';
 import { useOrders } from '../../context/OrdersContext';
+import { anotarLecturas } from '../../utils/contadorFirestore';
 
 /**
  * DispatchSheetView ("Hoja de Despacho / Reparto")
@@ -70,6 +71,7 @@ export default function DispatchSheetView() {
                     where("fecha_entrega", ">=", pastDateStr)
                 );
                 const snapshot = await getDocs(q);
+                anotarLecturas(snapshot.size, 'Hoja de despacho');
 
                 return snapshot.docs
                     .map(doc => ({ id: doc.id, ...doc.data() }))

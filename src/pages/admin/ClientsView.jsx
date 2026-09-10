@@ -39,6 +39,7 @@ import AdminPageHeader from '../../components/admin/AdminPageHeader';
 import { useOrders } from '../../context/OrdersContext';
 import ClientProfileModal from '../../components/admin/ClientProfileModal';
 import { getClientWhatsAppUrl } from '../../utils/phoneUtils';
+import { anotarLecturas } from '../../utils/contadorFirestore';
 
 export default function ClientsView() {
     const { orders } = useOrders(); // Access global orders for CRM history
@@ -118,7 +119,9 @@ export default function ClientsView() {
             let processed = 0;
             const uniqueClients = new Map();
             const pedidosSnap = await getDocs(collection(db, "pedidos"));
+            anotarLecturas(pedidosSnap.size, 'Clientes');
             const ordersSnap = await getDocs(collection(db, "orders"));
+            anotarLecturas(ordersSnap.size, 'Clientes');
 
             const allOrders = [
                 ...pedidosSnap.docs.map(d => ({ id: d.id, ...d.data() })),

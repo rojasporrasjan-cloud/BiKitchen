@@ -1185,7 +1185,9 @@ export default function PromotionsView() {
             />
 
             {/* Tabs Switcher */}
-            <div className="flex bg-gray-100 p-1 rounded-xl self-start md:self-auto">
+            {/* flex-wrap: las tres pestanas no caben en un celular y
+                "Descuentos Platos" se salia de la pantalla. */}
+            <div className="flex flex-wrap bg-gray-100 p-1 rounded-xl self-start md:self-auto">
                 <button
                     onClick={() => setActiveTab('promotions')}
                     className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'promotions'

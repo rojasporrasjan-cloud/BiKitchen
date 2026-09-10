@@ -18,6 +18,7 @@
  */
 
 import { calcularPuntos } from '../config/loyalty';
+import { esTelefonoDeRelleno } from './telefonoRelleno';
 import { individualesData } from '../data/individualesData';
 import { SHIPPING_ZONES } from '../data/shippingZones';
 
@@ -228,8 +229,12 @@ export const buildPedidoFromImport = (parsed, options = {}) => {
 export const validatePedidoForFirestore = (pedido) => {
     const problems = [];
     if (!pedido?.cliente) problems.push('Falta el nombre del cliente.');
-    // El correo se arma solo a partir del teléfono, así que basta con el teléfono
-    if (!pedido?.telefono) problems.push('Falta el teléfono (de ahí sale el correo también).');
+    // El teléfono NO bloquea. Gina manda pedidos sin número todas las semanas y
+    // antes había que inventarle uno para poder guardarlos: así nacieron los
+    // 8888-8888 que después fusionaban clientes distintos en la hoja. Es mejor
+    // un pedido sin teléfono —que se cocina bien y se completa después— que un
+    // teléfono falso que hace desaparecer al de al lado. Sale como aviso en
+    // `avisosDelPedido`, y `resolverCorreo` arma el correo con el nombre.
     if (typeof pedido?.correo !== 'string' || pedido.correo.length <= 4) {
         problems.push('El correo falta o es demasiado corto.');
     }
@@ -240,4 +245,27 @@ export const validatePedidoForFirestore = (pedido) => {
         problems.push('El pedido no tiene ítems.');
     }
     return problems;
+};
+
+/**
+ * Lo que queda incompleto pero NO impide guardar.
+ *
+ * La diferencia con `validatePedidoForFirestore` es quién se enoja: los
+ * problemas los rechaza Firestore, los avisos solo los lee una persona. Un
+ * pedido sin teléfono se cocina, se empaca y se entrega igual; lo único que no
+ * se puede es escribirle por WhatsApp. Eso se arregla después, sin volver a
+ * escribir el pedido entero.
+ *
+ * @returns {string[]} avisos; vacía significa que no falta nada
+ */
+export const avisosDelPedido = (pedido) => {
+    const avisos = [];
+    if (!pedido?.telefono) {
+        avisos.push('Sin teléfono. El pedido se guarda igual y se cocina bien; '
+            + 'cuando llegue el número se agrega desde Pedidos sin tener que rehacerlo.');
+    } else if (esTelefonoDeRelleno(pedido.telefono)) {
+        avisos.push(`El teléfono ${pedido.telefono} es de relleno, no identifica a nadie. `
+            + 'Mejor dejarlo vacío: un relleno repetido fusiona clientes distintos en la hoja.');
+    }
+    return avisos;
 };

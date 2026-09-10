@@ -32,6 +32,32 @@ export const BLE_ADVERTISED_SERVICE_UUID = '0000af30-0000-1000-8000-00805f9b34fb
 export const BLE_WRITE_UUID = '0000ff02-0000-1000-8000-00805f9b34fb';
 export const BLE_NOTIFY_UUID = '0000ff03-0000-1000-8000-00805f9b34fb';
 export const CHUNK_SIZE = 128;
+
+/**
+ * Lo mas chico que se manda de un golpe.
+ *
+ * Un BLE sin negociar acepta 20 bytes por escritura. Si un modelo no traga los
+ * 128 de la M110, el adaptador va bajando hasta aca antes de darse por vencido.
+ */
+export const CHUNK_MINIMO = 20;
+
+/**
+ * Los servicios BLE donde suelen vivir estas impresoras.
+ *
+ * Chrome solo deja MIRAR los servicios que se pidieron de antemano: lo que no
+ * este en esta lista es invisible aunque la impresora lo tenga. Por eso, cuando
+ * se conecto una impresora que no era la M110, no habia manera de descubrirle
+ * nada — ni siquiera para diagnosticar.
+ */
+export const SERVICIOS_CONOCIDOS = [
+    BLE_SERVICE_UUID,                            // ff00 - Phomemo M110
+    BLE_ADVERTISED_SERVICE_UUID,                 // af30 - lo que anuncia la M110
+    '000018f0-0000-1000-8000-00805f9b34fb',      // ESC/POS de muchas termicas
+    '0000fee7-0000-1000-8000-00805f9b34fb',      // otra comun en termicas
+    '49535343-fe7d-4ae5-8fa9-9fafd205e455',      // UART transparente (Microchip/ISSC)
+    'e7810a71-73ae-499d-8c15-faa9aef0c3f2',      // otra de etiquetadoras
+    '0000ffe0-0000-1000-8000-00805f9b34fb'       // modulos HM-10 y sus clones
+];
 export const CHUNK_DELAY_MS = 20;
 
 /**
