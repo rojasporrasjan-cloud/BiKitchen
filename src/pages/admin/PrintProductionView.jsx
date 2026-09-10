@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { db } from '../../firebase/config';
 import { useAuth } from '../../context/AuthContext';
@@ -24,6 +24,7 @@ import {
 import { getOfficialMenus, DEFAULT_MENUS } from '../../utils/firestoreMenus';
 import { getScheduleFromOrder } from '../../utils/orderDates';
 import { ESTADOS_QUE_IMPRIMEN } from '../../utils/estadosPedido';
+import { inicioDeVentana, ventanaAUsar, pedidosDeLaHoja } from '../../utils/ventanaDeLaHoja';
 import { anotarLecturas } from '../../utils/contadorFirestore';
 import { revisarHoja } from '../../utils/revisarHoja';
 import {
@@ -271,7 +272,10 @@ export default function PrintProductionView() {
         }
         setGuardandoAjuste(false);
     };
-    const [orders, setOrders] = useState([]);
+    // Lo que trajo la VENTANA de consulta, sin filtrar por la fecha de la hoja.
+    // Cambiar de fecha ya no vuelve a consultar: se filtra esto en memoria.
+    const [pedidosDeLaVentana, setPedidosDeLaVentana] = useState([]);
+    const [ventanaCargada, setVentanaCargada] = useState('');
     const [officialMenus, setOfficialMenus] = useState(null);
     const [loading, setLoading] = useState(true);
     const [empaqueTab, setEmpaqueTab] = useState('packs');
@@ -495,21 +499,31 @@ export default function PrintProductionView() {
     };
 
 
+    // La ventana solo se amplia hacia ATRAS. Avanzar en la semana —del sabado al
+    // lunes— pide una ventana que empieza DESPUES, y lo que ya esta cargado la
+    // contiene: no hace falta volver a consultar. Antes cada cambio de fecha
+    // bajaba los ~545 pedidos otra vez, y asi se agoto la cuota del 9 de
+    // setiembre de 2026 cambiando de hoja.
+    useEffect(() => {
+        const necesaria = inicioDeVentana(primeraFecha);
+        if (!necesaria) return;
+        setVentanaCargada(prev => ventanaAUsar(prev, necesaria));
+    }, [primeraFecha]);
+
+    // Los menus si dependen de la fecha de la hoja, no de la ventana.
     useEffect(() => {
         if (!date) return;
+        getOfficialMenus().then(menus => setOfficialMenus(menus)).catch(console.error);
+    }, [date]);
+
+    useEffect(() => {
+        if (!ventanaCargada) return;
         setLoading(true);
-        const targetDate = new Date(primeraFecha + "T12:00:00");
-        const pastDate = new Date(targetDate);
-        pastDate.setDate(pastDate.getDate() - 40); // Buscar hasta 40 días atrás para mensualidades
-        const pastDateStr = pastDate.toISOString().split('T')[0];
 
         const q = query(
             collection(db, "pedidos"),
-            where("fecha_entrega", ">=", pastDateStr)
+            where("fecha_entrega", ">=", ventanaCargada)
         );
-
-        // Cargar menús oficiales
-        getOfficialMenus().then(menus => setOfficialMenus(menus)).catch(console.error);
 
         // Listener en tiempo real: cualquier cambio en observaciones o pedidos se refleja al instante
         const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -524,19 +538,9 @@ export default function PrintProductionView() {
             // refresco inflaria la cuenta hasta volverla inservible.
             anotarLecturas(snapshot.docChanges().length, 'Hoja de producción');
 
-            let rawOrders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-            rawOrders = rawOrders.filter(order => {
-                const status = (order.status || order.estado || '').toLowerCase();
-                if (!ESTADOS_QUE_IMPRIMEN.includes(status)) return false;
-
-                const schedule = getScheduleFromOrder(order);
-                return schedule.some(f => fechas.includes(f));
-            });
-
-            rawOrders.sort((a, b) => (a.cliente || '').localeCompare(b.cliente || ''));
-
-            setOrders(mapPedidosFromLegacy(rawOrders));
+            // Se guarda CRUDO. El filtro por fecha vive en `orders`, mas abajo:
+            // asi cambiar de dia no cuesta una consulta nueva.
+            setPedidosDeLaVentana(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
             setLoading(false);
         }, (error) => {
             console.error("Error in real-time orders listener:", error);
@@ -544,7 +548,22 @@ export default function PrintProductionView() {
         });
 
         return () => unsubscribe();
-    }, [date]);
+    }, [ventanaCargada]);
+
+    /**
+     * Los pedidos de ESTA hoja, filtrados en memoria.
+     *
+     * Es el mismo filtro que antes corria dentro del `onSnapshot`; lo unico que
+     * cambia es DONDE corre. Al depender de `date` y no de la consulta, pasar de
+     * la hoja del sabado a la del lunes no gasta ni una lectura.
+     */
+    const orders = useMemo(
+        () => mapPedidosFromLegacy(pedidosDeLaHoja(pedidosDeLaVentana, fechas, {
+            estadosQueImprimen: ESTADOS_QUE_IMPRIMEN,
+            calendario: getScheduleFromOrder
+        })),
+        [pedidosDeLaVentana, date]
+    );
 
     // Que pedidos ya se le mandaron a la cocina en tandas anteriores. Sin esto
     // la hoja del viernes repetiria lo del miercoles y se cocinaria dos veces.
