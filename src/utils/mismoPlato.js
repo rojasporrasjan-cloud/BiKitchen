@@ -38,6 +38,24 @@ const VACIAS = new Set([
  * contenga al otro. Son colores y clases: el frijol blanco y el rojo se compran
  * aparte y se cocinan aparte.
  */
+/**
+ * Conectores que hacen del nombre largo OTRO plato, no el mismo escrito mejor.
+ *
+ *   "Picadillo de vainica Y zanahoria"        -> ademas lleva zanahoria
+ *   "Zuchinnis salteados CON hongos"          -> ademas lleva hongos
+ *   "Mix de vegetales ESTILO Mediterraneo"    -> otra preparacion
+ *
+ * "estilo" entro el 10 de setiembre de 2026. Sin el, "Mix de vegetales estilo
+ * Mediterraneo" —que solo existe en el menu de cena vegetariana— se fusionaba
+ * con el "Mix de vegetales" del bajo calorias, y como gana el nombre mas largo
+ * la hoja le pedia a Gina 58 porciones de un plato que no estaba en el menu de
+ * la semana. Ella lo cacho: "no tenemos mix de vegetales mediterraneos".
+ *
+ * Un nombre que la cocina no reconoce es peor que dos renglones separados: se
+ * para a preguntar, o peor, cocina otra cosa.
+ */
+const DISTINGUEN = new Set(['y', 'con', 'estilo']);
+
 const VARIEDADES = new Set([
     'blanco', 'blancos', 'blanca', 'blancas',
     'negro', 'negros', 'negra', 'negras',
@@ -65,7 +83,7 @@ const agregaIngredientes = (nombreLargo, palabrasDelCorto) => {
     const palabras = sinTildes(nombreLargo).replace(/[^a-z0-9ñ\s]/g, ' ').split(/\s+/).filter(Boolean);
     const yaEsta = new Set(palabrasDelCorto);
     for (let i = 1; i < palabras.length; i++) {
-        if (palabras[i - 1] !== 'y' && palabras[i - 1] !== 'con') continue;
+        if (!DISTINGUEN.has(palabras[i - 1])) continue;
         const p = palabras[i];
         if (VACIAS.has(p)) continue;
         if (!yaEsta.has(p)) return true;   // le suma algo que el otro no tiene
