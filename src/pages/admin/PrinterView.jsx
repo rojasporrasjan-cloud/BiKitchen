@@ -41,6 +41,7 @@ import { contarPorGrupo, leerImpresas, anotarImpresas, gruposQueFaltan, totalImp
 import {
     ETIQUETAS_POR_ROLLO, tamanoValido, planDeRollos, proximoRollo
 } from '../../utils/labels/rollosDeEtiquetas';
+import { anotarLecturas } from '../../utils/contadorFirestore';
 
 /**
  * Etiquetas de producción.
@@ -230,6 +231,7 @@ export default function PrinterView() {
                     where('fecha_entrega', '>=', desde.toISOString().split('T')[0])
                 ));
                 if (cancelado) return;
+                anotarLecturas(snapshot.size, 'Etiquetas');
                 setRawOrders(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
             } catch (err) {
                 console.error('[Etiquetas] Error leyendo pedidos:', err);

@@ -4,6 +4,7 @@ import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import AdminPageHeader from '../../components/admin/AdminPageHeader';
 import { toCRInternational, formatCRPhone } from '../../utils/phoneUtils';
+import { anotarLecturas } from '../../utils/contadorFirestore';
 
 /**
  * PhoneAuditView — revisión de solo lectura de los teléfonos guardados.
@@ -47,6 +48,8 @@ export default function PhoneAuditView() {
                 getDocs(collection(db, 'clientes')),
                 getDocs(collection(db, 'pedidos'))
             ]);
+
+            anotarLecturas(pedidosSnap.size + clientesSnap.size, 'Revisar teléfonos');
 
             const rows = [];
             let okCount = 0;

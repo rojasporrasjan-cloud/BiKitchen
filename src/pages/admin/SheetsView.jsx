@@ -28,6 +28,7 @@ import {
 import { useOrders } from '../../context/OrdersContext';
 import HojaDeCocinaPorTandas from '../../components/admin/HojaDeCocinaPorTandas';
 import { abrirHoja } from '../../utils/abrirHoja';
+import { anotarLecturas } from '../../utils/contadorFirestore';
 
 export default function SheetsView() {
     const { orders: allOrders, updateOrderStatus } = useOrders();
@@ -107,6 +108,7 @@ export default function SheetsView() {
                 );
                 
                 const snapshot = await getDocs(q);
+                anotarLecturas(snapshot.size, 'Hojas');
                 let results = snapshot.docs.map(doc => ({
                     id: doc.id,
                     ...doc.data()

@@ -10,6 +10,7 @@ import {
     resumenAuditoria,
     paraCorregir
 } from '../../utils/auditarPuntos';
+import { anotarLecturas } from '../../utils/contadorFirestore';
 
 /**
  * Auditoría de BiPuntos — solo para el dueño.
@@ -51,6 +52,7 @@ export default function PointsAuditView() {
                 getDocs(collection(db, 'loyalty'))
             ]);
 
+            anotarLecturas(pedidosSnap.size + loyaltySnap.size, 'Auditoría BiPuntos');
             const pedidos = pedidosSnap.docs.map(d => ({ id: d.id, ...d.data() }));
             const loyaltyPorCorreo = {};
             loyaltySnap.docs.forEach(d => { loyaltyPorCorreo[d.id] = d.data(); });
