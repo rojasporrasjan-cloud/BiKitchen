@@ -59,6 +59,7 @@ import RevisionHoja from '../../components/admin/RevisionHoja';
 import { problemasParaLaHoja } from '../../utils/revisionDeLaHoja';
 import { problemasDelMenu } from '../../utils/revisionDeMenus';
 import { leerAsignaciones, guardarAsignaciones } from '../../utils/asignacionesDeCocina';
+import { apartarCambiosEscritos, packsDe } from '../../utils/cambiosEscritos';
 import EditorDePedido from '../../components/admin/EditorDePedido';
 import { cambiosDelPedido, cambioParaCancelar, cuantasProteinasPide } from '../../utils/guardarPedidoDeLaHoja';
 import EditorDeMenu from '../../components/admin/EditorDeMenu';
@@ -3920,7 +3921,20 @@ export default function PrintProductionView() {
                             {renderIndividuales(individualPackNames)}
                         </>
                     ) : (
-                        regularPackNames.map((packName) => {
+                        // Cada familia se dibuja DOS veces: primero los packs que van
+                        // TAL CUAL —de corrida, pum pum pum— y despues los que llevan un
+                        // cambio escrito, que se arman uno por uno.
+                        //
+                        //   "Si son treinta y cuatro packs y treinta no tienen ningun
+                        //    cambio, y cuatro si, se nos pueden enredar y perder esos
+                        //    cuatro" — Jan, 9 de setiembre de 2026.
+                        //
+                        // La segunda pasada devuelve null cuando no hay ninguno, asi que
+                        // una familia sin cambios se sigue viendo igual que siempre.
+                        regularPackNames.flatMap((n) => [
+                            { packName: n, soloConCambio: false },
+                            { packName: n, soloConCambio: true }
+                        ]).map(({ packName, soloConCambio }) => {
                             const packData = consolidatedPacksMap[packName];
                             const kitchenMenuData = kitchenData.porMenu[packName] || (packData.sourcePackNames?.length > 0 ? kitchenData.porMenu[packData.sourcePackNames[0]] : null);
 
@@ -4002,11 +4016,21 @@ export default function PrintProductionView() {
                             // El nombre del pack hace falta para saber contra que
                             // composicion comparar: un "3 vegetales y 1 carbo" solo es
                             // personalizacion si NO es lo que ese pack lleva de fabrica.
-                            const { estandar: estandarSinOrden, personalizados: clientesPropios, packsEstandar } =
+                            const { estandar: estandarSinOrden, personalizados: clientesPropios } =
                                 separarPersonalizadosDePack(packData.clientes, platosEmpaque, packName);
                             // De corrida por dia: primero los del sabado, que se cierran
                             // hoy; despues los del lunes, que van a refri.
-                            const clientesEstandar = porDiaDeEntrega(estandarSinOrden);
+                            const ordenados = porDiaDeEntrega(estandarSinOrden);
+                            // Y aparte los que llevan un cambio ESCRITO en la nota, que la
+                            // hoja no reconocia como cambio y se perdian entre los demas.
+                            const partido = apartarCambiosEscritos(ordenados, (c) => c.observaciones);
+                            const clientesEstandar = soloConCambio ? partido.conCambioEscrito : partido.sinCambio;
+                            if (soloConCambio && clientesEstandar.length === 0) return null;
+                            // MISMA formula que usaba `separarPersonalizadosDePack` para su
+                            // `packsEstandar`, para que partir la familia en dos no cambie
+                            // como se cuenta. `cantidadDePacks` cuenta distinto y bajaba los
+                            // numeros de toda la hoja.
+                            const packsEstandar = packsDe(clientesEstandar);
                             // Los que cambiaron algo NO son excepciones sueltas: si cinco
                             // pidieron el mismo cambio, son otra linea de cinco. Se agrupan
                             // por el cambio para poder armarlos de corrido igual que los
@@ -4016,13 +4040,19 @@ export default function PrintProductionView() {
                                 agruparCambiosDePack(clientesPropios);
 
                             return (
-                                <div key={`empaque-${packName}`} className="pack-table-container mb-12 print:mb-0 print:break-after-page print:[page-break-after:always] break-inside-avoid print:break-inside-avoid">
+                                <div key={`empaque-${packName}-${soloConCambio ? "cambio" : "tal-cual"}`} className="pack-table-container mb-12 print:mb-0 print:break-after-page print:[page-break-after:always] break-inside-avoid print:break-inside-avoid">
                                     {/* ESTILO EXCEL */}
                                     {/* overflow-x-auto: en el celular la tabla mide 513px
                                         sobre una pantalla de 375 y quedaba CORTADA —no se
                                         veian ni Especificaciones ni Cliente—. Ahora desliza.
                                         En impresion vuelve a visible: el papel es apaisado y
                                         la tabla entra entera. */}
+                                    {/* Sin clientes no se dibuja la tabla. Al partir la familia en dos
+                                        hojas, la de "tal cual" puede quedar vacia —si TODOS llevan
+                                        cambio— y salia una cabecera diciendo "AQUI VAN 0 PACKS"
+                                        encima de una tabla sin nada. Los bloques de cambio y de menu
+                                        propio siguen saliendo igual: son otra cosa. */}
+                                    {clientesEstandar.length > 0 && (
                                     <div className="w-full overflow-x-auto print:overflow-visible">
                                         {/* Cabecera Tipo Excel (Amarillo) */}
                                         <div className="bg-yellow-400 text-black font-bold text-lg p-1.5 print:py-1 print:text-base border border-black text-center uppercase tracking-wide">
@@ -4036,16 +4066,21 @@ export default function PrintProductionView() {
                                             <span className="text-gray-900">TANDA {puestoDeFamilia(packName) + 1}</span>
                                             {'  —  '}
                                             {packName.replace(/\s*\d{1,3}(?:[.,]\d{3})*\s*(?:colones|col|¢)/i, '')}
+                                            {soloConCambio && ' — CON CAMBIO'}
                                             {' '}
                                             <span className="text-gray-800 text-base print:text-sm">
                                                 {(() => {
                                                     const fam = ordenDeFamilias[puestoDeFamilia(packName)];
-                                                    const suyos = `${packData.totalPacks} ${packData.totalPacks === 1 ? 'pack' : 'packs'}`;
+                                                    // Los packs DE ESTE BLOQUE, no los de la familia: la
+                                                    // familia se dibuja en dos hojas —los que van tal cual
+                                                    // y los que llevan cambio— y las dos decian el total,
+                                                    // asi que las dos ponian "30 packs" con 13 en una.
+                                                    const suyos = `${packsEstandar} ${packsEstandar === 1 ? 'pack' : 'packs'}`;
                                                     // El numero que MANDA EL ORDEN va primero. Con el de la
                                                     // tabla adelante, la hoja se leia "4 packs, 3 packs,
                                                     // 4 packs" y parecia desordenada. Con el de la familia
                                                     // adelante se lee 5, 5, 4, 2, 1, 1: de mayor a menor.
-                                                    return fam && fam.packs !== packData.totalPacks
+                                                    return fam && fam.packs !== packsEstandar
                                                         ? `(${fam.packs} en la familia · aquí van ${suyos})`
                                                         : `(${suyos})`;
                                                 })()}
@@ -4299,11 +4334,12 @@ export default function PrintProductionView() {
                                             })()}
                                         </table>
                                     </div>
+                                    )}
 
                                     {/* BLOQUE 2: los que cambiaron UN ingrediente, agrupados por
                                         el cambio. Cinco que pidieron pure de papa se arman de
                                         corrido, como los estandar, no de a uno. */}
-                                    {gruposDeCambio.map((grupo) => {
+                                    {!soloConCambio && gruposDeCambio.map((grupo) => {
                                         // El mismo formato que la tabla amarilla: mismas columnas,
                                         // mismo orden y editable igual.
                                         //
@@ -4417,7 +4453,7 @@ export default function PrintProductionView() {
                                         se arma distinto y no se puede juntar con nadie.
                                         Usa el MISMO formato que la tabla amarilla: antes era otra
                                         tabla horizontal y por eso no se podia editar nada ahi. */}
-                                    {clientesDeMenuPropio.map((cliente) => {
+                                    {!soloConCambio && clientesDeMenuPropio.map((cliente) => {
                                         const zona = cliente.zona_envio && cliente.zona_envio !== 'No especificada'
                                             ? `, ${cliente.zona_envio}` : '';
                                         const cuantos = Number(cliente.cantidad) > 0 ? Number(cliente.cantidad) : 1;
