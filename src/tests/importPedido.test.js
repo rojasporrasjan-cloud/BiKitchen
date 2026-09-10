@@ -261,10 +261,17 @@ describe('validatePedidoForFirestore', () => {
     });
 
     it('rechaza lo mismo que rechazarían las reglas de Firestore', () => {
+        // El cero YA NO se rechaza: una regalia vale cero y hay que poder
+        // crearla desde la app. Sale como aviso, no como bloqueo.
         expect(validatePedidoForFirestore({
             cliente: 'Ana', telefono: '88888888', correo: 'a@b.com',
             total: 0, items: [{ nombre: 'X' }]
-        })).toContain('El total tiene que ser un número mayor a cero.');
+        })).toEqual([]);
+
+        expect(validatePedidoForFirestore({
+            cliente: 'Ana', telefono: '88888888', correo: 'a@b.com',
+            total: -100, items: [{ nombre: 'X' }]
+        })).toContain('El total tiene que ser un número de cero para arriba.');
 
         expect(validatePedidoForFirestore({
             cliente: 'Ana', telefono: '88888888', correo: 'a@b.com',

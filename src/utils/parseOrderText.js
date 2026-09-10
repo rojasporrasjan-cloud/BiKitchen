@@ -158,6 +158,33 @@ const aISO = (y, m, d) => `${y}-${String(m + 1).padStart(2, '0')}-${String(d).pa
  * @param {Date} [hoy] - inyectable para poder testear
  * @returns {string|null}
  */
+const DIAS_SEMANA = /^(lunes|martes|miercoles|jueves|viernes|sabado|domingo)$/;
+
+/**
+ * ¿Esta línea es una fecha suelta, o es otra cosa que arranca con un número?
+ *
+ * Dentro del bloque de entregas se acepta un día sin mes —"Miércoles 26" hereda
+ * setiembre de la línea de arriba— y eso estaba tomando cualquier renglón que
+ * empezara con un número. Un ítem como
+ *
+ *     3 Individuales — Pollo encebollado 250 g
+ *
+ * se leía como el 3 de setiembre y le agregaba al pedido una entrega que nadie
+ * pidió. Una entrega inventada es comida cocinada de más, y encima el cliente
+ * aparece en la hoja de un día que no le toca.
+ *
+ * Una línea de fecha solo trae números, el nombre de un día y a lo sumo un "de".
+ * Cualquier otra palabra —el nombre de un plato— la descalifica.
+ */
+const pareceLineaDeFecha = (sinT) => {
+    const palabras = String(sinT || '')
+        .replace(/[^a-z0-9\s]/gi, ' ')
+        .split(/\s+/)
+        .filter(Boolean);
+    if (palabras.length === 0) return false;
+    return palabras.every(p => /^\d{1,4}$/.test(p) || DIAS_SEMANA.test(p) || p === 'de');
+};
+
 export const parseFechaEspanol = (texto, hoy = new Date(), defaultMonth = null) => {
     if (!texto || typeof texto !== 'string') return null;
 
@@ -182,7 +209,9 @@ export const parseFechaEspanol = (texto, hoy = new Date(), defaultMonth = null) 
         const dia = Number(conMes[1]);
         let mes = MESES[conMes[2]];
 
-        if (mes === undefined && defaultMonth !== null) {
+        // Solo se hereda el mes si la linea es una fecha de verdad. Sin esto,
+        // "3 Individuales" tomaba "individuales" como si fuera un mes.
+        if (mes === undefined && defaultMonth !== null && pareceLineaDeFecha(sinT)) {
             mes = defaultMonth;
         }
 
@@ -202,7 +231,7 @@ export const parseFechaEspanol = (texto, hoy = new Date(), defaultMonth = null) 
 
     // "Miércoles 26" (sin mes explícito, hereda el mes del bloque)
     const sinNombreMes = sinT.match(/\b(\d{1,2})\b/);
-    if (sinNombreMes && defaultMonth !== null) {
+    if (sinNombreMes && defaultMonth !== null && pareceLineaDeFecha(sinT)) {
         const dia = Number(sinNombreMes[1]);
         if (dia >= 1 && dia <= 31) {
             const base = new Date(hoy);

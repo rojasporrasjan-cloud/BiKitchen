@@ -238,8 +238,19 @@ export const validatePedidoForFirestore = (pedido) => {
     if (typeof pedido?.correo !== 'string' || pedido.correo.length <= 4) {
         problems.push('El correo falta o es demasiado corto.');
     }
-    if (typeof pedido?.total !== 'number' || pedido.total <= 0) {
-        problems.push('El total tiene que ser un número mayor a cero.');
+    // El CERO se permite a proposito: una regalia vale cero.
+    //
+    // Giancarlo Longui y Alejandra Calderon llevan proteinas de regalia que van
+    // en su propio pedido, aparte del pack, con total 0 porque ya se cobraron
+    // adentro. Con el cero bloqueado no habia forma de crearlas desde la app:
+    // hubo que escribirlas a mano en la base, por fuera de todo lo que revisa
+    // el importador. Y como la lista cambia cada semana, esa tarea se repite y
+    // se olvida: al lunes 14 de setiembre de 2026 a los dos les faltaba.
+    //
+    // Un cero de verdad equivocado no se pierde: sale como aviso, que es lo que
+    // corresponde a algo que hay que mirar pero no impide guardar.
+    if (typeof pedido?.total !== 'number' || pedido.total < 0) {
+        problems.push('El total tiene que ser un número de cero para arriba.');
     }
     if (!Array.isArray(pedido?.items) || pedido.items.length === 0) {
         problems.push('El pedido no tiene ítems.');
@@ -266,6 +277,10 @@ export const avisosDelPedido = (pedido) => {
     } else if (esTelefonoDeRelleno(pedido.telefono)) {
         avisos.push(`El teléfono ${pedido.telefono} es de relleno, no identifica a nadie. `
             + 'Mejor dejarlo vacío: un relleno repetido fusiona clientes distintos en la hoja.');
+    }
+    if (pedido?.total === 0) {
+        avisos.push('El total quedó en ₡0. Si es una regalía está bien; si no, '
+            + 'escribí el monto antes de crearlo.');
     }
     return avisos;
 };
