@@ -60,6 +60,7 @@ import { problemasParaLaHoja } from '../../utils/revisionDeLaHoja';
 import { problemasDelMenu } from '../../utils/revisionDeMenus';
 import { leerAsignaciones, guardarAsignaciones } from '../../utils/asignacionesDeCocina';
 import { apartarCambiosEscritos, packsDe } from '../../utils/cambiosEscritos';
+import { marcasDePedidoRepetido, llaveDeCliente } from '../../utils/clientesRepetidos';
 import EditorDePedido from '../../components/admin/EditorDePedido';
 import { cambiosDelPedido, cambioParaCancelar, cuantasProteinasPide } from '../../utils/guardarPedidoDeLaHoja';
 import EditorDeMenu from '../../components/admin/EditorDeMenu';
@@ -1375,7 +1376,7 @@ export default function PrintProductionView() {
                         const items = client.items;
 
                         return (
-                            <tbody key={clientName} className="break-inside-avoid print:break-inside-avoid">
+                            <tbody key={`${clientName}-${idx}`} className="break-inside-avoid print:break-inside-avoid">
                                 {items.map((item, itemIdx) => (
                                     <tr key={itemIdx}>
                                         <td className="border border-black p-3 font-medium text-gray-800">{item.name}</td>
@@ -2467,8 +2468,8 @@ export default function PrintProductionView() {
                                 <div className="mt-2 text-amber-900">
                                     Estos quedaron sin dueño, hay que ponerlos a mano:
                                     <ul className="list-disc ml-6 mt-1">
-                                        {resumenReparto.sinAsignar.map(x => (
-                                            <li key={x.nombre}><b>{x.nombre}</b> — {x.motivo}</li>
+                                        {resumenReparto.sinAsignar.map((x, iAviso) => (
+                                            <li key={`${x.nombre}-${iAviso}`}><b>{x.nombre}</b> — {x.motivo}</li>
                                         ))}
                                     </ul>
                                 </div>
@@ -2525,14 +2526,14 @@ export default function PrintProductionView() {
                                         </div>
 
                                         <div className="space-y-2.5 max-h-64 overflow-y-auto pr-1">
-                                            {itemsInCat.map(item => {
+                                            {itemsInCat.map((item, iItem) => {
                                                 const isSelected = selectedKitchenItems.includes(item.name);
                                                 const currentCook = kitchenAssignments[item.name] || '';
                                                 const sugerencia = sugerirCocinera(item.name, TIPO_POR_CATEGORIA[item.category]);
 
                                                 return (
                                                     <div
-                                                        key={item.name}
+                                                        key={`${item.name}-${iItem}`}
                                                         className={`flex items-center justify-between p-2 rounded border transition-all text-xs ${isSelected ? 'bg-blue-50 border-blue-400' : 'bg-gray-50/60 border-gray-200 hover:bg-gray-50'
                                                             }`}
                                                     >
@@ -4140,6 +4141,10 @@ export default function PrintProductionView() {
                                             </thead>
                                             {platosEmpaque.map((p, idx) => {
                                                 const totalPlatos = packsEstandar * (p.vecesPorPack || 1);
+                                                // Si alguien sale dos veces en ESTA tabla, cada linea dice
+                                                // cual de sus pedidos es. Christian Vargas tiene dos packs
+                                                // Regular a proposito y salian identicos: se leia duplicado.
+                                                const marcasRepetido = marcasDePedidoRepetido(clientesEstandar);
 
                                                 // Función para obtener la celda del cliente en base al índice absoluto de la fila
                                                 const renderClientCells = (subRowIndex) => {
@@ -4171,6 +4176,7 @@ export default function PrintProductionView() {
                                                                 clientDisplayName = `${client.nombre} (${client.cantidad}) (Semana ${dateIdx + 1})${zoneStr}`;
                                                             }
                                                         }
+                                                        clientDisplayName += marcasRepetido[absoluteRowIndex] || '';
 
                                                         return (
                                                             <>
@@ -4411,21 +4417,28 @@ export default function PrintProductionView() {
                                                                     <td className="border border-black p-1 print:py-0.5 print:px-1 text-center font-bold text-base print:text-sm align-middle" rowSpan={filasPorPlato}>{grupo.total}</td>
                                                                     <td className="border border-black p-1 print:py-0.5 print:px-1 align-middle whitespace-pre-wrap text-xs print:text-[10px] leading-tight" rowSpan={filasPorPlato}>{enVezDe}</td>
                                                                     <td className="border border-black p-1 print:py-0.5 print:px-1 align-middle whitespace-pre-wrap text-xs print:text-[11px] font-medium" rowSpan={filasPorPlato}>
-                                                                        {idx === 0 && clientesDelGrupo.map((c) => {
+                                                                        {idx === 0 && (() => {
+                                                                            // La llave era el NOMBRE, y los dos pedidos de Christian
+                                                                            // Vargas chocaban: React avisa que con llaves repetidas
+                                                                            // puede duplicar U OMITIR elementos. Un cliente que
+                                                                            // desaparece de la hoja es comida que no se empaca.
+                                                                            const marcas = marcasDePedidoRepetido(clientesDelGrupo);
+                                                                            return clientesDelGrupo.map((c, iCli) => {
                                                                             const zona = c.zona_envio && c.zona_envio !== 'No especificada' ? `, ${c.zona_envio}` : '';
                                                                             const cuantos = Number(c.cantidad) > 0 ? Number(c.cantidad) : 1;
                                                                             return (
                                                                                 <button
-                                                                                    key={c.nombre}
+                                                                                    key={llaveDeCliente(c, iCli)}
                                                                                     type="button"
                                                                                     onClick={() => abrirEditor(c.rawPedido?.id, c.nombre)}
                                                                                     title={`Arreglar el pedido de ${c.nombre}`}
                                                                                     className="block text-left w-full hover:underline hover:text-blue-700 print:hover:no-underline"
                                                                                 >
-                                                                                    {`${c.nombre} (${cuantos})${zona}${diaDelCliente(c)}`}
+                                                                                    {`${c.nombre} (${cuantos})${zona}${diaDelCliente(c)}${marcas[iCli] || ''}`}
                                                                                 </button>
                                                                             );
-                                                                        })}
+                                                                            });
+                                                                        })()}
                                                                     </td>
                                                                 </tr>
                                                                 {showVegetales && (
