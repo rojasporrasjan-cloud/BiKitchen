@@ -4440,7 +4440,21 @@ export default function PrintProductionView() {
                                                                     <td className="border border-black p-1 print:py-0.5 print:px-1 text-center bg-gray-50">{porcion.proteina || ''}</td>
                                                                     <td className="border border-black p-1 print:py-0.5 print:px-1 text-center font-bold text-base print:text-sm align-middle" rowSpan={filasPorPlato}>{cuantos}</td>
                                                                     <td className="border border-black p-1 print:py-0.5 print:px-1 align-middle whitespace-pre-wrap text-xs print:text-[10px] leading-tight" rowSpan={filasPorPlato}>
-                                                                        {idx === 0 ? notasDeCliente(cliente, packName) : ''}
+                                                                        {idx === 0 ? (() => {
+                                                                            // Las mismas etiquetas que arma el bloque estandar.
+                                                                            // `notasDeCliente` NO existe en este alcance: vive dentro
+                                                                            // del armado del Excel, y usarlo aca tumbaba la hoja
+                                                                            // entera con "notasDeCliente is not defined" apenas
+                                                                            // aparecia un cliente con menu propio.
+                                                                            const tags = etiquetasDeEmpaque(cliente, {
+                                                                                esTwoPack: detectIsTwoPack(cliente.rawPedido || cliente),
+                                                                                otrosPacks: getOtherPacksTag(cliente.nombre, packName)
+                                                                            });
+                                                                            const obs = sinSustituciones(cliente.observaciones);
+                                                                            const lineas = tags.map(x => `** ${x}`);
+                                                                            if (obs) lineas.push(`** ${obs}`);
+                                                                            return lineas.join('\n');
+                                                                        })() : ''}
                                                                     </td>
                                                                     <td className="border border-black p-1 print:py-0.5 print:px-1 align-middle text-xs print:text-[11px] font-medium" rowSpan={filasPorPlato}>
                                                                         {idx === 0 && (
