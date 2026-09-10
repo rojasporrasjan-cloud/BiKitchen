@@ -448,16 +448,22 @@ export default function PrintProductionView() {
     /**
      * ¿Se preparan tambien los desayunos del dia que se adelanta?
      *
-     * Arranca APAGADO porque asi lo pidio Gina en agosto de 2026: "un pack de
-     * almuerzos se puede dejar hecho; un gallo pinto con huevo no". Sin ese
-     * filtro la hoja pedia 35 desayunos que nadie iba a hacer.
+     * Arranca PRENDIDO, y no es un cambio de opinion: es alinear la pantalla
+     * con lo que la cocina ya hacia.
      *
-     * El 10 de setiembre dijo lo contrario: que los del lunes tambien los hace
-     * el jueves. Por eso es un interruptor y no un cambio de regla: se prende
-     * cuando ella lo confirma y se apaga si vuelve atras, sin tocar codigo. Una
-     * regla que costo 35 desayunos de mas no se da vuelta en silencio.
+     * En agosto de 2026 Gina pidio lo contrario —"un pack de almuerzos se puede
+     * dejar hecho; un gallo pinto con huevo no"— y se filtraron. Pero ese filtro
+     * quedo SOLO en la pantalla: el Excel, que es de donde Gina cocina, siguio
+     * trayendo los desayunos del dia adelantado todo este tiempo. La pantalla
+     * decia 4 y el archivo decia 27, y mando el archivo.
+     *
+     * El 10 de setiembre Gina confirmo que si los hace el jueves. O sea que lo
+     * que estaba mal era la pantalla, no la cocina.
+     *
+     * Sigue siendo un interruptor: si vuelve a cambiar, se apaga sin tocar
+     * codigo. Y apagado ahora las DOS dicen lo mismo, que es lo que faltaba.
      */
-    const [conDesayunosDelAdelanto, setConDesayunosDelAdelanto] = useState(false);
+    const [conDesayunosDelAdelanto, setConDesayunosDelAdelanto] = useState(true);
     // Los controles finos —sumar el adelanto, que familia traer— los deja
     // puestos el boton del dia. Se esconden porque eran cinco botones mas en una
     // pantalla que ya tenia demasiados: "hay mucho desorden" (Jan).
@@ -2044,7 +2050,14 @@ export default function PrintProductionView() {
      * cocinando de mas o de menos.
      */
     const handleExportarCuatroPestanas = async (wbCompartido = null) => {
-        const enFecha = (f) => todosLosPedidos.filter(p => (calendarioDelPedido(p) || []).includes(f));
+        // El MISMO filtro de desayunos que usa la pantalla.
+        //
+        // El Excel armaba sus pedidos por su cuenta y nunca lo aplicaba: la
+        // pantalla decia "del adelanto solo los almuerzos" y el archivo traia
+        // los desayunos del lunes igual. Dos hojas contradiciendose sobre lo
+        // mismo, y la que va a la cocina es la del archivo.
+        const conLaReglaDeDesayunos = sinDesayunosDeAdelanto(todosLosPedidos);
+        const enFecha = (f) => conLaReglaDeDesayunos.filter(p => (calendarioDelPedido(p) || []).includes(f));
 
         // Las fechas marcadas como adelanto van recortadas a los recurrentes;
         // el resto entra completo.
