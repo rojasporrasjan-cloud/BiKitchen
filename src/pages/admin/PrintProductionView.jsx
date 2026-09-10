@@ -25,6 +25,7 @@ import { getOfficialMenus, DEFAULT_MENUS } from '../../utils/firestoreMenus';
 import { getScheduleFromOrder } from '../../utils/orderDates';
 import { ESTADOS_QUE_IMPRIMEN } from '../../utils/estadosPedido';
 import { inicioDeVentana, ventanaAUsar, pedidosDeLaHoja } from '../../utils/ventanaDeLaHoja';
+import { hojasPorDia, clientesDelDia, SIN_DIA } from '../../utils/hojasPorDia';
 import { anotarLecturas } from '../../utils/contadorFirestore';
 import { revisarHoja } from '../../utils/revisarHoja';
 import {
@@ -649,20 +650,29 @@ export default function PrintProductionView() {
         return fa < fb ? -1 : 1;
     });
 
-    const diaDelCliente = (c) => {
-        if (fechas.length < 2) return '';
-        // El pedido no siempre queda a la misma profundidad: segun por donde
-        // pase —pack normal, pack familiar, bloque de cambios— el cliente trae
-        // el pedido en `rawPedido`, en `rawPedido.rawPedido`, o en el mismo
-        // objeto. Se prueban los tres y gana el primero que tenga fechas de
-        // esta hoja: si no, el dia salia vacio justo en los bloques donde mas
-        // hace falta —Rebeca Toval es del sabado y su bloque no lo decia—.
+    /**
+     * Las entregas de ESTE cliente que caen en la hoja.
+     *
+     * El pedido no siempre queda a la misma profundidad: segun por donde pase
+     * —pack normal, pack familiar, bloque de cambios— el cliente trae el pedido
+     * en `rawPedido`, en `rawPedido.rawPedido`, o en el mismo objeto. Se prueban
+     * los tres y gana el primero que tenga fechas de esta hoja: si no, el dia
+     * salia vacio justo en los bloques donde mas hace falta —Rebeca Toval es del
+     * sabado y su bloque no lo decia—.
+     */
+    const entregasDelCliente = (c) => {
         for (const fuente of [c?.rawPedido?.rawPedido, c?.rawPedido, c]) {
             if (!fuente) continue;
             const suyas = (calendarioDelPedido(fuente) || []).filter(f => fechas.includes(f));
-            if (suyas.length > 0) return ` · ${suyas.map(etiquetaDelDia).join(' + ')}`;
+            if (suyas.length > 0) return suyas;
         }
-        return '';
+        return [];
+    };
+
+    const diaDelCliente = (c) => {
+        if (fechas.length < 2) return '';
+        const suyas = entregasDelCliente(c);
+        return suyas.length > 0 ? ` · ${suyas.map(etiquetaDelDia).join(' + ')}` : '';
     };
 
     /** Si se pidio adelantar una sola familia, cual pedido califica. */
@@ -3951,11 +3961,26 @@ export default function PrintProductionView() {
                         //
                         // La segunda pasada devuelve null cuando no hay ninguno, asi que
                         // una familia sin cambios se sigue viendo igual que siempre.
-                        regularPackNames.flatMap((n) => [
-                            { packName: n, soloConCambio: false },
-                            { packName: n, soloConCambio: true }
-                        ]).map(({ packName, soloConCambio }) => {
-                            const packData = consolidatedPacksMap[packName];
+                        // Una tabla por DIA de entrega. Empaque son dos corridas
+                        // distintas: la del sabado se cierra ese dia, la del lunes va
+                        // a refri sin cerrar. Mezcladas en una tabla hay que ir leyendo
+                        // el dia en cada nombre y saltando entre dos montones.
+                        regularPackNames.flatMap((n) => {
+                            const todosLosClientes = consolidatedPacksMap[n]?.clientes || [];
+                            return hojasPorDia(todosLosClientes, fechas, entregasDelCliente)
+                                .flatMap((dia) => [
+                                    { packName: n, dia, soloConCambio: false },
+                                    { packName: n, dia, soloConCambio: true }
+                                ]);
+                        }).map(({ packName, dia, soloConCambio }) => {
+                            const packDataCompleto = consolidatedPacksMap[packName];
+                            // Los de ESTE dia. Con una sola fecha en la hoja `dia` viene
+                            // null y no se filtra nada: queda igual que siempre.
+                            const clientesDeEsteDia = clientesDelDia(
+                                packDataCompleto.clientes, dia, entregasDelCliente
+                            );
+                            if (clientesDeEsteDia.length === 0) return null;
+                            const packData = { ...packDataCompleto, clientes: clientesDeEsteDia };
                             const kitchenMenuData = kitchenData.porMenu[packName] || (packData.sourcePackNames?.length > 0 ? kitchenData.porMenu[packData.sourcePackNames[0]] : null);
 
                             const isCenaSheet = packName.startsWith('CENAS -');
@@ -4060,7 +4085,7 @@ export default function PrintProductionView() {
                                 agruparCambiosDePack(clientesPropios);
 
                             return (
-                                <div key={`empaque-${packName}-${soloConCambio ? "cambio" : "tal-cual"}`} className="pack-table-container mb-12 print:mb-0 print:break-after-page print:[page-break-after:always] break-inside-avoid print:break-inside-avoid">
+                                <div key={`empaque-${packName}-${dia || "todo"}-${soloConCambio ? "cambio" : "tal-cual"}`} className="pack-table-container mb-12 print:mb-0 print:break-after-page print:[page-break-after:always] break-inside-avoid print:break-inside-avoid">
                                     {/* ESTILO EXCEL */}
                                     {/* overflow-x-auto: en el celular la tabla mide 513px
                                         sobre una pantalla de 375 y quedaba CORTADA —no se
@@ -4087,6 +4112,10 @@ export default function PrintProductionView() {
                                             {'  —  '}
                                             {packName.replace(/\s*\d{1,3}(?:[.,]\d{3})*\s*(?:colones|col|¢)/i, '')}
                                             {soloConCambio && ' — CON CAMBIO'}
+                                            {/* El dia va en la CABECERA, no en cada nombre:
+                                                asi se ve de un vistazo que corrida es. */}
+                                            {dia === SIN_DIA && ' — SIN DÍA (revisar)'}
+                                            {dia && dia !== SIN_DIA && ` — ${etiquetaDelDia(dia).toUpperCase()}`}
                                             {' '}
                                             <span className="text-gray-800 text-base print:text-sm">
                                                 {(() => {
@@ -4376,11 +4405,11 @@ export default function PrintProductionView() {
                                         const filasPorPlato = 1 + (showVegetales ? 1 : 0) + (showCarbos ? 1 : 0);
                                         const clientesDelGrupo = grupo.clientes;
                                         return (
-                                        <div key={`cambio-${packName}-${grupo.clave}`} className="mt-6 print:mt-4 break-inside-avoid print:break-inside-avoid">
+                                        <div key={`cambio-${packName}-${dia || "todo"}-${grupo.clave}`} className="mt-6 print:mt-4 break-inside-avoid print:break-inside-avoid">
                                             <div className="bg-yellow-400 text-black font-bold text-lg p-1.5 print:py-1 print:text-base border border-black text-center uppercase tracking-wide">
                                                 <span className="text-gray-900">TANDA {puestoDeFamilia(packName) + 1}</span>
                                                 {'  —  '}
-                                                {packName} — CON CAMBIO{' '}
+                                                {packName} — CON CAMBIO{dia && dia !== SIN_DIA ? ` — ${etiquetaDelDia(dia).toUpperCase()}` : ''}{' '}
                                                 <span className="text-gray-800 text-base print:text-sm">
                                                     ({grupo.total} {grupo.total === 1 ? 'pack' : 'packs'})
                                                 </span>
@@ -4491,11 +4520,11 @@ export default function PrintProductionView() {
                                         const cuantos = Number(cliente.cantidad) > 0 ? Number(cliente.cantidad) : 1;
                                         const filasPorPlato = 1 + (showVegetales ? 1 : 0) + (showCarbos ? 1 : 0);
                                         return (
-                                            <div key={`propio-${packName}-${cliente.nombre}`} className="mt-6 print:mt-4 break-inside-avoid print:break-inside-avoid">
+                                            <div key={`propio-${packName}-${dia || "todo"}-${cliente.nombre}`} className="mt-6 print:mt-4 break-inside-avoid print:break-inside-avoid">
                                                 <div className="bg-yellow-400 text-black font-bold text-lg p-1.5 print:py-1 print:text-base border border-black text-center uppercase tracking-wide">
                                                     <span className="text-gray-900">TANDA {puestoDeFamilia(packName) + 1}</span>
                                                     {'  —  '}
-                                                    {packName} — MENÚ PROPIO{' '}
+                                                    {packName} — MENÚ PROPIO{dia && dia !== SIN_DIA ? ` — ${etiquetaDelDia(dia).toUpperCase()}` : ''}{' '}
                                                     <span className="text-gray-800 text-base print:text-sm">({cuantos} {cuantos === 1 ? 'pack' : 'packs'})</span>
                                                 </div>
                                                 <div className="bg-[#fff2cc] text-black text-xs print:text-[10px] p-1.5 border-x border-b border-black">
