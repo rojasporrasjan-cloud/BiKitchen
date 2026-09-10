@@ -464,6 +464,25 @@ export default function PrintProductionView() {
      * codigo. Y apagado ahora las DOS dicen lo mismo, que es lo que faltaba.
      */
     const [conDesayunosDelAdelanto, setConDesayunosDelAdelanto] = useState(true);
+
+    /**
+     * Familias que HOY no se cocinan.
+     *
+     * Gina no saca el keto ni los familiares el jueves: esos los hace el
+     * viernes. Cocinarlos hoy no es solo trabajo de mas, es comida cocinada dos
+     * dias antes de tiempo.
+     *
+     * Sacarlos de la hoja del jueves no los pierde: la tanda del jueves no los
+     * registra como enviados, asi que el viernes entran solos cuando la hoja
+     * descuenta lo que ya se hizo.
+     *
+     * Es un interruptor porque es una costumbre, no una ley: alguna semana
+     * puede querer adelantarlos.
+     */
+    const [dejarParaElViernes, setDejarParaElViernes] = useState(false);
+
+    /** Las familias que el interruptor deja fuera. */
+    const FAMILIAS_DEL_VIERNES = ['keto', 'familiarDeluxe', 'familiarPremium'];
     // Los controles finos —sumar el adelanto, que familia traer— los deja
     // puestos el boton del dia. Se esconden porque eran cinco botones mas en una
     // pantalla que ya tenia demasiados: "hay mucho desorden" (Jan).
@@ -716,6 +735,22 @@ export default function PrintProductionView() {
      * Se quita el desayuno del pedido, no el pedido: el cliente igual lleva su
      * pack de almuerzos ese dia.
      */
+    /**
+     * Quita las familias que hoy no se cocinan.
+     *
+     * Se aplica en el MISMO punto que el filtro de desayunos —sobre la lista de
+     * pedidos, antes de armar nada— para que la pantalla y el Excel vean lo
+     * mismo. El Excel se saltaba el de desayunos y por eso las dos hojas se
+     * contradecian; no vale la pena repetir ese error.
+     */
+    const sinLasFamiliasDelViernes = (pedidos) => {
+        if (!dejarParaElViernes) return pedidos;
+        return (pedidos || []).filter(p => {
+            const clave = mapPackNameToMenuKey(p.plan || p.tipoMenu || '');
+            return !FAMILIAS_DEL_VIERNES.includes(clave);
+        });
+    };
+
     const sinDesayunosDeAdelanto = (pedidos) => {
         // Con el interruptor prendido el dia de adelanto va COMPLETO, desayunos
         // incluidos: es lo que Gina confirmo el 10 de setiembre de 2026.
@@ -734,7 +769,7 @@ export default function PrintProductionView() {
     // Apagando solo el segundo, la hoja salia casi vacia —solo los individuales
     // que entraron despues— y parecia que no habia nada que cocinar.
     const { nuevos: cleanOrders, repetidos: yaEnLaCocina } = pedidosDeLaTanda(
-        sinDesayunosDeAdelanto(todosLosPedidos),
+        sinLasFamiliasDelViernes(sinDesayunosDeAdelanto(todosLosPedidos)),
         sinRebaja ? [] : yaEnviados,
         { soloRecurrentes, calendario: calendarioDelPedido, fechas, fechasDeAdelanto, familiaPermitida }
     );
@@ -742,11 +777,11 @@ export default function PrintProductionView() {
     // El empaque sigue saliendo por fecha de entrega, pero si una fecha va como
     // adelanto tambien se recorta ahi: de lunes solo se empacan los mensuales y
     // quincenales, que son los unicos que se cocinaron.
-    const pedidosParaEmpaque = sinDesayunosDeAdelanto(
+    const pedidosParaEmpaque = sinLasFamiliasDelViernes(sinDesayunosDeAdelanto(
         todosLosPedidos.filter(p =>
             pasaElAdelanto(p, { fechas, fechasDeAdelanto, calendario: calendarioDelPedido, familiaPermitida })
         )
-    );
+    ));
     // El aviso de "se cancelo despues de mandarse" solo tiene sentido si la hoja
     // cubre el CICLO entero. Abriendo un solo dia —el lunes suelto, cuando la
     // tanda se mando por sabado y lunes juntos— los pedidos del sabado no estan
@@ -2056,7 +2091,7 @@ export default function PrintProductionView() {
         // pantalla decia "del adelanto solo los almuerzos" y el archivo traia
         // los desayunos del lunes igual. Dos hojas contradiciendose sobre lo
         // mismo, y la que va a la cocina es la del archivo.
-        const conLaReglaDeDesayunos = sinDesayunosDeAdelanto(todosLosPedidos);
+        const conLaReglaDeDesayunos = sinLasFamiliasDelViernes(sinDesayunosDeAdelanto(todosLosPedidos));
         const enFecha = (f) => conLaReglaDeDesayunos.filter(p => (calendarioDelPedido(p) || []).includes(f));
 
         // Las fechas marcadas como adelanto van recortadas a los recurrentes;
@@ -4008,6 +4043,25 @@ export default function PrintProductionView() {
                             </span>
                         </label>
                     )}
+
+                    <label className={`px-5 py-3 rounded-lg font-bold shadow cursor-pointer flex items-center gap-3 border-2 transition ${dejarParaElViernes
+                        ? 'bg-amber-100 border-amber-500 text-amber-900'
+                        : 'bg-white border-gray-300 text-gray-700'}`}>
+                        <input
+                            type="checkbox"
+                            checked={dejarParaElViernes}
+                            onChange={(e) => setDejarParaElViernes(e.target.checked)}
+                            className="w-5 h-5 cursor-pointer"
+                        />
+                        <span>
+                            {dejarParaElViernes ? 'SIN keto ni familiares' : 'CON keto y familiares'}
+                            <span className="block text-[11px] font-normal">
+                                {dejarParaElViernes
+                                    ? 'Esos se cocinan el viernes; hoy no salen'
+                                    : 'La hoja los incluye hoy'}
+                            </span>
+                        </span>
+                    </label>
 
                     <label className="px-5 py-3 bg-white border-2 border-indigo-300 text-indigo-900 rounded-lg font-bold hover:bg-indigo-50 transition shadow cursor-pointer flex items-center gap-2 text-sm">
                         📥 Cargar el adelanto de Gina
