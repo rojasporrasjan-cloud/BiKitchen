@@ -269,6 +269,58 @@ export const packsSinDecirCuales = (pedidos = []) => (pedidos || [])
     })
     .filter(Boolean);
 
+/**
+ * 8. Un pedido que no dice QUE cocinarle.
+ *
+ * Alejandra Calderon paga 78.000 por un "Pack Mensual Proteinas 250 g". Su
+ * lista de proteinas cambia cada semana y va en un pedido de individuales
+ * aparte —asi lo dice su propia nota— pero ese pedido solo existia para el 7 de
+ * setiembre. Para el 14 nadie lo creo.
+ *
+ * La hoja no se rompio ni aviso nada: dibujo un renglon que decia
+ *
+ *     Pack Mensual Proteinas 250 g   |   250g
+ *
+ * O sea, UNA porcion generica en vez de sus CINCO proteinas, y sin decir
+ * cuales. Eso no lo puede cocinar nadie, y se lee como si estuviera completo.
+ *
+ * La revision 7 no lo agarra porque exige que el nombre traiga el numero ("Pack
+ * de 3 proteinas"); aca el 5 esta en la nota, no en el nombre. Asi que la senal
+ * tiene que ser otra, y mas general: el pedido no calza con ninguna familia del
+ * menu Y sus unicos "platos" son el nombre del plan repetido. No hay de donde
+ * sacar que se cocina.
+ *
+ * Los packs con familia quedan fuera —sus platos salen del menu de la semana— y
+ * los que SI son pack sin familia ya los avisa la revision 3, para no gritar
+ * dos veces por lo mismo.
+ */
+export const pedidosQueNoDicenQueCocinar = (pedidos = []) => (pedidos || [])
+    .filter(p => {
+        if (!p) return false;
+        if (p.esDesayuno) return false;      // los desayunos van por su propio camino
+        if (p.esPack) return false;          // eso lo avisa la revision 3
+        if ((p.familias || []).length > 0) return false;  // el menu le pone los platos
+
+        // La revision 7 ya se encarga de los que dicen "Pack de N proteinas"
+        const nombre = String(p.plan || '');
+        const conNumero = nombre.match(/(\d+)\s*prote[ií]nas?/i);
+        if (conNumero && Number(conNumero[1]) > 1) return false;
+
+        // Platos de verdad: los que NO son el nombre del plan repetido
+        const propios = (p.platos || [])
+            .map(x => clave(x))
+            .filter(x => x && x !== clave(nombre));
+        return propios.length === 0;
+    })
+    .map(p => aviso(
+        'alto', 'sin-platos',
+        'No se sabe qué cocinarle',
+        `El pedido de ${p.cliente} ("${p.plan}") no trae platos: en la hoja sale `
+        + 'un solo renglón con el nombre del plan y una porción genérica. '
+        + 'Nadie puede cocinar eso.',
+        [p.cliente], p.id
+    ));
+
 const ORDEN_NIVEL = { alto: 0, medio: 1, bajo: 2 };
 
 /**
@@ -289,7 +341,8 @@ export const problemasParaLaHoja = ({ pedidos = [], preparaciones = [], fecha = 
         'pack-sin-cocinar': 'Revisá el nombre del pack: no calzó con ninguna familia del menú.',
         repetido: 'Cancelá el que sobra, o marcá los dos como "no fusionar" si de verdad son distintos.',
         renovacion: 'Escribile antes de la última entrega para renovarle el pack.',
-        'pack-sin-detalle': 'Preguntale al cliente qué proteínas quiere y escribilas en el pedido.'
+        'pack-sin-detalle': 'Preguntale al cliente qué proteínas quiere y escribilas en el pedido.',
+        'sin-platos': 'Abrí el pedido y escribí los platos de esta semana, o cargá su pedido de individuales de esta fecha.'
     };
 
     return [
@@ -298,6 +351,7 @@ export const problemasParaLaHoja = ({ pedidos = [], preparaciones = [], fecha = 
         ...packsQueNadieCocina(pedidos),
         ...pedidosRepetidos(pedidos),
         ...packsSinDecirCuales(pedidos),
+        ...pedidosQueNoDicenQueCocinar(pedidos),
         ...seLesAcaban(pedidos, fecha)
     ].map(a => ({
         pedidoId: a.pedidoId || null,
