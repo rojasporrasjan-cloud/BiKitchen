@@ -60,7 +60,11 @@ const NO_ES_CAMBIO = new RegExp([
     // 'No lleva el 19 ni el 26' es un calendario, no un cambio de plato.
     'no lleva (?:el|los|la|las)?\\s*\\d', 'entregas? del\\b', 'no va (?:el|los)\\b',
     // Rastro de nuestras propias correcciones al cargar el pedido
-    'reemplaza (?:la|el)\\b[^.]*anterior', 'vale lo que dice'
+    'reemplaza (?:la|el)\\b[^.]*anterior', 'vale lo que dice',
+    // Quitar la cena o el desayuno cambia el TAMANO del pack, no un
+    // ingrediente. Marlon Camacho ('NO lleva cena') se empaca igual que
+    // los demas: sus platos son los del menu, solo van menos.
+    'no lleva (?:cenas?|desayunos?)'
 ].join('|'), 'i');
 
 /** Las frases de una nota, separadas como las escribe Gina. */

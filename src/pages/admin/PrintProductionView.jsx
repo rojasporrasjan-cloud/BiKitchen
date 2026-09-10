@@ -598,6 +598,36 @@ export default function PrintProductionView() {
      * misma tabla y no habia como saber cual bolsa sale hoy. Con una sola fecha
      * no se muestra: el titulo ya lo dice y repetirlo en cada fila es ruido.
      */
+    /**
+     * La primera fecha de este cliente dentro de la hoja, para poder ordenar.
+     *
+     * Empaque los arma DE CORRIDA por dia: primero todos los del sabado, que se
+     * cierran hoy, y despues los del lunes, que van a refri sin cerrar porque
+     * todavia les faltan cenas y desayunos. Intercalados obligan a leer el dia
+     * en cada nombre y a saltar entre dos montones.
+     *
+     *   "Corrida del sabado, corrida del lunes, y ya los del lunes quedan
+     *    guardados" — Jan, 9 de setiembre de 2026.
+     */
+    const primerDiaDelCliente = (c) => {
+        for (const fuente of [c?.rawPedido?.rawPedido, c?.rawPedido, c]) {
+            if (!fuente) continue;
+            const suyas = (calendarioDelPedido(fuente) || []).filter(f => fechas.includes(f));
+            if (suyas.length > 0) return suyas.slice().sort()[0];
+        }
+        return '';
+    };
+
+    /** Ordena una lista de clientes por dia de entrega, respetando el resto. */
+    const porDiaDeEntrega = (clientes) => (clientes || []).slice().sort((a, b) => {
+        const fa = primerDiaDelCliente(a);
+        const fb = primerDiaDelCliente(b);
+        if (fa === fb) return 0;
+        if (!fa) return 1;
+        if (!fb) return -1;
+        return fa < fb ? -1 : 1;
+    });
+
     const diaDelCliente = (c) => {
         if (fechas.length < 2) return '';
         // El pedido no siempre queda a la misma profundidad: segun por donde
@@ -3972,8 +4002,11 @@ export default function PrintProductionView() {
                             // El nombre del pack hace falta para saber contra que
                             // composicion comparar: un "3 vegetales y 1 carbo" solo es
                             // personalizacion si NO es lo que ese pack lleva de fabrica.
-                            const { estandar: clientesEstandar, personalizados: clientesPropios, packsEstandar } =
+                            const { estandar: estandarSinOrden, personalizados: clientesPropios, packsEstandar } =
                                 separarPersonalizadosDePack(packData.clientes, platosEmpaque, packName);
+                            // De corrida por dia: primero los del sabado, que se cierran
+                            // hoy; despues los del lunes, que van a refri.
+                            const clientesEstandar = porDiaDeEntrega(estandarSinOrden);
                             // Los que cambiaron algo NO son excepciones sueltas: si cinco
                             // pidieron el mismo cambio, son otra linea de cinco. Se agrupan
                             // por el cambio para poder armarlos de corrido igual que los

@@ -67,6 +67,16 @@ describe('lo que NO es un cambio de comida', () => {
         expect(tieneCambioEscrito('Poner platos de LENTEJAS Y GARBANZOS CON CARNE DE CERDO.')).toBe(true);
     });
 
+    it('quitar la cena NO es un cambio de ingrediente', () => {
+        // Marlon Camacho: sus platos son los del menu, solo van menos. Se
+        // empaca de corrido con los demas — decision de Jan, 9 de setiembre.
+        expect(tieneCambioEscrito('NO lleva cena.')).toBe(false);
+        expect(tieneCambioEscrito('No lleva desayunos')).toBe(false);
+        // Pero una restriccion de comida SI lo es
+        expect(tieneCambioEscrito('NO LACTEOS.')).toBe(true);
+        expect(tieneCambioEscrito('NO MARISCOS')).toBe(true);
+    });
+
     it('sin nota no hay cambio', () => {
         expect(tieneCambioEscrito('')).toBe(false);
         expect(tieneCambioEscrito(null)).toBe(false);
