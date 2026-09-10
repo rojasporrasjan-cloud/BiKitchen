@@ -445,6 +445,19 @@ export default function PrintProductionView() {
     // Ver la hoja SIN descontar nada: las cantidades completas del dia. Es como
     // Gina revisa que no falte, antes de mirar cuanto le queda por hacer.
     const [sinRebaja, setSinRebaja] = useState(true);
+    /**
+     * ¿Se preparan tambien los desayunos del dia que se adelanta?
+     *
+     * Arranca APAGADO porque asi lo pidio Gina en agosto de 2026: "un pack de
+     * almuerzos se puede dejar hecho; un gallo pinto con huevo no". Sin ese
+     * filtro la hoja pedia 35 desayunos que nadie iba a hacer.
+     *
+     * El 10 de setiembre dijo lo contrario: que los del lunes tambien los hace
+     * el jueves. Por eso es un interruptor y no un cambio de regla: se prende
+     * cuando ella lo confirma y se apaga si vuelve atras, sin tocar codigo. Una
+     * regla que costo 35 desayunos de mas no se da vuelta en silencio.
+     */
+    const [conDesayunosDelAdelanto, setConDesayunosDelAdelanto] = useState(false);
     // Los controles finos —sumar el adelanto, que familia traer— los deja
     // puestos el boton del dia. Se esconden porque eran cinco botones mas en una
     // pantalla que ya tenia demasiados: "hay mucho desorden" (Jan).
@@ -697,10 +710,15 @@ export default function PrintProductionView() {
      * Se quita el desayuno del pedido, no el pedido: el cliente igual lleva su
      * pack de almuerzos ese dia.
      */
-    const sinDesayunosDeAdelanto = (pedidos) => pedidos
-        // Un pack que es SOLO desayunos no se adelanta del todo
-        .filter(p => !(esSoloDeAdelanto(p) && mapPackNameToMenuKey(p.plan || p.tipoMenu || '') === 'desayuno'))
-        .map(p => (esSoloDeAdelanto(p) ? { ...p, incluyeDesayuno: false, packsDesayuno: 0 } : p));
+    const sinDesayunosDeAdelanto = (pedidos) => {
+        // Con el interruptor prendido el dia de adelanto va COMPLETO, desayunos
+        // incluidos: es lo que Gina confirmo el 10 de setiembre de 2026.
+        if (conDesayunosDelAdelanto) return pedidos;
+        return pedidos
+            // Un pack que es SOLO desayunos no se adelanta del todo
+            .filter(p => !(esSoloDeAdelanto(p) && mapPackNameToMenuKey(p.plan || p.tipoMenu || '') === 'desayuno'))
+            .map(p => (esSoloDeAdelanto(p) ? { ...p, incluyeDesayuno: false, packsDesayuno: 0 } : p));
+    };
 
     // "Ver TODO" tiene que apagar los DOS descuentos, no uno solo:
     //
@@ -3952,6 +3970,31 @@ export default function PrintProductionView() {
                             </span>
                         </span>
                     </label>
+
+                    {/* Solo aparece si de verdad hay un dia que adelantar: en la hoja
+                        de un solo dia no significa nada. */}
+                    {fechasDeAdelanto.size > 0 && (
+                        <label className={`px-5 py-3 rounded-lg font-bold shadow cursor-pointer flex items-center gap-3 border-2 transition ${conDesayunosDelAdelanto
+                            ? 'bg-amber-100 border-amber-500 text-amber-900'
+                            : 'bg-white border-gray-300 text-gray-700'}`}>
+                            <input
+                                type="checkbox"
+                                checked={conDesayunosDelAdelanto}
+                                onChange={(e) => setConDesayunosDelAdelanto(e.target.checked)}
+                                className="w-5 h-5 cursor-pointer"
+                            />
+                            <span>
+                                {conDesayunosDelAdelanto
+                                    ? 'CON los desayunos del adelanto'
+                                    : 'SIN los desayunos del adelanto'}
+                                <span className="block text-[11px] font-normal">
+                                    {conDesayunosDelAdelanto
+                                        ? `Los desayunos de ${nombreDelDiaCorto([...fechasDeAdelanto][0] || '')} tambien se hacen hoy`
+                                        : `Del adelanto solo los almuerzos, sin desayunos`}
+                                </span>
+                            </span>
+                        </label>
+                    )}
 
                     <label className="px-5 py-3 bg-white border-2 border-indigo-300 text-indigo-900 rounded-lg font-bold hover:bg-indigo-50 transition shadow cursor-pointer flex items-center gap-2 text-sm">
                         📥 Cargar el adelanto de Gina
