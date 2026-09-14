@@ -1,12 +1,18 @@
 import React, { useState } from 'react';
 import { useSubstitutions } from '../hooks/useSubstitutions';
+import { MAX_CAMBIOS_POR_PACK } from '../utils/limiteDeCambios';
 
-const MAX_CHANGES = 2; // máximo de cambios permitidos por categoría
+// 2 cambios EN TOTAL por pack, sumando proteína, vegetal y harina.
+// Antes eran 2 POR CATEGORÍA —hasta 6 por pack— y en la cocina era un
+// despelote: "solo puedan hacer como 2 cambios nada más" (Gina, 14 set 2026).
+const MAX_CHANGES = MAX_CAMBIOS_POR_PACK;
 
 // ─── Sección de sustitución por plato para UNA categoría ───────────────────
-function CategorySection({ emoji, label, dishes, options, changes, onChange, fieldKey }) {
+function CategorySection({ emoji, label, dishes, options, changes, onChange, fieldKey, totalChanges = 0 }) {
   const count = changes.length;
-  const atMax = count >= MAX_CHANGES;
+  // El tope es del PACK entero: con 2 cambios en proteína ya no se puede
+  // cambiar un vegetal.
+  const atMax = totalChanges >= MAX_CHANGES;
 
   const getSelected = (dishNumber) =>
     changes.find((c) => c.dishNumber === dishNumber)?.newValue || '';
@@ -46,7 +52,7 @@ function CategorySection({ emoji, label, dishes, options, changes, onChange, fie
           <span className={`text-[9px] font-black px-2 py-0.5 rounded-full transition-colors ${
             atMax ? 'text-red-600 bg-red-50' : 'text-orange-500 bg-orange-50'
           }`}>
-            {count}/{MAX_CHANGES}
+            {count}
           </span>
         )}
       </div>
@@ -97,9 +103,9 @@ function CategorySection({ emoji, label, dishes, options, changes, onChange, fie
       </div>
 
       {/* Aviso de límite alcanzado */}
-      {atMax && (
+      {atMax && count > 0 && (
         <p className="text-[9px] text-orange-500 font-bold pl-0.5">
-          Máximo {MAX_CHANGES} cambios por categoría
+          Ya elegiste {MAX_CHANGES} cambios, el máximo por pack
         </p>
       )}
     </div>
@@ -170,7 +176,7 @@ export default function SubstitutionPicker({ value = {}, onChange, dishes, hideE
         {open && (
           <div className="px-4 pb-4 pt-3 space-y-4 border-t border-slate-100">
             <p className="text-[10px] text-slate-400">
-              Máximo {MAX_CHANGES} cambios por categoría
+              Máximo {MAX_CHANGES} cambios en total por pack · llevás {totalChanges}
             </p>
 
             {proteins.length > 0 && (
@@ -181,6 +187,7 @@ export default function SubstitutionPicker({ value = {}, onChange, dishes, hideE
                 changes={proteinChanges}
                 onChange={(updated) => onChange?.({ ...value, proteinChanges: updated })}
                 fieldKey="proteina"
+                totalChanges={totalChanges}
               />
             )}
 
@@ -192,6 +199,7 @@ export default function SubstitutionPicker({ value = {}, onChange, dishes, hideE
                 changes={vegeChanges}
                 onChange={(updated) => onChange?.({ ...value, vegeChanges: updated })}
                 fieldKey="vegetal"
+                totalChanges={totalChanges}
               />
             )}
 
@@ -203,6 +211,7 @@ export default function SubstitutionPicker({ value = {}, onChange, dishes, hideE
                 changes={carboChanges}
                 onChange={(updated) => onChange?.({ ...value, carboChanges: updated })}
                 fieldKey="carbo"
+                totalChanges={totalChanges}
               />
             )}
           </div>
