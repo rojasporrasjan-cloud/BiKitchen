@@ -268,3 +268,57 @@ Son 3 packs.
 - **160 archivos de tests, 1.722 pruebas.** Correr `npx vitest run` antes de subir
 - Código y comentarios **en español**, explicando el *por qué* con el caso real
 - Jan no es programador: hablarle del negocio, no del código
+
+## Proteínas de la semana (packs de proteínas de varias entregas) — 14 set 2026
+
+**Problema:** un pack mensual de proteínas guardaba UNA lista (la de la compra) y la hoja la repetía las 4 semanas. Cuando el cliente pedía otras, no había dónde ponerlas.
+
+**Cómo funciona ahora:**
+
+- Cada pedido puede tener `proteinasPorEntrega: { 'AAAA-MM-DD': ['Proteína 1', …] }`. La lista de la compra (`items[i].proteinas`) no se toca: es el respaldo.
+- Se eligen en **Admin → Proteínas de la semana** (`/admin/proteinas-semanales`), agrupado por día (miércoles, sábado, lunes). Se puede escribir, pegar la lista de WhatsApp ("x2" repite) o repetir la semana anterior. No gasta lecturas: usa los pedidos que el panel ya tiene.
+- También desde la hoja: tocar el nombre del cliente abre el editor, y en un pack de varias entregas **guarda solo la lista de la entrega de esa hoja**.
+- La hoja de producción, las etiquetas, la hoja de despacho y "Hojas" pasan la fecha a `mapPedidosFromLegacy(pedidos, fechas)`, que aplica `conProteinasDeLaEntrega`. Las cuatro leen la misma lista para la misma fecha.
+- **Aviso rojo en la hoja** cuando un pack de proteínas de la entrega 2 en adelante no tiene nada elegido: la hoja usa la lista de la compra, pero casi seguro no es la de esa semana. La primera entrega no avisa, porque usa lo que el cliente eligió al comprar.
+- Si se mueve la fecha de una entrega desde el editor, la lista elegida se va con ella (`moverProteinasConLaFecha`).
+- Qué cuenta como pack de proteínas: dice "proteínas" en plural y no es de una familia del menú. "Bajo en Calorías (200 g de proteína)" NO lo es.
+
+**Código:** `src/utils/proteinasPorEntrega.js`, `src/pages/admin/ProteinasSemanalesView.jsx`, `src/components/admin/EntregaDeProteinas.jsx`. **Pruebas:** `proteinasPorEntrega.test.js` y `proteinasSemanalesView.test.jsx`.
+
+**Ojo:** mientras no se suba a producción, la página publicada no lee `proteinasPorEntrega` y sigue cocinando la lista de la compra. Hay que sacar la hoja desde localhost.
+
+## El ciclo sábado + lunes, día por día — 14 set 2026
+
+Botones JUEVES / VIERNES / SÁBADO de la hoja → URL con `dia=jueves|viernes|sabado`. Regla en `src/utils/planDelCiclo.js` (probada en `planDelCiclo.test.js` y, con la pantalla montada, en `hojaPorDiaDelCiclo.test.jsx`).
+
+| Día | Cocina y empaque | Se descuenta |
+|---|---|---|
+| Jueves | Sábado completo + mensuales/quincenales del lunes. Sin keto ni familiares. Solo cocina. | Nada |
+| Viernes | Sábado completo + **bajo calorías del lunes** (no personalizados) | Lo cocinado el **jueves**: la hoja del jueves marcada como enviada, o el Excel de Gina si se carga (manda el Excel, no se suman) |
+| Sábado | **Todo el lunes** menos lo empacado el viernes (por defecto los bajo calorías; se marca/desmarca en el panel) | **Solo lo que sobró** (mensaje de Gina del viernes en la noche) |
+
+**Por qué el sábado no resta lo del jueves y viernes:** esa comida ya se usó en las bolsas del sábado y del adelanto; lo que no se usó es el sobrante. Restar las dos cosas contaba la misma comida dos veces y el sábado pedía de menos exactamente lo adelantado.
+
+**Otros arreglos del mismo día:**
+- Empacados, "ya cocinados" y sobrantes se guardan **por ciclo** (antes para siempre: un mensual marcado un viernes seguía marcado la semana siguiente y desaparecía de la hoja).
+- Las correcciones a mano de Gina se guardan **por día** (`fecha__dia`): lo del jueves ya no reaparece el viernes.
+- Cada hoja mandada guarda su `dia`. Las viejas se deducen por el día en que se mandaron.
+
+**Para que funcione:** el jueves hay que **marcar la hoja como enviada** (o el viernes cargar el Excel de Gina), y el viernes en la noche **pegar lo que sobró** en la hoja del SÁBADO. Si falta cualquiera de las dos, la hoja lo avisa arriba.
+
+**Pendiente:** el Excel de Gina se pierde al recargar; sobrantes y empacados se guardan en el navegador de quien los mete; no existe el estado "cocinado sin salsa / por terminar".
+
+## Lecturas de Firebase: solo lo que cada pantalla necesita — 14 set 2026
+
+**Antes:** toda página del panel bajaba la colección `pedidos` entera (~600), porque el menú lateral la usaba para el numerito de pendientes. Además la hoja de producción, Producción, Despacho y Etiquetas bajaban cada una los últimos 40 días (~340), y las tres últimas con `getDocs`, que el caché en disco no ahorra.
+
+**Ahora:**
+- `src/utils/consultaPorFechas.js` + `src/hooks/usePedidosDeFechas.js`: los pedidos de unas fechas con DOS consultas en vivo. Una busca `fechas_entrega` que contenga la fecha; la otra, `fecha_entrega` entre 4 semanas antes y la última fecha. La segunda existe por las fechas que `getScheduleFromOrder` calcula y no están guardadas. Probado con un barrido contra el calendario real (`consultaPorFechas.test.js`). No da la hoja por cargada con lo del caché: espera al servidor, y si no llega en 8 s avisa en rojo "puede estar INCOMPLETA".
+- Lo usan: hoja de producción, Producción (SheetsView), Hoja de despacho, Etiquetas (PrinterView), Proteínas de la semana (5 semanas) e Importar WhatsApp (solo las fechas del pedido pegado, para el aviso de duplicado; mientras revisa no deja crear).
+- `OrdersContext`: la lista entera se baja solo si una pantalla llama `useOrders()`. Para confirmar sin bajarla: `useAccionesDePedidos()`.
+- Menú lateral: `usePedidosPendientes` cuenta con `getCountFromServer` (1 lectura) al abrir, al volver a la pestaña y cada 5 min.
+- Los selectores de fecha salen del calendario de reparto (`fechasDeReparto`: lunes, miércoles, sábado) y no de recorrer todos los pedidos. Otro día se elige con el campo de fecha libre.
+
+**Siguen bajando todo** (lo necesitan, o se usan poco): Pedidos, Dashboard, Clientes, Reportes, Packs mensuales, Difusión, auditorías.
+
+**Pruebas:** `lecturasBajoDemanda.test.jsx` y `pantallasSinListaEntera.test.jsx` fallan si una pantalla del día a día vuelve a pedir la lista entera.
