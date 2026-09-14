@@ -76,22 +76,34 @@ export const DEFAULT_MENUS = {
     { numero: 4, proteina: 'Flautas de queso con salsa ranchera', vegetal: 'Frijoles molidos', carbo: 'Café o jugo' },
     { numero: 5, proteina: 'Gallo pinto con huevo y jamón', vegetal: 'Queso y natilla', carbo: 'Tortilla' }
   ],
+  // ── LOS FAMILIARES ──────────────────────────────────────────────────────
+  //
+  // No son un menu de proteina + vegetal + harina como los demas: son una lista
+  // de platos, cada uno con SU medida y SU envase. Por eso llevan campos
+  // propios en vez de meter la medida dentro de `vegetal`, que era un parche y
+  // dejaba la instruccion de empaque sin ningun lugar donde vivir.
+  //
+  //   medida   cuanto lleva ese plato          "4 tazas", "500 g", "8 unidades"
+  //   empaque  en que se manda, palabras de Gina
+  //
+  // `vegetal` se sigue llenando con la medida para no romper lo que ya la lee
+  // de ahi; el dato bueno es `medida`.
   familiarPremium: [
-    { numero: 1, proteina: 'Spaguettis en salsa pomodoro con pollo', vegetal: '4 porciones', carbo: '—' },
-    { numero: 2, proteina: 'Salchichas con papas', vegetal: '4 porciones', carbo: '—' },
-    { numero: 3, proteina: 'Trocitos de cerdo en salsa de piña', vegetal: '500 g', carbo: '—' },
-    { numero: 4, proteina: 'Crema de ayote sazón', vegetal: '4 porciones', carbo: '—' },
-    { numero: 5, proteina: 'Tortas de huevo con espinacas', vegetal: '4 porciones', carbo: '—' },
-    { numero: 6, proteina: 'Puré de camote', vegetal: '4 porciones', carbo: '—' }
+    { numero: 1, proteina: 'Lentejas con pollo', medida: '4 tazas', empaque: 'Empacar en taza de kg', vegetal: '4 tazas', carbo: '—' },
+    { numero: 2, proteina: 'Fajitas de cerdo en salsa BBQ', medida: '500 g', empaque: 'Empacar en taza de 500 g', vegetal: '500 g', carbo: '—' },
+    { numero: 3, proteina: 'Spaguettis con carne en salsa pomodoro', medida: '4 tazas', empaque: 'Empacar en taza de kg', vegetal: '4 tazas', carbo: '—' },
+    { numero: 4, proteina: 'Pollo mechado en salsa criolla', medida: '500 g', empaque: 'Empacar en taza de 500 g', vegetal: '500 g', carbo: '—' },
+    { numero: 5, proteina: 'Barbudos', medida: '8 unidades', empaque: 'Empacar en taza de kg', vegetal: '8 unidades', carbo: '—' },
+    { numero: 6, proteina: 'Ensalada coleslaw', medida: '4 tazas', empaque: 'Empacar en taza de kg', vegetal: '4 tazas', carbo: '—' }
   ],
   familiarDeluxe: [
-    { numero: 1, proteina: 'Arroz con palmito gratinado', vegetal: '4 porciones', carbo: '—' },
-    { numero: 2, proteina: 'Carne mechada en salsa', vegetal: '4 porciones', carbo: '—' },
-    { numero: 3, proteina: 'Pollo con papas achiotado', vegetal: '4 porciones', carbo: '—' },
-    { numero: 4, proteina: 'Picadillo de vainica con zanahoria y carne molida', vegetal: '4 porciones', carbo: '—' },
-    { numero: 5, proteina: 'Filet de tilapia empanizada', vegetal: '4 porciones', carbo: '—' },
-    { numero: 6, proteina: 'Yuca al ajillo', vegetal: '4 porciones', carbo: '—' },
-    { numero: 7, proteina: 'Escabeche de vegetales', vegetal: '4 porciones', carbo: '—' }
+    { numero: 1, proteina: 'Lasagna de pollo', medida: '1 molde', empaque: 'Molde desechable', vegetal: '1 molde', carbo: '—' },
+    { numero: 2, proteina: 'Arroz con carne de cerdo', medida: '4 tazas', empaque: 'Empacar en taza de kg', vegetal: '4 tazas', carbo: '—' },
+    { numero: 3, proteina: 'Carne de res en salsa', medida: '500 g', empaque: 'Empacar en taza de 500 g', vegetal: '500 g', carbo: '—' },
+    { numero: 4, proteina: 'Chili con carne', medida: '4 tazas', empaque: 'Empacar en taza de kg', vegetal: '4 tazas', carbo: '—' },
+    { numero: 5, proteina: 'Ensalada de papa', medida: '4 tazas', empaque: 'Empacar en taza de kg', vegetal: '4 tazas', carbo: '—' },
+    { numero: 6, proteina: 'Picadillo de vainica con carne molida', medida: '4 tazas', empaque: 'Empacar en taza de kg', vegetal: '4 tazas', carbo: '—' },
+    { numero: 7, proteina: 'Yuca frita', medida: '4 porciones', empaque: '', vegetal: '4 porciones', carbo: '—' }
   ],
   // ========== MENÚS DE CENA (Separados del almuerzo) ==========
   // Estructura: { menuType: { cena: [...platos] } }

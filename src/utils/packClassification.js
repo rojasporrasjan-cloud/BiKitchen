@@ -33,6 +33,11 @@ export const mapPackNameToMenuKey = (name) => {
     // "Pack Deluxe" a secas NO entra: hay un pedido asi con categoria
     // Individuales, que es otro producto.
     if (n.includes('paquete deluxe')) return 'familiarDeluxe';
+    // "Paquete Premium" no lo produce el checkout —el Pack Familiar Premium sale
+    // como "Pack Familiar", que ya cae por la palabra "familiar"— pero es como
+    // le dicen Jan y Gina. Desde que se pueden agregar clientes a mano desde la
+    // hoja, alguien lo va a escribir asi, y sin esta linea no lo reconoce nadie.
+    if (n.includes('paquete premium')) return 'familiarPremium';
     if (n.includes('familiar') && n.includes('deluxe')) return 'familiarDeluxe';
     if (n.includes('familiar') && n.includes('premium')) return 'familiarPremium';
     if (n.includes('familiar')) return 'familiarPremium';
@@ -202,17 +207,35 @@ export const nombreDeHojaDeEmpaque = (packName, etiquetaFamilia) =>
  *   Casaditos   1,5 de harina y 0,5 de vegetal   (estaba al reves)
  *   Familiar    la porcion es 1 kg o 4 tazas, no gramos por persona
  *
+ * Las otras cuatro familias nunca se revisaron, y las cuatro estaban mal. Se
+ * corrigieron el 12 de setiembre de 2026 leyendo la hoja de Gina del lunes 14,
+ * plato por plato —no del encabezado, que en Regular dice 90 g por un pedido
+ * suelto de un cliente y en Keto dice 150 cuando los platos dicen 200—:
+ *
+ *   Sin Carbos    vegetal 1,5   (estaba en 1)
+ *   Regular       vegetal 0,5 y harina 1   (estaban INVERTIDOS)
+ *   Vegetariano   proteina 120 y harina 1  (estaban en 150 y 0,5)
+ *   Full Pack     harina 2      (estaba en 0,5: se cocinaba la cuarta parte)
+ *
+ * Que las tres que Gina si habia revisado calzaran exacto con su hoja es lo que
+ * da confianza en las otras cuatro: el metodo de lectura quedo comprobado.
+ *
  * `proteina: null` quiere decir que el plato NO se mide en gramos por persona:
  * es una bandeja entera y el numero por plato no significa nada.
  */
 export const PORCIONES_POR_FAMILIA = {
     bajoCalorias:    { proteina: 120,  vegetal: 1,   carbo: 0.5 },
-    sinCarbos:       { proteina: 120,  vegetal: 1,   carbo: 0   },
+    // 1,5 taza de vegetal, no 1: es lo que compensa que no lleve harina
+    sinCarbos:       { proteina: 120,  vegetal: 1.5, carbo: 0   },
     keto:            { proteina: 200,  vegetal: 1.5, carbo: 0   },
-    regular:         { proteina: 100,  vegetal: 1,   carbo: 0.5 },
+    // Vegetal y harina estaban AL REVES: el regular lleva media taza de
+    // vegetal y una entera de harina, no al contrario
+    regular:         { proteina: 100,  vegetal: 0.5, carbo: 1   },
     casaditos:       { proteina: 100,  vegetal: 0.5, carbo: 1.5 },
-    vegetariano:     { proteina: 150,  vegetal: 1,   carbo: 0.5 },
-    fullPack:        { proteina: 150,  vegetal: 1,   carbo: 0.5 },
+    // 120 g, no 150; y una taza de harina, no media
+    vegetariano:     { proteina: 120,  vegetal: 1,   carbo: 1   },
+    // DOS tazas de harina. Con media se cocinaba la CUARTA PARTE
+    fullPack:        { proteina: 150,  vegetal: 1,   carbo: 2   },
     // El plato de un familiar es una BANDEJA para cuatro, no una porcion: se
     // cocina por KILO. Con los 150 g por defecto, el Paquete Deluxe de Rebeca
     // Toval —siete platos— mandaba a cocinar 1.365 g cuando hacen falta 9.100.

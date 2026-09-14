@@ -131,13 +131,47 @@ export const seParecen = (nombreA, nombreB) => {
     return contenido(setA, setB) || contenido(setB, setA);
 };
 
+/**
+ * Dos formas de escribir la MISMA palabra.
+ *
+ * Salió de la hoja del 12 de setiembre de 2026, donde tres avisos eran esto:
+ *
+ *     "Envío" / "Envíos"                                   singular y plural
+ *     "Fajitas de lomo encebollado" / "...encebollada"     el adjetivo concuerda distinto
+ *
+ * Se iban a cocinar por separado, cada una a la mitad. No es un dato del
+ * cliente ni una decisión de cocina: es la misma palabra escrita de dos formas.
+ *
+ * El plural se compara sumando la terminación en vez de recortarla, porque
+ * recortar es ambiguo: "carnes" y "vegetales" se ven iguales pero uno viene de
+ * "carne" y el otro de "vegetal". Sumando no hay que adivinar.
+ *
+ * El género solo se acepta en terminaciones de ADJETIVO —ado/ada, ido/ida,
+ * ito/ita, oso/osa—, nunca en cualquier palabra: si no, "pollo" y "polla"
+ * pasarían por lo mismo.
+ */
+export const mismaPalabra = (a, b) => {
+    if (a === b) return true;
+    if (a + 's' === b || b + 's' === a) return true;
+    if (a + 'es' === b || b + 'es' === a) return true;
+
+    if (a.length === b.length && a.length > 4 && a.slice(0, -1) === b.slice(0, -1)) {
+        const finales = [a.slice(-1), b.slice(-1)].sort().join('');
+        if (finales === 'ao' && /(ad|id|it|os)$/.test(a.slice(0, -1))) return true;
+    }
+    return false;
+};
+
+/** ¿Está esta palabra en la lista, en cualquiera de sus formas? */
+const estaEnLaLista = (lista, palabra) => lista.some(x => mismaPalabra(x, palabra));
+
 export const esElMismoPlato = (nombreA, nombreB) => {
     const a = palabrasClave(nombreA);
     const b = palabrasClave(nombreB);
     if (a.length === 0 || b.length === 0) return false;
 
     // La palabra principal manda: "Sopa de albóndigas" no es "Albóndigas"
-    if (a[0] !== b[0]) return false;
+    if (!mismaPalabra(a[0], b[0])) return false;
 
     const setA = new Set(a);
     const setB = new Set(b);
@@ -151,12 +185,14 @@ export const esElMismoPlato = (nombreA, nombreB) => {
     // blancos: la hoja pedía 101 tazas donde hacían falta 33, y Gina lo tenía
     // claro —en su lista manda "frijoles blancos 30 tazas" y "frijoles
     // arreglado 10 tazas" por separado—.
-    const soloEnUno = [...setA].filter(p => !setB.has(p))
-        .concat([...setB].filter(p => !setA.has(p)));
+    // Se compara con `mismaPalabra` y no con `Set.has`: "Envío" y "Envíos" son
+    // la misma palabra, y por igualdad exacta salían como dos platos.
+    const soloEnUno = [...setA].filter(p => !estaEnLaLista(b, p))
+        .concat([...setB].filter(p => !estaEnLaLista(a, p)));
     if (soloEnUno.some(p => VARIEDADES.has(p))) return false;
 
-    const contenido = (chico, grande) => [...chico].every(p => grande.has(p));
-    if (!contenido(setA, setB) && !contenido(setB, setA)) return false;
+    const contenido = (chico, grande) => [...chico].every(p => estaEnLaLista(grande, p));
+    if (!contenido(setA, b) && !contenido(setB, a)) return false;
 
     // El largo contiene al corto. Falta ver si lo que le agrega es como se
     // cocina —mismo plato— o algo que le ponen encima —otro plato—.

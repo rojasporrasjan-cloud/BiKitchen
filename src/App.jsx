@@ -82,6 +82,7 @@ const SubstitutionsConfigView = lazyWithRetry(() => import('./pages/admin/Substi
 const PrintProductionView = lazyWithRetry(() => import('./pages/admin/PrintProductionView'));
 const WhatsAppImportView = lazyWithRetry(() => import('./pages/admin/WhatsAppImportView'));
 const MonthlyPacksView = lazyWithRetry(() => import('./pages/admin/MonthlyPacksView'));
+const ProteinasSemanalesView = lazyWithRetry(() => import('./pages/admin/ProteinasSemanalesView'));
 const BroadcastView = lazyWithRetry(() => import('./pages/admin/BroadcastView'));
 const PointsAuditView = lazyWithRetry(() => import('./pages/admin/PointsAuditView'));
 const PrinterView = lazyWithRetry(() => import('./pages/admin/PrinterView'));
@@ -300,6 +301,7 @@ function AnimatedRoutes() {
                   para que esconder la opción del menú no sea la única barrera. */}
               <Route path="whatsapp-import" element={<WhatsAppImportView />} />
               <Route path="monthly-packs" element={<MonthlyPacksView />} />
+              <Route path="proteinas-semanales" element={<ProteinasSemanalesView />} />
               <Route path="broadcast" element={<BroadcastView />} />
               <Route path="points-audit" element={<PointsAuditView />} />
               <Route path="impresion" element={<PrinterView />} />

@@ -15,6 +15,8 @@
  * cocinando de más o de menos.
  */
 
+import { COLUMNAS_DE_EMPAQUE } from './tablasDeEmpaque';
+
 const NARANJA = 'FFFFC000';
 const SALMON = 'FFF4B084';
 const SALMON_CLARO = 'FFFCE4D6';
@@ -492,6 +494,186 @@ export const agregarPestanaDeEmpaquePorPack = (wb, opciones) => {
     pintar(fin.getCell(3), SALMON_CLARO);
     fin.getCell(2).border = borde;
     fin.getCell(3).border = borde;
+
+    return ws;
+};
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * LA HOJA DE EMPAQUE, IGUAL QUE EN PANTALLA
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/** El amarillo de la barra de título y el crema del aviso de cambio. */
+const AMARILLO = 'FFFFC000';
+const CREMA = 'FFFFF2CC';
+const NEGRO = 'FF000000';
+
+/**
+ * Una tabla de empaque, escrita tal como se ve en la hoja de producción.
+ *
+ * "necesito que la hoja de excel se vea igual a como sale en produccion […]
+ *  como se divide nuestra hoja actual por tandas sin cambios con cambios etc
+ *  […] no importan cuantas pestañas sean" — Jan, 10 de setiembre de 2026.
+ *
+ * Hasta hoy el Excel sacaba una lista de un cliente por fila: otra hoja, no la
+ * misma. Quien empaca trabaja de la pantalla o del papel impreso, y el Excel no
+ * se podía cotejar con ninguno de los dos.
+ *
+ * Una pestaña por tabla. Son muchas —una por familia, por día de entrega y por
+ * si llevan cambio o no— y así es como tiene que ser: cada pestaña es una
+ * corrida de empaque, que es como se trabaja en la cocina.
+ *
+ * Las filas vienen armadas de `tablasDeEmpaque.js`, el mismo módulo que usa la
+ * pantalla. Acá no se decide nada: se dibuja.
+ *
+ * @param {object}   wb          el libro de ExcelJS
+ * @param {object}   opciones
+ * @param {string}   opciones.titulo      la barra amarilla
+ * @param {string}   [opciones.aviso]     la barra negra ("ES KETO - SE COCINA APARTE")
+ * @param {string}   [opciones.banner]    el aviso crema del cambio compartido
+ * @param {string[]} [opciones.porciones] las líneas de "CANTIDAD POR PLATO"
+ * @param {Array}    opciones.filas       de `filasDeTablaDeEmpaque`
+ */
+export const agregarPestanaDeEmpaqueComoLaHoja = (wb, opciones) => {
+    const { titulo, aviso = '', banner = '', porciones = [], filas = [] } = opciones || {};
+    const ws = wb.addWorksheet(nombreLibre(wb, titulo), { views: [{ showGridLines: false }] });
+
+    // Los mismos anchos relativos que la pantalla: la descripción y las dos
+    // columnas de texto libre son las que necesitan aire.
+    ws.columns = [
+        { width: 11 }, { width: 34 }, { width: 10 },
+        { width: 8 }, { width: 52 }, { width: 40 }
+    ];
+
+    let f = 1;
+
+    // ── La barra amarilla ────────────────────────────────────────────────
+    ws.mergeCells(`A${f}:F${f}`);
+    const t = ws.getCell(`A${f}`);
+    t.value = String(titulo || '').toUpperCase();
+    t.font = { name: 'Calibri', size: 13, bold: true };
+    t.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    t.border = borde;
+    pintar(t, AMARILLO);
+    ws.getRow(f).height = 30;
+    f += 1;
+
+    // ── "ES KETO - SE COCINA APARTE" ─────────────────────────────────────
+    // "Ojala en la hoja especifique que es keto porque se cocina aparte, igual
+    // cuando es vegetariano" — Gina.
+    if (aviso) {
+        ws.mergeCells(`A${f}:F${f}`);
+        const a = ws.getCell(`A${f}`);
+        a.value = aviso;
+        a.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
+        a.alignment = { horizontal: 'center', vertical: 'middle' };
+        a.border = borde;
+        pintar(a, NEGRO);
+        ws.getRow(f).height = 20;
+        f += 1;
+    }
+
+    // ── "Todos estos llevan el mismo cambio: …" ──────────────────────────
+    if (banner) {
+        ws.mergeCells(`A${f}:F${f}`);
+        const b = ws.getCell(`A${f}`);
+        b.value = banner;
+        b.font = { name: 'Calibri', size: 10 };
+        b.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+        b.border = borde;
+        pintar(b, CREMA);
+        ws.getRow(f).height = 24;
+        f += 1;
+    }
+
+    // ── CANTIDAD POR PLATO ───────────────────────────────────────────────
+    porciones.filter(Boolean).forEach((texto) => {
+        const etiqueta = ws.getCell(`A${f}`);
+        etiqueta.value = 'CANTIDAD POR PLATO';
+        etiqueta.font = { name: 'Calibri', size: 9, bold: true };
+        etiqueta.alignment = { horizontal: 'left', vertical: 'middle' };
+        etiqueta.border = borde;
+
+        ws.mergeCells(`B${f}:F${f}`);
+        const v = ws.getCell(`B${f}`);
+        v.value = String(texto).toUpperCase();
+        v.font = { name: 'Calibri', size: 9, bold: true };
+        v.alignment = { horizontal: 'left', vertical: 'middle' };
+        v.border = borde;
+        f += 1;
+    });
+
+    // ── La cabecera de columnas ──────────────────────────────────────────
+    const cab = ws.getRow(f);
+    COLUMNAS_DE_EMPAQUE.forEach((h, i) => {
+        const c = cab.getCell(i + 1);
+        c.value = h;
+        c.font = { name: 'Calibri', size: 11, bold: true };
+        c.alignment = { horizontal: 'center', vertical: 'middle' };
+        c.border = borde;
+        pintar(c, SALMON);
+    });
+    cab.height = 20;
+    f += 1;
+
+    // ── Las filas ────────────────────────────────────────────────────────
+    const primeraDeDatos = f;
+
+    filas.forEach((fila) => {
+        const r = ws.getRow(f);
+
+        r.getCell(1).value = fila.plato === null ? null : fila.plato;
+        r.getCell(2).value = fila.descripcion;
+        r.getCell(3).value = fila.cantidad;
+        r.getCell(4).value = fila.platos === null ? null : fila.platos;
+        r.getCell(5).value = fila.especificaciones === null ? null : fila.especificaciones;
+        r.getCell(6).value = fila.cliente === null ? null : fila.cliente;
+
+        for (let c = 1; c <= 6; c++) {
+            const celda = r.getCell(c);
+            celda.border = borde;
+            celda.font = { name: 'Calibri', size: 10 };
+            celda.alignment = (c === 1 || c === 3 || c === 4)
+                ? { horizontal: 'center', vertical: 'middle' }
+                : { horizontal: 'left', vertical: 'middle', wrapText: true };
+        }
+        r.getCell(1).font = { name: 'Calibri', size: 10, bold: true };
+        r.getCell(4).font = { name: 'Calibri', size: 11, bold: true };
+
+        // La parte que cambió va en verde, igual que en pantalla: es lo único
+        // que distingue el plato de esta corrida del plato normal.
+        if (fila.resaltada) {
+            pintar(r.getCell(2), VERDE);
+            r.getCell(2).font = { name: 'Calibri', size: 10, bold: true };
+        }
+
+        f += 1;
+    });
+
+    // ── Las celdas unidas ────────────────────────────────────────────────
+    // Se unen DESPUÉS de escribir todo: ExcelJS borra el contenido de las
+    // celdas que quedan tapadas, así que unir sobre la marcha dejaba el número
+    // de plato en blanco a partir del segundo.
+    filas.forEach((fila, i) => {
+        if (!fila.alto || fila.alto < 2) return;
+        const desde = primeraDeDatos + i;
+        const hasta = desde + fila.alto - 1;
+
+        ws.mergeCells(`A${desde}:A${hasta}`);
+        ws.mergeCells(`D${desde}:D${hasta}`);
+        // Cuando el cliente va por plato —los de un cambio compartido— las dos
+        // columnas de texto también se unen. Cuando va por renglón, no: cada
+        // fila lleva su propio cliente.
+        if (fila.cliente !== null && filas[i + 1] && filas[i + 1].cliente === null) {
+            ws.mergeCells(`E${desde}:E${hasta}`);
+            ws.mergeCells(`F${desde}:F${hasta}`);
+        }
+    });
+
+    // Apaisado: la tabla tiene seis columnas y dos son de texto largo.
+    ws.pageSetup = {
+        orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0,
+        margins: { left: 0.3, right: 0.3, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 }
+    };
 
     return ws;
 };

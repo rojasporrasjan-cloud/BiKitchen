@@ -10,6 +10,10 @@
  * ubicado el pedido, los datos buenos se leen de Firestore.
  */
 
+import { individualesData } from '../data/individualesData';
+
+const sinTildesLector = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
 // Los números se generan como `#ORD-` + base36 en mayúsculas (ver generateOrderNumber
 // en CheckoutSteps.jsx). Los pedidos viejos creados desde el admin usan 4 dígitos.
 const ORDER_NUMBER_RE = /#ORD-[A-Z0-9]+/gi;
@@ -702,6 +706,58 @@ const grabItems = (text) => {
  * @param {string} text
  * @returns {object} datos del pedido + warnings
  */
+/**
+ * ¿El pedido entero es una reposición?
+ *
+ * "reponer 3 platos de Gallo pinto con huevo revuelto" — Angie Navarro, 10 de
+ * setiembre de 2026. El importador no lo sabía, le buscó precio en el catálogo
+ * y la reposición salía como una venta de ₡32.550, con puntos de lealtad
+ * incluidos.
+ *
+ * SOLO "reponer" / "reposición". "Regalía" NO: "two pack mensual con REGALÍA
+ * desayunos" es un pack PAGADO que trae desayunos de regalo, y tomarlo como
+ * gratis dejaba en ₡0 un mensual entero. "Sin cargo" tampoco: casi siempre es
+ * del envío, no del pedido.
+ */
+export const esTextoDeReposicion = (texto) =>
+    /\b(repon(er|emos|go)|reposici[oó]n)\b/i.test(String(texto || ''));
+
+/**
+ * Pone la reposición en la forma que el lector de ítems entiende.
+ *
+ *     reponer 3 platos de            →   3 Gallo pinto con huevo revuelto
+ *     Gallo pinto con huevo revuelto
+ *
+ *     reponer 2 Pollo teriyaki       →   2 Pollo teriyaki
+ *
+ * Sin esto, "reponer 3 platos de" quedaba como NOMBRE del ítem: salía así en la
+ * etiqueta y en la hoja, y el plato de verdad quedaba escondido adentro.
+ */
+export const normalizarReposicion = (texto) => {
+    const lineas = String(texto || '').split('\n');
+    const salida = [];
+    const RE = /^[\s•·*□▢▪◦◽◾-]*(?:reponer|reposici[oó]n(?:\s+de)?|reponemos|repongo)\s+(\d+)\s*(?:platos?|unidades?|porciones?)?\s*(?:de\s*)?(.*)$/i;
+
+    for (let i = 0; i < lineas.length; i++) {
+        const m = lineas[i].match(RE);
+        if (!m) { salida.push(lineas[i]); continue; }
+
+        const cuantos = m[1];
+        let plato = m[2].trim();
+        if (!plato) {
+            // El plato viene en el renglón siguiente que tenga algo.
+            let j = i + 1;
+            while (j < lineas.length && !lineas[j].trim()) j++;
+            if (j < lineas.length) {
+                plato = lineas[j].trim();
+                i = j;
+            }
+        }
+        salida.push(plato ? `${cuantos} ${plato}` : lineas[i]);
+    }
+    return salida.join('\n');
+};
+
 export const parseOrderBlock = (textoCrudo, hoy = new Date()) => {
     const warnings = [];
     if (!textoCrudo || typeof textoCrudo !== 'string') {
@@ -710,7 +766,9 @@ export const parseOrderBlock = (textoCrudo, hoy = new Date()) => {
 
     // Lo PRIMERO: quitar los sellos de hora del chat. Si no, la fecha del sello
     // se puede colar como fecha de entrega y el pedido queda programado mal.
-    const text = limpiarPrefijosDeChat(textoCrudo);
+    const sinSellos = limpiarPrefijosDeChat(textoCrudo);
+    const esReposicion = esTextoDeReposicion(sinSellos);
+    const text = esReposicion ? normalizarReposicion(sinSellos) : sinSellos;
 
     // Las etiquetas cubren los dos formatos: el del correo y el de WhatsApp
     const numeroOrden = extractOrderNumbers(text)[0] || null;
@@ -759,6 +817,30 @@ export const parseOrderBlock = (textoCrudo, hoy = new Date()) => {
     
     const { items, consumidas } = grabItems(textItemsScan);
 
+    // Un plato del catálogo escrito solo, sin número ni precio.
+    //
+    // "Lasagna de pollo" — Timoty Gutiérrez, 10 set 2026. Sin número adelante
+    // el lector no lo tomaba como ítem, el pedido quedaba sin nada y no se
+    // podía crear. Solo se rescata cuando NO se encontró ningún ítem y el
+    // renglón nombra un producto del catálogo: una nota suelta ("No lácteos")
+    // no se vuelve un plato. El precio no se inventa acá.
+    if (items.length === 0 && textItemsScan === text) {
+        text.split('\n').forEach((linea, i) => {
+            if (consumidas.has(i)) return;
+            const limpia = linea.replace(/^[\s•·*□▢▪◦◽◾-]+/, '').trim();
+            if (!limpia || limpia.includes(':') || esLineaIgnorable(limpia) || PARECE_FECHA.test(limpia)) return;
+            const clave = sinTildesLector(limpia.toLowerCase());
+            if (clave.split(/\s+/).length < 2 || clave.length < 8) return;
+            const esDelCatalogo = individualesData.some(prod => {
+                const nombre = sinTildesLector(prod.nombre.toLowerCase());
+                return nombre === clave || nombre.startsWith(`${clave} `) || clave.startsWith(`${nombre} `) || clave === nombre;
+            });
+            if (!esDelCatalogo) return;
+            items.push({ cantidad: 1, nombre: limpia, precio: null, proteinas: [], instruccionesSuelta: [] });
+            consumidas.add(i);
+        });
+    }
+
     // WhatsApp lo trae como "💳 *PAGO*: SINPE"; el correo lo pone en la línea
     // siguiente al encabezado "MÉTODO DE PAGO".
     let metodoPago = grab(text, ['PAGO', 'M[ée]todo de pago']);
@@ -803,7 +885,9 @@ export const parseOrderBlock = (textoCrudo, hoy = new Date()) => {
     if (!finalTelefono) warnings.push('Falta el teléfono.');
     // El correo NO se avisa: si no viene, se arma a partir del teléfono
     // (ver resolverCorreo en buildPedidoFromImport.js).
-    if (!total || total <= 0) warnings.push('Falta el TOTAL o quedó en cero.');
+    // Una reposición va en cero a propósito: avisar que "falta el total" empuja
+    // a escribirle un monto que no se cobra.
+    if ((!total || total <= 0) && !esReposicion) warnings.push('Falta el TOTAL o quedó en cero.');
     if (items.length === 0) warnings.push('No pude leer ningún ítem del pedido.');
 
     // Auto-asignar precio del ítem si viene 1 solo ítem y su precio no se extrajo explícito
@@ -855,6 +939,7 @@ export const parseOrderBlock = (textoCrudo, hoy = new Date()) => {
         zona: finalZona, direccion, referencias, observaciones,
         items, subtotal, descuento, costoEnvio, total,
         fechasEntrega, metodoPago,
+        esReposicion,
         warnings
     };
 };

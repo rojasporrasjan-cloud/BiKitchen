@@ -1,5 +1,6 @@
 import { esIndividualEnLaHoja } from './packClassification';
 import { porcionesDelPlato } from './porcionesDelPedido';
+import { conProteinasDeLaEntrega } from './proteinasPorEntrega';
 
 // Utilidades de logística para BiKitchen Food
 // - Normalización de pedidos al modelo de platos/ingredientes
@@ -104,8 +105,14 @@ export function detectIsTwoPack(order) {
  *     }
  *   ]
  * }
+ *
+ * @param {Array} rawPedidos
+ * @param {string[]|string} [fechas] las fechas de la hoja. Con ellas, un pack de
+ *   proteinas usa la lista elegida para ESA entrega (ver proteinasPorEntrega.js)
+ *   en vez de repetir la de la compra todas las semanas. Sin fechas queda igual
+ *   que siempre.
  */
-export function mapPedidosFromLegacy(rawPedidos) {
+export function mapPedidosFromLegacy(rawPedidos, fechas = null) {
   if (!Array.isArray(rawPedidos)) return [];
 
   const parseCantidadUnidad = (valorCrudo) => {
@@ -137,7 +144,10 @@ export function mapPedidosFromLegacy(rawPedidos) {
     return { unidad: 'g', cantidad: num || 0 };
   };
 
-  return rawPedidos.map((p) => {
+  return rawPedidos.map((pedidoCrudo) => {
+    // La lista de proteinas de ESTA entrega, si se eligio. Es una copia: el
+    // pedido de Firestore no se toca.
+    const p = fechas ? conProteinasDeLaEntrega(pedidoCrudo, fechas) : pedidoCrudo;
     const platosNormalizados = [];
 
     // Numeración CORRIDA para todo el pedido.

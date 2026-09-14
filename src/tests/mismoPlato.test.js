@@ -21,7 +21,8 @@ import {
     palabrasClave,
     palabraPrincipal,
     buscarRenglonDelMismoPlato,
-    nombreMasCompleto
+    nombreMasCompleto,
+    mismaPalabra
 } from '../utils/mismoPlato';
 
 describe('esElMismoPlato', () => {
@@ -391,5 +392,44 @@ describe('el conector dice si es el mismo plato o le ponen algo encima', () => {
         expect(esElMismoPlato('Pollo al ajillo', 'Pollo teriyaki')).toBe(false);
         expect(esElMismoPlato('Sopa de albóndigas', 'Albóndigas')).toBe(false);
         expect(esElMismoPlato('Frijoles', 'Frijoles blancos guisados')).toBe(false);
+    });
+});
+
+/**
+ * Tres avisos de la hoja del 12 de setiembre de 2026 eran la misma palabra
+ * escrita de dos formas. Se iban a cocinar por separado, cada una a la mitad.
+ */
+describe('la misma palabra escrita distinto', () => {
+
+    it('junta el singular con el plural', () => {
+        expect(esElMismoPlato('Envío', 'Envíos')).toBe(true);
+        expect(esElMismoPlato('Vegetal salteado', 'Vegetales salteados')).toBe(true);
+    });
+
+    it('junta el adjetivo que concuerda distinto', () => {
+        expect(esElMismoPlato('Fajitas de lomo encebollado', 'Fajitas de lomo encebollada')).toBe(true);
+    });
+
+    it('el plural se compara sumando, no recortando', () => {
+        // Recortar es ambiguo: "carnes" y "vegetales" se ven iguales pero uno
+        // viene de "carne" y el otro de "vegetal"
+        expect(mismaPalabra('carne', 'carnes')).toBe(true);
+        expect(mismaPalabra('vegetal', 'vegetales')).toBe(true);
+        expect(mismaPalabra('papa', 'papas')).toBe(true);
+    });
+
+    it('el género solo vale en terminaciones de adjetivo', () => {
+        expect(mismaPalabra('encebollado', 'encebollada')).toBe(true);
+        expect(mismaPalabra('salteado', 'salteada')).toBe(true);
+        // Si valiera en cualquier palabra, esto pasaría por lo mismo
+        expect(mismaPalabra('pollo', 'polla')).toBe(false);
+    });
+
+    it('NO junta lo que sigue siendo distinto', () => {
+        expect(mismaPalabra('res', 'fresas')).toBe(false);
+        expect(esElMismoPlato('Pollo al ajillo', 'Pollo teriyaki')).toBe(false);
+        expect(esElMismoPlato('Frijoles', 'Frijoles blancos')).toBe(false);
+        expect(esElMismoPlato('Sopa albóndigas', 'Albóndigas de res')).toBe(false);
+        expect(esElMismoPlato('Pollo en salsa de mostaza', 'Pollo en salsa de curry')).toBe(false);
     });
 });

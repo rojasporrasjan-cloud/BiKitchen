@@ -153,6 +153,23 @@ describe('7. un pack de proteinas que no dice cuales', () => {
         expect(avisos[0].detalle).toMatch(/no qued[oó] escrito/i);
     });
 
+    it('una proteina elegida DOS VECES cuenta por dos', () => {
+        // Milton lleva "Pollo en salsa mediterranea x2": son cinco elecciones
+        // aunque sean cuatro nombres. Contando nombres distintos la hoja lo
+        // acusaba de no haber elegido todo cuando si lo habia hecho.
+        expect(packsSinDecirCuales([{
+            cliente: 'Milton Hernandez',
+            plan: 'Pack 5 Proteinas (250g)',
+            platos: [
+                'Fajitas de lomo encebolladas',
+                'Fajitas de cerdo en salsa criolla',
+                'Pollo en crema ligera de hongos',
+                'Pollo en salsa mediterranea',
+                'Pollo en salsa mediterranea'
+            ]
+        }])).toHaveLength(0);
+    });
+
     it('el de German, que SI trae sus cinco, no se avisa', () => {
         expect(packsSinDecirCuales([{
             cliente: 'German',

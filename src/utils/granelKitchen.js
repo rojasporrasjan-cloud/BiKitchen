@@ -17,6 +17,18 @@
  * distintas.
  */
 
+import { PLATOS_EN_MOLDE, MEDIDA_DE_MOLDE } from '../data/platosEnMolde';
+import { palabrasClave } from './mismoPlato';
+
+/**
+ * Un individual que va en molde desechable: la lasaña, los pasteles, las
+ * flautas y los canelones. El envase ES la medida.
+ */
+export const vaEnMolde = (nombre) => {
+    const n = String(nombre || '').toLowerCase();
+    return PLATOS_EN_MOLDE.some(p => n.includes(p));
+};
+
 /**
  * Normaliza el nombre para que no se dupliquen líneas por espacios de más.
  *
@@ -89,6 +101,34 @@ export const sumarAGranel = (mapa, nombre, cantidad, unidad, categoria, porcione
  * @param {number} opts.gramosPorPorcion - gramaje del pack
  * @param {(n: string) => string} [opts.categoria]
  */
+/**
+ * Si ese nombre corresponde a un plato que el pack de verdad lleva.
+ *
+ * Sirve de guarda para los cambios leidos del texto: sin ella, una frase mal
+ * entendida agrega comida que nadie pidio. Se compara con el mismo emparejador
+ * que junta los platos escritos distinto, asi que "tilapia" calza con "Filet de
+ * tilapia al ajillo".
+ */
+export const platoDelPackQueNombra = (nombre, platos) => {
+    const buscadas = palabrasClave(nombre);
+    if (buscadas.length === 0) return null;
+
+    const candidatos = (platos || [])
+        .map((p) => String(p?.proteina?.nombre || p?.proteina || ''))
+        .filter(Boolean)
+        .filter((suyo) => {
+            const suyas = palabrasClave(suyo);
+            // Todas las palabras escritas tienen que estar en el plato:
+            // "tilapia" calza con "Filet de tilapia al ajillo".
+            return buscadas.every((x) => suyas.includes(x));
+        });
+
+    // Si calza con VARIOS no se elige ninguno: en un pack con tres pollos,
+    // "cambiar el pollo" no dice cual, y restarle al que no es deja sin comida
+    // a quien si lo pidio.
+    return candidatos.length === 1 ? candidatos[0] : null;
+};
+
 export const aplicarSustitucionesAlGranel = (mapa, opts = {}) => {
     const { sustituciones = [], platos = [], porciones = 1, gramosPorPorcion = 0, categoria, acumular } = opts;
     const gramos = (Number(gramosPorPorcion) || 0) * (Number(porciones) || 1);
@@ -108,7 +148,19 @@ export const aplicarSustitucionesAlGranel = (mapa, opts = {}) => {
         const idx = Number(s.plato) - 1;
         // El nombre del menu manda sobre el que venia escrito en el pedido:
         // el pedido puede traerlo con otra ortografia y no restaria nada.
-        const original = platos[idx]?.proteina?.nombre || platos[idx]?.proteina || s.de;
+        let original = platos[idx]?.proteina?.nombre || platos[idx]?.proteina || s.de;
+
+        // Un cambio LEIDO DEL TEXTO se resuelve al plato de verdad del pack.
+        //
+        // Gina escribe "cambiar la tilapia", no "Filet de tilapia al ajillo".
+        // Restando el texto tal cual, la resta no encuentra a quien restarle y
+        // queda SOLO la suma: se cocinaria comida de mas. Y si la frase no
+        // nombra ningun plato del pack —o nombra varios— no se mueve nada.
+        if (s.deTexto) {
+            const resuelto = platoDelPackQueNombra(original, platos);
+            if (!resuelto) return;
+            original = resuelto;
+        }
 
         if (original) sumar(original, -gramos, 'g');
         sumar(s.a, gramos, 'g');
@@ -257,10 +309,20 @@ const leerCantidadEscrita = (texto, itemQty) => {
         return { totalQty: parseFloat(kg[1]) * itemQty, unit: 'kg', portionGrams: null, numPorciones: itemQty };
     }
 
-    // "6 unidades"
-    const un = t.match(/(\d+)\s*unidades\b/i);
+    // "6 unidades" y tambien "1 unidad". El singular no se leia: Gina lo
+    // escribe asi en los desayunos y la medida se perdia. Pasaba de casualidad
+    // porque el valor por defecto del parser tambien era 'unidades'.
+    const un = t.match(/(\d+)\s*unidad(?:es)?\b/i);
     if (un) {
         return { totalQty: parseInt(un[1], 10) * itemQty, unit: 'unidades', portionGrams: null, numPorciones: itemQty };
+    }
+
+    // "1 molde", "3 moldes". Hace falta para los paquetes familiares, que se
+    // cuentan por ENVASE y no por peso: sin esto, "Arroz con carne de cerdo"
+    // caia en la regla de las proteinas por la palabra "carne" y salia 250 g.
+    const mol = t.match(/(\d+)\s*moldes?\b/i);
+    if (mol) {
+        return { totalQty: parseInt(mol[1], 10) * itemQty, unit: MEDIDA_DE_MOLDE, portionGrams: null, numPorciones: itemQty };
     }
 
     return null;
@@ -286,6 +348,14 @@ export const parseQuantityAndUnit = (rawName, specStr = '', itemCount = 1, expli
 
     // Sin nada escrito: se asume por el tipo de plato.
     const combined = `${rawStr} ${spec}`.toLowerCase();
+
+    // El molde manda sobre la adivinanza. "Lasagna de pollo" tiene la palabra
+    // "pollo" y caia en la regla de las proteinas: salia 250 g de lasaña, que
+    // no significa nada para quien empaca. Va antes porque el envase ES la
+    // medida de estos platos.
+    if (vaEnMolde(rawStr)) {
+        return { totalQty: itemQty, unit: MEDIDA_DE_MOLDE, portionGrams: null, numPorciones: itemQty };
+    }
 
     const isProtein = /pollo|lomo|cerdo|carne|pibil|pork|bistec|fajitas|pescado|tilapia|salmón|salmon|atun|corvina|prote[íi]na/i.test(combined);
     if (isProtein) {
@@ -330,5 +400,12 @@ export const textoDeCantidad = (nombre, medida, veces, gramos) => {
     if (p.unit === 'taza(s)') return `${p.totalQty} taza${p.totalQty > 1 ? 's' : ''}`;
     if (p.unit === 'porciones') return `${p.totalQty} porci${p.totalQty > 1 ? 'ones' : 'ón'}`;
     if (p.unit === 'kg') return `${p.totalQty} kg`;
+    // El molde se nombra entero: quien empaca tiene que ir a buscar el envase,
+    // y "1 unidad" no le dice cual.
+    if (p.unit === MEDIDA_DE_MOLDE) {
+        return p.totalQty > 1
+            ? `${p.totalQty} moldes desechables`
+            : '1 molde desechable';
+    }
     return `${p.totalQty} unidad${p.totalQty > 1 ? 'es' : ''}`;
 };

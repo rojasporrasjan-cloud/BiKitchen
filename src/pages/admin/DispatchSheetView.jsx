@@ -1,103 +1,58 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../../firebase/config';
-import { collection, query, where, getDocs } from 'firebase/firestore';
-import { cachedFetch, invalidateCache } from '../../utils/firestoreCache';
+import usePedidosDeFechas from '../../hooks/usePedidosDeFechas';
+import { fechasDeReparto } from '../../utils/consultaPorFechas';
 import AdminPageHeader from '../../components/admin/AdminPageHeader';
 import { ClipboardList, Printer, Calendar, RefreshCw, FileText } from 'lucide-react';
 import { mapPedidosFromLegacy } from '../../utils/logisticsUtils';
+import { conProteinasDeLaEntrega } from '../../utils/proteinasPorEntrega';
 import { getScheduleFromOrder } from '../../utils/orderDates';
-import { useOrders } from '../../context/OrdersContext';
-import { anotarLecturas } from '../../utils/contadorFirestore';
 
 /**
  * DispatchSheetView ("Hoja de Despacho / Reparto")
  * Displays a print-friendly, Excel-like table of daily production/dispatch totals.
  */
 export default function DispatchSheetView() {
-    const { orders: allOrders } = useOrders();
-    const [availableDates, setAvailableDates] = useState([]);
+    // Las fechas del calendario de reparto: ya no se baja la lista entera de
+    // pedidos para armar el selector.
+    const [availableDates] = useState(() => fechasDeReparto().filter(f => {
+        const hace3 = new Date(); hace3.setDate(hace3.getDate() - 3);
+        return f >= hace3.toISOString().split('T')[0];
+    }));
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
     const [orders, setOrders] = useState([]);
-    const [loading, setLoading] = useState(false);
     const [sheetData, setSheetData] = useState({ sections: [], totals: {} });
 
-    // Obtener fechas disponibles de pedidos activos
     useEffect(() => {
-        if (!allOrders || allOrders.length === 0) return;
-        
-        const dates = [];
-        allOrders.forEach(o => {
-            if (o.status === 'cancelled') return;
-            getScheduleFromOrder(o).forEach(d => {
-                if (d) dates.push(d);
-            });
+        if (availableDates.length > 0 && !availableDates.includes(selectedDate)) {
+            setSelectedDate(availableDates[0]);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // Solo los pedidos de ESTA fecha, en vivo (ver consultaPorFechas.js). Antes
+    // eran los ultimos 40 dias con getDocs: ~340 lecturas cada apertura.
+    const { pedidos: pedidosDeLaFecha, cargando: loading } = usePedidosDeFechas([selectedDate], 'Hoja de despacho');
+
+    useEffect(() => {
+        const rawOrders = (pedidosDeLaFecha || []).filter(order => {
+            // Un pedido cancelado no se empaca
+            if (order.status === 'cancelled') return false;
+            return getScheduleFromOrder(order).includes(selectedDate);
         });
+        // Los packs de proteinas con la lista de ESTA entrega. Va antes de
+        // las dos cosas de abajo porque processSheetData lee los items
+        // crudos: si solo se aplicara a `normalized`, el despacho diria las
+        // proteinas de la compra y la cocina las de la semana.
+        const deEstaEntrega = rawOrders.map(o => conProteinasDeLaEntrega(o, [selectedDate]));
+        setOrders(mapPedidosFromLegacy(deEstaEntrega, [selectedDate]));
+        // PASAMOS los crudos A processSheetData EN LUGAR DE normalized
+        // PORQUE mapPedidosFromLegacy ELIMINA EL CARRITO Y LOS ITEMS ORIGINALES
+        processSheetData(deEstaEntrega);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [pedidosDeLaFecha, selectedDate]);
 
-        // Valores únicos, ordenados descendente
-        const uniqueDates = [...new Set(dates)].sort((a, b) => new Date(a) - new Date(b));
-        
-        // Filtramos solo fechas desde hace 3 días en adelante para no saturar el menú
-        const limitDate = new Date();
-        limitDate.setDate(limitDate.getDate() - 3);
-        const limitDateStr = limitDate.toISOString().split('T')[0];
-        
-        const futureDates = uniqueDates.filter(d => d >= limitDateStr);
-        setAvailableDates(futureDates);
-        
-        if (futureDates.length > 0 && !futureDates.includes(selectedDate)) {
-            setSelectedDate(futureDates[0]);
-        }
-    }, [allOrders]);
-
-    // Load orders for selected date
-    const loadOrders = async (force = false) => {
-        setLoading(true);
-        try {
-            const cacheKey = `dispatch_orders_${selectedDate}`;
-            if (force) invalidateCache(cacheKey);
-
-            const rawOrders = await cachedFetch(cacheKey, async () => {
-                // Mismo criterio que SheetsView. Antes se buscaba por
-                // fecha_entrega == selectedDate, y eso dejaba fuera las semanas 2, 3
-                // y 4 de los packs mensuales: solo la primera entrega tiene esa fecha
-                // guardada, el resto vive en el calendario del pedido.
-                const targetDate = new Date(selectedDate + "T12:00:00");
-                const pastDate = new Date(targetDate);
-                pastDate.setDate(pastDate.getDate() - 40); // cubre packs de hasta 4 semanas
-                const pastDateStr = pastDate.toISOString().split('T')[0];
-
-                const q = query(
-                    collection(db, "pedidos"),
-                    where("fecha_entrega", ">=", pastDateStr)
-                );
-                const snapshot = await getDocs(q);
-                anotarLecturas(snapshot.size, 'Hoja de despacho');
-
-                return snapshot.docs
-                    .map(doc => ({ id: doc.id, ...doc.data() }))
-                    .filter(order => {
-                        // Un pedido cancelado no se empaca
-                        if (order.status === 'cancelled') return false;
-                        return getScheduleFromOrder(order).includes(selectedDate);
-                    });
-            }, 'dashboard'); // share cache group with dashboard/sheets
-
-            // Normalize orders using shared utility
-            const normalized = mapPedidosFromLegacy(rawOrders);
-            setOrders(normalized);
-            // PASAMOS rawOrders A processSheetData EN LUGAR DE normalized 
-            // PORQUE mapPedidosFromLegacy ELIMINA EL CARRITO Y LOS ITEMS ORIGINALES
-            processSheetData(rawOrders);
-
-        } catch (error) {
-            console.error("Error loading dispatch orders:", error);
-        }
-        setLoading(false);
-    };
-
-    useEffect(() => {
-        loadOrders();
-    }, [selectedDate]);
+    // La lista llega en vivo: "Actualizar" ya no tiene que volver a consultar.
+    const loadOrders = () => {};
 
     const processSheetData = (orderList) => {
         const sectionsMap = {};
@@ -162,13 +117,22 @@ export default function DispatchSheetView() {
                                 onChange={(e) => setSelectedDate(e.target.value)}
                                 className="bg-transparent outline-none text-sm font-medium text-gray-700 appearance-none cursor-pointer pr-4"
                             >
-                                {availableDates.length === 0 && <option value={selectedDate}>{selectedDate}</option>}
+                                {!availableDates.includes(selectedDate) && <option value={selectedDate}>{selectedDate}</option>}
                                 {availableDates.map(date => (
                                     <option key={date} value={date}>
                                         {new Date(date + 'T12:00:00').toLocaleDateString('es-CR', { weekday: 'long', day: 'numeric', month: 'long' }).replace(/^\w/, c => c.toUpperCase())}
                                     </option>
                                 ))}
                             </select>
+                            {/* Un reparto fuera de lunes, miercoles y sabado: el selector ya
+                                no sale de los pedidos, asi que se elige a mano. */}
+                            <input
+                                type="date"
+                                value={selectedDate}
+                                onChange={(e) => e.target.value && setSelectedDate(e.target.value)}
+                                aria-label="Elegir otro día"
+                                className="ml-2 bg-transparent outline-none text-sm text-gray-700 border-l border-gray-200 pl-2"
+                            />
                         </div>,
                         <button
                             key="print"

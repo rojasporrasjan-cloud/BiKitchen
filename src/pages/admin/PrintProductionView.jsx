@@ -24,9 +24,10 @@ import {
 import { getOfficialMenus, DEFAULT_MENUS } from '../../utils/firestoreMenus';
 import { getScheduleFromOrder } from '../../utils/orderDates';
 import { ESTADOS_QUE_IMPRIMEN } from '../../utils/estadosPedido';
-import { inicioDeVentana, ventanaAUsar, pedidosDeLaHoja } from '../../utils/ventanaDeLaHoja';
+import { pedidosDeLaHoja } from '../../utils/ventanaDeLaHoja';
+import usePedidosDeFechas from '../../hooks/usePedidosDeFechas';
 import { hojasPorDia, clientesDelDia, SIN_DIA } from '../../utils/hojasPorDia';
-import { anotarLecturas } from '../../utils/contadorFirestore';
+import { anotarSnapshot } from '../../utils/contadorFirestore';
 import { revisarHoja } from '../../utils/revisarHoja';
 import {
     sumarAGranel,
@@ -56,7 +57,27 @@ import { COLECCION_PRODUCCION, claveDeProduccion, acumularCocinado, cocinadoDeLa
 import { COLECCION_TANDAS, pedidosDeLaTanda, pasaElAdelanto, esRecurrente, acumularEnviados, claveDePedido, canceladosDespuesDeEnviar, cicloDeProduccion } from '../../utils/tandasDeCocina';
 import { familiasPorVolumen, tandaDeCadaPreparacion, conCabecerasDeTanda, cargaPorTanda, tituloDeTanda, avisoDeTandasSaltadas, ordenarPorTanda } from '../../utils/tandasDeEmpaque';
 import { leerAdelanto } from '../../utils/leerAdelantoDeGina';
-import { agregarPestanaDeCocina, agregarPestanaDeEmpaque, agregarPestanaDeAvisos, agregarPestanaDeEmpaquePorPack } from '../../utils/excelCuatroPestanas';
+import { esDiaDelCiclo, pedidosDelDia, empacadosDelViernesPorDefecto, descuentoDelDia, TEXTOS_DEL_DIA } from '../../utils/planDelCiclo';
+import { leerSobrantes, sobranteDelRenglon } from '../../utils/leerSobrantesPegados';
+import {
+    claveDeEmpacado,
+    sinLosYaEmpacados,
+    alternarEmpacado,
+    hayEmpacadosGuardados,
+    leerEmpacados,
+    guardarEmpacados
+} from '../../utils/packsYaEmpacados';
+import { NOMBRE_DE_FAMILIA } from '../../utils/familiasYaCocinadas';
+import {
+    sinLosYaCocinados, alternarCocinado, alternarVarios,
+    leerPedidosCocinados, guardarPedidosCocinados
+} from '../../utils/pedidosYaCocinados';
+import {
+    leerTextoDeSobrantes, guardarTextoDeSobrantes,
+    leerSinRebaja, guardarSinRebaja
+} from '../../utils/loQueYaSeHizoGuardado';
+import { agregarPestanaDeCocina, agregarPestanaDeEmpaque, agregarPestanaDeAvisos, agregarPestanaDeEmpaquePorPack, agregarPestanaDeEmpaqueComoLaHoja } from '../../utils/excelCuatroPestanas';
+import { filasDeTablaDeEmpaque, tituloDeTablaDeEmpaque } from '../../utils/tablasDeEmpaque';
 import RevisionHoja from '../../components/admin/RevisionHoja';
 import { problemasParaLaHoja } from '../../utils/revisionDeLaHoja';
 import { problemasDelMenu } from '../../utils/revisionDeMenus';
@@ -64,7 +85,11 @@ import { leerAsignaciones, guardarAsignaciones } from '../../utils/asignacionesD
 import { apartarCambiosEscritos, packsDe } from '../../utils/cambiosEscritos';
 import { marcasDePedidoRepetido, llaveDeCliente } from '../../utils/clientesRepetidos';
 import EditorDePedido from '../../components/admin/EditorDePedido';
-import { cambiosDelPedido, cambioParaCancelar, cuantasProteinasPide } from '../../utils/guardarPedidoDeLaHoja';
+import LoQueYaSeHizo from '../../components/admin/LoQueYaSeHizo';
+import { avisosDeCambiosEnLaHoja } from '../../utils/limiteDeCambios';
+import { esPackDeProteinas, cuantasProteinas, estadoDeLaEntrega, entregasDelPedido, cambioDeProteinas, avisosDeProteinasSinElegir, moverProteinasConLaFecha } from '../../utils/proteinasPorEntrega';
+import { cambiosDelPedido, cambioParaCancelar, cuantasProteinasPide, menuDelPedido, cambiosDelMenuDelPedido, listaDelMenu } from '../../utils/guardarPedidoDeLaHoja';
+import { calendarioGuardado } from '../../utils/cambiarFechaDelPedido';
 import EditorDeMenu from '../../components/admin/EditorDeMenu';
 import { cambiosDelMenu, platosParaEditar, cambioDeUnPlato } from '../../utils/guardarMenuDeLaHoja';
 import { invalidateCacheByType } from '../../utils/firestoreCache';
@@ -72,6 +97,7 @@ import CeldaEditable from '../../components/admin/CeldaEditable';
 import AgregarClienteAlPack from '../../components/admin/AgregarClienteAlPack';
 import { pedidoNuevo, idParaPedidoNuevo } from '../../utils/agregarPedidoDesdeLaHoja';
 import { individualesData, getProductUnits } from '../../data/individualesData';
+import { catalogoDePlatos } from '../../utils/catalogoDePlatos';
 import ExcelJS from 'exceljs';
 import { agregarHojasGina } from '../../utils/excelHojaProduccion';
 import { packSeParteEnAlmuerzoYCena } from '../../utils/labels/labelDomain';
@@ -134,6 +160,11 @@ export default function PrintProductionView() {
     // resto pasa demasiado tiempo guardado.
     //   ?date=2026-09-05,2026-09-07&soloPacks=bajoCalorias
     const soloPacks = searchParams.get('soloPacks') || '';
+    // Que dia del ciclo sabado + lunes es esta hoja: jueves, viernes o sabado.
+    // Cada uno cocina, empaca y descuenta distinto (ver planDelCiclo.js). Sin
+    // `dia` en la URL la hoja hace lo de antes, para no romper enlaces viejos
+    // ni la hoja del miercoles.
+    const diaDelCiclo = esDiaDelCiclo(searchParams.get('dia')) ? searchParams.get('dia') : null;
 
     /**
      * El proximo dia de reparto despues del primero de la hoja.
@@ -176,6 +207,11 @@ export default function PrintProductionView() {
     // Lo que Gina corrige a mano sobre la hoja de cocina. Se guarda por fecha y
     // manda sobre el calculo: ella es la que ve si el numero esta mal.
     const [ajustesCocina, setAjustesCocina] = useState({});
+    // Por DIA dentro del ciclo. Las hojas del jueves, viernes y sabado tienen
+    // la misma fecha ("sabado,lunes"), y con la fecha sola lo que Gina corrigio
+    // el jueves —"pollo 10 kg"— volvia a salir el viernes en vez de lo que
+    // faltaba, y si se mandaba contaba 20 kg hechos.
+    const llaveDeAjustes = diaDelCiclo ? `${date}__${diaDelCiclo}` : date;
     const [guardandoAjuste, setGuardandoAjuste] = useState(false);
     const [descargando, setDescargando] = useState(false);
     const [errorDeAjuste, setErrorDeAjuste] = useState('');
@@ -183,11 +219,11 @@ export default function PrintProductionView() {
     useEffect(() => {
         if (!date) return;
         let vigente = true;
-        getDoc(doc(db, COLECCION_AJUSTES, date))
+        getDoc(doc(db, COLECCION_AJUSTES, llaveDeAjustes))
             .then(d => { if (vigente) setAjustesCocina(d.exists() ? (d.data().renglones || {}) : {}); })
             .catch(err => console.error('[Cocina] No se pudieron leer los ajustes:', err));
         return () => { vigente = false; };
-    }, [date]);
+    }, [llaveDeAjustes]);
 
     const [guardandoTanda, setGuardandoTanda] = useState(false);
 
@@ -213,6 +249,9 @@ export default function PrintProductionView() {
             await setDoc(doc(collection(db, COLECCION_TANDAS)), {
                 clave: claveDeTanda,
                 fechas,
+                // El viernes descuenta SOLO lo del jueves: hay que saber de que
+                // dia es cada hoja mandada.
+                dia: diaDelCiclo || null,
                 soloRecurrentes,
                 pedidos: cleanOrders.map(claveDePedido),
                 cuantos,
@@ -227,6 +266,7 @@ export default function PrintProductionView() {
                 enviada: new Date().toISOString()
             });
             const previas = [...tandasPrevias, {
+                dia: diaDelCiclo || null,
                 pedidos: cleanOrders.map(claveDePedido),
                 // La hora tiene que venir tambien en la copia de memoria, o el
                 // recuadro de arriba decia "ya se mando" sin poder decir cuando,
@@ -254,8 +294,9 @@ export default function PrintProductionView() {
         setAjustesCocina(siguientes);
         setGuardandoAjuste(true);
         try {
-            await setDoc(doc(db, COLECCION_AJUSTES, date), {
+            await setDoc(doc(db, COLECCION_AJUSTES, llaveDeAjustes), {
                 fecha: date,
+                dia: diaDelCiclo || null,
                 renglones: siguientes,
                 actualizado: new Date().toISOString()
             }, { merge: true });
@@ -275,10 +316,16 @@ export default function PrintProductionView() {
     };
     // Lo que trajo la VENTANA de consulta, sin filtrar por la fecha de la hoja.
     // Cambiar de fecha ya no vuelve a consultar: se filtra esto en memoria.
-    const [pedidosDeLaVentana, setPedidosDeLaVentana] = useState([]);
-    const [ventanaCargada, setVentanaCargada] = useState('');
+    // Solo los pedidos de las fechas de ESTA hoja (ver consultaPorFechas.js).
+    // Antes se bajaban los ultimos 40 dias enteros, ~340 pedidos, para una hoja
+    // que usa ~90.
+    const {
+        pedidos: pedidosDeLaVentana,
+        cargando: cargandoPedidos,
+        sinServidor: pedidosSinServidor
+    } = usePedidosDeFechas(fechas, 'Hoja de producción');
     const [officialMenus, setOfficialMenus] = useState(null);
-    const [loading, setLoading] = useState(true);
+    const loading = cargandoPedidos;
     const [empaqueTab, setEmpaqueTab] = useState('packs');
     // El reparto de estaciones se guarda POR FECHA y se recupera al abrir.
     //
@@ -310,20 +357,58 @@ export default function PrintProductionView() {
         const crudo = enLaHoja?.rawPedido || enLaHoja;
         if (!crudo?.id) return;
         const plan = crudo.plan || crudo.tipoMenu || '';
+        // Un pack de proteinas de VARIAS entregas se edita por semana: lo que
+        // se escribe aca es la lista de la entrega de esta hoja. Si se
+        // escribiera en el item, se pisaria la lista de la compra y todas las
+        // semanas pasarian a decir lo mismo.
+        const esDeProteinas = esPackDeProteinas(crudo);
+        const fechaDeProteinas = esDeProteinas && entregasDelPedido(crudo).length > 1
+            ? (entregasDelPedido(crudo).find(f => fechas.includes(f)) || null)
+            : null;
         setPedidoEnEdicion({
             id: crudo.id,
             cliente: crudo.cliente || nombreCliente,
             plan,
             observaciones: crudo.observaciones || '',
             items: crudo.items || [],
-            proteinas: crudo.items?.[0]?.proteinas || [],
-            cuantasProteinas: cuantasProteinasPide(plan)
+            // `menu` tambien: en los pedidos viejos los platos viven ahi, y el
+            // guardado tiene que escribir donde la hoja lee.
+            menu: crudo.menu,
+            proteinas: fechaDeProteinas
+                ? estadoDeLaEntrega(crudo, fechaDeProteinas).lista
+                : (crudo.items?.[0]?.proteinas || []),
+            // "Pack Mensual Proteinas 250 g" no trae el numero en el nombre y
+            // `cuantasProteinasPide` devolvia 0: el campo ni aparecia.
+            cuantasProteinas: esDeProteinas ? cuantasProteinas(crudo) : cuantasProteinasPide(plan),
+            fechaDeProteinas,
+            proteinasPorEntrega: crudo.proteinasPorEntrega || {},
+            // Un personalizado trae su menu en el pedido y hay que poder
+            // cambiarselo cada semana desde aca.
+            esPersonalizado: esPersonalizado(plan),
+            menuActual: esPersonalizado(plan) ? menuDelPedido(crudo) : [],
+            // Las fechas GUARDADAS, no las deducidas: `getScheduleFromOrder`
+            // inventa las que faltan cuando el pedido dice "mensual", y escribir
+            // eso de vuelta convertiria una suposicion en comida que nadie pidio.
+            fechasEntrega: calendarioGuardado(crudo),
+            // La entrega que se esta mirando: la de ESTA hoja, para poder mover
+            // solo esa sin tocar el resto del mes.
+            fechaDeLaHoja: (calendarioGuardado(crudo).find(f => fechas.includes(f))
+                || calendarioGuardado(crudo)[0] || primeraFecha)
         });
     };
 
     const guardarEdicion = async (edicion) => {
-        const cambios = cambiosDelPedido(pedidoEnEdicion, edicion);
-        if (!cambios) return;
+        const semana = pedidoEnEdicion.fechaDeProteinas;
+        const cambios = cambiosDelPedido(pedidoEnEdicion, semana ? { ...edicion, proteinas: null } : edicion) || {};
+        if (semana && Array.isArray(edicion.proteinas)) {
+            Object.assign(cambios, cambioDeProteinas(pedidoEnEdicion, semana, edicion.proteinas) || {});
+        }
+        // Si se movio la entrega, las proteinas elegidas se van con ella.
+        const elegidas = cambios.proteinasPorEntrega || pedidoEnEdicion.proteinasPorEntrega || {};
+        if (cambios.fechas_entrega && edicion.fechas && Object.keys(elegidas).length > 0) {
+            cambios.proteinasPorEntrega = moverProteinasConLaFecha(elegidas, edicion.fechas);
+        }
+        if (Object.keys(cambios).length === 0) return;
         await updateDoc(doc(db, 'pedidos', pedidoEnEdicion.id), cambios);
     };
 
@@ -340,6 +425,16 @@ export default function PrintProductionView() {
     const guardarCeldaDeMenu = async (packName, numeroPlato, campo, valor) => {
         const esCena = /^CENAS\s*-/i.test(String(packName || ''));
         const base = String(packName || '').replace(/^CENAS\s*-\s*/i, '').trim();
+
+        // Un PERSONALIZADO no usa el menu oficial: sus platos viven en su
+        // pedido. Sin esta desviacion, la hoja traducia "Personalizado Bajo
+        // Calorias — Dalia" a `bajoCalorias` y cambiarle un plato a Dalia se lo
+        // cambiaba a los 43 packs de la familia —y a ella no, porque su tabla
+        // sigue leyendo su pedido—. Se veia como si no hubiera pasado nada.
+        if (esPersonalizado(base)) {
+            await guardarCeldaDePersonalizado(packName, numeroPlato, campo, valor);
+            return;
+        }
         const familia = mapPackNameToMenuKey(base);
         const cambios = cambioDeUnPlato({ familia, esCena, numeroPlato, campo, valor, menus: officialMenus });
         if (!cambios) return;
@@ -357,6 +452,36 @@ export default function PrintProductionView() {
             else copia[familia] = cambios[familia];
             return copia;
         });
+    };
+
+    /**
+     * Cambia UN plato del menu propio de un personalizado, en SU pedido.
+     *
+     * El numero de plato de la hoja es corrido por todo el pedido: si antes del
+     * pack hay otro item, el Plato 1 del pack no es el primero de la lista.
+     */
+    const guardarCeldaDePersonalizado = async (packName, numeroPlato, campo, valor) => {
+        const clientes = consolidatedPacksMap[packName]?.clientes || packsMap[packName]?.clientes || [];
+        const pedidos = [...new Map(clientes
+            .map(c => c.rawPedido)
+            .filter(p => p?.id)
+            .map(p => [p.id, p])).values()];
+
+        for (const pedido of pedidos) {
+            const lista = pedido[listaDelMenu(pedido)] || [];
+            const iPack = lista.findIndex(it => Array.isArray(it?.proteinas) && it.proteinas.length > 0);
+            if (iPack === -1) continue;
+            const antes = lista.slice(0, iPack)
+                .reduce((n, it) => n + (Array.isArray(it?.proteinas) && it.proteinas.length ? it.proteinas.length : 1), 0);
+            const i = Number(numeroPlato) - 1 - antes;
+
+            const platos = menuDelPedido(pedido);
+            if (!platos[i]) continue;
+            platos[i] = { ...platos[i], [campo]: String(valor ?? '') };
+
+            const cambios = cambiosDelMenuDelPedido(pedido, platos);
+            if (cambios) await updateDoc(doc(db, 'pedidos', pedido.id), cambios);
+        }
     };
 
     // El pack al que se le esta agregando un cliente, o null.
@@ -442,9 +567,42 @@ export default function PrintProductionView() {
     // pantalla porque no vive en Firestore: es un archivo suyo.
     const [adelantoDeGina, setAdelantoDeGina] = useState(null);
     const [errorDeAdelanto, setErrorDeAdelanto] = useState('');
+    // El mensaje de Gina con lo que sobro, pegado tal cual.
+    // Se guarda en el navegador: la hoja se arma entre varias recargas y
+    // perder el mensaje de Gina obliga a pedirselo otra vez.
+    const [textoDeSobrantes, setTextoDeSobrantes] = useState(() => leerTextoDeSobrantes(claveDeTanda));
+    const escribirSobrantes = (texto) => {
+        setTextoDeSobrantes(texto);
+        guardarTextoDeSobrantes(texto, claveDeTanda);
+    };
+    // Los packs que ya se empacaron. Se guardan en el navegador de quien arma
+    // la hoja: es un apunte de esta hornada, no un dato del negocio.
+    const [packsEmpacados, setPacksEmpacados] = useState(() => leerEmpacados(claveDeTanda));
+    // Si en este ciclo alguien ya dijo que se empaco el viernes. Mientras nadie
+    // lo diga, el sabado da por empacados los bajo calorias del lunes, que es lo
+    // que se hace siempre.
+    const [empacadosDecididos, setEmpacadosDecididos] = useState(() => hayEmpacadosGuardados(claveDeTanda));
+    // Los pedidos cuya comida YA esta hecha.
+    //
+    // Se marca por PEDIDO y no por familia: Gina reporta lo cocinado, despues
+    // entran pedidos nuevos, y marcar la familia entera sacaria tambien a los
+    // nuevos. Esos clientes se quedarian sin comida y la hoja no diria nada.
+    const [pedidosCocinados, setPedidosCocinados] = useState(() => leerPedidosCocinados(claveDeTanda));
     // Ver la hoja SIN descontar nada: las cantidades completas del dia. Es como
     // Gina revisa que no falte, antes de mirar cuanto le queda por hacer.
-    const [sinRebaja, setSinRebaja] = useState(true);
+    // Al cambiar de ciclo —otra semana— se leen los apuntes DE ESE ciclo. Sin
+    // esto la pantalla seguia mostrando los de la semana que estaba abierta.
+    useEffect(() => {
+        setTextoDeSobrantes(leerTextoDeSobrantes(claveDeTanda));
+        setPacksEmpacados(leerEmpacados(claveDeTanda));
+        setPedidosCocinados(leerPedidosCocinados(claveDeTanda));
+        setEmpacadosDecididos(hayEmpacadosGuardados(claveDeTanda));
+    }, [claveDeTanda]);
+    const [sinRebaja, setSinRebaja] = useState(() => leerSinRebaja());
+    const cambiarSinRebaja = (valor) => {
+        setSinRebaja(valor);
+        guardarSinRebaja(valor);
+    };
     /**
      * ¿Se preparan tambien los desayunos del dia que se adelanta?
      *
@@ -538,56 +696,13 @@ export default function PrintProductionView() {
     };
 
 
-    // La ventana solo se amplia hacia ATRAS. Avanzar en la semana —del sabado al
-    // lunes— pide una ventana que empieza DESPUES, y lo que ya esta cargado la
-    // contiene: no hace falta volver a consultar. Antes cada cambio de fecha
-    // bajaba los ~545 pedidos otra vez, y asi se agoto la cuota del 9 de
-    // setiembre de 2026 cambiando de hoja.
-    useEffect(() => {
-        const necesaria = inicioDeVentana(primeraFecha);
-        if (!necesaria) return;
-        setVentanaCargada(prev => ventanaAUsar(prev, necesaria));
-    }, [primeraFecha]);
-
     // Los menus si dependen de la fecha de la hoja, no de la ventana.
     useEffect(() => {
         if (!date) return;
         getOfficialMenus().then(menus => setOfficialMenus(menus)).catch(console.error);
     }, [date]);
 
-    useEffect(() => {
-        if (!ventanaCargada) return;
-        setLoading(true);
 
-        const q = query(
-            collection(db, "pedidos"),
-            where("fecha_entrega", ">=", ventanaCargada)
-        );
-
-        // Listener en tiempo real: cualquier cambio en observaciones o pedidos se refleja al instante
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            // Esta es la pantalla mas cara del panel y la que agoto la cuota el 3
-            // de setiembre de 2026: cada apertura se baja los ~545 pedidos. Sin
-            // anotarlo, el contador de la barra marcaba 0% mientras se gastaba
-            // todo, que fue justo lo que no dejo verlo venir.
-            //
-            // Se cuentan los CAMBIOS y no `snapshot.size`: la primera vez traen
-            // lo mismo —todos los documentos llegan como 'added'—, pero despues
-            // el listener solo cobra lo que cambio, y sumar el total en cada
-            // refresco inflaria la cuenta hasta volverla inservible.
-            anotarLecturas(snapshot.docChanges().length, 'Hoja de producción');
-
-            // Se guarda CRUDO. El filtro por fecha vive en `orders`, mas abajo:
-            // asi cambiar de dia no cuesta una consulta nueva.
-            setPedidosDeLaVentana(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-            setLoading(false);
-        }, (error) => {
-            console.error("Error in real-time orders listener:", error);
-            setLoading(false);
-        });
-
-        return () => unsubscribe();
-    }, [ventanaCargada]);
 
     /**
      * Los pedidos de ESTA hoja, filtrados en memoria.
@@ -600,8 +715,16 @@ export default function PrintProductionView() {
         () => mapPedidosFromLegacy(pedidosDeLaHoja(pedidosDeLaVentana, fechas, {
             estadosQueImprimen: ESTADOS_QUE_IMPRIMEN,
             calendario: getScheduleFromOrder
-        })),
+        }), fechas),
         [pedidosDeLaVentana, date]
+    );
+
+    // Lo que se sugiere al escribir un plato en "Arreglar": la lista de
+    // proteinas de la semana, el menu, los individuales y lo ya cargado.
+    // Todo sale de lo que la pantalla ya tiene: no gasta lecturas.
+    const sugerenciasDePlatos = useMemo(
+        () => catalogoDePlatos({ menus: officialMenus, individuales: individualesData, pedidos: pedidosDeLaVentana }),
+        [officialMenus, pedidosDeLaVentana]
     );
 
     // Que pedidos ya se le mandaron a la cocina en tandas anteriores. Sin esto
@@ -768,20 +891,162 @@ export default function PrintProductionView() {
     //
     // Apagando solo el segundo, la hoja salia casi vacia —solo los individuales
     // que entraron despues— y parecia que no habia nada que cocinar.
-    const { nuevos: cleanOrders, repetidos: yaEnLaCocina } = pedidosDeLaTanda(
-        sinLasFamiliasDelViernes(sinDesayunosDeAdelanto(todosLosPedidos)),
-        sinRebaja ? [] : yaEnviados,
-        { soloRecurrentes, calendario: calendarioDelPedido, fechas, fechasDeAdelanto, familiaPermitida }
-    );
+    /**
+     * Saca de la COCINA las familias que ya estan hechas enteras.
+     *
+     * Solo de la cocina. Esos packs igual hay que EMPACARLOS el sabado: la
+     * comida existe, pero no esta en las bolsas. Sacarlos tambien del empaque
+     * dejaria a esos clientes sin pedido, que es el error mas caro que puede
+     * cometer esta hoja.
+     */
+    const sinLasFamiliasYaCocinadas = (pedidos) => {
+        if (sinRebaja) return pedidos;
+        return sinLosYaCocinados(pedidos, pedidosCocinados);
+    };
+
+    // ── El plan del dia (jueves, viernes o sabado) ───────────────────────
+    const familiaDelPedido = (p) => mapPackNameToMenuKey(p.plan || p.tipoMenu || '');
+    const empacadosPorDefecto = diaDelCiclo
+        ? empacadosDelViernesPorDefecto({
+            pedidos: todosLosPedidos, fechas, calendario: calendarioDelPedido,
+            familiaDe: familiaDelPedido, claveDe: claveDeEmpacado
+        })
+        : [];
+    const empacadosDelViernes = empacadosDecididos ? packsEmpacados : empacadosPorDefecto;
+    const planDelDia = diaDelCiclo
+        ? pedidosDelDia({
+            dia: diaDelCiclo,
+            // El sabado se empaca el lunes ENTERO, desayunos incluidos: el
+            // filtro de desayunos del adelanto es para el jueves y el viernes.
+            pedidos: diaDelCiclo === 'sabado' ? todosLosPedidos : sinDesayunosDeAdelanto(todosLosPedidos),
+            fechas,
+            calendario: calendarioDelPedido,
+            familiaDe: familiaDelPedido,
+            esRecurrente: (p) => esRecurrente(p, calendarioDelPedido),
+            // "Ver todo" muestra el lunes completo, sin sacar lo empacado.
+            empacados: sinRebaja ? [] : empacadosDelViernes,
+            claveDe: claveDeEmpacado
+        })
+        : null;
+
+    const { nuevos: cleanOrders, repetidos: yaEnLaCocina } = planDelDia
+        // Con el plan del dia la cocina se descuenta por CANTIDADES, no sacando
+        // pedidos enteros: sacar los ya mandados y ademas restar lo cocinado
+        // era descontar dos veces.
+        ? { nuevos: planDelDia.cocina, repetidos: [] }
+        : pedidosDeLaTanda(
+            sinLasFamiliasYaCocinadas(sinLasFamiliasDelViernes(sinDesayunosDeAdelanto(todosLosPedidos))),
+            sinRebaja ? [] : yaEnviados,
+            { soloRecurrentes, calendario: calendarioDelPedido, fechas, fechasDeAdelanto, familiaPermitida }
+        );
 
     // El empaque sigue saliendo por fecha de entrega, pero si una fecha va como
     // adelanto tambien se recorta ahi: de lunes solo se empacan los mensuales y
     // quincenales, que son los unicos que se cocinaron.
-    const pedidosParaEmpaque = sinLasFamiliasDelViernes(sinDesayunosDeAdelanto(
-        todosLosPedidos.filter(p =>
-            pasaElAdelanto(p, { fechas, fechasDeAdelanto, calendario: calendarioDelPedido, familiaPermitida })
-        )
-    ));
+    const empaqueDelDia = planDelDia
+        // El sabado se muestran TODOS los del lunes para poder marcar cuales se
+        // empacaron el viernes; lo que se empaca de verdad es `planDelDia.empaque`.
+        ? (diaDelCiclo === 'sabado' ? planDelDia.delLunes : planDelDia.empaque)
+        : sinLasFamiliasDelViernes(sinDesayunosDeAdelanto(
+            todosLosPedidos.filter(p =>
+                pasaElAdelanto(p, { fechas, fechasDeAdelanto, calendario: calendarioDelPedido, familiaPermitida })
+            )
+        ));
+
+    // Lo que ya se empaco no se vuelve a empacar. Con "ver todo sin rebajar"
+    // se muestran igual: sirve para revisar la hoja completa antes de descontar.
+    const pedidosParaEmpaque = planDelDia
+        ? planDelDia.empaque
+        : (sinRebaja
+            ? empaqueDelDia
+            : sinLosYaEmpacados(empaqueDelDia, packsEmpacados));
+    /**
+     * Los packs que se pueden marcar como ya empacados.
+     *
+     * Solo los del dia de adelanto: son los unicos que se alistan antes. Marcar
+     * uno del dia principal seria sacarlo de la hoja en la que hay que empacarlo.
+     */
+    const candidatosAEmpacar = empaqueDelDia
+        .filter(esSoloDeAdelanto)
+        .map(p => ({
+            clave: claveDeEmpacado(p),
+            cliente: p.cliente || 'Sin nombre',
+            paquete: p.plan || p.tipoMenu || '',
+            cantidad: p.cantidadMenus || 1
+        }))
+        .filter(c => c.clave)
+        .sort((a, b) => a.cliente.localeCompare(b.cliente));
+
+    /**
+     * Las familias que hay en esta hoja, con cuantos packs lleva cada una.
+     *
+     * Se cuentan sobre TODO el dia —no sobre la tanda— para que la familia no
+     * desaparezca de la lista apenas se marca: si desapareciera, no habria forma
+     * de desmarcarla cuando uno se equivoca.
+     */
+    const familiasDeLaHoja = (() => {
+        const porFamilia = new Map();
+        empaqueDelDia.forEach(p => {
+            const clave = mapPackNameToMenuKey(p.plan || p.tipoMenu || '');
+            if (!clave) return;
+            if (!porFamilia.has(clave)) porFamilia.set(clave, { packs: 0, pedidos: [] });
+            const f = porFamilia.get(clave);
+            f.packs += (p.cantidadMenus || 1);
+            const k = claveDePedido(p);
+            if (k) f.pedidos.push({
+                clave: k,
+                cliente: p.cliente || 'Sin nombre',
+                cantidad: p.cantidadMenus || 1
+            });
+        });
+        return [...porFamilia.entries()]
+            .map(([clave, f]) => ({
+                clave,
+                packs: f.packs,
+                nombre: NOMBRE_DE_FAMILIA[clave] || clave,
+                pedidos: f.pedidos.sort((a, b) => a.cliente.localeCompare(b.cliente))
+            }))
+            .sort((a, b) => b.packs - a.packs);
+    })();
+
+    /**
+     * Si hay algo apuntado que la hoja no esta restando ahora mismo.
+     *
+     * Mira el TEXTO pegado y no `sobrantesDeGina`: con el interruptor prendido
+     * los sobrantes se calculan vacios a proposito, asi que preguntarles si hay
+     * algo daria siempre que no y el aviso no saldria nunca.
+     */
+    const hayAlgoQueDescontar =
+        textoDeSobrantes.trim().length > 0
+        || pedidosCocinados.length > 0
+        || packsEmpacados.length > 0
+        || !!adelantoDeGina;
+
+    const guardarCocinados = (nuevos) => {
+        setPedidosCocinados(nuevos);
+        guardarPedidosCocinados(nuevos, claveDeTanda);
+    };
+
+    /** Un pedido suelto: el que entro despues NO esta cocinado. */
+    const alternarPedidoCocinado = (clave) => guardarCocinados(alternarCocinado(pedidosCocinados, clave));
+
+    /** El atajo: todos los de una familia de una vez. */
+    const alternarFamiliaCocinada = (claveFamilia) => {
+        const familia = familiasDeLaHoja.find(f => f.clave === claveFamilia);
+        if (!familia) return;
+        guardarCocinados(alternarVarios(pedidosCocinados, familia.pedidos.map(p => p.clave)));
+    };
+
+    const alternarPackEmpacado = (clave) => {
+        // Se parte de lo que se VE marcado: si todavia rigen los de por defecto,
+        // tocar uno los guarda a todos, no solo ese.
+        const base = diaDelCiclo ? empacadosDelViernes : packsEmpacados;
+        const nuevos = alternarEmpacado(base, clave);
+        setPacksEmpacados(nuevos);
+        setEmpacadosDecididos(true);
+        guardarEmpacados(nuevos, claveDeTanda);
+    };
+
     // El aviso de "se cancelo despues de mandarse" solo tiene sentido si la hoja
     // cubre el CICLO entero. Abriendo un solo dia —el lunes suelto, cuando la
     // tanda se mando por sabado y lunes juntos— los pedidos del sabado no estan
@@ -811,6 +1076,55 @@ export default function PrintProductionView() {
     // la hoja del viernes se lo volvia a pedir.
     const packsMap = {};
     const packsMapCocina = {};
+
+    /**
+     * Los dos paquetes familiares los empaca COCINA, no Empaque.
+     *
+     * Por eso van en la tabla de individuales: no bajan a que les pesen la
+     * porcion, salen de la cocina ya en su envase. Cada plato lleva su propia
+     * medida y su propio envase —taza de kg, taza de 500 g, molde desechable—,
+     * que es justo lo que esa tabla sabe mostrar y la de packs no.
+     */
+    const FAMILIAS_QUE_EMPACA_COCINA = ['familiarDeluxe', 'familiarPremium'];
+
+    const esPaqueteFamiliar = (packName) =>
+        FAMILIAS_QUE_EMPACA_COCINA.includes(mapPackNameToMenuKey(packName));
+
+    /**
+     * Los platos de un paquete familiar, con la medida de cada uno.
+     *
+     * Salen del menu, no del pedido: el cliente pide "Paquete Deluxe" y los
+     * siete platos los pone la semana. Sin esto la tabla mostraba una sola
+     * linea con el nombre del paquete y la cocina no sabia que hacer.
+     */
+    const platosDelPaqueteFamiliar = (packName) => {
+        const menuKey = mapPackNameToMenuKey(packName);
+        if (!FAMILIAS_QUE_EMPACA_COCINA.includes(menuKey)) return null;
+
+        const menu = officialMenus?.[menuKey] || DEFAULT_MENUS[menuKey] || [];
+        const platos = Array.isArray(menu) ? menu : (menu.platos || []);
+        if (platos.length === 0) return null;
+
+        return platos.map((m, i) => {
+            // La medida de cada plato NO se suma: se cuentan ENVASES.
+            //
+            // "No las vamos a contar, lo dejamos como moldes, ellos lo empacan
+            // ya que saben" (Jan). La cocina se sabe que un arroz de Deluxe son
+            // 4 tazas; lo que necesita del papel es CUANTOS armar. Sumarlo a
+            // tazas —12 tazas de arroz por 3 paquetes— no le sirve a nadie y
+            // ademas mezclaria estas tazas con las de los packs normales.
+            //
+            // La medida escrita no se pierde: va en la nota, al lado del envase.
+            const detalle = [m.medida, m.empaque].filter(Boolean).join(' · ');
+            return {
+                numero: m.numero || i + 1,
+                cantidad: 1,
+                medida: '1 molde',
+                descripcion: detalle,
+                proteina: { nombre: typeof m.proteina === 'string' ? m.proteina : m.proteina?.nombre }
+            };
+        });
+    };
 
     const addClientToPackMap = (mapa, pName, cData, overridePlates = null) => {
         const packsMap = mapa;
@@ -863,6 +1177,10 @@ export default function PrintProductionView() {
         // pedido. Gina los lleva así en su pestaña "Personalizado": Dalia Parrales
         // con 3 packs sin cerdo, Maycol Ávila con dos menús y sin vainica.
         if (esPersonalizado(packName)) return false;
+
+        // Los familiares los empaca cocina, plato por plato en su envase: van
+        // en la tabla de individuales aunque sean un pack.
+        if (esPaqueteFamiliar(packName)) return true;
 
         if (isIndividualPack(packName)) return true;
         // Si pertenece a una de las 7 familias de packs oficiales (Bajo Calorías, Full Pack, Keto, etc),
@@ -1001,7 +1319,12 @@ export default function PrintProductionView() {
                 addClientToPackMap(mapa, `CENAS - ${packName}`, cenaClient, null);
             } else {
                 const normClient = { ...clientForPack, observaciones: cleanObs };
-                addClientToPackMap(mapa, packName, normClient, filteredPlates.length > 0 ? filteredPlates : null);
+                // Un familiar trae sus platos del menu, con la medida de cada uno.
+                const platosFamiliares = platosDelPaqueteFamiliar(packName);
+                addClientToPackMap(
+                    mapa, packName, normClient,
+                    platosFamiliares || (filteredPlates.length > 0 ? filteredPlates : null)
+                );
             }
 
             const menuKey = mapPackNameToMenuKey(packName);
@@ -1312,6 +1635,17 @@ export default function PrintProductionView() {
                             <tr>
                                 <th colSpan="5" className="bg-[#f4b084] text-black font-bold text-2xl p-2 border border-black text-center uppercase tracking-wide">
                                     DESAYUNOS {totalChunks > 1 ? `(Bloque ${chunkIdx + 1})` : ''}
+                                    {/* Meter a alguien que falta sin salir de la hoja. Estaba
+                                        solo en los packs: en desayunos y en individuales no
+                                        habia forma, y son justo los que se piden de ultimo. */}
+                                    <button
+                                        type="button"
+                                        onClick={() => setPackParaAgregar(packName)}
+                                        className="print:hidden ml-3 px-2.5 py-1 rounded-lg border-2 border-gray-800 bg-white text-gray-900 text-[11px] font-bold hover:bg-gray-100 align-middle normal-case tracking-normal"
+                                        title={`Agregar un cliente a ${packName}`}
+                                    >
+                                        + Agregar cliente
+                                    </button>
                                 </th>
                             </tr>
                             <tr className="bg-[#fce4d6]">
@@ -1456,6 +1790,14 @@ export default function PrintProductionView() {
                         <tr>
                             <th colSpan="3" className="border border-black p-2 font-bold text-center text-lg bg-gray-50 uppercase tracking-widest">
                                 INDIVIDUALES
+                                <button
+                                    type="button"
+                                    onClick={() => setPackParaAgregar('Individuales')}
+                                    className="print:hidden ml-3 px-2.5 py-1 rounded-lg border-2 border-gray-800 bg-white text-gray-900 text-[11px] font-bold hover:bg-gray-100 align-middle normal-case tracking-normal"
+                                    title="Agregar un individual"
+                                >
+                                    + Agregar cliente
+                                </button>
                             </th>
                         </tr>
                     </thead>
@@ -1756,15 +2098,30 @@ export default function PrintProductionView() {
         // que las tandas vienen a evitar. Diana Gonzalez lleva bajo calorias y
         // tres proteinas de 250 g: sus proteinas se cocinan con el bajo calorias.
         const familiasDelCliente = new Map();
+        const anotarFamiliaDelCliente = (cliente, nombreFamilia) => {
+            const k = String(cliente || '').trim().toLowerCase();
+            if (!k) return;
+            if (!familiasDelCliente.has(k)) familiasDelCliente.set(k, []);
+            const suyas = familiasDelCliente.get(k);
+            if (!suyas.includes(nombreFamilia)) suyas.push(nombreFamilia);
+        };
+
         Object.keys(mapaConsolidado).forEach(nombreFamilia => {
-            (mapaConsolidado[nombreFamilia]?.clientes || []).forEach(c => {
-                const k = String(c?.nombre || '').trim().toLowerCase();
-                if (!k) return;
-                if (!familiasDelCliente.has(k)) familiasDelCliente.set(k, []);
-                const suyas = familiasDelCliente.get(k);
-                if (!suyas.includes(nombreFamilia)) suyas.push(nombreFamilia);
-            });
+            (mapaConsolidado[nombreFamilia]?.clientes || []).forEach(c => anotarFamiliaDelCliente(c?.nombre, nombreFamilia));
         });
+
+        // Los PAQUETES FAMILIARES tambien reciben sus platos del menu, aunque
+        // salgan en la tabla de individuales porque los empaca cocina.
+        //
+        // Sin esto la revision daba una alarma falsa: decia que el Pack Familiar
+        // Deluxe de Maria Jose Madrigal "no trae platos", cuando la hoja le pone
+        // los siete del menu. La alarma llegaba porque `mapaConsolidado` ya no
+        // los incluye desde que se mudaron a individuales.
+        Object.keys(mapaPacks)
+            .filter(n => esPaqueteFamiliar(n))
+            .forEach(nombreFamilia => {
+                (mapaPacks[nombreFamilia]?.clientes || []).forEach(c => anotarFamiliaDelCliente(c?.nombre, nombreFamilia));
+            });
 
         // 2. Process Individuales (Pre-empacados directamente en cocina)
         Object.keys(mapaPacks).filter(n => isActuallyIndividual(n) && !isDesayunoPack(n)).forEach(packName => {
@@ -1918,13 +2275,29 @@ export default function PrintProductionView() {
     /** Lo ya cocinado en las hojas anteriores de esta misma hornada. */
     // Lo ya cocinado sale de dos lados y se SUMAN: las hojas anteriores que se
     // mandaron desde el sistema, y el Excel que Gina llena a mano el jueves.
+    // Lo que sobro, leido del mensaje pegado. Se recalcula al escribir: es
+    // texto en memoria, no cuesta nada y deja ver al instante que entendio.
+    const sobrantesDeGina = leerSobrantes(sinRebaja ? '' : textoDeSobrantes);
+
+    // Lo que se descuenta HOY segun el dia: el viernes lo cocinado el jueves,
+    // el sabado lo que sobro. Nunca las dos cosas.
+    const descuentoHoy = diaDelCiclo
+        ? descuentoDelDia({ dia: diaDelCiclo, tandas: tandasPrevias, excelDeGina: adelantoDeGina?.cocinado })
+        : null;
+
     const yaCocinado = (() => {
         // Sin rebaja no se descuenta nada: la hoja muestra lo que pide el dia
         // completo. Es un interruptor de la vista, no un cambio de los datos.
         if (sinRebaja) return {};
+        if (descuentoHoy) return { ...descuentoHoy.cocinado };
         const total = { ...acumularCocinado(tandasPrevias) };
-        Object.entries(adelantoDeGina?.cocinado || {}).forEach(([clave, cantidad]) => {
-            total[clave] = (total[clave] || 0) + cantidad;
+        // Las tres fuentes se SUMAN, porque las tres son comida que ya existe:
+        //   lo de las hojas anteriores, lo del Excel del jueves, y lo que sobro.
+        // Comida que sobro es comida hecha: no hay que volver a cocinarla.
+        [adelantoDeGina?.cocinado].forEach(fuente => {
+            Object.entries(fuente || {}).forEach(([clave, cantidad]) => {
+                total[clave] = (total[clave] || 0) + cantidad;
+            });
         });
         return total;
     })();
@@ -1940,7 +2313,13 @@ export default function PrintProductionView() {
     const cantidadACocinar = (item) => {
         const pide = cuantoCocinar(item);
         const hecho = Number(yaCocinado[claveDeProduccion(item?.name, item?.unit)]) || 0;
-        return Math.max(0, pide - hecho);
+        // Lo que sobro se busca por PLATO y no por nombre exacto: Gina escribe
+        // "Cerdo BBQ" donde el menu dice "Cerdo en salsa BBQ", y por nombre
+        // exacto esos 4 kg no se descontaban nunca.
+        const sobro = (sinRebaja || (descuentoHoy && !descuentoHoy.usarSobrantes))
+            ? 0
+            : sobranteDelRenglon(item, sobrantesDeGina.reconocidos);
+        return Math.max(0, pide - hecho - sobro);
     };
 
     /** Lo que pide TODA la hornada, para poder adelantar de una vez. */
@@ -2013,7 +2392,9 @@ export default function PrintProductionView() {
      * hace el trabajo. Es exactamente lo que ya hacia bien la pestana 4 del
      * Excel; ahora la pantalla dice lo mismo que el archivo.
      */
-    const bulkItems = sinRebaja ? bulkDeLaTanda : bulkSemana;
+    // Con el plan del dia la base es SIEMPRE lo de hoy (`cleanOrders`) y el
+    // descuento hace el resto.
+    const bulkItems = (sinRebaja || diaDelCiclo) ? bulkDeLaTanda : bulkSemana;
 
     // El mismo orden que usa la pestana de cocina del Excel: si cada una lo
     // armara por su cuenta, el archivo y la pantalla volverian a discrepar.
@@ -2073,6 +2454,443 @@ export default function PrintProductionView() {
             setErrorDeAdelanto(err.message || 'No se pudo leer el archivo');
             setAdelantoDeGina(null);
         }
+    };
+
+    /**
+     * Todo lo que hace falta para UNA tabla de empaque.
+     *
+     * Esto vivia dentro del JSX, y el Excel calculaba lo suyo por otro lado: por
+     * eso las dos hojas no se parecian. Ahora la pantalla y el Excel llaman a
+     * esta misma funcion, asi que no pueden discrepar aunque se quiera.
+     *
+     * Devuelve `null` cuando la tabla no existe —el dia no tiene clientes, o se
+     * pidio la de "con cambio" y nadie cambio nada— y quien llama simplemente no
+     * la dibuja.
+     *
+     * @param {object} combo {packName, dia, soloConCambio}
+     */
+    const datosDeTablaDeEmpaque = ({ packName, dia, soloConCambio }) => {
+        const packDataCompleto = consolidatedPacksMap[packName];
+        // Los de ESTE dia. Con una sola fecha en la hoja `dia` viene
+        // null y no se filtra nada: queda igual que siempre.
+        const clientesDeEsteDia = clientesDelDia(
+            packDataCompleto.clientes, dia, entregasDelCliente
+        );
+        if (clientesDeEsteDia.length === 0) return null;
+        const packData = { ...packDataCompleto, clientes: clientesDeEsteDia };
+        const kitchenMenuData = kitchenData.porMenu[packName] || (packData.sourcePackNames?.length > 0 ? kitchenData.porMenu[packData.sourcePackNames[0]] : null);
+
+        const isCenaSheet = packName.startsWith('CENAS -');
+        const basePackName = isCenaSheet ? packName.replace(/^CENAS\s*-\s*/i, '') : packName;
+        const menuKey = packData.menuKey || mapPackNameToMenuKey(basePackName);
+        const rawPlatos = resolvePlatosForPack(packName, packData);
+
+        // Generar especificaciones
+        const specsList = packData.clientes.map(c => {
+            const note = c.observaciones ? ` ** ${c.observaciones}` : '';
+            return `${c.nombre} (${c.cantidad})${note}`;
+        });
+
+        // Resumen de cocina (si existe)
+        let resumenCocina = null;
+        if (kitchenMenuData) {
+            const platesCocina = Object.values(kitchenMenuData.platos).sort((a, b) => (a.numero || 0) - (b.numero || 0));
+            // Consolidar ingredientes
+            const ingreds = {};
+            platesCocina.forEach(p => {
+                const protName = p.proteina?.nombre || 'Proteína';
+                const vegName = p.vegetal?.nombre || 'Vegetales';
+                const carbName = p.carbo?.nombre || 'Carbohidratos';
+
+                ingreds[protName] = (ingreds[protName] || 0) + (p.proteina.totalGramos || 0);
+
+                // Para vegetales y carbos, sumamos cantidadBase si unidad es igual. 
+                // Simplificación: sumamos "unidades" si hay mezcla
+                ingreds[vegName] = (ingreds[vegName] || 0) + (p.vegetal.cantidadBase || 0) * (p.totalPlatos || 0);
+                ingreds[carbName] = (ingreds[carbName] || 0) + (p.carbo.cantidadBase || 0) * (p.totalPlatos || 0);
+            });
+
+            resumenCocina = Object.entries(ingreds).filter(([, qty]) => qty > 0).map(([name, qty]) => ({ name, qty }));
+        }
+        let effectivePlatos = rawPlatos.length > 0 ? rawPlatos : (packData.platosBase.length > 0 ? packData.platosBase : [
+            { numero: 1, proteina: { nombre: 'Proteína' }, vegetal: { nombre: 'Vegetales' }, carbo: { nombre: 'Harinas' } },
+            { numero: 2, proteina: { nombre: 'Proteína' }, vegetal: { nombre: 'Vegetales' }, carbo: { nombre: 'Harinas' } },
+            { numero: 3, proteina: { nombre: 'Proteína' }, vegetal: { nombre: 'Vegetales' }, carbo: { nombre: 'Harinas' } },
+            { numero: 4, proteina: { nombre: 'Proteína' }, vegetal: { nombre: 'Vegetales' }, carbo: { nombre: 'Harinas' } },
+            { numero: 5, proteina: { nombre: 'Proteína' }, vegetal: { nombre: 'Vegetales' }, carbo: { nombre: 'Harinas' } }
+        ]);
+
+        const porcion = porcionesDelPack(packName);
+        const platosEmpaque = effectivePlatos.map((p, idx) => {
+            const original = packData.platosBase[idx] || {};
+            const isOfficial = typeof p.proteina === 'string';
+            return {
+                numero: p.numero || idx + 1,
+                vecesPorPack: Number(p.vecesPorPack || original.vecesPorPack) > 0
+                    ? Number(p.vecesPorPack || original.vecesPorPack)
+                    : 1,
+                proteina: {
+                    nombre: isOfficial ? p.proteina : (p.proteina?.nombre || original.proteina?.nombre || '—'),
+                    gramosPorPorcion: porcion.textoPorcion ? null
+                        : (isOfficial ? getDefaultGrams(packName) : (p.proteina?.gramosPorPorcion || original.proteina?.gramosPorPorcion || getDefaultGrams(packName)))
+                },
+                vegetal: {
+                    nombre: isOfficial ? p.vegetal : (p.vegetal?.nombre || original.vegetal?.nombre || '—'),
+                    cantidadPorPorcion: isOfficial ? porcion.vegetal : (p.vegetal?.cantidadPorPorcion || original.vegetal?.cantidadPorPorcion || porcion.vegetal)
+                },
+                carbo: {
+                    nombre: isOfficial ? p.carbo : (p.carbo?.nombre || original.carbo?.nombre || '—'),
+                    cantidadPorPorcion: isOfficial ? porcion.carbo : (p.carbo?.cantidadPorPorcion || original.carbo?.cantidadPorPorcion || porcion.carbo)
+                }
+            };
+        });
+
+        const showCarbos = llevaFilaDeCarbo(platosEmpaque, menuKey);
+        const showVegetales = llevaFilaDeVegetal(platosEmpaque);
+        const rowsPerPlate = 1 + (showVegetales ? 1 : 0) + (showCarbos ? 1 : 0);
+
+        // Quien cambio un plato sale de esta tabla y va a la suya.
+        //
+        // La columna de platos y la de clientes van por su lado: el
+        // nombre de Guillermo Vargas caia en la fila del arroz aunque
+        // su cambio fuera de la tilapia, y el Plato 1 seguia contando
+        // 4 tilapias — una para el que no come tilapia.
+        // El nombre del pack hace falta para saber contra que
+        // composicion comparar: un "3 vegetales y 1 carbo" solo es
+        // personalizacion si NO es lo que ese pack lleva de fabrica.
+        const { estandar: estandarSinOrden, personalizados: clientesPropios } =
+            separarPersonalizadosDePack(packData.clientes, platosEmpaque, packName);
+        // De corrida por dia: primero los del sabado, que se cierran
+        // hoy; despues los del lunes, que van a refri.
+        const ordenados = porDiaDeEntrega(estandarSinOrden);
+        // Y aparte los que llevan un cambio ESCRITO en la nota, que la
+        // hoja no reconocia como cambio y se perdian entre los demas.
+        const partido = apartarCambiosEscritos(ordenados, (c) => c.observaciones);
+        const clientesEstandar = soloConCambio ? partido.conCambioEscrito : partido.sinCambio;
+        if (soloConCambio && clientesEstandar.length === 0) return null;
+        // MISMA formula que usaba `separarPersonalizadosDePack` para su
+        // `packsEstandar`, para que partir la familia en dos no cambie
+        // como se cuenta. `cantidadDePacks` cuenta distinto y bajaba los
+        // numeros de toda la hoja.
+        const packsEstandar = packsDe(clientesEstandar);
+        // Los que cambiaron algo NO son excepciones sueltas: si cinco
+        // pidieron el mismo cambio, son otra linea de cinco. Se agrupan
+        // por el cambio para poder armarlos de corrido igual que los
+        // estandar. Los de composicion propia van solos: su envase se
+        // arma distinto y no se puede juntar con nadie.
+        const { grupos: gruposDeCambio, propios: clientesDeMenuPropio } =
+            agruparCambiosDePack(clientesPropios);
+
+        // El TEXTO de las dos ultimas columnas, calculado UNA vez.
+        //
+        // Estaba metido dentro del JSX, y por eso el Excel escribia otra cosa:
+        // el nombre sin la zona ni el dia, la nota sin las etiquetas de TWO PACK
+        // ni de restricciones. Quien empaca leia dos versiones del mismo cliente.
+        //
+        // La nota se filtra contra el plato DE ESA FILA, asi que la celda depende
+        // de donde cae el cliente: el cliente 7 cae en el renglon 7, que es del
+        // plato 3 cuando cada plato ocupa 3 renglones.
+        const marcasRepetido = marcasDePedidoRepetido(clientesEstandar);
+        const celdasEstandar = clientesEstandar.map((client, i) => {
+            const idxPlato = Math.floor(i / rowsPerPlate);
+
+            const tags = etiquetasDeEmpaque(client, {
+                esTwoPack: detectIsTwoPack(client.rawPedido || client),
+                otrosPacks: getOtherPacksTag(client.nombre, packName)
+            });
+
+            const dishObs = filterNoteForDish(
+                sinSustituciones(client.observaciones), platosEmpaque[idxPlato], platosEmpaque
+            );
+            let notes = dishObs ? `** ${dishObs}` : '';
+            if (tags.length > 0) {
+                const tagsStr = tags.map(t => `** ${t}`).join('\n');
+                notes = notes ? `${tagsStr}\n${notes}` : tagsStr;
+            }
+
+            const zone = client.zona_envio || '';
+            const zoneStr = zone && zone !== 'No especificada' && zone.toLowerCase() !== 'recoge en tienda' ? `, ${zone}` : '';
+            let nombre = `${client.nombre} (${client.cantidad})${zoneStr}${diaDelCliente(client)}`;
+            if (client.rawPedido) {
+                const schedule = getScheduleFromOrder(client.rawPedido);
+                const dateIdx = schedule.indexOf(date);
+                if (schedule.length > 1 && dateIdx !== -1) {
+                    nombre = `${client.nombre} (${client.cantidad}) (Semana ${dateIdx + 1})${zoneStr}`;
+                }
+            }
+            nombre += marcasRepetido[i] || '';
+
+            return { cliente: nombre, especificaciones: notes, raw: client };
+        });
+
+        /**
+         * Los que no caben en los renglones de plato.
+         *
+         * Si la familia tiene mas clientes que renglones —14 packs contra 5
+         * platos de 3— los ultimos se quedan sin fila. Salen al final, y se
+         * arman distinto a proposito:
+         *
+         *   - No llevan el dia: ya va en la cabecera de la tabla.
+         *   - No se filtra la nota por plato, porque no tienen plato al lado:
+         *     va entera.
+         *   - Si el cliente ya lleva desayunos, "Desayunos" se quita de la
+         *     etiqueta de otros packs para no decirlo dos veces.
+         *   - Se pegan las observaciones de los items, que en estas filas son
+         *     lo unico que dice que va en la bolsa.
+         */
+        const celdasSobrantes = clientesEstandar
+            .slice(platosEmpaque.length * rowsPerPlate)
+            .map((client) => {
+                const hasDesayunoAlready = client.incluyeDesayuno
+                    || (client.observaciones && client.observaciones.toLowerCase().includes('desayun'));
+
+                const tags = etiquetasDeEmpaque(client, {
+                    esTwoPack: detectIsTwoPack(client.rawPedido || client)
+                });
+                let otherPacksTag = getOtherPacksTag(client.nombre, packName);
+                if (hasDesayunoAlready && otherPacksTag) {
+                    const cleaned = otherPacksTag.replace('Lleva también: ', '')
+                        .split(', ').filter(x => x !== 'Desayunos').join(', ');
+                    otherPacksTag = cleaned ? `Lleva también: ${cleaned}` : '';
+                }
+                if (otherPacksTag) tags.push(otherPacksTag);
+
+                let clientNotesText = sinSustituciones(
+                    client.observaciones || client.rawPedido?.observaciones
+                    || client.rawPedido?.details?.notes || ''
+                );
+                if (client.rawPedido?.items) {
+                    client.rawPedido.items.forEach(it => {
+                        if (it.observaciones && !clientNotesText.includes(it.observaciones)) {
+                            clientNotesText = clientNotesText
+                                ? `${clientNotesText} · ${it.observaciones}`
+                                : it.observaciones;
+                        }
+                    });
+                }
+
+                let notes = clientNotesText ? `** ${clientNotesText}` : '';
+                if (tags.length > 0) {
+                    const tagsStr = tags.map(t => `** ${t}`).join('\n');
+                    notes = notes ? `${tagsStr}\n${notes}` : tagsStr;
+                }
+
+                const zone = client.zona_envio || '';
+                const zoneStr = zone && zone !== 'No especificada' && zone.toLowerCase() !== 'recoge en tienda'
+                    ? `, ${zone}` : '';
+
+                return {
+                    cliente: `${client.nombre} (${client.cantidad})${zoneStr}`,
+                    especificaciones: notes,
+                    raw: client
+                };
+            });
+
+        return {
+            packName, dia, soloConCambio,
+            packDataCompleto, clientesDeEsteDia, packData, kitchenMenuData,
+            isCenaSheet, basePackName, menuKey, rawPlatos, specsList, resumenCocina,
+            effectivePlatos, porcion, platosEmpaque, showCarbos, showVegetales,
+            rowsPerPlate, estandarSinOrden, clientesPropios, ordenados, partido,
+            clientesEstandar, packsEstandar, gruposDeCambio, clientesDeMenuPropio,
+            celdasEstandar, celdasSobrantes, marcasRepetido
+        };
+    };
+
+    /**
+     * Las combinaciones de tabla que tiene la hoja, en orden.
+     *
+     * Cada familia sale DOS veces —los que van tal cual y los que llevan un
+     * cambio escrito— y una vez por cada dia de entrega. Es la lista que recorre
+     * la pantalla; el Excel recorre esta misma para sacar sus pestanas.
+     */
+    const combosDeEmpaque = () => regularPackNames.flatMap((n) => {
+        const todosLosClientes = consolidatedPacksMap[n]?.clientes || [];
+        return hojasPorDia(todosLosClientes, fechas, entregasDelCliente)
+            .flatMap((dia) => [
+                { packName: n, dia, soloConCambio: false },
+                { packName: n, dia, soloConCambio: true }
+            ]);
+    });
+
+    /**
+     * El empaque en Excel, pestaña por pestaña, igual que en pantalla.
+     *
+     * "necesito que la hoja de excel se vea igual a como sale en produccion
+     *  […] como se divide nuestra hoja actual por tandas sin cambios con
+     *  cambios etc […] no importan cuantas pestañas sean" — Jan, 10 set 2026.
+     *
+     * Una pestaña por TABLA, que es como está partida la hoja: por tanda, por
+     * familia, por día de entrega, y separando los que van tal cual de los que
+     * llevan cambio. Salen muchas y así tiene que ser: cada pestaña es una
+     * corrida de empaque.
+     *
+     * Todo sale de `datosDeTablaDeEmpaque`, la misma función que dibuja la
+     * pantalla. No hay un solo número calculado acá.
+     */
+    const handleExportarEmpaqueComoLaHoja = async (wbCompartido = null) => {
+        const wb = wbCompartido || new ExcelJS.Workbook();
+        if (!wbCompartido) { wb.creator = 'BiKitchen'; wb.created = new Date(); }
+
+        combosDeEmpaque().forEach((combo) => {
+            const datos = datosDeTablaDeEmpaque(combo);
+            if (!datos) return;
+
+            const { packName, dia, soloConCambio } = combo;
+            const {
+                porcion, platosEmpaque, showVegetales, showCarbos, rowsPerPlate,
+                clientesEstandar, packsEstandar, celdasEstandar, celdasSobrantes,
+                gruposDeCambio, clientesDeMenuPropio
+            } = datos;
+
+            const tanda = puestoDeFamilia(packName) + 1;
+            const fam = ordenDeFamilias[puestoDeFamilia(packName)];
+            const etiquetaDia = dia === SIN_DIA
+                ? 'SIN DÍA (revisar)'
+                : (dia ? etiquetaDelDia(dia).toUpperCase() : '');
+
+            // Las mismas tres líneas de arriba de la tabla.
+            const porciones = [
+                porcion.textoPorcion
+                    || (platosEmpaque[0]?.proteina?.gramosPorPorcion
+                        ? `${platosEmpaque[0].proteina.gramosPorPorcion} GRAMOS DE PROTEINA`
+                        : `${getDefaultGrams(packName)} GRAMOS DE PROTEINA`),
+                showVegetales
+                    ? `${platosEmpaque[0]?.vegetal?.cantidadPorPorcion ?? porcion.vegetal} TAZA(S) DE VEGETALES`
+                    : null,
+                showCarbos
+                    ? `${platosEmpaque[0]?.carbo?.cantidadPorPorcion ?? porcion.carbo} TAZA(S) DE HARINA`
+                    : null
+            ];
+
+            // ── TABLA 1: los que van tal cual ───────────────────────────
+            if (clientesEstandar.length > 0) {
+                // El mismo recorte del precio que hace la cabecera en pantalla.
+                const familia = packName.replace(/\s*\d{1,3}(?:[.,]\d{3})*\s*(?:colones|col|¢)/i, '');
+
+                const platos = platosEmpaque.map((p) => ({
+                    numero: p.numero,
+                    total: packsEstandar * (p.vecesPorPack || 1),
+                    partes: [
+                        { nombre: p.proteina?.nombre || '', cantidad: p.proteina?.gramosPorPorcion ?? '' },
+                        showVegetales && { nombre: p.vegetal?.nombre || '', cantidad: p.vegetal?.cantidadPorPorcion ?? '' },
+                        showCarbos && { nombre: p.carbo?.nombre || '', cantidad: p.carbo?.cantidadPorPorcion ?? '' }
+                    ].filter(Boolean)
+                }));
+
+                agregarPestanaDeEmpaqueComoLaHoja(wb, {
+                    titulo: tituloDeTablaDeEmpaque({
+                        tanda, familia,
+                        variante: soloConCambio ? 'CON CAMBIO' : '',
+                        dia: etiquetaDia,
+                        packs: packsEstandar,
+                        enLaFamilia: fam ? fam.packs : null
+                    }),
+                    // "Ojala en la hoja especifique que es keto porque se cocina
+                    // aparte, igual cuando es vegetariano" — Gina.
+                    aviso: avisoDeFamilia(packName) || '',
+                    porciones,
+                    filas: filasDeTablaDeEmpaque({
+                        platos,
+                        celdasPorFila: celdasEstandar,
+                        sobrantes: celdasSobrantes
+                    })
+                });
+            }
+
+            // Los dos bloques de abajo solo existen en la pasada "tal cual":
+            // en la de cambios ya salieron.
+            if (soloConCambio) return;
+
+            // ── TABLA 2: los que comparten un cambio ────────────────────
+            gruposDeCambio.forEach((grupo) => {
+                const marcas = marcasDePedidoRepetido(grupo.clientes);
+                const listaDeClientes = grupo.clientes.map((c, i) => {
+                    const zona = c.zona_envio && c.zona_envio !== 'No especificada' ? `, ${c.zona_envio}` : '';
+                    const cuantos = Number(c.cantidad) > 0 ? Number(c.cantidad) : 1;
+                    return `${c.nombre} (${cuantos})${zona}${diaDelCliente(c)}${marcas[i] || ''}`;
+                }).join('\n');
+
+                const platos = (grupo.platos || []).map((plato) => ({
+                    numero: plato.numero,
+                    total: grupo.total,
+                    partes: [
+                        { nombre: plato.proteina || '', cantidad: porcion.proteina || '', resaltada: plato.cambiada === 'proteina' },
+                        showVegetales && { nombre: plato.vegetal || '', cantidad: porcion.vegetal ?? '', resaltada: plato.cambiada === 'vegetal' },
+                        showCarbos && { nombre: plato.carbo || '', cantidad: porcion.carbo ?? '', resaltada: plato.cambiada === 'carbo' }
+                    ].filter(Boolean)
+                }));
+
+                const celdasPorPlato = (grupo.platos || []).map((plato, idx) => ({
+                    especificaciones: plato.original
+                        ? `** ${String(plato[plato.cambiada] || '').toUpperCase()} en vez de ${plato.original}`
+                        : '',
+                    cliente: idx === 0 ? listaDeClientes : ''
+                }));
+
+                agregarPestanaDeEmpaqueComoLaHoja(wb, {
+                    titulo: tituloDeTablaDeEmpaque({
+                        tanda, familia: packName, variante: 'CON CAMBIO',
+                        dia: etiquetaDia, packs: grupo.total
+                    }),
+                    banner: `Todos estos llevan el mismo cambio: ${grupo.texto}`,
+                    porciones,
+                    filas: filasDeTablaDeEmpaque({ platos, celdasPorPlato })
+                });
+            });
+
+            // ── TABLA 3: menú propio, uno por cliente ───────────────────
+            clientesDeMenuPropio.forEach((cliente) => {
+                const zona = cliente.zona_envio && cliente.zona_envio !== 'No especificada'
+                    ? `, ${cliente.zona_envio}` : '';
+                const cuantos = Number(cliente.cantidad) > 0 ? Number(cliente.cantidad) : 1;
+
+                const tags = etiquetasDeEmpaque(cliente, {
+                    esTwoPack: detectIsTwoPack(cliente.rawPedido || cliente),
+                    otrosPacks: getOtherPacksTag(cliente.nombre, packName)
+                });
+                const obs = sinSustituciones(cliente.observaciones);
+                const lineas = tags.map(x => `** ${x}`);
+                if (obs) lineas.push(`** ${obs}`);
+
+                const platos = (cliente.platos || []).map((plato, idx) => ({
+                    numero: plato.numero ?? idx + 1,
+                    total: cuantos,
+                    partes: [
+                        { nombre: plato.proteina || '', cantidad: porcion.proteina || '' },
+                        showVegetales && { nombre: plato.vegetal || '', cantidad: porcion.vegetal ?? '' },
+                        showCarbos && { nombre: plato.carbo || '', cantidad: porcion.carbo ?? '' }
+                    ].filter(Boolean)
+                }));
+
+                const celdasPorPlato = platos.map((_, idx) => ({
+                    especificaciones: idx === 0 ? lineas.join('\n') : '',
+                    cliente: idx === 0 ? `${cliente.nombre} (${cuantos})${zona}${diaDelCliente(cliente)}` : ''
+                }));
+
+                agregarPestanaDeEmpaqueComoLaHoja(wb, {
+                    titulo: tituloDeTablaDeEmpaque({
+                        tanda, familia: packName, variante: 'MENÚ PROPIO',
+                        dia: etiquetaDia, packs: cuantos
+                    }),
+                    banner: `No lleva el menú tal cual. Pidió: ${cliente.cambio?.texto || ''}`,
+                    porciones,
+                    filas: filasDeTablaDeEmpaque({ platos, celdasPorPlato })
+                });
+            });
+        });
+
+        if (wbCompartido) return;
+        const buffer = await wb.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Empaque como la hoja ${fechas.join(' y ')}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     };
 
     /**
@@ -2180,17 +2998,27 @@ export default function PrintProductionView() {
         // para eso existe. `yaCocinado` sigue el interruptor de la pantalla, asi
         // que aca se arma el descuento aparte.
         const descuento = {};
-        Object.entries(acumularCocinado(tandasPrevias)).forEach(([k, v]) => { descuento[k] = v; });
-        Object.entries(adelantoDeGina?.cocinado || {}).forEach(([k, v]) => {
-            descuento[k] = (descuento[k] || 0) + v;
-        });
-        const hayDescuento = Object.keys(descuento).length > 0;
+        if (descuentoHoy) {
+            // Con el plan del dia, el MISMO descuento que la pantalla.
+            Object.assign(descuento, descuentoHoy.cocinado);
+        } else {
+            Object.entries(acumularCocinado(tandasPrevias)).forEach(([k, v]) => { descuento[k] = v; });
+            Object.entries(adelantoDeGina?.cocinado || {}).forEach(([k, v]) => {
+                descuento[k] = (descuento[k] || 0) + v;
+            });
+        }
+        // Los sobrantes solo cuentan el sabado (o en la hoja sin plan del dia).
+        const sobrantesParaExcel = (!descuentoHoy || descuentoHoy.usarSobrantes)
+            ? leerSobrantes(textoDeSobrantes).reconocidos
+            : [];
+        const hayDescuento = Object.keys(descuento).length > 0 || sobrantesParaExcel.length > 0;
 
         const armarRenglonesConDescuento = (bulk) => armarRenglones(bulk).map(r => {
             // Las cabeceras de tanda no llevan numeros: descontarles algo daria
             // NaN en la columna FALTA COCINAR.
             if (r.tipo) return r;
-            const hecho = Number(descuento[claveDeProduccion(r.name, r.unit)]) || 0;
+            const hecho = (Number(descuento[claveDeProduccion(r.name, r.unit)]) || 0)
+                + (sobrantesParaExcel.length ? sobranteDelRenglon(r, sobrantesParaExcel) : 0);
             return { ...r, hecho, falta: Math.max(0, r.pide - hecho) };
         });
 
@@ -2242,11 +3070,14 @@ export default function PrintProductionView() {
         });
 
         agregarPestanaDeCocina(wb, {
-            titulo: '4 FALTA COCINAR',
-            explicacion: hayDescuento
-                ? 'Lo mismo de la pestana 3, menos lo que Gina ya cocino el jueves. La columna FALTA COCINAR es lo que hay que poner en la olla hoy.'
-                : 'No se cargo el archivo del adelanto, asi que no hay nada que descontar: esta pestana es igual a la 3.',
-            renglones: armarRenglonesConDescuento(bulkTodo),
+            titulo: diaDelCiclo ? `4 FALTA COCINAR ${TEXTOS_DEL_DIA[diaDelCiclo].titulo}` : '4 FALTA COCINAR',
+            explicacion: diaDelCiclo
+                ? `${TEXTOS_DEL_DIA[diaDelCiclo].explica} La columna FALTA COCINAR es lo que hay que poner en la olla hoy.`
+                : (hayDescuento
+                    ? 'Lo mismo de la pestana 3, menos lo que Gina ya cocino el jueves. La columna FALTA COCINAR es lo que hay que poner en la olla hoy.'
+                    : 'No se cargo el archivo del adelanto, asi que no hay nada que descontar: esta pestana es igual a la 3.'),
+            // Con el plan del dia, la misma base que la pantalla: lo de HOY.
+            renglones: armarRenglonesConDescuento(diaDelCiclo ? bulkDeLaTanda : bulkTodo),
             conDescuento: true
         });
 
@@ -2381,6 +3212,10 @@ export default function PrintProductionView() {
             await handleExportToExcel(wb);
             await handleExportarCuatroPestanas(wb);
             await handleExportarEmpaqueDelAdelanto(wb);
+            // El empaque tabla por tabla, igual que en pantalla. Va de ultimo
+            // porque son muchas pestanas —una por corrida— y dejarlas antes
+            // empujaba las de cocina hasta el final del archivo.
+            await handleExportarEmpaqueComoLaHoja(wb);
 
             const buffer = await wb.xlsx.writeBuffer();
             const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -3701,6 +4536,12 @@ export default function PrintProductionView() {
 
     return (
         <div className="bg-white text-black min-h-screen p-4 text-xs font-sans print:m-0 print:p-0">
+            {pedidosSinServidor && (
+                <div role="alert" className="print:hidden mb-4 mx-auto max-w-3xl rounded-xl border-4 border-red-500 bg-red-50 p-4 text-center text-red-900">
+                    <p className="font-black text-lg">No hay conexión con Firebase: la hoja puede estar INCOMPLETA</p>
+                    <p className="text-sm mt-1">Se muestra lo que había guardado en esta compu. No la imprimás ni bajés el Excel hasta que vuelva la conexión.</p>
+                </div>
+            )}
             {/* Ocultar en impresión pero dar info en pantalla */}
             <div className="mb-4 print:hidden text-center">
                 <h1 className="text-2xl font-bold text-gray-800">Vista de Producción para: {date}</h1>
@@ -3732,6 +4573,7 @@ export default function PrintProductionView() {
                         if (cfg.adelanto) p.set('adelanto', cfg.adelanto);
                         if (cfg.soloPacks) p.set('soloPacks', cfg.soloPacks);
                         if (cfg.view) p.set('view', cfg.view);
+                        if (cfg.dia) p.set('dia', cfg.dia);
                         setSearchParams(p);
                         // El jueves no hay nada que descontar todavia; el viernes
                         // y el sabado si, o se le vuelve a pedir a la cocina lo
@@ -3751,16 +4593,16 @@ export default function PrintProductionView() {
                         // "El adelanto seria los paquetes mensuales y quincenales"
                         // — Jan, 9 de setiembre de 2026.
                         {
-                            t: 'JUEVES', s: `Solo cocina · ${nombreDelDiaCorto(iso(sab))} + adelanto del ${nombreDelDiaCorto(iso(lun))}`,
-                            cfg: { date: ciclo, adelanto: iso(lun), view: 'cocina', rebajar: false }
+                            t: 'JUEVES', s: `Solo cocina · ${nombreDelDiaCorto(iso(sab))} + mensuales y quincenales del ${nombreDelDiaCorto(iso(lun))}`,
+                            cfg: { date: ciclo, adelanto: iso(lun), view: 'cocina', rebajar: false, dia: 'jueves' }
                         },
                         {
-                            t: 'VIERNES', s: 'Empaque y cocina, descontando lo del jueves',
-                            cfg: { date: ciclo, adelanto: iso(lun), rebajar: true }
+                            t: 'VIERNES', s: `${nombreDelDiaCorto(iso(sab))} + bajo calorías del ${nombreDelDiaCorto(iso(lun))}, menos lo del jueves`,
+                            cfg: { date: ciclo, adelanto: iso(lun), rebajar: true, dia: 'viernes' }
                         },
                         {
-                            t: 'SÁBADO', s: `Empaque del ${nombreDelDiaCorto(iso(lun))} y lo que falte de cocina`,
-                            cfg: { date: ciclo, adelanto: iso(lun), rebajar: true }
+                            t: 'SÁBADO', s: `Todo el ${nombreDelDiaCorto(iso(lun))}, menos lo empacado y lo que sobró`,
+                            cfg: { date: ciclo, adelanto: iso(lun), rebajar: true, dia: 'sabado' }
                         }
                     ];
 
@@ -3876,7 +4718,13 @@ export default function PrintProductionView() {
                     // Carbos con proteinas del pack vegetariano y las cenas con
                     // el menu de la semana pasada— y eso es igual de caro: se
                     // cocina lo que no era.
-                    extra={[...problemasDelMenu({
+                    extra={[...avisosDeCambiosEnLaHoja(pedidosDeLaHoja(pedidosDeLaVentana, fechas, {
+                        estadosQueImprimen: ESTADOS_QUE_IMPRIMEN,
+                        calendario: getScheduleFromOrder
+                    })), ...avisosDeProteinasSinElegir(pedidosDeLaHoja(pedidosDeLaVentana, fechas, {
+                        estadosQueImprimen: ESTADOS_QUE_IMPRIMEN,
+                        calendario: getScheduleFromOrder
+                    }), fechas), ...problemasDelMenu({
                         menus: officialMenus,
                         fecha: fechas[0] || date
                     }), ...problemasParaLaHoja({
@@ -3902,9 +4750,20 @@ export default function PrintProductionView() {
                             // `proteinas`. Leerlas del nombre del item devolvia el
                             // nombre del pack y la revision acusaba a todo el mundo
                             // de no haber elegido nada.
+                            // Una proteina elegida DOS VECES cuenta por dos.
+                            //
+                            // El "x2" no vive en el nombre sino en `cantidades`, asi
+                            // que contando nombres salian 4 de 5 y la hoja acusaba a
+                            // Milton y a Raquel de no haber elegido todo cuando si lo
+                            // habian hecho: uno de sus platos iba repetido.
                             platos: (p.rawPedido?.items || p.items || [])
                                 .flatMap(i => (i?.proteinas?.length
-                                    ? i.proteinas
+                                    ? i.proteinas.flatMap((nombre, idx) => {
+                                        const veces = Number(i?.cantidades?.[idx]) > 0
+                                            ? Number(i.cantidades[idx])
+                                            : 1;
+                                        return Array.from({ length: veces }, () => nombre);
+                                    })
                                     : [i?.nombre || i?.name || i?.planName || '']))
                                 .filter(Boolean),
                             familias: familiasDelCliente.get(
@@ -3925,6 +4784,7 @@ export default function PrintProductionView() {
                         onGuardar={guardarEdicion}
                         onCancelarPedido={cancelarPedidoDeLaHoja}
                         onCerrar={() => setPedidoEnEdicion(null)}
+                        sugerencias={sugerenciasDePlatos}
                     />
                 )}
 
@@ -3969,6 +4829,29 @@ export default function PrintProductionView() {
                     </div>
                 )}
 
+                {/* El unico error que arruina la hoja en silencio.
+                    Con "ver todo" prendido las cantidades salen SIN descontar lo
+                    que sobro ni lo que ya se cocino: se cocina de mas y no se
+                    nota hasta que sobra otra vez. Va pegado al boton de
+                    imprimir porque es el ultimo momento para verlo. */}
+                {sinRebaja && (hayAlgoQueDescontar) && (
+                    <div className="print:hidden mt-6 mx-auto max-w-3xl rounded-xl border-4 border-red-500 bg-red-50 p-4 text-center">
+                        <p className="text-red-900 font-black text-lg">
+                            Vas a imprimir SIN descontar lo que ya se hizo
+                        </p>
+                        <p className="text-red-900 text-sm mt-1">
+                            Hay cosas apuntadas en <b>“Lo que ya se hizo”</b> que no se están
+                            restando. Las cantidades salen completas y se va a cocinar de más.
+                        </p>
+                        <button
+                            onClick={() => cambiarSinRebaja(false)}
+                            className="mt-3 px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold shadow"
+                        >
+                            Descontar y ver lo que FALTA cocinar
+                        </button>
+                    </div>
+                )}
+
                 <div className="mt-6 flex flex-wrap justify-center gap-3 sm:gap-4">
                     <button
                         onClick={() => window.print()}
@@ -3985,7 +4868,33 @@ export default function PrintProductionView() {
                         {descargando ? '⏳ Armando el archivo…' : '📊 Descargar Excel de la hoja'}
                     </button>
 
-                    {fechas.length > 1 && (
+                    {diaDelCiclo && (
+                        <div className="w-full px-4 py-3 rounded-lg bg-sky-50 border-2 border-sky-300 text-sm text-sky-900">
+                            <b>Hoja del {TEXTOS_DEL_DIA[diaDelCiclo].titulo}:</b> {TEXTOS_DEL_DIA[diaDelCiclo].explica}
+                            {diaDelCiclo === 'viernes' && !sinRebaja && descuentoHoy?.origen === 'nada' && (
+                                <span className="block mt-2 p-2 rounded bg-red-100 border border-red-300 text-red-900 font-bold">
+                                    No hay nada anotado del jueves: la hoja pide TODO completo. Marcá la hoja del jueves
+                                    como enviada o cargá el Excel de Gina.
+                                </span>
+                            )}
+                            {diaDelCiclo === 'viernes' && descuentoHoy?.origen === 'excel' && (
+                                <span className="block mt-1 text-xs">Se descuenta lo que Gina anotó en su Excel del jueves.</span>
+                            )}
+                            {diaDelCiclo === 'sabado' && !sinRebaja && !textoDeSobrantes.trim() && (
+                                <span className="block mt-2 p-2 rounded bg-amber-100 border border-amber-300 text-amber-900 font-bold">
+                                    Todavía no se anotó lo que sobró el viernes: la hoja no descuenta nada de comida.
+                                </span>
+                            )}
+                            {diaDelCiclo === 'sabado' && (
+                                <span className="block mt-1 text-xs">
+                                    Empacados el viernes: <b>{empacadosDelViernes.length}</b>
+                                    {!empacadosDecididos && ' (los bajo calorías del lunes, por defecto)'}.
+                                </span>
+                            )}
+                        </div>
+                    )}
+
+                    {!diaDelCiclo && fechas.length > 1 && (
                         <div className="w-full px-4 py-2 rounded-lg bg-sky-50 border-2 border-sky-300 text-sm text-sky-900">
                             <b>Qué trae esta hoja:</b>{' '}
                             {fechas.filter(f => !fechasDeAdelanto.has(f)).join(', ') || '—'} <b>completo</b>
@@ -4006,7 +4915,7 @@ export default function PrintProductionView() {
                         <input
                             type="checkbox"
                             checked={sinRebaja}
-                            onChange={(e) => setSinRebaja(e.target.checked)}
+                            onChange={(e) => cambiarSinRebaja(e.target.checked)}
                             className="w-5 h-5 cursor-pointer"
                         />
                         <span>
@@ -4018,6 +4927,27 @@ export default function PrintProductionView() {
                             </span>
                         </span>
                     </label>
+
+                    {/* Con el plan del dia, lo que sobro y lo empacado se meten en la
+                        hoja del SABADO: es la unica que los descuenta. */}
+                    {(!diaDelCiclo || diaDelCiclo === 'sabado') && (
+                    <div className="w-full">
+                        <LoQueYaSeHizo
+                            texto={textoDeSobrantes}
+                            onTexto={escribirSobrantes}
+                            sobrantes={sobrantesDeGina}
+                            candidatos={candidatosAEmpacar}
+                            empacados={diaDelCiclo ? empacadosDelViernes : packsEmpacados}
+                            onAlternar={alternarPackEmpacado}
+                            familias={familiasDeLaHoja}
+                            pedidosCocinados={pedidosCocinados}
+                            onAlternarFamilia={alternarFamiliaCocinada}
+                            onAlternarPedido={alternarPedidoCocinado}
+                            desactivado={sinRebaja}
+                            delSabado={diaDelCiclo === 'sabado'}
+                        />
+                    </div>
+                    )}
 
                     {/* Solo aparece si de verdad hay un dia que adelantar: en la hoja
                         de un solo dia no significa nada. */}
@@ -4121,116 +5051,18 @@ export default function PrintProductionView() {
                                     { packName: n, dia, soloConCambio: true }
                                 ]);
                         }).map(({ packName, dia, soloConCambio }) => {
-                            const packDataCompleto = consolidatedPacksMap[packName];
-                            // Los de ESTE dia. Con una sola fecha en la hoja `dia` viene
-                            // null y no se filtra nada: queda igual que siempre.
-                            const clientesDeEsteDia = clientesDelDia(
-                                packDataCompleto.clientes, dia, entregasDelCliente
-                            );
-                            if (clientesDeEsteDia.length === 0) return null;
-                            const packData = { ...packDataCompleto, clientes: clientesDeEsteDia };
-                            const kitchenMenuData = kitchenData.porMenu[packName] || (packData.sourcePackNames?.length > 0 ? kitchenData.porMenu[packData.sourcePackNames[0]] : null);
-
-                            const isCenaSheet = packName.startsWith('CENAS -');
-                            const basePackName = isCenaSheet ? packName.replace(/^CENAS\s*-\s*/i, '') : packName;
-                            const menuKey = packData.menuKey || mapPackNameToMenuKey(basePackName);
-                            const rawPlatos = resolvePlatosForPack(packName, packData);
-
-                            // Generar especificaciones
-                            const specsList = packData.clientes.map(c => {
-                                const note = c.observaciones ? ` ** ${c.observaciones}` : '';
-                                return `${c.nombre} (${c.cantidad})${note}`;
-                            });
-
-                            // Resumen de cocina (si existe)
-                            let resumenCocina = null;
-                            if (kitchenMenuData) {
-                                const platesCocina = Object.values(kitchenMenuData.platos).sort((a, b) => (a.numero || 0) - (b.numero || 0));
-                                // Consolidar ingredientes
-                                const ingreds = {};
-                                platesCocina.forEach(p => {
-                                    const protName = p.proteina?.nombre || 'Proteína';
-                                    const vegName = p.vegetal?.nombre || 'Vegetales';
-                                    const carbName = p.carbo?.nombre || 'Carbohidratos';
-
-                                    ingreds[protName] = (ingreds[protName] || 0) + (p.proteina.totalGramos || 0);
-
-                                    // Para vegetales y carbos, sumamos cantidadBase si unidad es igual. 
-                                    // Simplificación: sumamos "unidades" si hay mezcla
-                                    ingreds[vegName] = (ingreds[vegName] || 0) + (p.vegetal.cantidadBase || 0) * (p.totalPlatos || 0);
-                                    ingreds[carbName] = (ingreds[carbName] || 0) + (p.carbo.cantidadBase || 0) * (p.totalPlatos || 0);
-                                });
-
-                                resumenCocina = Object.entries(ingreds).filter(([, qty]) => qty > 0).map(([name, qty]) => ({ name, qty }));
-                            }
-                            let effectivePlatos = rawPlatos.length > 0 ? rawPlatos : (packData.platosBase.length > 0 ? packData.platosBase : [
-                                { numero: 1, proteina: { nombre: 'Proteína' }, vegetal: { nombre: 'Vegetales' }, carbo: { nombre: 'Harinas' } },
-                                { numero: 2, proteina: { nombre: 'Proteína' }, vegetal: { nombre: 'Vegetales' }, carbo: { nombre: 'Harinas' } },
-                                { numero: 3, proteina: { nombre: 'Proteína' }, vegetal: { nombre: 'Vegetales' }, carbo: { nombre: 'Harinas' } },
-                                { numero: 4, proteina: { nombre: 'Proteína' }, vegetal: { nombre: 'Vegetales' }, carbo: { nombre: 'Harinas' } },
-                                { numero: 5, proteina: { nombre: 'Proteína' }, vegetal: { nombre: 'Vegetales' }, carbo: { nombre: 'Harinas' } }
-                            ]);
-
-                            const porcion = porcionesDelPack(packName);
-                            const platosEmpaque = effectivePlatos.map((p, idx) => {
-                                const original = packData.platosBase[idx] || {};
-                                const isOfficial = typeof p.proteina === 'string';
-                                return {
-                                    numero: p.numero || idx + 1,
-                                    vecesPorPack: Number(p.vecesPorPack || original.vecesPorPack) > 0
-                                        ? Number(p.vecesPorPack || original.vecesPorPack)
-                                        : 1,
-                                    proteina: {
-                                        nombre: isOfficial ? p.proteina : (p.proteina?.nombre || original.proteina?.nombre || '—'),
-                                        gramosPorPorcion: porcion.textoPorcion ? null
-                                            : (isOfficial ? getDefaultGrams(packName) : (p.proteina?.gramosPorPorcion || original.proteina?.gramosPorPorcion || getDefaultGrams(packName)))
-                                    },
-                                    vegetal: {
-                                        nombre: isOfficial ? p.vegetal : (p.vegetal?.nombre || original.vegetal?.nombre || '—'),
-                                        cantidadPorPorcion: isOfficial ? porcion.vegetal : (p.vegetal?.cantidadPorPorcion || original.vegetal?.cantidadPorPorcion || porcion.vegetal)
-                                    },
-                                    carbo: {
-                                        nombre: isOfficial ? p.carbo : (p.carbo?.nombre || original.carbo?.nombre || '—'),
-                                        cantidadPorPorcion: isOfficial ? porcion.carbo : (p.carbo?.cantidadPorPorcion || original.carbo?.cantidadPorPorcion || porcion.carbo)
-                                    }
-                                };
-                            });
-
-                            const showCarbos = llevaFilaDeCarbo(platosEmpaque, menuKey);
-                            const showVegetales = llevaFilaDeVegetal(platosEmpaque);
-                            const rowsPerPlate = 1 + (showVegetales ? 1 : 0) + (showCarbos ? 1 : 0);
-
-                            // Quien cambio un plato sale de esta tabla y va a la suya.
-                            //
-                            // La columna de platos y la de clientes van por su lado: el
-                            // nombre de Guillermo Vargas caia en la fila del arroz aunque
-                            // su cambio fuera de la tilapia, y el Plato 1 seguia contando
-                            // 4 tilapias — una para el que no come tilapia.
-                            // El nombre del pack hace falta para saber contra que
-                            // composicion comparar: un "3 vegetales y 1 carbo" solo es
-                            // personalizacion si NO es lo que ese pack lleva de fabrica.
-                            const { estandar: estandarSinOrden, personalizados: clientesPropios } =
-                                separarPersonalizadosDePack(packData.clientes, platosEmpaque, packName);
-                            // De corrida por dia: primero los del sabado, que se cierran
-                            // hoy; despues los del lunes, que van a refri.
-                            const ordenados = porDiaDeEntrega(estandarSinOrden);
-                            // Y aparte los que llevan un cambio ESCRITO en la nota, que la
-                            // hoja no reconocia como cambio y se perdian entre los demas.
-                            const partido = apartarCambiosEscritos(ordenados, (c) => c.observaciones);
-                            const clientesEstandar = soloConCambio ? partido.conCambioEscrito : partido.sinCambio;
-                            if (soloConCambio && clientesEstandar.length === 0) return null;
-                            // MISMA formula que usaba `separarPersonalizadosDePack` para su
-                            // `packsEstandar`, para que partir la familia en dos no cambie
-                            // como se cuenta. `cantidadDePacks` cuenta distinto y bajaba los
-                            // numeros de toda la hoja.
-                            const packsEstandar = packsDe(clientesEstandar);
-                            // Los que cambiaron algo NO son excepciones sueltas: si cinco
-                            // pidieron el mismo cambio, son otra linea de cinco. Se agrupan
-                            // por el cambio para poder armarlos de corrido igual que los
-                            // estandar. Los de composicion propia van solos: su envase se
-                            // arma distinto y no se puede juntar con nadie.
-                            const { grupos: gruposDeCambio, propios: clientesDeMenuPropio } =
-                                agruparCambiosDePack(clientesPropios);
+                            // El calculo vive en `datosDeTablaDeEmpaque`, que es la
+                            // MISMA que usa el Excel. Aca solo se dibuja.
+                            const datos = datosDeTablaDeEmpaque({ packName, dia, soloConCambio });
+                            if (!datos) return null;
+                            const {
+                                packData, kitchenMenuData, isCenaSheet, basePackName, menuKey,
+                                specsList, resumenCocina, porcion, platosEmpaque,
+                                showCarbos, showVegetales, rowsPerPlate,
+                                clientesEstandar, packsEstandar,
+                                gruposDeCambio, clientesDeMenuPropio,
+                                celdasEstandar, celdasSobrantes
+                            } = datos;
 
                             return (
                                 <div key={`empaque-${packName}-${dia || "todo"}-${soloConCambio ? "cambio" : "tal-cual"}`} className="pack-table-container mb-12 print:mb-0 print:break-after-page print:[page-break-after:always] break-inside-avoid print:break-inside-avoid">
@@ -4340,39 +5172,16 @@ export default function PrintProductionView() {
                                                 // Si alguien sale dos veces en ESTA tabla, cada linea dice
                                                 // cual de sus pedidos es. Christian Vargas tiene dos packs
                                                 // Regular a proposito y salian identicos: se leia duplicado.
-                                                const marcasRepetido = marcasDePedidoRepetido(clientesEstandar);
-
-                                                // Función para obtener la celda del cliente en base al índice absoluto de la fila
+                                                // El texto ya viene armado de `datosDeTablaDeEmpaque`:
+                                                // el MISMO que escribe el Excel.
                                                 const renderClientCells = (subRowIndex) => {
                                                     const absoluteRowIndex = idx * rowsPerPlate + subRowIndex;
-                                                    const client = clientesEstandar[absoluteRowIndex];
+                                                    const celda = celdasEstandar[absoluteRowIndex];
 
-                                                    if (client) {
-                                                        // Las MISMAS etiquetas que el Excel: si cada salida armara su lista,
-                                                        // volverian a decir cosas distintas y nadie se daria cuenta.
-                                                        const tags = etiquetasDeEmpaque(client, {
-                                                            esTwoPack: detectIsTwoPack(client.rawPedido || client),
-                                                            otrosPacks: getOtherPacksTag(client.nombre, packName)
-                                                        });
-
-                                                        const dishObs = filterNoteForDish(sinSustituciones(client.observaciones), platosEmpaque[idx], platosEmpaque);
-                                                        let notes = dishObs ? `** ${dishObs}` : '';
-                                                        if (tags.length > 0) {
-                                                            const tagsStr = tags.map(t => `** ${t}`).join('\n');
-                                                            notes = notes ? `${tagsStr}\n${notes}` : tagsStr;
-                                                        }
-
-                                                        const zone = client.zona_envio || '';
-                                                        const zoneStr = zone && zone !== 'No especificada' && zone.toLowerCase() !== 'recoge en tienda' ? `, ${zone}` : '';
-                                                        let clientDisplayName = `${client.nombre} (${client.cantidad})${zoneStr}${diaDelCliente(client)}`;
-                                                        if (client.rawPedido) {
-                                                            const schedule = getScheduleFromOrder(client.rawPedido);
-                                                            const dateIdx = schedule.indexOf(date);
-                                                            if (schedule.length > 1 && dateIdx !== -1) {
-                                                                clientDisplayName = `${client.nombre} (${client.cantidad}) (Semana ${dateIdx + 1})${zoneStr}`;
-                                                            }
-                                                        }
-                                                        clientDisplayName += marcasRepetido[absoluteRowIndex] || '';
+                                                    if (celda) {
+                                                        const client = celda.raw;
+                                                        const notes = celda.especificaciones;
+                                                        const clientDisplayName = celda.cliente;
 
                                                         return (
                                                             <>
@@ -4463,38 +5272,15 @@ export default function PrintProductionView() {
                                             })}
                                             {/* Filas adicionales si hay más clientes que filas de platos disponbles */}
                                             {(() => {
-                                                const totalAvailableRows = platosEmpaque.length * rowsPerPlate;
-                                                if (clientesEstandar.length <= totalAvailableRows) return null;
-                                                const extraClients = clientesEstandar.slice(totalAvailableRows);
+                                                // El texto viene de `datosDeTablaDeEmpaque`: el MISMO
+                                                // que escribe el Excel.
+                                                if (celdasSobrantes.length === 0) return null;
                                                 return (
                                                     <tbody className="break-inside-avoid print:break-inside-avoid">
-                                                        {extraClients.map((client, extraIdx) => {
-                                                            const hasDesayunoAlready = client.incluyeDesayuno || (client.observaciones && client.observaciones.toLowerCase().includes('desayun'));
-                                                            // Las MISMAS etiquetas que el Excel y que la tabla de arriba.
-                                                            const tags = etiquetasDeEmpaque(client, { esTwoPack: detectIsTwoPack(client.rawPedido || client) });
-                                                            let otherPacksTag = getOtherPacksTag(client.nombre, packName);
-                                                            if (hasDesayunoAlready && otherPacksTag) {
-                                                                const cleaned = otherPacksTag.replace('Lleva también: ', '').split(', ').filter(p => p !== 'Desayunos').join(', ');
-                                                                otherPacksTag = cleaned ? `Lleva también: ${cleaned}` : '';
-                                                            }
-                                                            if (otherPacksTag) tags.push(otherPacksTag);
-                                                            
-                                                            let clientNotesText = sinSustituciones(client.observaciones || client.rawPedido?.observaciones || client.rawPedido?.details?.notes || '');
-                                                            if (client.rawPedido?.items) {
-                                                                client.rawPedido.items.forEach(it => {
-                                                                    if (it.observaciones && !clientNotesText.includes(it.observaciones)) {
-                                                                        clientNotesText = clientNotesText ? `${clientNotesText} · ${it.observaciones}` : it.observaciones;
-                                                                    }
-                                                                });
-                                                            }
-                                                            let notes = clientNotesText ? `** ${clientNotesText}` : '';
-                                                            if (tags.length > 0) {
-                                                                const tagsStr = tags.map(t => `** ${t}`).join('\n');
-                                                                notes = notes ? `${tagsStr}\n${notes}` : tagsStr;
-                                                            }
-                                                            const zone = client.zona_envio || '';
-                                                            const zoneStr = zone && zone !== 'No especificada' && zone.toLowerCase() !== 'recoge en tienda' ? `, ${zone}` : '';
-                                                            let clientDisplayName = `${client.nombre} (${client.cantidad})${zoneStr}`;
+                                                        {celdasSobrantes.map((celda, extraIdx) => {
+                                                            const client = celda.raw;
+                                                            const notes = celda.especificaciones;
+                                                            const clientDisplayName = celda.cliente;
 
                                                             return (
                                                                 <tr key={`extra-${extraIdx}`}>

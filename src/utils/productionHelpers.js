@@ -39,6 +39,8 @@ export const normalizeClientKey = (name) => {
  * @returns {{ pedidos: Array, fusionados: Array }}
  */
 
+import { sustitucionesEscritas } from './sustitucionesEscritas';
+
 /**
  * Los dos nombres, la misma persona?
  *
@@ -85,6 +87,27 @@ export const listarSustituciones = (pedido) => {
             });
         });
     });
+
+    // Los que se escribieron a mano en la especificacion.
+    //
+    // Sin esto, un "cambiar la tilapia por pollo" se veia en la hoja de empaque
+    // pero la cocina seguia haciendo la tilapia: el cambio no llegaba a la olla.
+    // Le paso a Jose David Alpizar.
+    //
+    // Van marcados con `deTexto` para que quien los aplique pueda exigir que el
+    // plato original exista de verdad antes de mover nada.
+    const escritos = sustitucionesEscritas(
+        pedido.observaciones || pedido.rawPedido?.observaciones || ''
+    ).cambios;
+
+    // Un cambio que el checkout ya guardo no se cuenta dos veces: la nota suele
+    // repetir lo mismo que ya vino estructurado.
+    const yaEsta = (x) => subs.some(s2 =>
+        String(s2.a || '').toLowerCase().includes(String(x.a || '').toLowerCase())
+        || String(x.a || '').toLowerCase().includes(String(s2.a || '').toLowerCase()));
+
+    escritos.forEach(x => { if (!yaEsta(x)) subs.push(x); });
+
     return subs;
 };
 

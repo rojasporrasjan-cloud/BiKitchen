@@ -174,8 +174,26 @@ export const esNombreDePack = (nombre) => {
  * ₡49.000 (5 Comidas Bajo Calorías quincenal). Sin esto, a esos clientes les
  * faltaban las cinco etiquetas de sus cenas.
  */
+/**
+ * Cuando el pedido dice que NO lleva cena.
+ *
+ * La regla de abajo buscaba la palabra "cena" sin mirar si venía negada, así que
+ * una especificación que dice "NO LLEVA CENA" la daba por afirmativa. A Marlon
+ * Camacho lo mandaba a la hoja de cenas justo por decir que no las lleva, y a
+ * Sofía Gutiérrez le desarmaba el two pack por lo mismo (Gina, 11 de setiembre
+ * de 2026).
+ *
+ * Se mira SOLO alrededor de la palabra: un "no mariscos" en otra parte de la
+ * nota no tiene por qué quitarle la cena a nadie.
+ */
+const DICE_QUE_NO_LLEVA_CENA =
+    /\b(no|sin)\s+(lleva\s+|tiene\s+|come\s+|incluye\s+|quiere\s+)?cenas?\b/;
+
 export const textoLlevaCena = (texto) => {
     const t = String(texto || '').toLowerCase();
+
+    // Lo negado manda sobre todo lo demás: si dice que no lleva cena, no lleva.
+    if (DICE_QUE_NO_LLEVA_CENA.test(t)) return false;
 
     const diceCena = /almuerzo[s]?\s*y\s*cena[s]?/.test(t) || /\bcenas?\b/.test(t);
 
@@ -336,7 +354,9 @@ export const selectOrdersForDate = (rawOrders, date) => {
     // etiquetas se quedaban con pedidos DISTINTOS del mismo cliente.
     elegibles.sort((a, b) => String(a.cliente || '').localeCompare(String(b.cliente || '')));
 
-    const normalizados = mapPedidosFromLegacy(elegibles);
+    // Con la fecha: la etiqueta de un pack de proteinas dice las de ESTA
+    // entrega, igual que la hoja de cocina.
+    const normalizados = mapPedidosFromLegacy(elegibles, [date]);
     return deduplicateOrdersByClient(normalizados);
 };
 

@@ -21,6 +21,7 @@ import { calcularPuntos } from '../config/loyalty';
 import { esTelefonoDeRelleno } from './telefonoRelleno';
 import { individualesData } from '../data/individualesData';
 import { SHIPPING_ZONES } from '../data/shippingZones';
+import { avisoDeCambiosDeMas } from './limiteDeCambios';
 
 const sinTildes = (str) => String(str || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
@@ -101,11 +102,16 @@ export const buildPedidoFromImport = (parsed, options = {}) => {
         : fechas.length === 2 ? 'biweekly'
             : null;
 
-    let costoEnvio = num(parsed?.costoEnvio);
+    // Reposición, regalía o sin cargo: no se cobra nada —ni platos, ni envío—
+    // y no da puntos. Sin esto, la reposición de Angie Navarro (10 set 2026)
+    // salía como venta de ₡32.550 más envío, y le acreditaba puntos.
+    const esReposicion = !!parsed?.esReposicion;
+
+    let costoEnvio = esReposicion ? 0 : num(parsed?.costoEnvio);
     const zonaEnvio = parsed?.zona || 'No especificada';
 
     // Si no viene costo de envío pero sí la zona, auto-completar desde SHIPPING_ZONES
-    if (!costoEnvio && zonaEnvio && zonaEnvio !== 'No especificada') {
+    if (!esReposicion && !costoEnvio && zonaEnvio && zonaEnvio !== 'No especificada') {
         const cleanZone = sinTildes(zonaEnvio.toLowerCase());
         const zoneMatch = SHIPPING_ZONES.find(z => {
             const zName = sinTildes(z.name.toLowerCase());
@@ -119,10 +125,19 @@ export const buildPedidoFromImport = (parsed, options = {}) => {
 
     const items = rawItems.map((item) => {
         const cantidad = num(item?.cantidad, 1) || 1;
-        let precio = num(item?.precio);
+        let precio = esReposicion ? 0 : num(item?.precio);
+        // Si el precio sale del catálogo, queda anotado de dónde: es una
+        // adivinanza y se muestra para revisarla antes de crear el pedido.
+        let precioDelCatalogo = null;
 
-        // Si el precio del ítem viene en 0 o null, auto-completar desde el catálogo individualesData
-        if (!precio && item?.nombre) {
+        // Si el precio del ítem viene en 0 o null, auto-completar desde el catálogo individualesData.
+        //
+        // NO en una reposición (va en cero) ni en un desayuno: los desayunos no
+        // están en el catálogo de individuales, así que cualquier coincidencia
+        // es otro producto. "Gallo pinto con huevo revuelto" caía en "Gallo
+        // pinto" de ARROCES —la olla de 6 tazas, ₡9.850— y se cobraba por plato.
+        const esDesayuno = /desayun|huevo/i.test(String(item?.nombre || ''));
+        if (!esReposicion && !esDesayuno && !precio && item?.nombre) {
             const cleanName = sinTildes(String(item.nombre).toLowerCase());
             const match = individualesData.find(prod => {
                 const prodName = sinTildes(prod.nombre.toLowerCase());
@@ -130,13 +145,21 @@ export const buildPedidoFromImport = (parsed, options = {}) => {
                 return cleanName.includes(prodName) || prodName.includes(cleanItemName);
             });
             if (match) {
+                const tamanos = String(match.descripcion || '').split('/').map(s => s.trim());
+                let grande = true;
                 if (cleanName.includes('kg') || cleanName.includes('kilo') || cleanName.includes('1 kg')) {
                     precio = match.precio1kg || match.precio500 || 0;
                 } else if (cleanName.includes('500') || cleanName.includes('500g')) {
                     precio = match.precio500 || match.precio1kg || 0;
+                    grande = false;
                 } else {
                     precio = match.precio1kg || match.precio500 || 0;
                 }
+                precioDelCatalogo = {
+                    producto: match.nombre,
+                    tamano: (grande ? tamanos[1] : tamanos[0]) || '',
+                    precio
+                };
             }
         }
 
@@ -148,7 +171,8 @@ export const buildPedidoFromImport = (parsed, options = {}) => {
             nombre: item?.nombre || '',
             cantidad,
             precio,
-            total: num(item?.total) || (precio * cantidad),
+            total: esReposicion ? 0 : (num(item?.total) || (precio * cantidad)),
+            precioDelCatalogo,
             proteinas,
             proteina: '',
             carbo: '',
@@ -166,7 +190,7 @@ export const buildPedidoFromImport = (parsed, options = {}) => {
     const subtotalCalculado = items.reduce((acc, i) => acc + (i.total || 0), 0);
     const subtotal = num(parsed?.subtotal) || num(parsed?.total) || subtotalCalculado;
     const totalCalculado = subtotalCalculado > 0 ? (subtotalCalculado + costoEnvio - num(parsed?.descuento)) : 0;
-    const total = num(parsed?.total) || totalCalculado || subtotal;
+    const total = esReposicion ? 0 : (num(parsed?.total) || totalCalculado || subtotal);
     const numeroOrdenFinal = orderNumber || parsed?.numeroOrden || generateImportOrderNumber();
     const { correo, esPlaceholder } = resolverCorreo(parsed?.correo, parsed?.telefono, parsed?.cliente, numeroOrdenFinal);
 
@@ -193,7 +217,11 @@ export const buildPedidoFromImport = (parsed, options = {}) => {
         fecha_entrega: fechas[0] || null,
         fechas_entrega: fechas,
         horario_preferido: '9:00 AM - 2:00 PM',
-        observaciones: parsed?.observaciones || '',
+        // Que quien empaca y quien cobra lo vea escrito: no se cobra.
+        observaciones: esReposicion && !/reposici|repon|regal|sin cargo|cortes/i.test(parsed?.observaciones || '')
+            ? ['REPOSICIÓN — sin cargo', parsed?.observaciones].filter(Boolean).join(' · ')
+            : (parsed?.observaciones || ''),
+        esReposicion,
 
         items,
         subtotal,
@@ -271,6 +299,10 @@ export const validatePedidoForFirestore = (pedido) => {
  */
 export const avisosDelPedido = (pedido) => {
     const avisos = [];
+    // Maximo 2 cambios de ingredientes por pack (Gina, 14 set 2026). Se avisa
+    // y no se bloquea: puede ser un cliente viejo que ya lo tenia pagado.
+    const deMas = avisoDeCambiosDeMas(pedido);
+    if (deMas) avisos.push(deMas);
     if (!pedido?.telefono) {
         avisos.push('Sin teléfono. El pedido se guarda igual y se cocina bien; '
             + 'cuando llegue el número se agrega desde Pedidos sin tener que rehacerlo.');
@@ -278,9 +310,22 @@ export const avisosDelPedido = (pedido) => {
         avisos.push(`El teléfono ${pedido.telefono} es de relleno, no identifica a nadie. `
             + 'Mejor dejarlo vacío: un relleno repetido fusiona clientes distintos en la hoja.');
     }
-    if (pedido?.total === 0) {
+    if (pedido?.esReposicion) {
+        avisos.push('Es una REPOSICIÓN: va en ₡0, sin envío y sin puntos. '
+            + 'Si sí se cobra, borrá la palabra "reponer" del mensaje.');
+    } else if (pedido?.total === 0) {
         avisos.push('El total quedó en ₡0. Si es una regalía está bien; si no, '
             + 'escribí el monto antes de crearlo.');
     }
+    // El precio que se adivinó del catálogo: puede ser otro tamaño u otro
+    // producto. "1 Lasagna de pollo" se llevaba la de 8 porciones en salsa roja
+    // (₡21.650) sin que nadie lo pidiera.
+    (pedido?.items || []).forEach((it) => {
+        const c = it?.precioDelCatalogo;
+        if (!c) return;
+        avisos.push(`El precio de «${it.nombre}» lo puse yo del catálogo: `
+            + `${c.producto}${c.tamano ? ` (${c.tamano})` : ''} a ₡${Number(c.precio).toLocaleString('es-CR')}. `
+            + 'Revisalo: puede ser otro tamaño u otra salsa.');
+    });
     return avisos;
 };

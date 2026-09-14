@@ -254,15 +254,24 @@ export const packsSinDecirCuales = (pedidos = []) => (pedidos || [])
         if (!(cuantas > 1)) return null;
 
         // Los platos de verdad: los que NO son el nombre del pack repetido.
-        const propios = (p?.platos || []).map(x => clave(x)).filter(Boolean);
-        const distintos = new Set(propios.filter(x => x !== clave(nombre)));
-        if (distintos.size >= cuantas) return null;
+        //
+        // Se cuentan las ELECCIONES, no los nombres distintos. Un cliente puede
+        // pedir la misma proteína dos veces —Milton lleva "Pollo en salsa
+        // mediterránea x2"— y contando nombres salían 4 de 5: la hoja lo acusaba
+        // de no haber elegido todo cuando sí lo había hecho.
+        //
+        // El relleno que motivó este aviso repite el NOMBRE DEL PACK, y eso ya
+        // queda afuera en el filtro de arriba.
+        const propios = (p?.platos || [])
+            .map(x => clave(x))
+            .filter(x => x && x !== clave(nombre));
+        if (propios.length >= cuantas) return null;
 
         return aviso(
             'alto', 'pack-sin-detalle',
             'Un pack de proteínas que no dice cuáles',
             `${p.cliente} lleva "${nombre}" pero en el pedido no quedó escrito qué `
-            + `proteínas eligió (hay ${distintos.size} de ${cuantas}). La hoja rellena `
+            + `proteínas eligió (hay ${propios.length} de ${cuantas}). La hoja rellena `
             + 'repitiendo un plato, así que se cocinaría lo mismo varias veces.',
             [p.cliente], p.id
         );
