@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, Outlet, Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Menu as MenuIcon, LogOut, X, LayoutDashboard, ShoppingBag, Users, ClipboardList, Truck, UtensilsCrossed, Gift, Tag, Search, Bell, Image, MessageCircle, FileText, Target, BadgePercent, Settings, Phone, CalendarDays, Send, Award, Printer } from 'lucide-react';
+import { Menu as MenuIcon, LogOut, X, LayoutDashboard, ShoppingBag, Users, ClipboardList, Truck, UtensilsCrossed, Gift, Tag, Search, Bell, Image, MessageCircle, FileText, Target, BadgePercent, Settings, Phone, CalendarDays, Send, Award, Printer, Beef } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { useOrders } from '../context/OrdersContext';
+import usePedidosPendientes from '../hooks/usePedidosPendientes';
 import { getAllCoupons } from '../utils/firestoreCoupons';
 import '../utils/deleteAllData'; // Importar script de eliminación (disponible en consola)
 import ContadorDeCuota from '../components/admin/ContadorDeCuota';
@@ -29,23 +29,13 @@ function useIsMobile() {
 export default function AdminLayout() {
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-    const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
     const { logout, currentUser, isSuperAdmin } = useAuth();
     const navigate = useNavigate();
     const isMobile = useIsMobile();
-    const { orders, getStats } = useOrders();
+    // Contado con UNA lectura, no bajando todos los pedidos en cada pagina.
+    const pendingOrdersCount = usePedidosPendientes();
 
     const [pendingGiftCardsCount, setPendingGiftCardsCount] = useState(0);
-
-    // Usar OrdersContext para obtener conteo de pedidos pendientes (evita listener duplicado)
-    useEffect(() => {
-        try {
-            const stats = getStats?.();
-            if (stats && typeof stats.pendingOrders === 'number') {
-                setPendingOrdersCount(stats.pendingOrders);
-            }
-        } catch (e) { }
-    }, [orders, getStats]);
 
     // Obtener conteo de tarjetas de regalo pendientes
     useEffect(() => {
@@ -101,6 +91,8 @@ export default function AdminLayout() {
         // 🛒 Operación Diaria (Más usados)
         { to: '/admin/orders', label: 'Pedidos', icon: ShoppingBag, badge: pendingOrdersCount },
         { to: '/admin/sheets', label: 'Producción', icon: ClipboardList },
+        // Van al lado de Producción: se llenan ANTES de sacar la hoja.
+        { to: '/admin/proteinas-semanales', label: 'Proteínas de la semana', icon: Beef },
         { to: '/admin/dispatch-sheet', label: 'Hoja de Despacho', icon: FileText },
         { to: '/admin/delivery', label: 'Reparto', icon: Truck },
         { to: '/admin/clients', label: 'Clientes', icon: Users },

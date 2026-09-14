@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
-    anotarLecturas, lecturasDeHoy, reiniciarContador, diaDeCuota,
+    anotarLecturas, anotarSnapshot, lecturasDeHoy, reiniciarContador, diaDeCuota,
     cuandoSeReinicia, faltaParaReiniciar, LIMITE_DIARIO
 } from '../utils/contadorFirestore.js';
 
@@ -127,5 +127,57 @@ describe('reiniciar a mano', () => {
         anotarLecturas(12345, 'x');
         reiniciarContador();
         expect(lecturasDeHoy().total).toBe(0);
+    });
+});
+
+
+/**
+ * Desde que el cache vive en disco, cada suscripcion emite dos veces: primero
+ * lo guardado y despues lo del servidor. Solo la segunda le cuesta a la cuota.
+ *
+ * Contar la primera hacia que una recarga marcara 337 lecturas sin que Firebase
+ * hubiera cobrado ninguna. Un contador inflado asusta y hace parar el trabajo
+ * por nada; uno corto deja que la cuota se agote sin aviso. Las dos formas de
+ * mentir estan cubiertas aca.
+ */
+describe('anotarSnapshot: lo que cobra el servidor, no lo que pinta el cache', () => {
+    const snap = ({ fromCache, cambios = 0, size = 0 }) => ({
+        metadata: { fromCache },
+        docChanges: () => new Array(cambios).fill({}),
+        size
+    });
+
+    beforeEach(() => reiniciarContador());
+
+    it('lo servido desde el disco no cuesta NADA', () => {
+        expect(anotarSnapshot(snap({ fromCache: true, cambios: 337 }), 'Hoja')).toBe(0);
+        expect(lecturasDeHoy().total).toBe(0);
+    });
+
+    it('lo que manda el servidor SI se cuenta', () => {
+        expect(anotarSnapshot(snap({ fromCache: false, cambios: 545 }), 'Hoja')).toBe(545);
+        expect(lecturasDeHoy().total).toBe(545);
+    });
+
+    it('reanudar sin cambios cuesta cero', () => {
+        // Es el caso normal al recargar: el token le dice al servidor donde
+        // quedo y no hay nada nuevo que mandar.
+        anotarSnapshot(snap({ fromCache: false, cambios: 0 }), 'Hoja');
+        expect(lecturasDeHoy().total).toBe(0);
+    });
+
+    it('guarda el motivo para saber que pantalla es la cara', () => {
+        anotarSnapshot(snap({ fromCache: false, cambios: 10 }), 'Etiquetas');
+        expect(lecturasDeHoy().porMotivo).toEqual([['Etiquetas', 10]]);
+    });
+
+    it('sin snapshot no revienta', () => {
+        expect(anotarSnapshot(null, 'x')).toBe(0);
+        expect(anotarSnapshot(undefined, 'x')).toBe(0);
+    });
+
+    it('si no hay docChanges cae al tamano total', () => {
+        const sinCambios = { metadata: { fromCache: false }, size: 42 };
+        expect(anotarSnapshot(sinCambios, 'x')).toBe(42);
     });
 });

@@ -7,7 +7,7 @@ import { collection, query, where, getDocs, doc, updateDoc } from 'firebase/fire
 import AdminPageHeader from '../../components/admin/AdminPageHeader';
 import { getClientWhatsAppUrl } from '../../utils/phoneUtils';
 import { getScheduleFromOrder } from '../../utils/orderDates';
-import { anotarLecturas } from '../../utils/contadorFirestore';
+import { anotarSnapshot } from '../../utils/contadorFirestore';
 
 /**
  * DeliveryView - Vista de Reparto
@@ -48,7 +48,7 @@ export default function DeliveryView() {
                     where('fecha_entrega', '>=', pastDateStr)
                 );
                 const snapshot = await getDocs(q);
-                anotarLecturas(snapshot.size, 'Reparto');
+                anotarSnapshot(snapshot, 'Reparto');
 
                 return snapshot.docs
                     .map(doc => ({

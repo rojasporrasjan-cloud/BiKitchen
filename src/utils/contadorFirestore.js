@@ -84,6 +84,40 @@ export const anotarLecturas = (cuantas, motivo = 'otros') => {
     guardar(dia);
 };
 
+/**
+ * Anota lo que un `onSnapshot` le costó DE VERDAD a la cuota.
+ *
+ * Desde que el caché vive en disco (ver `src/firebase/config.js`), cada
+ * suscripción emite dos veces al abrir la pantalla: primero lo que ya estaba
+ * guardado —`metadata.fromCache === true`— y un instante después lo que manda
+ * el servidor. La primera emisión no le cuesta NADA a Firebase, pero trae los
+ * cientos de documentos como si fueran nuevos.
+ *
+ * Contarlas hacía que el contador marcara 337 lecturas por recarga cuando el
+ * servidor no había cobrado ninguna. Un contador que infla es tan inútil como
+ * uno que se queda corto: el 3 de setiembre marcaba 0% con la cuota agotada, y
+ * si ahora marca 90% sin gastar, Jan deja de trabajar por nada.
+ *
+ * @param {object} snapshot  el QuerySnapshot que entrega onSnapshot
+ * @param {string} motivo    qué pantalla lo pidió
+ * @returns {number} lo que se anotó
+ */
+export const anotarSnapshot = (snapshot, motivo = 'otros') => {
+    if (!snapshot) return 0;
+
+    // Servido desde el disco: la cuota ni se entera.
+    if (snapshot.metadata?.fromCache) return 0;
+
+    // Con token de reanudación el servidor manda solo lo que cambió, y eso es
+    // exactamente lo que cobra. En una carga fría los cambios son todos.
+    const cuantas = typeof snapshot.docChanges === 'function'
+        ? snapshot.docChanges().length
+        : (Number(snapshot.size) || 0);
+
+    anotarLecturas(cuantas, motivo);
+    return cuantas;
+};
+
 /** Lo que lleva gastado el día, ya calculado para mostrar. */
 export const lecturasDeHoy = () => {
     const hoy = diaDeCuota();

@@ -3,10 +3,9 @@ import {
     Printer, Lock, Calendar, RefreshCw, AlertTriangle,
     CheckCircle, XCircle, History, Tag, Users
 } from 'lucide-react';
-import { collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '../../firebase/config';
 import { useAuth } from '../../context/AuthContext';
-import { useOrders } from '../../context/OrdersContext';
+import usePedidosDeFechas from '../../hooks/usePedidosDeFechas';
+import { fechasDeReparto } from '../../utils/consultaPorFechas';
 import AdminPageHeader from '../../components/admin/AdminPageHeader';
 import PrintJobSidebar from '../../components/admin/PrintJobSidebar';
 import LabelSectionList from '../../components/admin/LabelSectionList';
@@ -41,7 +40,6 @@ import { contarPorGrupo, leerImpresas, anotarImpresas, gruposQueFaltan, totalImp
 import {
     ETIQUETAS_POR_ROLLO, tamanoValido, planDeRollos, proximoRollo
 } from '../../utils/labels/rollosDeEtiquetas';
-import { anotarLecturas } from '../../utils/contadorFirestore';
 
 /**
  * Etiquetas de producción.
@@ -59,14 +57,19 @@ const hoyISO = () => new Date().toISOString().split('T')[0];
 
 export default function PrinterView() {
     const { isSuperAdmin, currentUser } = useAuth();
-    const { orders: allOrders } = useOrders();
 
     const [selectedDate, setSelectedDate] = useState(hoyISO());
     const [expirationDate, setExpirationDate] = useState('');
-    const [rawOrders, setRawOrders] = useState([]);
     const [officialMenus, setOfficialMenus] = useState(null);
-    const [loading, setLoading] = useState(false);
-    const [loadError, setLoadError] = useState(null);
+    // Solo los pedidos de ESTA fecha, en vivo (ver consultaPorFechas.js). Antes
+    // eran los ultimos 40 dias con getDocs y ademas la lista entera para el
+    // selector de fechas.
+    const {
+        pedidos: rawOrders,
+        cargando: loading,
+        error: errorDeLectura
+    } = usePedidosDeFechas([selectedDate], 'Etiquetas');
+    const loadError = errorDeLectura ? (errorDeLectura.message || 'No se pudieron leer los pedidos') : null;
     const [excluded, setExcluded] = useState(() => new Set());
     // Lo que ya salio de la impresora para esta fecha, para no repetirlo.
     const [impresas, setImpresas] = useState({});
@@ -190,20 +193,8 @@ export default function PrinterView() {
         getOfficialMenus().then(setOfficialMenus).catch(() => setOfficialMenus(null));
     }, []);
 
-    // Fechas con producción, igual que en Hojas de Producción.
-    const availableDates = useMemo(() => {
-        if (!allOrders || allOrders.length === 0) return [];
-        const dates = [];
-        allOrders.forEach(o => {
-            if (o.status === 'cancelled') return;
-            getScheduleFromOrder(o).forEach(d => { if (d) dates.push(d); });
-        });
-        const unicas = [...new Set(dates)].sort();
-        const inicioMes = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
-            .toISOString().split('T')[0];
-        const recientes = unicas.filter(d => d >= inicioMes);
-        return recientes.length > 0 ? recientes : unicas;
-    }, [allOrders]);
+    // Las fechas del calendario de reparto, igual que en Hojas de Producción.
+    const availableDates = useMemo(() => fechasDeReparto(), []);
 
     useEffect(() => {
         if (availableDates.length === 0) return;
@@ -212,38 +203,9 @@ export default function PrinterView() {
         setSelectedDate(availableDates.find(d => d >= hoy) || availableDates[availableDates.length - 1]);
     }, [availableDates]);
 
-    // Los pedidos se leen crudos de Firestore a propósito: buildLabelBatch aplica
-    // por su cuenta el filtro de estados, el calendario y las sustituciones, igual
-    // que la hoja de producción. Los pedidos del contexto vienen con campos ya
-    // transformados para otras pantallas y ensuciarían el cálculo.
-    useEffect(() => {
-        if (!selectedDate) return;
-        let cancelado = false;
-
-        const cargar = async () => {
-            setLoading(true);
-            setLoadError(null);
-            try {
-                const desde = new Date(`${selectedDate}T12:00:00`);
-                desde.setDate(desde.getDate() - 40);
-                const snapshot = await getDocs(query(
-                    collection(db, 'pedidos'),
-                    where('fecha_entrega', '>=', desde.toISOString().split('T')[0])
-                ));
-                if (cancelado) return;
-                anotarLecturas(snapshot.size, 'Etiquetas');
-                setRawOrders(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
-            } catch (err) {
-                console.error('[Etiquetas] Error leyendo pedidos:', err);
-                if (!cancelado) setLoadError(err.message || 'No se pudieron leer los pedidos');
-            } finally {
-                if (!cancelado) setLoading(false);
-            }
-        };
-
-        cargar();
-        return () => { cancelado = true; };
-    }, [selectedDate]);
+    // Los pedidos se leen crudos de Firestore a propósito (usePedidosDeFechas,
+    // arriba): buildLabelBatch aplica por su cuenta el filtro de estados, el
+    // calendario y las sustituciones, igual que la hoja de producción.
 
     // Cada fecha lleva su propia cuenta: el lunes y el sabado son tiras aparte.
     useEffect(() => {

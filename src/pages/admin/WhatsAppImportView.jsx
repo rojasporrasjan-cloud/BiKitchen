@@ -3,12 +3,13 @@ import { MessageCircle, Search, CheckCircle, AlertTriangle, Package, Lock } from
 import { collection, query, where, getDocs, limit, addDoc, doc, getDoc } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { useAuth } from '../../context/AuthContext';
-import { useOrders } from '../../context/OrdersContext';
+import { useAccionesDePedidos } from '../../context/OrdersContext';
+import usePedidosDeFechas from '../../hooks/usePedidosDeFechas';
 import AdminPageHeader from '../../components/admin/AdminPageHeader';
 import ImportedOrderPreview from '../../components/admin/ImportedOrderPreview';
 import { extractOrderNumbers, parseOrderBlock } from '../../utils/parseOrderText';
 import { buildPedidoFromImport, validatePedidoForFirestore, avisosDelPedido, resolverCorreo } from '../../utils/buildPedidoFromImport';
-import { avisoDeDuplicado } from '../../utils/pedidoDuplicado';
+import { avisoDeDuplicado, fechasDelPedido } from '../../utils/pedidoDuplicado';
 import { esErrorDeCuota, errorDeCuota } from '../../utils/cuotaDeFirebase';
 import { nivelPorPuntos } from '../../config/loyalty';
 import { upsertClient } from '../../services/clientService';
@@ -57,7 +58,9 @@ export const itemsEscritosAMano = (manuales) => (Array.isArray(manuales) ? manua
 
 export default function WhatsAppImportView() {
     const { isSuperAdmin, currentUser } = useAuth();
-    const { updateOrderStatus, orders } = useOrders();
+    // Solo la accion de confirmar; los pedidos para el aviso de duplicado se
+    // leen por fecha, abajo, no la coleccion entera.
+    const { updateOrderStatus } = useAccionesDePedidos();
 
     const [rawText, setRawText] = useState('');
     const [results, setResults] = useState([]);
@@ -80,7 +83,7 @@ export default function WhatsAppImportView() {
      * así que isSuperAdmin() pasa de false a true y React reventaría si el hook
      * quedara del otro lado del return.
      */
-    const draftPedido = useMemo(() => {
+    const borrador = useMemo(() => {
         if (!draft) return null;
 
         const merged = {
@@ -118,18 +121,40 @@ export default function WhatsAppImportView() {
             createdBy: currentUser?.email || 'admin'
         });
 
+        return { merged, pedido };
+    }, [draft, edits, currentUser]);
+
+    // Los pedidos de las MISMAS fechas, para el aviso de duplicado. Antes esta
+    // pantalla bajaba la coleccion entera (~600 lecturas) para eso.
+    const fechasDelBorrador = useMemo(
+        () => (borrador ? fechasDelPedido(borrador.pedido) : []),
+        [borrador]
+    );
+    const { pedidos: mismosDias, cargando: revisandoDuplicados } =
+        usePedidosDeFechas(fechasDelBorrador, 'Importar WhatsApp');
+
+    const draftPedido = useMemo(() => {
+        if (!borrador) return null;
+        const { pedido } = borrador;
+
         // El duplicado se avisa ACA, antes de guardar. Edwin Perez salio
         // cobrado y cocinado dos veces y lo vimos cuando la comida ya estaba
         // hecha; en ese punto solo queda devolver la plata. Aca es un clic.
-        const repetido = avisoDeDuplicado(pedido, orders);
+        const repetido = revisandoDuplicados ? null : avisoDeDuplicado(pedido, mismosDias);
 
         return {
-            merged,
-            pedido,
-            problems: validatePedidoForFirestore(pedido),
+            ...borrador,
+            // Mientras se revisa no se puede crear: un clic rapido antes de que
+            // llegue la respuesta dejaria pasar justo el duplicado.
+            problems: [
+                ...validatePedidoForFirestore(pedido),
+                ...(revisandoDuplicados && fechasDelBorrador.length > 0
+                    ? ['Revisando si este cliente ya tiene un pedido igual…']
+                    : [])
+            ],
             avisos: [...(repetido ? [repetido] : []), ...avisosDelPedido(pedido)]
         };
-    }, [draft, edits, currentUser, orders]);
+    }, [borrador, mismosDias, revisandoDuplicados, fechasDelBorrador]);
 
     if (!isSuperAdmin()) {
         return (

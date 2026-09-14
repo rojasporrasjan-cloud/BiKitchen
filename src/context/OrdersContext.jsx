@@ -23,7 +23,7 @@ import { laCuotaSeAcabo, anotarCuotaAgotada, errorDeCuota } from '../utils/cuota
 import { onAuthStateChanged } from 'firebase/auth';
 import { ADMIN_EMAILS } from '../config/admins';
 import { PUNTOS_REFERIDO, calcularPuntos } from '../config/loyalty';
-import { anotarLecturas } from '../utils/contadorFirestore';
+import { anotarLecturas, anotarSnapshot } from '../utils/contadorFirestore';
 
 /**
  * Cuántos pedidos mantiene el panel en memoria, del más nuevo al más viejo.
@@ -47,6 +47,26 @@ export const useOrders = () => {
     if (!context) {
         throw new Error('useOrders must be used within an OrdersProvider');
     }
+    // Pedir la lista es lo que la hace bajar. Una pantalla que no llama a
+    // useOrders —la hoja de produccion, Proteinas de la semana— ya no paga los
+    // ~600 pedidos solo por estar dentro del panel.
+    const { pedirLista } = context;
+    useEffect(() => { pedirLista?.(); }, [pedirLista]);
+    return context;
+};
+
+/**
+ * Las ACCIONES sobre pedidos —confirmar, crear— sin bajar la lista entera.
+ *
+ * `updateOrderStatus` no necesita la lista cargada: escribe en un pedido por su
+ * id. Una pantalla que solo confirma (Producción) no tiene por que pagar los
+ * ~600 pedidos para eso.
+ */
+export const useAccionesDePedidos = () => {
+    const context = useContext(OrdersContext);
+    if (!context) {
+        throw new Error('useAccionesDePedidos must be used within an OrdersProvider');
+    }
     return context;
 };
 
@@ -60,6 +80,13 @@ export const OrdersProvider = ({ children }) => {
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
     const [isAdmin, setIsAdmin] = useState(false);
+    // La coleccion entera se baja SOLO cuando una pantalla la pide (useOrders).
+    // Antes arrancaba en todas las paginas apenas se sabia que era admin, y el
+    // menu lateral la pedia para un numerito: ~600 lecturas por pagina abierta.
+    // Una vez pedida se queda escuchando: con el cache en disco, volver a
+    // pedirla despues de mas de 30 minutos cobraria la coleccion otra vez.
+    const [seNecesitaLaLista, setSeNecesitaLaLista] = useState(false);
+    const pedirLista = React.useCallback(() => setSeNecesitaLaLista(true), []);
 
     // Verificar si el usuario es admin antes de suscribirse a pedidos
     // Comprueba tanto la lista estática ADMIN_EMAILS como el campo isAdmin en Firestore
@@ -105,13 +132,24 @@ export const OrdersProvider = ({ children }) => {
 
     // Subscribe to real-time updates desde 'pedidos' (solo si es admin)
     useEffect(() => {
-        if (!isAdmin) {
+        if (!isAdmin || !seNecesitaLaLista) {
             return;
         }
 
         const q = query(collection(db, "pedidos"), orderBy("createdAt", "desc"), limit(MAX_PEDIDOS_EN_MEMORIA));
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
+            // Esta suscripcion vive en TODA la app —OrdersProvider envuelve el
+            // sitio entero— y arranca apenas se detecta que la sesion es admin.
+            // Es decir: se baja la coleccion `pedidos` en cada carga de pagina,
+            // aunque la pantalla no tenga nada que ver con pedidos. Se usa para
+            // el numerito de pendientes del menu lateral.
+            //
+            // Nunca se habia contado, y por eso el contador de la barra marcaba
+            // 20% con la cuota ya agotada: el gasto mas grande del dia era
+            // justo el invisible.
+            anotarSnapshot(snapshot, 'Pedidos (toda la app)');
+
             const ordersData = snapshot.docs.map(doc => {
                 const data = doc.data({ serverTimestamps: 'estimate' });
                 // Normalizar campos para compatibilidad con OrdersView
@@ -159,7 +197,11 @@ export const OrdersProvider = ({ children }) => {
         });
 
         return () => unsubscribe();
-    }, [isAdmin]);
+    // `seNecesitaLaLista` TIENE que estar aca. Sin ella, entrar primero a una
+    // pantalla que no pide la lista (Importar WhatsApp, la hoja) y despues ir a
+    // Pedidos dejaba la pantalla en "cargando" para siempre: la sesion ya era
+    // admin, el efecto no volvia a correr y la suscripcion nunca arrancaba.
+    }, [isAdmin, seNecesitaLaLista]);
 
     // Agregar pedido manual (desde admin) - usa la misma estructura que el checkout
     const addOrder = async (cartItems, customerData, orderNumber, createdBy) => {
@@ -586,8 +628,9 @@ export const OrdersProvider = ({ children }) => {
     };
 
     const contextValue = React.useMemo(() => ({
-        orders, addOrder, updateOrderStatus, confirmPayment, getStats, formatTotal, deleteAllOrders, deleteOrder, loading
-    }), [orders, loading]);
+        orders, addOrder, updateOrderStatus, confirmPayment, getStats, formatTotal, deleteAllOrders, deleteOrder, loading,
+        pedirLista
+    }), [orders, loading, pedirLista]);
 
     return (
         <OrdersContext.Provider value={contextValue}>

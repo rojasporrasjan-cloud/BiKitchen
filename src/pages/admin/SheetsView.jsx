@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
     FileText,
     Download,
@@ -11,9 +11,6 @@ import {
     FileSpreadsheet
 } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { db } from '../../firebase/config';
-import { cachedFetch, invalidateCache } from '../../utils/firestoreCache';
-import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
 import { getScheduleFromOrder } from '../../utils/orderDates';
 import { imprimeEnHoja } from '../../utils/estadosPedido';
 import jsPDF from 'jspdf';
@@ -25,124 +22,67 @@ import {
     buildKitchenSheetData,
     buildPackagingSheetData
 } from '../../utils/logisticsUtils';
-import { useOrders } from '../../context/OrdersContext';
-import HojaDeCocinaPorTandas from '../../components/admin/HojaDeCocinaPorTandas';
+import { useAccionesDePedidos } from '../../context/OrdersContext';
+import usePedidosDeFechas from '../../hooks/usePedidosDeFechas';
+import { fechasDeReparto } from '../../utils/consultaPorFechas';
 import { abrirHoja } from '../../utils/abrirHoja';
-import { anotarLecturas } from '../../utils/contadorFirestore';
 
 export default function SheetsView() {
-    const { orders: allOrders, updateOrderStatus } = useOrders();
+    // Solo la accion de confirmar: la lista entera de pedidos ya no se baja aca.
+    const { updateOrderStatus } = useAccionesDePedidos();
     const [confirmandoTodos, setConfirmandoTodos] = useState(false);
     const [availableDates, setAvailableDates] = useState([]);
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
     // Pedidos ya normalizados al modelo de platos/ingredientes
-    const [orders, setOrders] = useState([]);
-    const [loading, setLoading] = useState(false);
     // Pedidos de esta fecha que NO están confirmados. Esta pantalla los muestra,
     // pero la hoja que se imprime para cocina y empaque solo incluye confirmados,
     // así que hay que avisarlo o se cocina de menos.
-    const [sinConfirmar, setSinConfirmar] = useState([]);
     const [marginPercent, setMarginPercent] = useState(30);
 
-    // Obtener fechas disponibles de pedidos activos
+    // Las fechas del selector salen del CALENDARIO de reparto —lunes, miercoles y
+    // sabado, de la semana pasada a seis semanas adelante— y no de los pedidos.
+    //
+    // Antes se armaban recorriendo TODOS los pedidos, y para eso esta pantalla
+    // bajaba la coleccion entera (~600 lecturas) cada vez que se abria. Un dia
+    // fuera de ese calendario se saca con "o elegi otro dia".
     useEffect(() => {
-        if (!allOrders || allOrders.length === 0) return;
-        
-        // Se listan TODAS las fechas del calendario de cada pedido, no solo la primera.
-        // Antes se usaba únicamente fecha_entrega, así que un día en el que solo tocaban
-        // semanas 2, 3 o 4 de packs mensuales ni siquiera aparecía en la lista: no había
-        // forma de sacar la hoja de ese día.
-        const dates = [];
-        allOrders.forEach(o => {
-            if (o.status === 'cancelled') return;
-            getScheduleFromOrder(o).forEach(d => {
-                if (d) dates.push(d);
-            });
-        });
+        const hoy = new Date();
+        const fechas = fechasDeReparto(hoy);
+        setAvailableDates(fechas);
 
-        const uniqueDates = [...new Set(dates)].sort();
-        
-        // Filtrar fechas desde el inicio del mes actual (agosto) para que el dropdown no empiece con enero
-        const today = new Date();
-        const startOfCurrentMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
-        const currentAndFutureDates = uniqueDates.filter(d => d >= startOfCurrentMonth);
-        
-        const datesToShow = currentAndFutureDates.length > 0 ? currentAndFutureDates : uniqueDates;
-        setAvailableDates(datesToShow);
-        
-        if (datesToShow.length > 0) {
-            const todayStr = today.toISOString().split('T')[0];
-            let nextDate = datesToShow.find(d => d >= todayStr);
-            if (!nextDate) nextDate = datesToShow[datesToShow.length - 1];
-            
-            const savedDate = localStorage.getItem('bikitchen_last_sheet_date');
-            if (savedDate && datesToShow.includes(savedDate)) {
-                setSelectedDate(savedDate);
-            } else if (!datesToShow.includes(selectedDate)) {
-                setSelectedDate(nextDate);
-            }
-        }
-    }, [allOrders]);
+        const hoyStr = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
+        const proxima = fechas.find(f => f >= hoyStr) || fechas[fechas.length - 1];
+        const guardada = localStorage.getItem('bikitchen_last_sheet_date');
+        // Una fecha guardada que ya paso hace mas de una semana no sirve de arranque.
+        if (guardada && guardada >= fechas[0]) setSelectedDate(guardada);
+        else setSelectedDate(proxima);
+    }, []);
 
     // Guardar en localStorage cada vez que cambie
     useEffect(() => {
         if (selectedDate) localStorage.setItem('bikitchen_last_sheet_date', selectedDate);
     }, [selectedDate]);
 
-    const loadOrdersForDate = async (date, force = false) => {
-        setLoading(true);
-        try {
-            const cacheKey = `sheets_orders_${date}`;
-            if (force) invalidateCache(cacheKey);
+    // Solo los pedidos de ESTA fecha, en vivo (ver consultaPorFechas.js). Antes
+    // eran los ultimos 40 dias con getDocs, que el cache en disco no ayuda:
+    // cada apertura cobraba ~340 lecturas.
+    const { pedidos: pedidosDeLaFecha, cargando: loading } = usePedidosDeFechas([selectedDate], 'Hojas');
 
-            const rawOrders = await cachedFetch(cacheKey, async () => {
-                const targetDate = new Date(date + "T12:00:00");
-                const pastDate = new Date(targetDate);
-                pastDate.setDate(pastDate.getDate() - 40); // Buscar hasta 40 días atrás para mensualidades
-                const pastDateStr = pastDate.toISOString().split('T')[0];
-
-                // Obtener todos los pedidos recientes que podrían tener entregas en esta fecha
-                const q = query(
-                    collection(db, "pedidos"),
-                    where("fecha_entrega", ">=", pastDateStr)
-                );
-                
-                const snapshot = await getDocs(q);
-                anotarLecturas(snapshot.size, 'Hojas');
-                let results = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                }));
-
-                // Filtrar localmente usando la función que genera el schedule real
-                results = results.filter(order => {
-                    if (order.status === 'cancelled') return false;
-                    const schedule = getScheduleFromOrder(order);
-                    return schedule.includes(date);
-                });
-
-                // Ordenar por cliente
-                results.sort((a, b) => (a.cliente || '').localeCompare(b.cliente || ''));
-
-                return results;
-            }, 'dashboard');
-
+    const { orders, sinConfirmar } = useMemo(() => {
+        const rawOrders = (pedidosDeLaFecha || [])
+            .filter(order => order.status !== 'cancelled' && getScheduleFromOrder(order).includes(selectedDate))
+            .sort((a, b) => (a.cliente || '').localeCompare(b.cliente || ''));
+        return {
             // La MISMA lista que usa PrintProductionView, importada, no copiada:
             // si cada pantalla tuviera la suya se contradirían tarde o temprano.
-            setSinConfirmar(rawOrders.filter(o => !imprimeEnHoja(o)));
+            sinConfirmar: rawOrders.filter(o => !imprimeEnHoja(o)),
+            // Con la fecha: packs de proteinas con la lista de esta entrega.
+            orders: mapPedidosFromLegacy(rawOrders, [selectedDate])
+        };
+    }, [pedidosDeLaFecha, selectedDate]);
 
-            const normalized = mapPedidosFromLegacy(rawOrders);
-
-            setOrders(normalized);
-        } catch (error) {
-            console.error("[Sheets] Error loading orders:", error);
-        }
-        setLoading(false);
-    };
-
-    useEffect(() => {
-        loadOrdersForDate(selectedDate);
-    }, [selectedDate]);
+    // La lista llega en vivo: "Actualizar" ya no tiene que volver a consultar.
+    const loadOrdersForDate = async () => {};
 
 
 
@@ -747,9 +687,10 @@ export default function SheetsView() {
                 </div>
             </div>
 
-            {/* La hoja de cocina de la semana va por tandas: el jueves los
-                mensuales y quincenales, y despues lo que va entrando. */}
-            <HojaDeCocinaPorTandas />
+            {/* La caja "Hoja de cocina de la semana" (adelanto del jueves /
+                viernes y sabado) se quito el 14 de setiembre de 2026: la hoja de
+                produccion ya trae el mismo selector por dia —martes, jueves,
+                viernes, sabado— y tener dos entradas a lo mismo confundia. */}
 
             {/* Action Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
