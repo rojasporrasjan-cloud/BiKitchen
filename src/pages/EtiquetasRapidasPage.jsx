@@ -39,6 +39,8 @@ import SEOHead from '../components/SEOHead';
 import { getOfficialMenus } from '../utils/firestoreMenus';
 import { individualesData } from '../data/individualesData';
 import { TIPO_ETIQUETA, TIPO_INDIVIDUAL, formatExpirationDate } from '../utils/labels/labelDomain';
+import { prepareLogo } from '../utils/labels/labelRenderer';
+import { loadSharedSettings, DEFAULT_SETTINGS } from '../services/printing/printerSettings';
 import { PhomemoM110Adapter, webBluetoothDisponible } from '../services/printing/PhomemoM110Adapter';
 
 const PIN_CORRECTO = '5682';
@@ -63,6 +65,32 @@ const FAMILIAS = [
 ];
 
 const CANTIDADES = [1, 2, 3, 5];
+
+/**
+ * La calibración de la impresora de BiKitchen.
+ *
+ * NO es la de fábrica. El rollo es de 35 × 25 mm, no de 30 × 20, y el contenido
+ * va corrido 3,5 mm a la derecha y 3 hacia abajo para que quede centrado. Con
+ * los valores de fábrica la etiqueta sale más chica y pegada a una esquina:
+ *
+ *   "no sale el mismo formato que tenemos sacando las etiquetas en la pc, las
+ *    ocupo con el logo y bien centradas" — Jan, 26 de setiembre de 2026.
+ *
+ * La calibración buena vive en `admin_config/printer_labels`, pero esa
+ * colección pide admin y esta pantalla va sin login. Así que se intenta leer
+ * —por si algún día se abre esa lectura— y si no se puede, se usa esta copia.
+ *
+ * ⚠️ Si Gina recalibra desde el panel, hay que actualizar estos números a mano
+ * hasta que la lectura compartida esté disponible.
+ */
+const CALIBRACION_BIKITCHEN = {
+    widthMm: 35,
+    heightMm: 25,
+    offsetXmm: 3.5,
+    offsetYmm: 3,
+    speed: 5,
+    interLabelDelayMs: 250
+};
 
 /** El vencimiento de siempre: una semana. Se puede cambiar antes de imprimir. */
 const enUnaSemana = () => {
@@ -113,6 +141,27 @@ export default function EtiquetasRapidasPage() {
     // Solo se construye si el navegador habla Bluetooth: en iPhone no existe.
     const adapterRef = useRef(null);
     if (!adapterRef.current && webBluetoothDisponible()) adapterRef.current = new PhomemoM110Adapter();
+
+    // El logo y la calibración: sin esto la etiqueta sale sin marca, más chica
+    // y pegada a la esquina. Es lo que la hacía verse distinta a la de la compu.
+    useEffect(() => {
+        const adaptador = adapterRef.current;
+        if (!adaptador) return;
+        let vivo = true;
+
+        // OJO: `readSettings()` devuelve los valores de FÁBRICA cuando el
+        // teléfono no tiene nada guardado, así que solo se usa si de verdad hay
+        // algo; si no, pisaría la calibración de la casa con 30 × 20 mm.
+        let guardada = null;
+        try { guardada = JSON.parse(localStorage.getItem('bikitchen_printer_settings') || 'null'); } catch { /* sin storage */ }
+        adaptador.settings = { ...DEFAULT_SETTINGS, ...CALIBRACION_BIKITCHEN, ...(guardada || {}) };
+        prepareLogo().then(l => { if (vivo && l) adaptador.logo = l; }).catch(() => { /* sale sin logo */ });
+        loadSharedSettings()
+            .then(s => { if (vivo && s) adaptador.settings = { ...adaptador.settings, ...s }; })
+            .catch(() => { /* pide admin: se queda con la copia de acá */ });
+
+        return () => { vivo = false; };
+    }, []);
 
     // ── El menú de la semana: UN documento, y con caché ──────────────────
     useEffect(() => {
