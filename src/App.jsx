@@ -50,6 +50,8 @@ const MiImpactoPage = lazyWithRetry(() => import('./pages/MiImpactoPage'));
 const MisPedidosPage = lazyWithRetry(() => import('./pages/MisPedidosPage'));
 // El link de cambios que llega por WhatsApp cada miércoles
 const CambiosSemanaPage = lazyWithRetry(() => import('./pages/CambiosSemanaPage'));
+// El link FIJO de cambios (para Kommo, sin variables): lleva a cada cliente a su link
+const BuscarCambiosPage = lazyWithRetry(() => import('./pages/BuscarCambiosPage'));
 const GiftCardsPage = lazyWithRetry(() => import('./pages/GiftCardsPage'));
 const FidelidadPage = lazyWithRetry(() => import('./pages/FidelidadPage'));
 const RewardStore = lazyWithRetry(() => import('./pages/RewardStore'));
@@ -208,7 +210,7 @@ function PublicRouteExtras() {
       <CartDrawer />
       {!hideFloating && <WhatsAppButton />}
       {/* {!hideFloating && <AISommelier />} */}
-      {!/^\/cambios\//.test(pathname) && <PWAPrompt />}
+      {!/^\/cambios(\/|$)/.test(pathname) && <PWAPrompt />}
       {/* Christmas effects y banner deshabilitados */}
     </>
   );
@@ -253,6 +255,7 @@ function AnimatedRoutes() {
             <Route path="/impacto" element={<MiImpactoPage />} />
             <Route path="/mis-pedidos" element={<MisPedidosPage />} />
             <Route path="/historial" element={<MisPedidosPage />} />
+            <Route path="/cambios" element={<BuscarCambiosPage />} />
             <Route path="/cambios/:codigo" element={<CambiosSemanaPage />} />
             <Route path="/gift-cards" element={<GiftCardsPage />} />
             <Route path="/tarjetas-regalo" element={<GiftCardsPage />} />

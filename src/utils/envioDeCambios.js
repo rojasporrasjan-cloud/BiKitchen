@@ -13,6 +13,7 @@
 
 import { loQueSePuedeCambiar } from './cambiosDeLaSemana';
 import { entregasDelPedido, esPackDeProteinas, elegidasPara } from './proteinasPorEntrega';
+import { consultasParaFechas } from './consultaPorFechas';
 
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
@@ -113,3 +114,68 @@ export const destinatarioKommo = ({ pedido, fecha, ultima }, url) => {
         ultima: !!ultima
     };
 };
+
+// ── El link FIJO: bikitchencr.com/cambios ─────────────────────────────────
+//
+// Para ponerlo en cualquier mensaje o automatización de Kommo sin variables,
+// como el de la impresora. El cliente escribe su WhatsApp y su nombre y lo
+// lleva a SU link firmado de siempre (/cambios/<código>): mismas reglas,
+// mismo cierre, máximo 2 cambios por pack.
+//
+// Para no leer los pedidos en cada búsqueda (regla 17) se arma UNA vez por
+// semana un índice teléfono → pedidos en `links_cambios/{sábado}`: buscar
+// cuesta 1 lectura. Si el número no está y el índice tiene más de un rato, se
+// vuelve a armar (alguien pudo hacer el pedido después).
+
+export const INDICE_VIGENTE_MS = 20 * 60 * 1000;
+
+/** El ciclo según la hora de Costa Rica, aunque el servidor esté en UTC. */
+export const cicloEnCostaRica = (ahora = new Date()) =>
+    proximoCiclo(new Date(ahora.getTime() - 6 * 60 * 60 * 1000 + ahora.getTimezoneOffset() * 60 * 1000));
+
+/** Los pedidos de unas fechas con el SDK de administrador: las dos consultas de la hoja. */
+export const leerPedidosDelCiclo = async (db, fechas) => {
+    const plan = consultasParaFechas(fechas);
+    if (!plan) return [];
+    const consultas = [
+        ...plan.grupos.map(g => db.collection('pedidos').where('fechas_entrega', 'array-contains-any', g).get()),
+        db.collection('pedidos').where('fecha_entrega', '>=', plan.desde).where('fecha_entrega', '<=', plan.hasta).get()
+    ];
+    const porId = new Map();
+    (await Promise.all(consultas)).forEach(snap => snap.docs.forEach(d => porId.set(d.id, { id: d.id, ...d.data() })));
+    return [...porId.values()];
+};
+
+/** { '88112233': [{ id, fecha, nombre, pack }] } a partir de pedidosParaElLink. */
+export const indiceDeTelefonos = (lista = []) => {
+    const indice = {};
+    lista.forEach(({ pedido, fecha }) => {
+        const tel = soloDigitos(pedido?.telefono);
+        if (tel.length !== 8) return;
+        (indice[tel] = indice[tel] || []).push({
+            id: pedido.id,
+            fecha,
+            nombre: String(pedido.cliente || '').trim(),
+            pack: pedido.plan || pedido.items?.[0]?.nombre || ''
+        });
+    });
+    return indice;
+};
+
+const palabras = (t) => String(t || '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase()
+    .split(/[^a-z]+/).filter(p => p.length >= 2);
+
+/**
+ * ¿El nombre que escribió es el del pedido? Basta el primer nombre ("ana"
+ * para "Ana Mora Solís"), sin tildes ni mayúsculas. Con el teléfono solo,
+ * cualquiera que sepa un número vería el pedido de otro.
+ */
+export const nombreCalza = (escrito, delPedido) => {
+    const [primero] = palabras(escrito);
+    return !!primero && palabras(delPedido).includes(primero);
+};
+
+/** Los pedidos de ese teléfono Y ese nombre. Vacío si no calza (sin decir cuál de los dos falló). */
+export const buscarEnIndice = (indice = {}, telefono, nombre) =>
+    (indice[soloDigitos(telefono)] || []).filter(x => nombreCalza(nombre, x.nombre));
+

@@ -7,7 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * cierre a la hora, y que guarde en el pedido por su id real (sin fantasmas).
  */
 
-const estado = vi.hoisted(() => ({ docs: {}, actualizados: [], ahora: null }));
+const estado = vi.hoisted(() => ({ docs: {}, actualizados: [], guardados: [], consultas: 0, ahora: null }));
 
 vi.mock('firebase-admin/app', () => ({ initializeApp: () => ({}), getApps: () => [], getApp: () => ({}) }));
 vi.mock('firebase-admin/auth', () => ({
@@ -19,12 +19,24 @@ vi.mock('firebase-admin/firestore', () => {
         update: async (datos) => {
             if (!estado.docs[ruta]) throw new Error('NOT_FOUND');
             estado.actualizados.push({ ruta, datos });
+        },
+        set: async (datos) => { estado.docs[ruta] = datos; estado.guardados.push(ruta); }
+    });
+    // Una consulta devuelve toda la colección: el filtro por fecha lo hace el código
+    const consulta = (c) => ({
+        where: () => consulta(c),
+        get: async () => {
+            estado.consultas++;
+            return {
+                docs: Object.entries(estado.docs).filter(([r]) => r.startsWith(`${c}/`))
+                    .map(([r, d]) => ({ id: r.split('/')[1], data: () => d }))
+            };
         }
     });
     return {
         getFirestore: () => ({
             doc: (ruta) => ref(ruta),
-            collection: (c) => ({ doc: (id) => ref(`${c}/${id}`) })
+            collection: (c) => ({ doc: (id) => ref(`${c}/${id}`), ...consulta(c) })
         })
     };
 });
@@ -41,6 +53,8 @@ beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-23T15:00:00Z'));   // miércoles 9 a. m. en CR
     estado.actualizados = [];
+    estado.guardados = [];
+    estado.consultas = 0;
     estado.docs = {
         'pedidos/abc123XYZ': {
             cliente: 'Ana Mora Solís', telefono: '88112233', direccion: 'Escazú',
@@ -116,5 +130,49 @@ describe('la función del link de cambios', () => {
         expect((await llamar({ accion: 'generar', pedidos }, { authorization: 'Bearer otro' })).status).toBe(403);
         const r = await llamar({ accion: 'generar', pedidos }, { authorization: 'Bearer dueno' });
         expect(r.links[0].url).toBe(`https://bikitchencr.com/cambios/${codigo()}`);
+    });
+
+    describe('el link fijo /cambios', () => {
+        // El miércoles 23 de setiembre el ciclo es el sábado 26 y el lunes 28
+        const buscar = (telefono, nombre) => llamar({ accion: 'buscar', telefono, nombre });
+
+        it('con su WhatsApp y su nombre lo lleva a SU link firmado, sin mostrar nada más', async () => {
+            const r = await buscar('8811-2233', 'ana');
+            expect(r.status).toBe(200);
+            expect(r.opciones).toEqual([{ pack: 'Pack Mensual Bajo en Calorías', fecha: '2026-09-26', ruta: `/cambios/${codigo()}` }]);
+            expect(JSON.stringify(r)).not.toMatch(/Solís|Escazú|88112233/);
+        });
+
+        it('con el número de otro pero sin su nombre no encuentra nada (y no dice qué falló)', async () => {
+            const sinNombre = await buscar('88112233', 'Pedro');
+            const otroNumero = await buscar('88990000', 'Ana');
+            expect(sinNombre.status).toBe(404);
+            expect(sinNombre.error).toBe(otroNumero.error);
+        });
+
+        it('arma el índice una vez: las búsquedas siguientes cuestan 1 lectura', async () => {
+            await buscar('88112233', 'Ana');
+            const consultas = estado.consultas;
+            expect(estado.guardados).toEqual(['links_cambios/2026-09-26']);
+            await buscar('88112233', 'Ana Mora');
+            expect(estado.consultas).toBe(consultas);
+        });
+
+        it('si alguien pidió después, lo encuentra cuando el índice ya tiene un rato', async () => {
+            await buscar('88112233', 'Ana');
+            estado.docs['pedidos/nuevo123456'] = {
+                cliente: 'Beto Rojas', telefono: '+506 7000 1111', status: 'confirmed', plan: 'Pack Bajo en Calorías',
+                items: [{ nombre: 'Pack Bajo en Calorías', cantidad: 1 }], fechas_entrega: ['2026-09-28']
+            };
+            vi.setSystemTime(new Date('2026-09-23T15:30:00Z'));
+            const r = await buscar('70001111', 'beto');
+            expect(r.status).toBe(200);
+            expect(r.opciones[0].fecha).toBe('2026-09-28');
+        });
+
+        it('pide los datos completos', async () => {
+            expect((await buscar('8811', 'Ana')).status).toBe(400);
+            expect((await buscar('88112233', '')).status).toBe(400);
+        });
     });
 });

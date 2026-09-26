@@ -20,7 +20,7 @@ Disallow: /checkout
 Disallow: /mis-pedidos
 Disallow: /mis-cupones
 Disallow: /mi-impacto
-Disallow: /cambios/
+Disallow: /cambios
 
 # APIs y funciones
 Disallow: /api/

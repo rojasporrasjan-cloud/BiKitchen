@@ -20,6 +20,8 @@
  *
  * Acciones (POST, JSON):
  *   { accion: 'ver', codigo }                         → lo que la página muestra
+ *   { accion: 'buscar', telefono, nombre }            → el link fijo /cambios: a qué
+ *                                                       /cambios/<código> lo lleva
  *   { accion: 'guardar', codigo, cambios, proteinas, notas }
  *   { accion: 'generar', pedidos: [{ id, fecha }] }   → solo el dueño (token de Firebase)
  *
@@ -38,6 +40,9 @@ import {
     estaCerrada, horaLimiteDe, horaLimiteEnPalabras
 } from '../../src/utils/cambiosDeLaSemana.js';
 import { entregasDelPedido } from '../../src/utils/proteinasPorEntrega.js';
+import {
+    cicloEnCostaRica, leerPedidosDelCiclo, pedidosParaElLink, indiceDeTelefonos, buscarEnIndice, INDICE_VIGENTE_MS
+} from '../../src/utils/envioDeCambios.js';
 
 let db;
 let auth;
@@ -169,6 +174,49 @@ const guardar = async (entrada) => {
     return json(200, { ok: true, guardado: cambio.cambiosDelLink[fecha] });
 };
 
+const NO_ENCONTRADO = 'No encontramos un pedido con ese número y ese nombre para esta semana. '
+    + 'Revisá que sea el WhatsApp con el que pediste. Si pediste hace poco, probá en un rato o escribinos.';
+
+/**
+ * El índice teléfono → pedidos de la semana (`links_cambios/{sábado}`).
+ * Leerlo cuesta 1 lectura; armarlo, las consultas del ciclo (una vez por semana,
+ * o cuando alguien no aparece y el índice ya tiene un rato).
+ */
+const indiceDeLaSemana = async ({ sabado, lunes }, { rearmar = false } = {}) => {
+    const ref = db.collection('links_cambios').doc(sabado);
+    if (!rearmar) {
+        const snap = await ref.get();
+        if (snap.exists) return { ...snap.data(), ref };
+    }
+    const [pedidos, { menus, sustituciones }] = await Promise.all([leerPedidosDelCiclo(db, [sabado, lunes]), menuYSustituciones()]);
+    const datos = {
+        porTelefono: indiceDeTelefonos(pedidosParaElLink(pedidos, [sabado, lunes], menus, sustituciones)),
+        armadoEn: new Date().toISOString()
+    };
+    await ref.set(datos);
+    return { ...datos, ref, recienArmado: true };
+};
+
+const buscar = async ({ telefono, nombre }) => {
+    const tel = String(telefono || '').replace(/\D/g, '').slice(-8);
+    if (tel.length !== 8 || String(nombre || '').trim().length < 2) {
+        return json(400, { error: 'Escribí tu número de WhatsApp (8 dígitos) y tu nombre.' });
+    }
+    const ciclo = cicloEnCostaRica();
+    let indice = await indiceDeLaSemana(ciclo);
+    let encontrados = buscarEnIndice(indice.porTelefono, tel, nombre);
+    const viejo = Date.now() - new Date(indice.armadoEn || 0).getTime() > INDICE_VIGENTE_MS;
+    if (encontrados.length === 0 && !indice.recienArmado && viejo) {
+        indice = await indiceDeLaSemana(ciclo, { rearmar: true });
+        encontrados = buscarEnIndice(indice.porTelefono, tel, nombre);
+    }
+    if (encontrados.length === 0) return json(404, { error: NO_ENCONTRADO });
+    // Solo el pack y la fecha: ni dirección ni teléfono ni el nombre completo
+    return json(200, {
+        opciones: encontrados.map(x => ({ pack: x.pack, fecha: x.fecha, ruta: `/cambios/${codigoPara(x.id, x.fecha)}` }))
+    });
+};
+
 const generar = async (entrada, authHeader) => {
     const idToken = String(authHeader || '').replace(/^Bearer\s+/i, '').trim();
     if (!idToken || !auth) return json(403, { error: 'Falta la sesión.' });
@@ -205,6 +253,7 @@ export const handler = async (event) => {
     try {
         if (entrada.accion === 'ver') return await ver(entrada);
         if (entrada.accion === 'guardar') return await guardar(entrada);
+        if (entrada.accion === 'buscar') return await buscar(entrada);
         if (entrada.accion === 'generar') return await generar(entrada, event.headers?.authorization);
         return json(400, { error: 'Acción desconocida.' });
     } catch (err) {

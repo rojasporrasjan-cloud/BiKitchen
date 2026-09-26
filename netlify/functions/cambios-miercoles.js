@@ -36,8 +36,7 @@
 import { initializeApp, getApps, getApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { codigoPara } from './cambios-semana.js';
-import { proximoCiclo, pedidosParaElLink, destinatarioKommo } from '../../src/utils/envioDeCambios.js';
-import { consultasParaFechas } from '../../src/utils/consultaPorFechas.js';
+import { proximoCiclo, pedidosParaElLink, destinatarioKommo, leerPedidosDelCiclo } from '../../src/utils/envioDeCambios.js';
 import {
     payloadContacto, payloadEjecutarBot, telefonosDeContacto, soloDigitos, enLotes, LOTE_CONTACTOS, LOTE_BOTS
 } from '../../src/utils/kommoPayload.js';
@@ -67,16 +66,7 @@ const kommo = async (ruta, { method = 'GET', body } = {}) => {
 };
 
 /** Los pedidos del sábado y el lunes, con las mismas dos consultas que la hoja. */
-export const pedidosDelCiclo = async (fechas) => {
-    const plan = consultasParaFechas(fechas);
-    const consultas = [
-        ...plan.grupos.map(g => db.collection('pedidos').where('fechas_entrega', 'array-contains-any', g).get()),
-        db.collection('pedidos').where('fecha_entrega', '>=', plan.desde).where('fecha_entrega', '<=', plan.hasta).get()
-    ];
-    const porId = new Map();
-    (await Promise.all(consultas)).forEach(snap => snap.docs.forEach(d => porId.set(d.id, { id: d.id, ...d.data() })));
-    return [...porId.values()];
-};
+export const pedidosDelCiclo = (fechas) => leerPedidosDelCiclo(db, fechas);
 
 /** El id del contacto en Kommo para un teléfono, o null. Una búsqueda por cliente. */
 const contactoPorTelefono = async (telefono) => {

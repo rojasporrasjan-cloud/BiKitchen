@@ -81,6 +81,30 @@ la cocina en silencio.
 - Constancia del envío automático: `estado` = `enviado` | `prueba` |
   `frenado-por-tope`. Con `enviado` no vuelve a mandar esa semana.
 
+### `links_cambios/{sábado}` (colección nueva, solo el servidor)
+- El índice del **link fijo** `bikitchencr.com/cambios`: `porTelefono` (últimos
+  8 dígitos) → `[{ id, fecha, nombre, pack }]`, y `armadoEn`.
+- Se arma solo la primera vez que alguien busca en la semana (las consultas del
+  ciclo) y después cada búsqueda cuesta **1 lectura**. Si un número no aparece
+  y el índice tiene más de 20 minutos, se rearma (pedidos nuevos).
+- Las reglas de Firestore no dejan leerlo desde el navegador (regla por defecto).
+
+## Los links fijos (para Kommo, sin variables)
+
+| Link | Qué hace |
+|---|---|
+| `bikitchencr.com/cambios` | El cliente escribe su WhatsApp y su **primer nombre** y llega a SU link firmado (`/cambios/<código>`). Mismas reglas: cierre del miércoles 8 p. m., máximo 2 cambios por pack |
+| `bikitchencr.com/menu` | El menú de la semana (ya existía: `CatalogPage`) |
+
+Están en Panel → Cambios de la semana → *Links fijos para Kommo*, con botón de
+copiar. Sirven en cualquier mensaje o automatización de Kommo **sin** campos ni
+variables. El link personal (con la casilla "Link cambios") sigue funcionando y
+es más cómodo para el cliente: entra directo sin escribir nada.
+
+Pedir el nombre además del teléfono es a propósito: con el número solo,
+cualquiera que sepa el WhatsApp de otro vería y cambiaría su pedido. Si no
+calza, el mensaje es el mismo para "número equivocado" y "nombre equivocado".
+
 ## Reglas de seguridad que no se quitan
 
 1. La nota libre del cliente no puede disparar un cambio en cocina: la palabra
@@ -144,7 +168,7 @@ En **Kommo** (lo hace Gina o quien administre la cuenta):
 
 `cambiosDeLaSemana.test.js`, `funcionCambiosSemana.test.js`,
 `envioDeCambios.test.js`, `funcionCambiosMiercoles.test.js`,
-`pantallasCambiosSemana.test.jsx`. Incluyen una prueba con el lector REAL de la
+`pantallasCambiosSemana.test.jsx` (también el link fijo), `sincroniaDeProteinas.test.js`. Incluyen una prueba con el lector REAL de la
 hoja (`leerCambioDePack`) y la de `[object Object]`.
 
 ## Pendiente

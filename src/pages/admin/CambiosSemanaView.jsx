@@ -3,6 +3,7 @@ import { RefreshCw, Link2, Copy, CheckCircle2, Clock, AlertTriangle } from 'luci
 import { auth } from '../../firebase/config';
 import AdminPageHeader from '../../components/admin/AdminPageHeader';
 import EnvioKommo from '../../components/admin/EnvioKommo';
+import LinksFijos from '../../components/cambios/LinksFijos';
 import usePedidosDeFechas from '../../hooks/usePedidosDeFechas';
 import { useSubstitutions } from '../../hooks/useSubstitutions';
 import { useAuth } from '../../context/AuthContext';
@@ -120,6 +121,8 @@ export default function CambiosSemanaView() {
                 ]}
                 gradient="from-orange-500 via-amber-500 to-yellow-500"
             />
+
+            <LinksFijos />
 
             <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex flex-wrap items-end gap-4">
                 <label className="text-sm font-semibold text-gray-700">

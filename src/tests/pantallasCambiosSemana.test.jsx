@@ -7,7 +7,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
  * Las dos pantallas del link de cambios, usadas como las usaría una persona.
  */
 
-const estado = vi.hoisted(() => ({ enviado: null, pedidos: [] }));
+const estado = vi.hoisted(() => ({ enviado: null, pedidos: [], opciones: [], buscado: null }));
 
 vi.mock('../firebase/config', () => ({ db: {}, auth: { currentUser: { getIdToken: async () => 't' } }, storage: {} }));
 vi.mock('../components/Navbar', () => ({ default: () => null }));
@@ -45,6 +45,12 @@ beforeEach(() => {
     globalThis.fetch = vi.fn(async (_url, { body }) => {
         const cuerpo = JSON.parse(body);
         if (cuerpo.accion === 'guardar') { estado.enviado = cuerpo; return { ok: true, json: async () => ({ ok: true }) }; }
+        if (cuerpo.accion === 'buscar') {
+            estado.buscado = cuerpo;
+            return cuerpo.nombre === 'Ana'
+                ? { ok: true, json: async () => ({ opciones: estado.opciones }) }
+                : { ok: false, json: async () => ({ error: 'No encontramos un pedido con ese número y ese nombre para esta semana.' }) };
+        }
         if (cuerpo.accion === 'generar') {
             return { ok: true, json: async () => ({ links: cuerpo.pedidos.map(p => ({ id: p.id, url: `https://bk/cambios/${p.id}` })) }) };
         }
@@ -54,6 +60,7 @@ beforeEach(() => {
 
 const { default: CambiosSemanaPage } = await import('../pages/CambiosSemanaPage');
 const { default: CambiosSemanaView } = await import('../pages/admin/CambiosSemanaView');
+const { default: BuscarCambiosPage } = await import('../pages/BuscarCambiosPage');
 const { proximoCiclo } = await import('../utils/envioDeCambios');
 
 describe('la página del cliente', () => {
@@ -100,3 +107,44 @@ describe('la pantalla del panel', () => {
         expect(screen.getByText('Kommo: 2')).toBeTruthy();
     });
 });
+
+describe('el link fijo /cambios', () => {
+    const abrir = async () => {
+        await act(async () => {
+            render(<MemoryRouter initialEntries={['/cambios']}><Routes>
+                <Route path="/cambios" element={<BuscarCambiosPage />} />
+                <Route path="/cambios/:codigo" element={<CambiosSemanaPage />} />
+            </Routes></MemoryRouter>);
+        });
+        fireEvent.change(screen.getByLabelText('Tu número de WhatsApp'), { target: { value: '8811 2233' } });
+    };
+
+    it('con un solo pack lo lleva directo a su menú para cambiar', async () => {
+        estado.opciones = [{ pack: 'Pack Mensual Bajo en Calorías', fecha: '2026-10-03', ruta: '/cambios/abc' }];
+        await abrir();
+        fireEvent.change(screen.getByLabelText('Tu nombre'), { target: { value: 'Ana' } });
+        await act(async () => { fireEvent.click(screen.getByText('Ver mi menú')); });
+        expect(estado.buscado).toMatchObject({ telefono: '8811 2233', nombre: 'Ana' });
+        expect(screen.getByText('¡Hola, Ana! 👋')).toBeTruthy();
+    });
+
+    it('con dos packs pregunta cuál', async () => {
+        estado.opciones = [
+            { pack: 'Pack Keto', fecha: '2026-10-03', ruta: '/cambios/uno' },
+            { pack: 'Pack Vegetariano', fecha: '2026-10-05', ruta: '/cambios/dos' }
+        ];
+        await abrir();
+        fireEvent.change(screen.getByLabelText('Tu nombre'), { target: { value: 'Ana' } });
+        await act(async () => { fireEvent.click(screen.getByText('Ver mi menú')); });
+        expect(screen.getByText('¿Qué pack querés cambiar?')).toBeTruthy();
+        expect(screen.getByText('Pack Vegetariano')).toBeTruthy();
+    });
+
+    it('si no lo encuentra, lo dice sin mostrar nada de nadie', async () => {
+        await abrir();
+        fireEvent.change(screen.getByLabelText('Tu nombre'), { target: { value: 'Pedro' } });
+        await act(async () => { fireEvent.click(screen.getByText('Ver mi menú')); });
+        expect(screen.getByRole('alert').textContent).toMatch(/No encontramos/);
+    });
+});
+
