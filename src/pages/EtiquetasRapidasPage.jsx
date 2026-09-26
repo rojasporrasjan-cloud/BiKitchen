@@ -89,7 +89,21 @@ const CALIBRACION_BIKITCHEN = {
     offsetXmm: 3.5,
     offsetYmm: 3,
     speed: 5,
-    interLabelDelayMs: 250
+
+    // LA PAUSA ENTRE ETIQUETAS VA EN AUTOMÁTICO, NO EN LOS 250 ms DE LA COMPU.
+    //
+    // "por alguna razón me saca 3 en lugar de 5" — Jan, 26 set 2026.
+    //
+    // Una etiqueta de 25 mm tarda 1.389 ms en salir del rodillo. Con la pausa
+    // fijada en 250 ms se le manda la siguiente cuando la anterior todavía está
+    // imprimiendo, la impresora se queda sin memoria y pierde etiquetas. Es el
+    // mismo problema que ya documenta printerSettings.js: "de un lote de 11
+    // salieron 9 y la décima quedó cortada".
+    //
+    // En 0, `tiempoDeImpresionMs()` la calcula según el alto: 1.839 ms para
+    // este rollo. Sale más lento —unos 2 s por etiqueta— pero salen todas, que
+    // es lo único que importa cuando alguien está esperando para empacar.
+    interLabelDelayMs: 0
 };
 
 /** El vencimiento de siempre: una semana. Se puede cambiar antes de imprimir. */
@@ -154,11 +168,16 @@ export default function EtiquetasRapidasPage() {
         // algo; si no, pisaría la calibración de la casa con 30 × 20 mm.
         let guardada = null;
         try { guardada = JSON.parse(localStorage.getItem('bikitchen_printer_settings') || 'null'); } catch { /* sin storage */ }
-        adaptador.settings = { ...DEFAULT_SETTINGS, ...CALIBRACION_BIKITCHEN, ...(guardada || {}) };
+        // La pausa entre etiquetas la manda SIEMPRE esta pantalla, venga de
+        // donde venga el resto: en el telefono los 250 ms de la compu hacen
+        // que se pierdan etiquetas a media tira.
+        const conPausaPropia = (s) => ({ ...s, interLabelDelayMs: 0 });
+
+        adaptador.settings = conPausaPropia({ ...DEFAULT_SETTINGS, ...CALIBRACION_BIKITCHEN, ...(guardada || {}) });
         prepareLogo().then(l => { if (vivo && l) adaptador.logo = l; }).catch(() => { /* sale sin logo */ });
         loadSharedSettings()
-            .then(s => { if (vivo && s) adaptador.settings = { ...adaptador.settings, ...s }; })
-            .catch(() => { /* pide admin: se queda con la copia de acá */ });
+            .then(s => { if (vivo && s) adaptador.settings = conPausaPropia({ ...adaptador.settings, ...s }); })
+            .catch(() => { /* pide admin: se queda con la copia de aca */ });
 
         return () => { vivo = false; };
     }, []);
@@ -253,6 +272,7 @@ export default function EtiquetasRapidasPage() {
             return;
         }
         const total = loQueSale.platos.length;
+        let salieron = 0;
         setEstado({ tipo: 'enviando', texto: `Enviando ${total}…` });
         const fecha = vence ? formatExpirationDate(vence) : '';
         try {
@@ -265,10 +285,19 @@ export default function EtiquetasRapidasPage() {
                     protein: loQueSale.platos[i],
                     expirationDate: fecha
                 });
+                salieron++;
             }
             setEstado({ tipo: 'ok', texto: `Listo — salieron ${total}` });
         } catch (err) {
-            setEstado({ tipo: 'error', texto: err?.message || 'Falló el envío' });
+            // Decir EN CUÁL se quedó: si de 5 salieron 3, quien empaca necesita
+            // saber que le faltan 2 y cuáles, no solo que "falló".
+            const faltan = total - salieron;
+            setEstado({
+                tipo: 'error',
+                texto: salieron > 0
+                    ? `Salieron ${salieron} de ${total}. Faltan ${faltan} — volvé a darle y saca solo esas.`
+                    : (err?.message || 'Falló el envío')
+            });
         }
     }, [loQueSale, vence]);
 
