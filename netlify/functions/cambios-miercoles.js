@@ -28,7 +28,9 @@
  *
  * Variables en Netlify (además de CAMBIOS_SECRETO, KOMMO_SUBDOMINIO, KOMMO_TOKEN):
  *   KOMMO_BOT_CAMBIOS            → id del bot con la plantilla "menú + cambios"
- *   KOMMO_CAMPO_LINK_CAMBIOS     → id del campo del contacto donde va el link
+ *   KOMMO_CAMPO_LINK_CAMBIOS     → opcional: id del campo del contacto donde va el link
+ *                                  personal. Sin él la plantilla usa los links fijos
+ *                                  (bikitchencr.com/cambios y /menu) y el bot igual sale.
  *   KOMMO_BOT_RENOVACION         → opcional: bot para la última entrega
  *   KOMMO_CAMPO_AVANCE, KOMMO_CAMPO_PROXIMA_ENTREGA, KOMMO_CAMPO_PACK → opcionales
  */
@@ -82,7 +84,7 @@ const contactoPorTelefono = async (telefono) => {
  */
 export const correr = async ({ ahora = new Date(), modo = process.env.CAMBIOS_ENVIO_AUTOMATICO } = {}) => {
     if (modo !== 'si' && modo !== 'prueba') return { estado: 'apagado' };
-    const faltan = ['CAMBIOS_SECRETO', 'KOMMO_SUBDOMINIO', 'KOMMO_TOKEN', 'KOMMO_BOT_CAMBIOS', 'KOMMO_CAMPO_LINK_CAMBIOS']
+    const faltan = ['CAMBIOS_SECRETO', 'KOMMO_SUBDOMINIO', 'KOMMO_TOKEN', 'KOMMO_BOT_CAMBIOS']
         .filter(v => !process.env[v]);
     if (modo === 'prueba' && !process.env.CAMBIOS_TELEFONO_PRUEBA) faltan.push('CAMBIOS_TELEFONO_PRUEBA');
     if (faltan.length) return { estado: 'sin-configurar', detalle: { faltan } };

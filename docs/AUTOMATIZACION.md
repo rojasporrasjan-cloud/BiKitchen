@@ -145,6 +145,10 @@ En **Netlify → Environment variables**:
 | `CAMBIOS_ENVIO_AUTOMATICO` | `no` (por defecto) · `prueba` · `si` |
 | `CAMBIOS_TELEFONO_PRUEBA` | El número al que manda en modo `prueba` |
 
+**Guía paso a paso de Kommo (para Jan, Gina o Claude en Chrome):
+`docs/KOMMO_CONFIGURACION.md`.** Con los links fijos no hace falta el campo
+"Link cambios"; lo de abajo es para el link personal por cliente.
+
 En **Kommo** (lo hace Gina o quien administre la cuenta):
 1. Crear un campo de contacto de texto, p. ej. "Link cambios". Su id se ve en
    Panel → Listas de Difusión → Enviar por Kommo → *Revisar mi cuenta*.

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ChevronRight, MessageCircle } from 'lucide-react';
 import Navbar from '../components/Navbar';
@@ -33,6 +33,12 @@ export default function BuscarCambiosPage() {
     const [buscando, setBuscando] = useState(false);
     const [error, setError] = useState('');
     const [opciones, setOpciones] = useState(null);
+    const listaRef = useRef(null);
+
+    // Con varios packs la lista queda debajo del botón: que se vea sin buscarla
+    useEffect(() => {
+        if (opciones) listaRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    }, [opciones]);
 
     const listo = telefono.replace(/\D/g, '').length >= 8 && nombre.trim().length >= 2;
 
@@ -94,7 +100,7 @@ export default function BuscarCambiosPage() {
                     </form>
 
                     {opciones && (
-                        <section className="mt-6" aria-labelledby="titulo-packs">
+                        <section ref={listaRef} className="mt-6 scroll-mt-24" aria-labelledby="titulo-packs">
                             <h2 id="titulo-packs" className="text-lg font-bold text-gray-900 mb-3">¿Qué pack querés cambiar?</h2>
                             <ul className="space-y-3">
                                 {opciones.map(o => (

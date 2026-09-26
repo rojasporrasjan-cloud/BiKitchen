@@ -120,4 +120,13 @@ describe('el envío automático del miércoles', () => {
         process.env.KOMMO_BOT_CAMBIOS = bot;
         expect(r).toEqual({ estado: 'sin-configurar', detalle: { faltan: ['KOMMO_BOT_CAMBIOS'] } });
     });
+
+    it('sin el campo del link igual lanza el bot: la plantilla usa los links fijos', async () => {
+        const campo = process.env.KOMMO_CAMPO_LINK_CAMBIOS;
+        delete process.env.KOMMO_CAMPO_LINK_CAMBIOS;
+        const r = await correr({ ahora: MIERCOLES, modo: 'si' });
+        process.env.KOMMO_CAMPO_LINK_CAMBIOS = campo;
+        expect(r.estado).toBe('enviado');
+        expect(bots().length).toBeGreaterThan(0);
+    });
 });
