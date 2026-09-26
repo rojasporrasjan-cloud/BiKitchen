@@ -34,7 +34,7 @@ import { initializeApp, getApps, getApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import {
-    loQueSePuedeCambiar, validarPedidoDeCambios, cambioParaGuardar,
+    loQueSePuedeCambiar, validarPedidoDeCambios, cambioParaGuardar, loGuardadoParaElLink,
     estaCerrada, horaLimiteDe, horaLimiteEnPalabras
 } from '../../src/utils/cambiosDeLaSemana.js';
 import { entregasDelPedido } from '../../src/utils/proteinasPorEntrega.js';
@@ -145,8 +145,9 @@ const ver = async ({ codigo }) => {
         cerrada: estaCerrada(fecha),
         permitido,
         // El detalle del link, no el texto de la hoja: ese lo puede haber
-        // escrito Gina y no es del cliente.
-        guardado: pedido.cambiosDelLink?.[fecha] || null
+        // escrito Gina y no es del cliente. En proteínas, lo guardado para la
+        // entrega (lo que va a cocinar la hoja).
+        guardado: loGuardadoParaElLink(pedido, fecha, permitido)
     });
 };
 

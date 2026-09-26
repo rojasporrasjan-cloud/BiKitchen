@@ -293,6 +293,29 @@ export const moverProteinasConLaFecha = (mapa = {}, { fechaActual, fechaNueva, t
     return nuevo;
 };
 
+/**
+ * Las listas elegidas cuando se reescribe el calendario ENTERO (Pedidos →
+ * "Entregas programadas"), o null si no hay que tocar nada.
+ *
+ * Ahí no se dice "moví esta fecha a esta otra": se guarda la lista nueva. Las
+ * fechas que se quitaron se emparejan, en orden, con las que se agregaron: el
+ * sábado 3 que pasó a lunes 5 se lleva sus proteínas. Lo que no tiene pareja
+ * se deja donde estaba: no estorba (esa fecha ya no es entrega) y no se pierde.
+ */
+export const proteinasConElCalendarioNuevo = (mapa, antes = [], despues = []) => {
+    if (!mapa || Object.keys(mapa).length === 0) return null;
+    const quitadas = [...new Set(antes)].filter(f => !despues.includes(f)).sort();
+    const agregadas = [...new Set(despues)].filter(f => !antes.includes(f)).sort();
+    const nuevo = {};
+    let cambio = false;
+    Object.keys(mapa).sort().forEach((f) => {
+        const destino = agregadas[quitadas.indexOf(f)];
+        if (destino && !(destino in mapa)) { nuevo[destino] = mapa[f]; cambio = true; }
+        else nuevo[f] = mapa[f];
+    });
+    return cambio ? nuevo : null;
+};
+
 const ESTADOS_QUE_NO_VAN = ['cancelled', 'cancelado', 'rejected', 'rechazado', 'refunded', 'reembolsado'];
 
 /**

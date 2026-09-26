@@ -52,6 +52,7 @@ import { parseFirebaseDate } from '../../utils/dateUtils';
 import { getClientWhatsAppUrl, getClientTelUrl } from '../../utils/phoneUtils';
 import { formatProteinList } from '../../utils/formatters';
 import { formatFechaCorta } from '../../utils/dateDisplay';
+import { proteinasConElCalendarioNuevo } from '../../utils/proteinasPorEntrega';
 
 // Generar próximas fechas de entrega disponibles (lógica mirror de Checkout)
 /**
@@ -3169,17 +3170,22 @@ Somos de BiKitchen, te contactamos sobre tu pedido ${selectedOrder.displayId}.
                                                                         <button
                                                                             type="button"
                                                                             onClick={async () => {
+                                                                                // Las proteínas elegidas por semana se van con su entrega
+                                                                                const proteinas = proteinasConElCalendarioNuevo(selectedOrder.proteinasPorEntrega, dateList, customDatesList);
+                                                                                const conProteinas = proteinas ? { proteinasPorEntrega: proteinas } : {};
                                                                                 try {
                                                                                     const ref = doc(db, 'pedidos', selectedOrder.id);
                                                                                     await updateDoc(ref, {
                                                                                         fechas_entrega: customDatesList,
                                                                                         fecha_entrega: customDatesList[0] || null,
+                                                                                        ...conProteinas,
                                                                                         updatedAt: new Date().toISOString()
                                                                                     });
                                                                                     setSelectedOrder(prev => ({
                                                                                         ...prev,
                                                                                         fechas_entrega: customDatesList,
-                                                                                        fecha_entrega: customDatesList[0] || null
+                                                                                        fecha_entrega: customDatesList[0] || null,
+                                                                                        ...conProteinas
                                                                                     }));
                                                                                     setEditingDatesOrder(false);
                                                                                     alert('¡Fechas de entrega actualizadas exitosamente!');

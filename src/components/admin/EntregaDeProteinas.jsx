@@ -37,6 +37,8 @@ export default function EntregaDeProteinas({ fila, listaSugerencias, onGuardar }
     const cambio = !iguales(escritas, guardada);
     const estado = ESTADO[origen];
     const zona = pedido.zona_envio && pedido.zona_envio !== 'No especificada' ? pedido.zona_envio : '';
+    // Lo que mandó el cliente por el link de cambios de la semana (cambiosDeLaSemana.js)
+    const delLink = pedido.cambiosDelLink?.[fila.fecha]?.origen === 'link-del-cliente' ? pedido.cambiosDelLink[fila.fecha] : null;
 
     const poner = (nueva) => setValores(Array.from({ length: Math.max(cuantas, nueva.length) }, (_, i) => nueva[i] || ''));
 
@@ -65,6 +67,15 @@ export default function EntregaDeProteinas({ fila, listaSugerencias, onGuardar }
                     {estado.texto}
                 </span>
             </header>
+
+            {delLink && (
+                <p className="mb-3 text-xs text-blue-900 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+                    El cliente respondió por el link
+                    {delLink.guardadoEn ? ` el ${new Date(delLink.guardadoEn).toLocaleDateString('es-CR', { weekday: 'long', day: 'numeric' })}` : ''}.
+                    {delLink.notas ? ` Nota: "${delLink.notas}"` : ''}
+                    {' '}Si cambiás algo acá, al abrir el link va a ver lo tuyo.
+                </p>
+            )}
 
             {!imprimeEnHoja(pedido) && (
                 <p className="mb-3 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex gap-1.5">

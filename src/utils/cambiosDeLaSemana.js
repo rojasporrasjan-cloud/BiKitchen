@@ -22,7 +22,7 @@
  */
 
 import { mapPackNameToMenuKey } from './packClassification';
-import { esPackDeProteinas, cuantasProteinas, entregasDelPedido } from './proteinasPorEntrega';
+import { esPackDeProteinas, cuantasProteinas, entregasDelPedido, elegidasPara } from './proteinasPorEntrega';
 import { MAX_CAMBIOS_POR_PACK } from './limiteDeCambios';
 
 /** 8 p. m. en Costa Rica (UTC-6, sin horario de verano). */
@@ -261,6 +261,26 @@ const quitarTexto = (base, pedazo) => {
  * un campo mal escrito no falla, se guarda en otro lado y la hoja no lo ve.
  * Es la misma regla de `cambioDeProteinas`.
  */
+/**
+ * Lo que el link muestra ya marcado al abrirlo.
+ *
+ * En un pack de proteínas manda lo guardado PARA ESA ENTREGA
+ * (`proteinasPorEntrega`), no lo que el cliente mandó por el link: Jan o Gina
+ * pueden haberlas elegido o cambiado después desde "Proteínas de la semana", y
+ * el cliente tiene que ver lo mismo que va a cocinar la hoja. Solo las que
+ * están en la lista de la semana (escritas como en la lista): una que no está
+ * no se puede ver ni quitar con los botones y trabaría el "Elegiste N de N".
+ */
+export const loGuardadoParaElLink = (pedido, fecha, permitido) => {
+    const delLink = pedido?.cambiosDelLink?.[fecha] || null;
+    if (permitido?.tipo !== 'proteinas') return delLink;
+    const elegidas = elegidasPara(pedido, fecha) || [];
+    if (!delLink && elegidas.length === 0) return null;
+    const comoEnLaLista = new Map((permitido.proteinas?.disponibles || []).map(d => [texto(d).toLowerCase(), d]));
+    const proteinas = elegidas.map(p => comoEnLaLista.get(texto(p).toLowerCase())).filter(Boolean);
+    return { ...(delLink || {}), proteinas };
+};
+
 export const cambioParaGuardar = (pedido, fecha, limpio, { ahora = new Date() } = {}) => {
     if (!fecha || !limpio) return null;
 

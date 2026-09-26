@@ -12,7 +12,7 @@
  */
 
 import { loQueSePuedeCambiar } from './cambiosDeLaSemana';
-import { entregasDelPedido } from './proteinasPorEntrega';
+import { entregasDelPedido, esPackDeProteinas, elegidasPara } from './proteinasPorEntrega';
 
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
@@ -71,7 +71,13 @@ export const pedidosParaElLink = (pedidos = [], fechas = [], menus, sustitucione
 };
 
 /** ¿Ya contestó para esa entrega? Devuelve lo que eligió, o null. */
-export const respuestaDe = (pedido, fecha) => pedido?.cambiosDelLink?.[fecha] || null;
+export const respuestaDe = (pedido, fecha) => {
+    const r = pedido?.cambiosDelLink?.[fecha] || null;
+    if (!r || !esPackDeProteinas(pedido)) return r;
+    // Las proteínas que valen son las guardadas para esa entrega: pudieron
+    // cambiarse después desde "Proteínas de la semana".
+    return { ...r, proteinas: elegidasPara(pedido, fecha) || [] };
+};
 
 const soloDigitos = (t) => {
     const d = String(t || '').replace(/\D/g, '');

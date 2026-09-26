@@ -69,6 +69,13 @@ la cocina en silencio.
 
 ### `pedido.proteinasPorEntrega` → `{ 'AAAA-MM-DD': [proteínas] }`
 - Ya existía (`proteinasPorEntrega.js`). Los packs de proteínas guardan ahí.
+- **Es LA lista de esa entrega**, la elija el cliente por el link o Jan/Gina en
+  "Proteínas de la semana". El link muestra esta (`loGuardadoParaElLink`), y el
+  panel también (`respuestaDe`); `cambiosDelLink[fecha].proteinas` es solo la
+  constancia de lo que mandó el cliente. Lo último que se guarda es lo que va.
+- Al reescribir las fechas en Pedidos → "Entregas programadas", la lista se
+  va con su entrega (`proteinasConElCalendarioNuevo`).
+  Test de punta a punta: `sincroniaDeProteinas.test.js`.
 
 ### `envios_cambios/{sábado}` (colección nueva)
 - Constancia del envío automático: `estado` = `enviado` | `prueba` |
