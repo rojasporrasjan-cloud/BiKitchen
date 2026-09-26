@@ -48,6 +48,8 @@ const CalculadoraAhorroPage = lazyWithRetry(() => import('./pages/CalculadoraAho
 const ReferidosPage = lazyWithRetry(() => import('./pages/ReferidosPage'));
 const MiImpactoPage = lazyWithRetry(() => import('./pages/MiImpactoPage'));
 const MisPedidosPage = lazyWithRetry(() => import('./pages/MisPedidosPage'));
+// El link de cambios que llega por WhatsApp cada miércoles
+const CambiosSemanaPage = lazyWithRetry(() => import('./pages/CambiosSemanaPage'));
 const GiftCardsPage = lazyWithRetry(() => import('./pages/GiftCardsPage'));
 const FidelidadPage = lazyWithRetry(() => import('./pages/FidelidadPage'));
 const RewardStore = lazyWithRetry(() => import('./pages/RewardStore'));
@@ -87,6 +89,8 @@ const WhatsAppImportView = lazyWithRetry(() => import('./pages/admin/WhatsAppImp
 const MonthlyPacksView = lazyWithRetry(() => import('./pages/admin/MonthlyPacksView'));
 const ProteinasSemanalesView = lazyWithRetry(() => import('./pages/admin/ProteinasSemanalesView'));
 const BroadcastView = lazyWithRetry(() => import('./pages/admin/BroadcastView'));
+// El link de cambios del miércoles: quién lo recibe y qué contestó (docs/AUTOMATIZACION.md)
+const CambiosSemanaView = lazyWithRetry(() => import('./pages/admin/CambiosSemanaView'));
 const PointsAuditView = lazyWithRetry(() => import('./pages/admin/PointsAuditView'));
 const PrinterView = lazyWithRetry(() => import('./pages/admin/PrinterView'));
 const DriverPortalView = lazyWithRetry(() => import('./pages/driver/DriverPortalView'));
@@ -204,7 +208,7 @@ function PublicRouteExtras() {
       <CartDrawer />
       {!hideFloating && <WhatsAppButton />}
       {/* {!hideFloating && <AISommelier />} */}
-      <PWAPrompt />
+      {!/^\/cambios\//.test(pathname) && <PWAPrompt />}
       {/* Christmas effects y banner deshabilitados */}
     </>
   );
@@ -249,6 +253,7 @@ function AnimatedRoutes() {
             <Route path="/impacto" element={<MiImpactoPage />} />
             <Route path="/mis-pedidos" element={<MisPedidosPage />} />
             <Route path="/historial" element={<MisPedidosPage />} />
+            <Route path="/cambios/:codigo" element={<CambiosSemanaPage />} />
             <Route path="/gift-cards" element={<GiftCardsPage />} />
             <Route path="/tarjetas-regalo" element={<GiftCardsPage />} />
             <Route path="/regalar" element={<GiftCardsPage />} />
@@ -307,6 +312,7 @@ function AnimatedRoutes() {
               <Route path="monthly-packs" element={<MonthlyPacksView />} />
               <Route path="proteinas-semanales" element={<ProteinasSemanalesView />} />
               <Route path="broadcast" element={<BroadcastView />} />
+              <Route path="cambios-semana" element={<CambiosSemanaView />} />
               <Route path="points-audit" element={<PointsAuditView />} />
               <Route path="impresion" element={<PrinterView />} />
             </Route>

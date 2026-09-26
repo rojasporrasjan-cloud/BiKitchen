@@ -154,6 +154,10 @@ export const WHATSAPP_MESSAGES = {
     // ============================================
     QUIERO_PEDIR: 'Quiero pedir 🛒',
 
+    // Desde la página de cambios de la semana (/cambios/:codigo), cuando el
+    // link no abre o ya se cerró la hora límite.
+    CAMBIOS_SEMANA: 'Hola, quiero hacer un cambio en mi pack de esta semana 🍽️',
+
     // Pack y plato específicos: arrancan con la keyword exacta para que el bot
     // entre al flujo de pedido, y recién después va el detalle para la persona
     // que atiende.

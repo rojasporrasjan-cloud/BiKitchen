@@ -101,6 +101,9 @@ export const payloadContacto = (cliente, { camposIds = {}, segmentoId } = {}) =>
     agregar(camposIds.entregasRestantes, cliente.entregasRestantes);
     agregar(camposIds.pack, cliente.planes?.[0] || '');
     agregar(camposIds.zona, cliente.zona || '');
+    // El link personal para elegir los cambios de la semana (envioDeCambios.js).
+    // Solo lo traen los clientes de la pantalla "Cambios de la semana".
+    agregar(camposIds.linkCambios, cliente.linkCambios || '');
 
     const payload = {
         name: cliente.nombre || 'Sin nombre',

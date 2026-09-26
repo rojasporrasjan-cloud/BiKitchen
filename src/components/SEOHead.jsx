@@ -170,6 +170,13 @@ export const SEO_CONFIG = {
         keywords: 'mi cuenta BiKitchen, mis pedidos, perfil usuario',
         url: `${BASE_URL}/mi-cuenta`
     },
+    // Link personal que llega por WhatsApp: noindex, y bloqueada en robots.txt
+    cambiosSemana: {
+        title: 'Tus cambios de la semana — BiKitchen',
+        description: 'Elegí los cambios de tu pack de esta semana. Tu pedido se actualiza solo y la cocina de BiKitchen ya lo tiene.',
+        keywords: 'cambios pack, menú semanal BiKitchen',
+        url: `${BASE_URL}/cambios`
+    },
     checkout: {
         title: 'Finalizar Pedido — BiKitchen',
         description: 'Completá tu pedido de comida saludable. Entrega rápida y pago seguro con tarjeta o SINPE Móvil.',

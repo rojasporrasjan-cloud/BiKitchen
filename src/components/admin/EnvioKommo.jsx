@@ -154,7 +154,7 @@ export default function EnvioKommo({ destinatarios, segmentoId }) {
                                     <span className="flex-1 text-gray-700">
                                         {c.nombre} <span className="text-gray-400">#{c.id}</span>
                                     </span>
-                                    {['avance', 'proximaEntrega', 'entregasRestantes', 'pack', 'zona'].map((clave) => (
+                                    {['avance', 'proximaEntrega', 'entregasRestantes', 'pack', 'zona', 'linkCambios'].map((clave) => (
                                         <button
                                             key={clave}
                                             onClick={() => usarCampo(clave, c.id)}
