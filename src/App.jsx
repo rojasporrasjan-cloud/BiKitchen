@@ -35,6 +35,9 @@ const PromocionesPage = lazyWithRetry(() => import('./pages/PromocionesPage'));
 const NosotrosPage = lazyWithRetry(() => import('./pages/NosotrosPage'));
 const ComoFuncionaPage = lazyWithRetry(() => import('./pages/ComoFuncionaPage'));
 const LoginPage = lazyWithRetry(() => import('./pages/LoginPage'));
+// Etiquetas de cocina: pantalla suelta, sin login, protegida por PIN.
+// No lee pedidos — solo el menu de la semana y el catalogo de individuales.
+const EtiquetasRapidasPage = lazyWithRetry(() => import('./pages/EtiquetasRapidasPage'));
 const TerminosPage = lazyWithRetry(() => import('./pages/TerminosPage'));
 const PrivacidadPage = lazyWithRetry(() => import('./pages/PrivacidadPage'));
 const CookiesPage = lazyWithRetry(() => import('./pages/CookiesPage'));
@@ -255,6 +258,7 @@ function AnimatedRoutes() {
             <Route path="/tienda-vip" element={<RewardStore />} />
             <Route path="/mi-cuenta" element={<MiCuentaPage />} />
             <Route path="/mis-cupones" element={<MisCuponesPage />} />
+            <Route path="/etiquetas" element={<EtiquetasRapidasPage />} />
             <Route path="/acceso-denegado" element={<AccesoDenegadoPage />} />
 
             {/* Tilopay payment return */}
@@ -328,7 +332,11 @@ function App() {
 
 function AppContent() {
   const location = useLocation();
-  const isAdminRoute = location.pathname.startsWith('/admin');
+  // Pantallas de herramienta: van sin el cascaron del sitio —sin barra de abajo,
+  // sin boton de WhatsApp, sin banners—. '/etiquetas' es la de la cocina: la
+  // barra de abajo le tapaba el boton de imprimir en el telefono.
+  const isAdminRoute = location.pathname.startsWith('/admin')
+    || location.pathname.startsWith('/etiquetas');
 
   // Capturar fuente de tráfico (UTMs, Referrer) en cada navegación
   useEffect(() => {

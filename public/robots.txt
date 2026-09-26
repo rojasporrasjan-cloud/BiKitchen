@@ -11,6 +11,9 @@ Sitemap: https://www.bikitchencr.com/sitemap.xml
 Disallow: /admin
 Disallow: /admin/
 
+# Herramienta interna de cocina — no indexar
+Disallow: /etiquetas
+
 # Páginas privadas de usuario — no indexar
 Disallow: /mi-cuenta
 Disallow: /checkout
