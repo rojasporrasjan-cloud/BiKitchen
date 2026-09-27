@@ -4,6 +4,25 @@
 > Se puede pegar entera en Claude en Chrome: está escrita como instrucciones.
 > El detalle técnico está en `docs/AUTOMATIZACION.md`.
 
+## Estado (26 de setiembre de 2026)
+
+| Pieza | Estado |
+|---|---|
+| Plantilla WhatsApp `menu_y_cambios` (id **84238**, Utilidad, variable "Nombre del contacto") | En revisión de Meta |
+| Salesbot "Menú y cambios" (id **115866**) | Guardado VACÍO y sin disparador. Falta el paso Mensaje cuando Meta apruebe |
+| Netlify `KOMMO_BOT_CAMBIOS` | Va `115866` |
+| Página (`/cambios`, `/menu`) | Lista en `bk-solo-automatizacion`, falta publicar |
+
+Ojo al editar el bot: al guardar, Kommo ofrece agregar un disparador ("Cuando se
+inicia un chat por mensaje entrante…"). **Cancelarlo siempre**: si el bot tiene
+disparador, le escribiría a gente que no tiene entrega.
+
+La cuenta no tenía plantillas aprobadas por Meta (29 plantillas "General", que
+solo sirven dentro de las 24 h después de que el cliente escribe). Los bots
+activos "Bot- Bievenida" y "Seguimiento" y las reglas de "Clientes Frecuentes"
+son del embudo de ventas: no se tocan. La Difusión a "Clientes Frecuentes" se
+descartó porque incluye packs vencidos (les llegaría "tu próxima entrega").
+
 ## Qué se quiere lograr
 
 Cada miércoles, cada cliente con entrega el sábado o el lunes recibe por
