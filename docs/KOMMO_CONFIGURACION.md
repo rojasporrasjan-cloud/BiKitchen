@@ -4,14 +4,37 @@
 > Se puede pegar entera en Claude en Chrome: está escrita como instrucciones.
 > El detalle técnico está en `docs/AUTOMATIZACION.md`.
 
-## Estado (26 de setiembre de 2026)
+## Estado (28 de setiembre de 2026)
 
-| Pieza | Estado |
-|---|---|
-| Plantilla WhatsApp `menu_y_cambios` (id **84238**, Utilidad, variable "Nombre del contacto") | En revisión de Meta |
-| Salesbot "Menú y cambios" (id **115866**) | Guardado VACÍO y sin disparador. Falta el paso Mensaje cuando Meta apruebe |
-| Netlify `KOMMO_BOT_CAMBIOS` | Va `115866` |
-| Página (`/cambios`, `/menu`) | Lista en `bk-solo-automatizacion`, falta publicar |
+**Plantillas de WhatsApp** (Utilidad, Español, variable {{1}} = "Nombre del contacto"):
+
+| Plantilla | id | Estado | Bot que la manda | id del bot |
+|---|---|---|---|---|
+| `menu_y_cambios` | 84238 | ✅ Aprobada | "Menú y cambios" | **115866** — con su paso Mensaje |
+| `pedido_confirmado` | 84306 | ✅ Aprobada | "Pedido confirmado" | 115992 — vacío |
+| `pedido_en_camino` | 84308 | ✅ Aprobada | "Pedido en camino" | 115994 — vacío |
+| `recordatorio_pago` | 84310 | ✅ Aprobada | "Recordatorio de pago" | 115996 — vacío |
+| `renovacion_pack` | 84312 | En revisión | "Renovación de pack" | 115998 — vacío |
+
+Todos los bots están **sin disparador**: los lanza el sistema de BiKitchen. En
+Netlify, `KOMMO_BOT_CAMBIOS` = `115866` (y `KOMMO_BOT_RENOVACION` = `115998`
+cuando su plantilla esté aprobada y tenga el paso Mensaje).
+
+`pedido_confirmado` y `pedido_en_camino` mandan a /mis-pedidos: **no se usan**
+hasta que los clientes de WhatsApp vean ahí su pedido ("conectar mi cuenta").
+
+**Campos del contacto:** "Link cambios" (texto, id 2457274), "Pack" (texto, id 2457276).
+
+**Embudos** (etapas en orden):
+- "Embudo de ventas" (13776399): Leads Entrantes · contactado · seguimiento
+  (106430555) · cliente interesado · seguimiento (106430483) · esperando pago ·
+  Logrado con éxito · Venta Perdido. **Hay dos etapas "seguimiento"**: antes de
+  mover leads ahí hay que saber cuál dispara el bot "Seguimiento".
+- "Clientes Frecuentes" (13802183): Leads Entrantes · pack semanal · pack
+  mensual · two pack · packs individuales · Logrado con éxito · Ventas Perdidos.
+
+Kommo no deja guardar un bot nuevo vacío: se le agrega un paso interno, se
+borra y recién ahí se guarda.
 
 Ojo al editar el bot: al guardar, Kommo ofrece agregar un disparador ("Cuando se
 inicia un chat por mensaje entrante…"). **Cancelarlo siempre**: si el bot tiene
