@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-    proximoCiclo, pedidosParaElLink, respuestaDe, destinatarioKommo, indiceDeTelefonos, nombreCalza, buscarEnIndice, cicloEnCostaRica
+    proximoCiclo, pedidosParaElLink, respuestaDe, destinatarioKommo, destinatariosUnicos, indiceDeTelefonos, nombreCalza, buscarEnIndice, cicloEnCostaRica
 } from '../utils/envioDeCambios';
 
 const MENUS = {
@@ -94,5 +94,28 @@ describe('el link fijo /cambios', () => {
     it('el ciclo se calcula con la hora de Costa Rica aunque el servidor esté en UTC', () => {
         // Miércoles 30 set, 7 p. m. en CR = jueves 1 oct 01:00 UTC: sigue siendo el ciclo del sábado 3
         expect(cicloEnCostaRica(new Date('2026-10-01T01:00:00Z')).sabado).toBe('2026-10-03');
+    });
+});
+
+describe('que no le llegue a quien no tiene nada que ver', () => {
+    const item = (telefono, extra = {}) => ({ pedido: mensual({ telefono, ...extra }), fecha: '2026-10-03', ultima: false });
+
+    it('un pedido con teléfono de relleno (8888-8888) no recibe mensaje', () => {
+        expect(destinatarioKommo(item('8888-8888'), 'https://bk/cambios/x')).toBeNull();
+        expect(destinatarioKommo(item('80000007'), 'https://bk/cambios/x')).toBeNull();
+        expect(destinatarioKommo(item('8811-2233'), 'https://bk/cambios/x')).not.toBeNull();
+    });
+
+    it('el link fijo tampoco encuentra pedidos por un teléfono de relleno', () => {
+        const indice = indiceDeTelefonos([{ pedido: { id: 'a', cliente: 'Ana Mora', telefono: '8888-8888' }, fecha: '2026-10-03' }]);
+        expect(indice).toEqual({});
+    });
+
+    it('dos pedidos de la misma persona: UN mensaje, y si uno es su última entrega, sale como renovación', () => {
+        const d1 = destinatarioKommo(item('8811-2233', { id: 'p1' }), 'https://bk/cambios/1');
+        const d2 = { ...destinatarioKommo(item('+506 8811 2233', { id: 'p2' }), 'https://bk/cambios/2'), ultima: true };
+        const unicos = destinatariosUnicos([d1, d2, null]);
+        expect(unicos).toHaveLength(1);
+        expect(unicos[0]).toMatchObject({ telefono: '88112233', linkCambios: 'https://bk/cambios/1', ultima: true });
     });
 });

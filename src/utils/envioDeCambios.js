@@ -14,6 +14,7 @@
 import { loQueSePuedeCambiar } from './cambiosDeLaSemana';
 import { entregasDelPedido, esPackDeProteinas, elegidasPara } from './proteinasPorEntrega';
 import { consultasParaFechas } from './consultaPorFechas';
+import { esTelefonoDeRelleno } from './telefonoRelleno';
 
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
@@ -93,7 +94,9 @@ const soloDigitos = (t) => {
  */
 export const destinatarioKommo = ({ pedido, fecha, ultima }, url) => {
     const telefono = soloDigitos(pedido?.telefono);
-    if (!telefono || !url) return null;
+    // 8888-8888 y compañía se anotan cuando el pedido no trae teléfono: ese
+    // número puede ser de una persona real que no tiene nada que ver con BiKitchen
+    if (!telefono || esTelefonoDeRelleno(telefono) || !url) return null;
     const entregas = entregasDelPedido(pedido);
     const numero = entregas.indexOf(fecha) + 1;
     return {
@@ -113,6 +116,22 @@ export const destinatarioKommo = ({ pedido, fecha, ultima }, url) => {
         linkCambios: url,
         ultima: !!ultima
     };
+};
+
+/**
+ * UN mensaje por persona. Un cliente con dos pedidos esa semana (dos packs,
+ * o un pack y unos individuales) recibía el mensaje dos veces. Se queda el
+ * primero; si alguno es su última entrega, sale como renovación, que también
+ * lleva el link.
+ */
+export const destinatariosUnicos = (destinatarios = []) => {
+    const porTelefono = new Map();
+    destinatarios.filter(Boolean).forEach((d) => {
+        const previo = porTelefono.get(d.telefono);
+        if (!previo) porTelefono.set(d.telefono, d);
+        else if (d.ultima && !previo.ultima) porTelefono.set(d.telefono, { ...previo, ultima: true });
+    });
+    return [...porTelefono.values()];
 };
 
 // ── El link FIJO: bikitchencr.com/cambios ─────────────────────────────────
@@ -151,7 +170,7 @@ export const indiceDeTelefonos = (lista = []) => {
     const indice = {};
     lista.forEach(({ pedido, fecha }) => {
         const tel = soloDigitos(pedido?.telefono);
-        if (tel.length !== 8) return;
+        if (tel.length !== 8 || esTelefonoDeRelleno(tel)) return;
         (indice[tel] = indice[tel] || []).push({
             id: pedido.id,
             fecha,

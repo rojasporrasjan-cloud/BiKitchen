@@ -8,7 +8,7 @@ import usePedidosDeFechas from '../../hooks/usePedidosDeFechas';
 import { useSubstitutions } from '../../hooks/useSubstitutions';
 import { useAuth } from '../../context/AuthContext';
 import { getOfficialMenus } from '../../utils/firestoreMenus';
-import { proximoCiclo, pedidosParaElLink, respuestaDe, destinatarioKommo } from '../../utils/envioDeCambios';
+import { proximoCiclo, pedidosParaElLink, respuestaDe, destinatarioKommo, destinatariosUnicos } from '../../utils/envioDeCambios';
 import { horaLimiteEnPalabras, estaCerrada } from '../../utils/cambiosDeLaSemana';
 
 /**
@@ -67,7 +67,7 @@ export default function CambiosSemanaView() {
     const respondieron = lista.filter(i => respuestaDe(i.pedido, i.fecha));
     const ultimas = lista.filter(i => i.ultima);
     const destinatarios = useMemo(
-        () => lista.map(i => destinatarioKommo(i, links[i.pedido.id])).filter(Boolean),
+        () => destinatariosUnicos(lista.map(i => destinatarioKommo(i, links[i.pedido.id]))),
         [lista, links]
     );
 

@@ -38,7 +38,7 @@
 import { initializeApp, getApps, getApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { codigoPara } from './cambios-semana.js';
-import { proximoCiclo, pedidosParaElLink, destinatarioKommo, leerPedidosDelCiclo } from '../../src/utils/envioDeCambios.js';
+import { proximoCiclo, pedidosParaElLink, destinatarioKommo, destinatariosUnicos, leerPedidosDelCiclo } from '../../src/utils/envioDeCambios.js';
 import {
     payloadContacto, payloadEjecutarBot, telefonosDeContacto, soloDigitos, enLotes, LOTE_CONTACTOS, LOTE_BOTS
 } from '../../src/utils/kommoPayload.js';
@@ -103,10 +103,11 @@ export const correr = async ({ ahora = new Date(), modo = process.env.CAMBIOS_EN
         db.doc('config/substitutions').get()
     ]);
     const lista = pedidosParaElLink(pedidos, [sabado, lunes], menusSnap.data(), sustSnap.data() || {});
-    let destinatarios = lista
+    const conTelefono = lista
         .map(i => destinatarioKommo(i, `${SITIO}/cambios/${codigoPara(i.pedido.id, i.fecha)}`))
         .filter(Boolean);
-    const sinTelefono = lista.length - destinatarios.length;
+    const sinTelefono = lista.length - conTelefono.length;     // sin número o con uno de relleno
+    let destinatarios = destinatariosUnicos(conTelefono);      // un mensaje por persona
 
     if (modo === 'prueba') {
         const tel = soloDigitos(process.env.CAMBIOS_TELEFONO_PRUEBA);
