@@ -118,6 +118,15 @@ calza, el mensaje es el mismo para "número equivocado" y "nombre equivocado".
    ni correo.
 5. `CAMBIOS_SECRETO` no se cambia una vez en uso: invalida todos los links ya
    mandados.
+6. **Nunca a quien no tiene nada que ver.** Quién recibe lo decide el sistema,
+   nunca Kommo: solo pedidos vivos con entrega ese sábado o lunes, **sin
+   teléfonos de relleno** (8888-8888, 8000-XXXX: `esTelefonoDeRelleno`) y **un
+   mensaje por persona** (`destinatariosUnicos`). Si salen más de 150, no manda
+   nada. En modo `prueba`, solo al número de Jan.
+7. **Los bots de Kommo van SIN disparador.** Kommo mete solo "Cualquier
+   conversación nueva" al guardar un bot, y el editor no lo muestra: después de
+   guardar, confirmarlo en la LISTA de bots. Un bot con mensaje y ese
+   disparador le escribiría a todo el que escriba por primera vez.
 
 ## Cómo lo aplica la cocina (y un límite conocido)
 
