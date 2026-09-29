@@ -66,7 +66,7 @@ beforeEach(() => {
     };
     estado.pedidos = [
         pedido('a', '8811-0001', ['2026-09-19', '2026-09-26', '2026-10-03']),     // sigue: mensaje de cambios
-        pedido('b', '8811-0002', ['2026-09-21', '2026-09-28'])                    // última: renovación
+        pedido('b', '8811-0002', ['2026-09-21', '2026-09-28'])                    // última: también recibe el menú
     ];
 });
 
@@ -78,13 +78,12 @@ describe('el envío automático del miércoles', () => {
         expect(estado.llamadas).toEqual([]);
     });
 
-    it('prendido: le escribe el link a cada uno y lanza el bot que le toca', async () => {
+    it('prendido: le escribe el link a cada uno y a TODOS les lanza el bot del menú (la renovación va aparte)', async () => {
         const r = await correr({ ahora: MIERCOLES, modo: 'si' });
         expect(r.estado).toBe('enviado');
-        expect(r.detalle).toMatchObject({ sabado: '2026-09-26', lunes: '2026-09-28', enviados: 2, renovacion: 1, nuevosEnKommo: 1 });
+        expect(r.detalle).toMatchObject({ sabado: '2026-09-26', lunes: '2026-09-28', enviados: 2, nuevosEnKommo: 1 });
         expect(bots()).toEqual([
-            [{ bot_id: 11, entity_id: 101, entity_type: 'contacts' }],
-            [{ bot_id: 22, entity_id: 5000, entity_type: 'contacts' }]
+            [{ bot_id: 11, entity_id: 101, entity_type: 'contacts' }, { bot_id: 11, entity_id: 5000, entity_type: 'contacts' }]
         ]);
         const patch = estado.llamadas.find(l => l.method === 'PATCH').body[0];
         const link = patch.custom_fields_values.find(c => c.field_id === 900).values[0].value;
@@ -96,6 +95,17 @@ describe('el envío automático del miércoles', () => {
         estado.docs['envios_cambios/2026-09-26'] = { estado: 'enviado' };
         expect((await correr({ ahora: MIERCOLES, modo: 'si' })).estado).toBe('ya-enviado');
         expect(bots()).toEqual([]);
+    });
+
+    it('en prueba, si el número de prueba no tiene pedido, le llega UNA muestra con el link fijo', async () => {
+        process.env.CAMBIOS_TELEFONO_PRUEBA = '8899-0000';
+        estado.kommoContactos = { 88990000: 777 };
+        const r = await correr({ ahora: MIERCOLES, modo: 'prueba' });
+        delete process.env.CAMBIOS_TELEFONO_PRUEBA;
+        expect(r.detalle.muestra).toBe(true);
+        expect(bots().flat().map(b => b.entity_id)).toEqual([777]);
+        const link = estado.llamadas.find(l => l.method === 'PATCH').body[0].custom_fields_values.find(c => c.field_id === 900).values[0].value;
+        expect(link).toBe('https://bikitchencr.com/cambios');
     });
 
     it('en prueba le manda SOLO al número de prueba', async () => {

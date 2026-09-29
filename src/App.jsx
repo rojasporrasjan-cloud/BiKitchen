@@ -52,6 +52,8 @@ const MisPedidosPage = lazyWithRetry(() => import('./pages/MisPedidosPage'));
 const CambiosSemanaPage = lazyWithRetry(() => import('./pages/CambiosSemanaPage'));
 // El link FIJO de cambios (para Kommo, sin variables): lleva a cada cliente a su link
 const BuscarCambiosPage = lazyWithRetry(() => import('./pages/BuscarCambiosPage'));
+// Los packs mensuales para Gina, por link, sin entrar al panel
+const PacksGinaPage = lazyWithRetry(() => import('./pages/PacksGinaPage'));
 const GiftCardsPage = lazyWithRetry(() => import('./pages/GiftCardsPage'));
 const FidelidadPage = lazyWithRetry(() => import('./pages/FidelidadPage'));
 const RewardStore = lazyWithRetry(() => import('./pages/RewardStore'));
@@ -203,6 +205,8 @@ function PublicRouteExtras() {
     /^\/cookies(\/|$)/,
     /^\/reembolsos(\/|$)/
   ].some((re) => re.test(pathname)) || isMobileMenuOpen || isCartOpen || isLoginPage;
+  // El link de Gina es una herramienta interna: sin promos, carrito ni botones flotantes
+  if (/^\/packs-mensuales\//.test(pathname)) return null;
   return (
     <>
       <ShippingDiscountBanner />
@@ -257,6 +261,7 @@ function AnimatedRoutes() {
             <Route path="/historial" element={<MisPedidosPage />} />
             <Route path="/cambios" element={<BuscarCambiosPage />} />
             <Route path="/cambios/:codigo" element={<CambiosSemanaPage />} />
+            <Route path="/packs-mensuales/:codigo" element={<PacksGinaPage />} />
             <Route path="/gift-cards" element={<GiftCardsPage />} />
             <Route path="/tarjetas-regalo" element={<GiftCardsPage />} />
             <Route path="/regalar" element={<GiftCardsPage />} />

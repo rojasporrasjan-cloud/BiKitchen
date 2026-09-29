@@ -4,8 +4,9 @@
  *
  * Cada miércoles a las 8 a. m. (Costa Rica) le manda a cada cliente con
  * entrega el sábado o el lunes su link para elegir los cambios de la semana.
- * A quien le toca su ÚLTIMA entrega se le manda el mensaje de renovación (si
- * hay bot configurado para eso), que también lleva el link.
+ * A TODOS, también a quien está en su última entrega: la renovación sale aparte,
+ * el día de esa última entrega (renovacion-del-dia.js), porque la plantilla
+ * de renovación no lleva el link y ese cliente se quedaba sin pedir cambios.
  *
  * "yo no voy a estar mandando uno por uno" — Jan, 25 set 2026.
  *
@@ -31,7 +32,7 @@
  *   KOMMO_CAMPO_LINK_CAMBIOS     → opcional: id del campo del contacto donde va el link
  *                                  personal. Sin él la plantilla usa los links fijos
  *                                  (bikitchencr.com/cambios y /menu) y el bot igual sale.
- *   KOMMO_BOT_RENOVACION         → opcional: bot para la última entrega
+ *   (KOMMO_BOT_RENOVACION ya no se usa acá: la renovación la manda renovacion-del-dia.js)
  *   KOMMO_CAMPO_AVANCE, KOMMO_CAMPO_PROXIMA_ENTREGA, KOMMO_CAMPO_PACK → opcionales
  */
 
@@ -71,11 +72,59 @@ const kommo = async (ruta, { method = 'GET', body } = {}) => {
 export const pedidosDelCiclo = (fechas) => leerPedidosDelCiclo(db, fechas);
 
 /** El id del contacto en Kommo para un teléfono, o null. Una búsqueda por cliente. */
-const contactoPorTelefono = async (telefono) => {
+export const contactoPorTelefono = async (telefono) => {
     const res = await kommo(`/api/v4/contacts?query=${encodeURIComponent(telefono)}&limit=10`);
     const candidatos = res?._embedded?.contacts || [];
     const suyo = candidatos.find(c => telefonosDeContacto(c).includes(soloDigitos(telefono)));
     return suyo ? suyo.id : null;
+};
+
+/**
+ * En modo prueba solo se le escribe al número de prueba. Si ese número no tiene
+ * pedido esa semana, igual le llega UNA muestra (con el link fijo, que no abre
+ * el pedido de nadie), para poder ver el mensaje sin esperar a tener un pack.
+ */
+export const soloAlNumeroDePrueba = (destinatarios, linkDeMuestra = '') => {
+    const tel = soloDigitos(process.env.CAMBIOS_TELEFONO_PRUEBA);
+    const suyo = destinatarios.find(d => d.telefono === tel);
+    if (suyo) return [suyo];
+    return [{ nombre: 'Prueba BiKitchen', telefono: tel, telefonoOriginal: tel, planes: ['Pack de prueba'], linkCambios: linkDeMuestra, muestra: true }];
+};
+
+/**
+ * Busca (o crea) a cada destinatario en Kommo, le escribe sus datos en la
+ * ficha y lanza el bot. Lo usan el envío del miércoles y el de renovación.
+ *
+ * @returns {Promise<{ conId: Array<{d, id}>, nuevos: Array }>}
+ */
+export const enviarPorKommo = async (destinatarios, { bot, camposIds, segmentoId }) => {
+    // 1. Buscar cada contacto por teléfono
+    const conId = [];
+    const nuevos = [];
+    for (const d of destinatarios) {
+        const id = await contactoPorTelefono(d.telefono);
+        if (id) conId.push({ d, id }); else nuevos.push(d);
+        await dormir(ESPERA_MS);
+    }
+    // 2. Crear los que no están y escribirle sus datos a todos
+    for (const lote of enLotes(nuevos, LOTE_CONTACTOS)) {
+        const res = await kommo('/api/v4/contacts', { method: 'POST', body: lote.map(d => payloadContacto(d, { camposIds, segmentoId })) });
+        (res?._embedded?.contacts || []).forEach((c, i) => conId.push({ d: lote[i], id: c.id }));
+        await dormir(ESPERA_MS);
+    }
+    for (const lote of enLotes(conId.filter(x => !nuevos.includes(x.d)), LOTE_CONTACTOS)) {
+        await kommo('/api/v4/contacts', {
+            method: 'PATCH',
+            body: lote.map(({ d, id }) => ({ id, ...payloadContacto(d, { camposIds, segmentoId }) }))
+        });
+        await dormir(ESPERA_MS);
+    }
+    // 3. Lanzar el bot, que es el que manda el mensaje
+    for (const lote of enLotes(conId.map(x => x.id), LOTE_BOTS)) {
+        await kommo('/api/v4/bots/run', { method: 'POST', body: payloadEjecutarBot(bot, lote) });
+        await dormir(ESPERA_MS);
+    }
+    return { conId, nuevos };
 };
 
 /**
@@ -109,10 +158,7 @@ export const correr = async ({ ahora = new Date(), modo = process.env.CAMBIOS_EN
     const sinTelefono = lista.length - conTelefono.length;     // sin número o con uno de relleno
     let destinatarios = destinatariosUnicos(conTelefono);      // un mensaje por persona
 
-    if (modo === 'prueba') {
-        const tel = soloDigitos(process.env.CAMBIOS_TELEFONO_PRUEBA);
-        destinatarios = destinatarios.filter(d => d.telefono === tel).slice(0, 1);
-    }
+    if (modo === 'prueba') destinatarios = soloAlNumeroDePrueba(destinatarios, `${SITIO}/cambios`);
     if (destinatarios.length > TOPE) {
         await constancia.set({ estado: 'frenado-por-tope', cuantos: destinatarios.length, revisadoEn: ahora.toISOString() }, { merge: true });
         return { estado: 'frenado-por-tope', detalle: { cuantos: destinatarios.length } };
@@ -124,44 +170,13 @@ export const correr = async ({ ahora = new Date(), modo = process.env.CAMBIOS_EN
         proximaEntrega: process.env.KOMMO_CAMPO_PROXIMA_ENTREGA,
         pack: process.env.KOMMO_CAMPO_PACK
     };
-
-    // 1. Buscar cada contacto por teléfono
-    const conId = [];
-    const nuevos = [];
-    for (const d of destinatarios) {
-        const id = await contactoPorTelefono(d.telefono);
-        if (id) conId.push({ d, id }); else nuevos.push(d);
-        await dormir(ESPERA_MS);
-    }
-
-    // 2. Crear los que no están y escribirle el link a todos
-    for (const lote of enLotes(nuevos, LOTE_CONTACTOS)) {
-        const res = await kommo('/api/v4/contacts', { method: 'POST', body: lote.map(d => payloadContacto(d, { camposIds, segmentoId: 'cambios-semana' })) });
-        (res?._embedded?.contacts || []).forEach((c, i) => conId.push({ d: lote[i], id: c.id }));
-        await dormir(ESPERA_MS);
-    }
-    for (const lote of enLotes(conId.filter(x => !nuevos.includes(x.d)), LOTE_CONTACTOS)) {
-        await kommo('/api/v4/contacts', {
-            method: 'PATCH',
-            body: lote.map(({ d, id }) => ({ id, ...payloadContacto(d, { camposIds, segmentoId: 'cambios-semana' }) }))
-        });
-        await dormir(ESPERA_MS);
-    }
-
-    // 3. Lanzar los bots: el de renovación a quien es su última entrega
-    const botRenovacion = process.env.KOMMO_BOT_RENOVACION;
-    const renovacion = conId.filter(x => x.d.ultima && botRenovacion);
-    const cambios = conId.filter(x => !(x.d.ultima && botRenovacion));
-    for (const [bot, grupo] of [[process.env.KOMMO_BOT_CAMBIOS, cambios], [botRenovacion, renovacion]]) {
-        for (const lote of enLotes(grupo.map(x => x.id), LOTE_BOTS)) {
-            await kommo('/api/v4/bots/run', { method: 'POST', body: payloadEjecutarBot(bot, lote) });
-            await dormir(ESPERA_MS);
-        }
-    }
+    const { conId, nuevos } = await enviarPorKommo(destinatarios, {
+        bot: process.env.KOMMO_BOT_CAMBIOS, camposIds, segmentoId: 'cambios-semana'
+    });
 
     const detalle = {
         sabado, lunes, modo,
-        enviados: conId.length, renovacion: renovacion.length, nuevosEnKommo: nuevos.length, sinTelefono,
+        enviados: conId.length, nuevosEnKommo: nuevos.length, sinTelefono, muestra: !!destinatarios[0]?.muestra,
         clientes: conId.map(x => x.d.nombre)
     };
     await constancia.set({ estado: modo === 'si' ? 'enviado' : 'prueba', enviadoEn: ahora.toISOString(), ...detalle }, { merge: true });

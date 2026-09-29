@@ -134,6 +134,51 @@ export const destinatariosUnicos = (destinatarios = []) => {
     return [...porTelefono.values()];
 };
 
+// ── La renovación: el día de la ÚLTIMA entrega ───────────────────────────
+//
+// Decisión de Jan (29 set 2026): el mensaje de renovación le llega al cliente
+// el mismo día que recibe su último pack. El del miércoles (menú y cambios) le
+// llega a todos, también a él, para que pueda pedir los cambios de esa última.
+
+const esCancelado = (p) => /^cancel|rechaz|reembols/i.test(String(p?.status || p?.estado || ''));
+
+/**
+ * A quién le toca el mensaje de renovación HOY.
+ *
+ *   - pack de varias entregas, no cancelado, y HOY es su última entrega;
+ *   - que no haya renovado ya: si el mismo teléfono tiene otro pedido con
+ *     entregas después de hoy, ya compró el siguiente y no se le escribe;
+ *   - nunca a teléfonos de relleno, y uno por persona (lo hace destinatariosUnicos).
+ *
+ * @param {Array} pedidos  los de hoy en adelante (leerPedidosDelCiclo)
+ * @param {string} hoy     AAAA-MM-DD en Costa Rica
+ * @returns {Array<{ pedido, fecha, ultima: true }>}
+ */
+export const renovacionesDelDia = (pedidos = [], hoy) => {
+    const vivos = (pedidos || []).filter(p => p && !esCancelado(p));
+    const telefonosQueSiguen = new Set(vivos
+        .filter(p => entregasDelPedido(p).some(f => f > hoy))
+        .map(p => soloDigitos(p.telefono))
+        .filter(t => t && !esTelefonoDeRelleno(t)));
+    const vistos = new Set();
+    return vivos
+        .filter(p => (vistos.has(p.id) ? false : vistos.add(p.id)))
+        .filter((p) => {
+            const entregas = entregasDelPedido(p);
+            return entregas.length > 1 && entregas[entregas.length - 1] === hoy;
+        })
+        .filter(p => !telefonosQueSiguen.has(soloDigitos(p.telefono)))
+        .map(pedido => ({ pedido, fecha: hoy, ultima: true }));
+};
+
+/** El destinatario de la renovación: sin link (la plantilla no lo lleva). */
+export const destinatarioDeRenovacion = (item) => {
+    const d = destinatarioKommo(item, 'sin-link');
+    if (!d) return null;
+    const { linkCambios: _sinLink, ...resto } = d;
+    return resto;
+};
+
 // ── El link FIJO: bikitchencr.com/cambios ─────────────────────────────────
 //
 // Para ponerlo en cualquier mensaje o automatización de Kommo sin variables,

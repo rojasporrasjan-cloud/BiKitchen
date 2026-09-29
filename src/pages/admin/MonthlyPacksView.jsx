@@ -6,6 +6,7 @@ import { useOrders } from '../../context/OrdersContext';
 import AdminPageHeader from '../../components/admin/AdminPageHeader';
 import PackClienteCard from '../../components/admin/PackClienteCard';
 import PackPedidoModal from '../../components/admin/PackPedidoModal';
+import LinkParaGina from '../../components/admin/LinkParaGina';
 import { isSubscription, getSubscriptionProgress } from '../../utils/subscriptionProgress';
 import { formatFechaLarga, diasHasta } from '../../utils/dateDisplay';
 
@@ -122,6 +123,8 @@ export default function MonthlyPacksView() {
                 ]}
                 gradient="from-purple-600 via-indigo-500 to-blue-500"
             />
+
+            <LinkParaGina />
 
             <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 flex items-start gap-3">
                 <Info size={18} className="text-blue-600 mt-0.5 shrink-0" aria-hidden="true" />

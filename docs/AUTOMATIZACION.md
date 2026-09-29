@@ -105,6 +105,38 @@ Pedir el nombre además del teléfono es a propósito: con el número solo,
 cualquiera que sepa el WhatsApp de otro vería y cambiaría su pedido. Si no
 calza, el mensaje es el mismo para "número equivocado" y "nombre equivocado".
 
+## La renovación: el día de la última entrega (29 set 2026)
+
+Decisión de Jan: el mensaje de renovación le llega al cliente **el mismo día
+que recibe su último pack**. El del miércoles (menú y cambios) le llega a
+**todos**, también al que está en su última semana, para que pueda pedir los
+cambios de esa entrega.
+
+- `netlify/functions/renovacion-del-dia.js`: lunes, miércoles y sábado a las
+  10 a. m. de Costa Rica. A quién: `renovacionesDelDia` (envioDeCambios.js):
+  pack de varias entregas, **hoy es la última**, no cancelado y **que no haya
+  renovado ya** (el mismo teléfono con otro pedido que sigue). Sin rellenos,
+  uno por persona, tope 40, una vez por día (`envios_renovacion/{fecha}`).
+- Viene **apagado**: `RENOVACION_AUTOMATICA` = `no` · `prueba` · `si`. En
+  `prueba` manda UNA muestra a `CAMBIOS_TELEFONO_PRUEBA` y guarda a quiénes les
+  habría llegado.
+- Bot: `KOMMO_BOT_RENOVACION` = `115998` ("Renovación de pack", plantilla
+  `renovacion_pack`), cuando la plantilla esté aprobada y el bot tenga su paso.
+
+## El link de Gina: packs mensuales (29 set 2026)
+
+Gina no entra al panel. Su link `bikitchencr.com/packs-mensuales/<código>`
+le muestra en qué semana va cada pack, **por renovar** y **terminados**, con la
+misma cuenta que Packs Mensuales del panel (`packsParaGina.js`). **Sin
+teléfonos, direcciones, correos ni montos.**
+
+- Se saca en Panel → Packs Mensuales → **"Link para Gina"** (solo el dueño).
+- `netlify/functions/packs-gina.js` firma el código con `CAMBIOS_SECRETO` y
+  otro texto adentro. Si el link se filtra, se cambia `VERSION` en ese archivo
+  y el viejo deja de abrir, sin tocar los links de cambios.
+- Lecturas: las fechas de hace 2 semanas a 5 adelante, no la colección
+  entera; guarda la lista 5 minutos.
+
 ## Reglas de seguridad que no se quitan
 
 1. La nota libre del cliente no puede disparar un cambio en cocina: la palabra

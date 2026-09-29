@@ -31,8 +31,10 @@ export default function BottomNav() {
   // ni en rutas de administrador o perfil
   const isAdminRoute = location.pathname.startsWith('/admin');
   const isProfileRoute = location.pathname === '/mi-cuenta';
+  // El link de Gina (packs mensuales) es una herramienta interna, no la tienda
+  const isGinaRoute = location.pathname.startsWith('/packs-mensuales/');
   
-  if (isMobileMenuOpen || isAdminRoute || isProfileRoute) return null;
+  if (isMobileMenuOpen || isAdminRoute || isProfileRoute || isGinaRoute) return null;
 
   return (
     <nav 

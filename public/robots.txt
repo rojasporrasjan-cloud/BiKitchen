@@ -21,6 +21,7 @@ Disallow: /mis-pedidos
 Disallow: /mis-cupones
 Disallow: /mi-impacto
 Disallow: /cambios
+Disallow: /packs-mensuales/
 
 # APIs y funciones
 Disallow: /api/
