@@ -45,6 +45,7 @@ import { PhomemoM110Adapter, webBluetoothDisponible } from '../services/printing
 
 const PIN_CORRECTO = '5682';
 const LLAVE_PIN = 'bikitchen_etiquetas_pin_ok';
+const LLAVE_LENTA = 'bikitchen_impresora_lenta';
 
 /**
  * Las familias que salen como botones, en el orden en que se empaca.
@@ -70,7 +71,7 @@ const CANTIDADES = [1, 2, 3, 5];
  * La calibración de la impresora de BiKitchen.
  *
  * NO es la de fábrica. El rollo es de 35 × 25 mm, no de 30 × 20, y el contenido
- * va corrido 3,5 mm a la derecha y 3 hacia abajo para que quede centrado. Con
+ * va corrido 4 mm a la derecha y 3 hacia abajo para que quede centrado. Con
  * los valores de fábrica la etiqueta sale más chica y pegada a una esquina:
  *
  *   "no sale el mismo formato que tenemos sacando las etiquetas en la pc, las
@@ -86,7 +87,10 @@ const CANTIDADES = [1, 2, 3, 5];
 const CALIBRACION_BIKITCHEN = {
     widthMm: 35,
     heightMm: 25,
-    offsetXmm: 3.5,
+    // 4 mm desde el 29 set 2026: la compu se recalibró a 4 y el teléfono se
+    // quedó en 3,5 —medio milímetro corrida—, porque no puede leer la
+    // calibración compartida sin login.
+    offsetXmm: 4,
     offsetYmm: 3,
     speed: 5,
 
@@ -103,13 +107,26 @@ const CALIBRACION_BIKITCHEN = {
     // En 0, `tiempoDeImpresionMs()` la calcula según el alto: 1.839 ms para
     // este rollo. Sale más lento —unos 2 s por etiqueta— pero salen todas, que
     // es lo único que importa cuando alguien está esperando para empacar.
+    //
+    // Desde el 27 de setiembre esto ya no puede volver a pasar en ninguna
+    // pantalla: `pausaEntreEtiquetasMs` no deja que la pausa baje de lo que
+    // tarda el papel, sea lo que sea que esté guardado. Se deja el 0 igual, para
+    // que una pausa larga guardada en la compu no haga lento el teléfono.
     interLabelDelayMs: 0
 };
 
-/** El vencimiento de siempre: una semana. Se puede cambiar antes de imprimir. */
-const enUnaSemana = () => {
-    const d = new Date();
-    d.setDate(d.getDate() + 7);
+/**
+ * El vencimiento: una semana desde el día en que se imprime. Fijo.
+ *
+ * Antes era una casilla de fecha que cualquiera podía cambiar, y desde el
+ * teléfono salían etiquetas con cualquier vencimiento (Jan, 29 set 2026). Ahora
+ * no se elige: se calcula en el momento de imprimir, así que tampoco se queda
+ * pegada la fecha de ayer si la página estuvo abierta desde el día anterior.
+ */
+const DIAS_DE_VENCIMIENTO = 7;
+const enUnaSemana = (hoy = new Date()) => {
+    const d = new Date(hoy);
+    d.setDate(d.getDate() + DIAS_DE_VENCIMIENTO);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
@@ -146,7 +163,15 @@ export default function EtiquetasRapidasPage() {
     const [individual, setIndividual] = useState(null);
     const [busqueda, setBusqueda] = useState('');
     const [cantidad, setCantidad] = useState(1);
-    const [vence, setVence] = useState(enUnaSemana);
+    // Para la impresora que saca una sí y una en blanco: espera el doble entre
+    // etiquetas. Se recuerda en cada teléfono, porque va con SU impresora.
+    const [lenta, setLenta] = useState(() => {
+        try { return localStorage.getItem(LLAVE_LENTA) === '1'; } catch { return false; }
+    });
+    const cambiarLenta = (valor) => {
+        setLenta(valor);
+        try { localStorage.setItem(LLAVE_LENTA, valor ? '1' : '0'); } catch { /* sin storage */ }
+    };
 
     const [impresora, setImpresora] = useState(null);
     const [conectando, setConectando] = useState(false);
@@ -274,7 +299,8 @@ export default function EtiquetasRapidasPage() {
         const total = loQueSale.platos.length;
         let salieron = 0;
         setEstado({ tipo: 'enviando', texto: `Enviando ${total}…` });
-        const fecha = vence ? formatExpirationDate(vence) : '';
+        const fecha = formatExpirationDate(enUnaSemana());
+        adapterRef.current.settings = { ...adapterRef.current.settings, impresoraLenta: lenta };
         try {
             await adapterRef.current.connect();
             for (let i = 0; i < loQueSale.platos.length; i++) {
@@ -299,7 +325,7 @@ export default function EtiquetasRapidasPage() {
                     : (err?.message || 'Falló el envío')
             });
         }
-    }, [loQueSale, vence]);
+    }, [loQueSale, lenta]);
 
     // ── PIN ──────────────────────────────────────────────────────────────
     if (!pinOk) {
@@ -455,16 +481,28 @@ export default function EtiquetasRapidasPage() {
                         ))}
                     </div>
 
-                    <label className="block text-xs font-black uppercase tracking-wider text-gray-500 mb-2" htmlFor="vence">
-                        Vence
+                    <p className="text-xs font-black uppercase tracking-wider text-gray-500 mb-2">Vence</p>
+                    <p className="w-full px-3 py-3 rounded-2xl bg-white border-2 border-gray-200 text-base font-black text-gray-900 mb-6">
+                        {formatExpirationDate(enUnaSemana())}
+                        <span className="block text-xs font-semibold text-gray-500">
+                            {DIAS_DE_VENCIMIENTO} días desde hoy · se pone solo
+                        </span>
+                    </p>
+
+                    <label className="flex items-start gap-3 px-3 py-3 mb-6 rounded-2xl bg-white border-2 border-gray-200 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            checked={lenta}
+                            onChange={(e) => cambiarLenta(e.target.checked)}
+                            className="mt-0.5 w-5 h-5 accent-bikitchen-orange"
+                        />
+                        <span className="text-sm font-bold text-gray-900">
+                            Imprimir más lento
+                            <span className="block text-xs font-semibold text-gray-500">
+                                Marcalo si salen etiquetas en blanco entre medio
+                            </span>
+                        </span>
                     </label>
-                    <input
-                        id="vence"
-                        type="date"
-                        value={vence}
-                        onChange={(e) => setVence(e.target.value)}
-                        className="w-full px-3 py-3 rounded-2xl border-2 border-gray-200 text-sm mb-6 focus:border-bikitchen-orange focus:outline-none"
-                    />
 
                     {loQueSale && loQueSale.platos.length > 0 && (
                         <div className="bg-white rounded-2xl border-2 border-gray-200 p-3 mb-4">
@@ -494,6 +532,15 @@ export default function EtiquetasRapidasPage() {
                                 {estado.tipo === 'error' && <AlertTriangle className="w-4 h-4 inline mr-1" aria-hidden="true" />}
                                 {estado.texto}
                             </p>
+                        )}
+                        {/* En el teléfono no hay consola: si algo falla, esto dice en qué paso. */}
+                        {estado?.tipo === 'error' && adapterRef.current?.bitacora?.length > 0 && (
+                            <details className="mb-2 text-xs text-gray-600">
+                                <summary className="font-bold cursor-pointer text-center">Ver detalles para mandarle a Jan</summary>
+                                <ul className="mt-1 max-h-32 overflow-y-auto bg-gray-50 rounded-lg p-2 font-mono break-words">
+                                    {adapterRef.current.bitacora.map((l, i) => <li key={i}>{l}</li>)}
+                                </ul>
+                            </details>
                         )}
                         <button
                             onClick={imprimir}
