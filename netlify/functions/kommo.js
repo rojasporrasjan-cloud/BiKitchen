@@ -21,13 +21,13 @@
  * Endpoint: POST /.netlify/functions/kommo
  */
 
-import { initializeApp, getApps, getApp } from 'firebase-admin/app';
+import { appDeAdmin } from '../../src/utils/firebaseAdminApp.js';
 import { getAuth } from 'firebase-admin/auth';
 
 let auth;
 try {
-    const apps = getApps();
-    auth = getAuth(apps.length === 0 ? initializeApp() : getApp());
+    // Sin el proyecto, verifyIdToken no sabe contra qué validar la sesión
+    auth = getAuth(appDeAdmin());
 } catch (err) {
     console.error('[Kommo] Firebase init:', err.message);
 }

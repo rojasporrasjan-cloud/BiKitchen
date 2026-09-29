@@ -21,7 +21,7 @@
  * `renovacion_pack` aprobada), y KOMMO_CAMPO_PACK opcional.
  */
 
-import { initializeApp, getApps, getApp } from 'firebase-admin/app';
+import { appDeAdmin } from '../../src/utils/firebaseAdminApp.js';
 import { getFirestore } from 'firebase-admin/firestore';
 import { enviarPorKommo, soloAlNumeroDePrueba } from './cambios-miercoles.js';
 import {
@@ -32,7 +32,7 @@ export const TOPE = 40;
 
 let db;
 try {
-    db = getFirestore(getApps().length === 0 ? initializeApp() : getApp());
+    db = getFirestore(appDeAdmin());
 } catch (err) {
     console.error('[RenovacionDelDia] Firebase init:', err.message);
 }

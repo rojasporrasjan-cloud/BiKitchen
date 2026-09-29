@@ -36,7 +36,7 @@
  *   KOMMO_CAMPO_AVANCE, KOMMO_CAMPO_PROXIMA_ENTREGA, KOMMO_CAMPO_PACK → opcionales
  */
 
-import { initializeApp, getApps, getApp } from 'firebase-admin/app';
+import { appDeAdmin } from '../../src/utils/firebaseAdminApp.js';
 import { getFirestore } from 'firebase-admin/firestore';
 import { codigoPara } from './cambios-semana.js';
 import { proximoCiclo, pedidosParaElLink, destinatarioKommo, destinatariosUnicos, leerPedidosDelCiclo } from '../../src/utils/envioDeCambios.js';
@@ -51,7 +51,7 @@ const SITIO = (process.env.SITIO_URL || 'https://bikitchencr.com').replace(/\/+$
 
 let db;
 try {
-    db = getFirestore(getApps().length === 0 ? initializeApp() : getApp());
+    db = getFirestore(appDeAdmin());
 } catch (err) {
     console.error('[CambiosMiercoles] Firebase init:', err.message);
 }

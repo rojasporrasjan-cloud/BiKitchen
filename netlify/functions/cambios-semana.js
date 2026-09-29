@@ -32,7 +32,7 @@
  */
 
 import crypto from 'node:crypto';
-import { initializeApp, getApps, getApp } from 'firebase-admin/app';
+import { appDeAdmin } from '../../src/utils/firebaseAdminApp.js';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import {
@@ -47,7 +47,7 @@ import {
 let db;
 let auth;
 try {
-    const app = getApps().length === 0 ? initializeApp() : getApp();
+    const app = appDeAdmin();
     db = getFirestore(app);
     auth = getAuth(app);
 } catch (err) {
