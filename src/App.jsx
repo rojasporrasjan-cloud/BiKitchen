@@ -212,7 +212,8 @@ function PublicRouteExtras() {
       <ShippingDiscountBanner />
       <PromoBanner />
       <CartDrawer />
-      {!hideFloating && <WhatsAppButton />}
+      {/* En el link personal de cambios tapaba el botón "Cambiar"; la página trae su propio link */}
+      {!hideFloating && !/^\/cambios\//.test(pathname) && <WhatsAppButton />}
       {/* {!hideFloating && <AISommelier />} */}
       {!/^\/cambios(\/|$)/.test(pathname) && <PWAPrompt />}
       {/* Christmas effects y banner deshabilitados */}

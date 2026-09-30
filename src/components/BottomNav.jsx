@@ -33,8 +33,11 @@ export default function BottomNav() {
   const isProfileRoute = location.pathname === '/mi-cuenta';
   // El link de Gina (packs mensuales) es una herramienta interna, no la tienda
   const isGinaRoute = location.pathname.startsWith('/packs-mensuales/');
-  
-  if (isMobileMenuOpen || isAdminRoute || isProfileRoute || isGinaRoute) return null;
+  // El link personal de cambios tiene su propia barra fija (contador + Enviar):
+  // la de navegación se le montaba encima
+  const isCambiosRoute = location.pathname.startsWith('/cambios/');
+
+  if (isMobileMenuOpen || isAdminRoute || isProfileRoute || isGinaRoute || isCambiosRoute) return null;
 
   return (
     <nav 

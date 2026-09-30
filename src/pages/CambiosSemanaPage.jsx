@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { CheckCircle2, Clock, MessageCircle } from 'lucide-react';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { CheckCircle2, Clock, MessageCircle, CalendarDays, Sparkles } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import SEOHead, { SEO_CONFIG } from '../components/SEOHead';
@@ -9,6 +9,7 @@ import PlatoParaCambiar from '../components/cambios/PlatoParaCambiar';
 import ElegirProteinas from '../components/cambios/ElegirProteinas';
 import { useWhatsApp } from '../hooks/useWhatsApp';
 import { WHATSAPP_MESSAGES } from '../config/whatsappMessages';
+import { CODIGO_DE_PRUEBA, PACKS_DE_PRUEBA, armarPrueba, enviarPrueba } from '../utils/cambiosDePrueba';
 
 /**
  * /cambios/:codigo — el cliente pide los cambios de su pack de esta semana.
@@ -45,7 +46,12 @@ const desdeLoGuardado = (guardado) => ({
 
 export default function CambiosSemanaPage() {
     const { codigo } = useParams();
+    const [params] = useSearchParams();
     const { getWhatsAppUrl } = useWhatsApp();
+    // /cambios/prueba: la misma página con el menú real, sin guardar nada
+    const esPrueba = codigo === CODIGO_DE_PRUEBA;
+    const packDePrueba = params.get('pack') || PACKS_DE_PRUEBA[0].id;
+    const [textoCocina, setTextoCocina] = useState('');
 
     const [datos, setDatos] = useState(null);
     const [error, setError] = useState('');
@@ -57,7 +63,13 @@ export default function CambiosSemanaPage() {
 
     useEffect(() => {
         let vigente = true;
-        llamar({ accion: 'ver', codigo })
+        setDatos(null);
+        setError('');
+        setListo(false);
+        const cargar = esPrueba
+            ? armarPrueba(packDePrueba)
+            : llamar({ accion: 'ver', codigo });
+        cargar
             .then((d) => {
                 if (!vigente) return;
                 const previo = desdeLoGuardado(d.guardado);
@@ -68,7 +80,7 @@ export default function CambiosSemanaPage() {
             })
             .catch((e) => vigente && setError(e.message));
         return () => { vigente = false; };
-    }, [codigo]);
+    }, [codigo, esPrueba, packDePrueba]);
 
     const permitido = datos?.permitido;
     const tope = permitido ? permitido.maxCambios * permitido.packs : 0;
@@ -98,17 +110,21 @@ export default function CambiosSemanaPage() {
     const handleEnviar = async () => {
         setEnviando(true);
         setError('');
+        const cuerpo = {
+            notas,
+            cambios: Object.entries(cambios).map(([clave, a]) => {
+                const [comida, parte, de] = clave.split('|');
+                return { comida, parte, de, a };
+            }),
+            proteinas: Object.entries(proteinas).flatMap(([nombre, n]) => Array.from({ length: n }, () => nombre))
+        };
         try {
-            await llamar({
-                accion: 'guardar',
-                codigo,
-                notas,
-                cambios: Object.entries(cambios).map(([clave, a]) => {
-                    const [comida, parte, de] = clave.split('|');
-                    return { comida, parte, de, a };
-                }),
-                proteinas: Object.entries(proteinas).flatMap(([nombre, n]) => Array.from({ length: n }, () => nombre))
-            });
+            if (esPrueba) {
+                // Las mismas reglas que el servidor, sin guardar
+                setTextoCocina(enviarPrueba(permitido, cuerpo));
+            } else {
+                await llamar({ accion: 'guardar', codigo, ...cuerpo });
+            }
             setListo(true);
             window.scrollTo({ top: 0, behavior: 'smooth' });
         } catch (e) {
@@ -127,7 +143,26 @@ export default function CambiosSemanaPage() {
             <div className="min-h-screen bg-gradient-to-b from-bikitchen-beige to-white">
                 <Navbar />
 
-                <main className="max-w-xl mx-auto px-4 pt-28 pb-16">
+                <main className="max-w-xl mx-auto px-4 pt-28 pb-44">
+                    {esPrueba && (
+                        <div className="mb-5 p-4 rounded-3xl bg-gray-900 text-white">
+                            <p className="font-black">Modo prueba: nada se guarda</p>
+                            <p className="mt-1 text-sm text-white/80">
+                                Es la misma página que ve el cliente, con el menú y la lista de cambios reales de esta semana.
+                                Al enviar te mostramos lo que le llegaría a la cocina.
+                            </p>
+                            <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Pack para probar">
+                                {PACKS_DE_PRUEBA.map(p => (
+                                    <Link key={p.id} to={`/cambios/${CODIGO_DE_PRUEBA}?pack=${p.id}`} replace
+                                        aria-current={p.id === packDePrueba ? 'true' : undefined}
+                                        className={`px-3 py-1.5 rounded-full text-xs font-bold ${p.id === packDePrueba ? 'bg-bikitchen-orange text-white' : 'bg-white/15 text-white'}`}>
+                                        {p.nombre.replace(/^Pack /, '')}
+                                    </Link>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
                     {!datos && !error && (
                         <div className="space-y-3" aria-busy="true" aria-label="Cargando tu menú">
                             <div className="h-8 w-2/3 bg-gray-200 rounded-lg animate-pulse" />
@@ -153,18 +188,28 @@ export default function CambiosSemanaPage() {
                             <h1 className="mt-1 text-3xl font-black text-gray-900 leading-tight">
                                 {listo ? '¡Listo! Ya tenemos tus cambios' : 'Tus cambios de esta semana'}
                             </h1>
-                            <p className="mt-2 text-gray-600">
-                                {datos.pack} · entrega del <b className="text-gray-900">{fechaEnPalabras(datos.fecha)}</b>
-                            </p>
-                            <p className={`mt-3 inline-flex items-start gap-2 px-3 py-2 rounded-xl text-sm font-semibold ${datos.cerrada ? 'bg-gray-100 text-gray-600' : 'bg-orange-50 text-bikitchen-orange'}`}>
-                                <Clock size={15} className="mt-0.5 shrink-0" aria-hidden="true" />
-                                {datos.cerrada ? `Se cerró el ${datos.cierreEnPalabras}` : `Tenés hasta el ${datos.cierreEnPalabras}`}
-                            </p>
+
+                            <div className="mt-4 bg-white rounded-3xl shadow-sm p-4 space-y-3">
+                                <p className="flex items-center gap-3 text-gray-700">
+                                    <span className="flex items-center justify-center w-9 h-9 rounded-full bg-bikitchen-beige text-bikitchen-orange shrink-0" aria-hidden="true">
+                                        <CalendarDays size={18} />
+                                    </span>
+                                    <span className="leading-snug">
+                                        <b className="block text-gray-900">{datos.pack}</b>
+                                        Entrega del {fechaEnPalabras(datos.fecha)}
+                                    </span>
+                                </p>
+                                <p className={`flex items-center gap-3 px-3 py-2 rounded-2xl text-sm font-semibold ${datos.cerrada ? 'bg-gray-100 text-gray-600' : 'bg-orange-50 text-bikitchen-orange'}`}>
+                                    <Clock size={16} className="shrink-0" aria-hidden="true" />
+                                    {datos.cerrada ? `Se cerró el ${datos.cierreEnPalabras}` : `Tenés hasta el ${datos.cierreEnPalabras}`}
+                                </p>
+                            </div>
 
                             {listo && (
                                 <div className="mt-6 bg-green-50 border border-green-200 rounded-2xl p-5">
                                     <p className="flex items-center gap-2 font-bold text-green-800">
-                                        <CheckCircle2 size={20} aria-hidden="true" /> Gina ya lo tiene en el sistema
+                                        <CheckCircle2 size={20} aria-hidden="true" />
+                                        {esPrueba ? 'Así lo vería el cliente (en la prueba no se guardó)' : 'Gina ya lo tiene en el sistema'}
                                     </p>
                                     <ul className="mt-3 space-y-1 text-sm text-green-900">
                                         {permitido.tipo === 'proteinas'
@@ -172,6 +217,12 @@ export default function CambiosSemanaPage() {
                                             : resumen.map(r => <li key={r}>{r}</li>)}
                                         {notas.trim() && <li>Nota: {notas.trim()}</li>}
                                     </ul>
+                                    {esPrueba && (
+                                        <div className="mt-4 p-3 rounded-xl bg-white border border-green-200">
+                                            <p className="text-xs font-bold uppercase tracking-wide text-gray-500">Prueba — esto le llegaría a la hoja de cocina</p>
+                                            <p className="mt-1 text-sm font-mono text-gray-900 break-words">{textoCocina || '(nada: sin cambios)'}</p>
+                                        </div>
+                                    )}
                                     {!datos.cerrada && (
                                         <button type="button" onClick={() => setListo(false)}
                                             className="mt-4 text-sm font-semibold text-green-800 underline">
@@ -202,9 +253,12 @@ export default function CambiosSemanaPage() {
                                         </section>
                                     ) : (
                                         <>
-                                            <p className="mt-6 text-sm text-gray-600">
-                                                Este es tu menú. Tocá <b>Cambiar</b> en lo que no te guste.
-                                                Llevás <b className="text-gray-900">{usados} de {tope}</b> cambios.
+                                            <p className="mt-6 flex items-start gap-2 text-sm text-gray-600">
+                                                <Sparkles size={16} className="mt-0.5 shrink-0 text-bikitchen-gold" aria-hidden="true" />
+                                                <span>
+                                                    Este es tu menú. Tocá <b>Cambiar</b> en lo que no te guste: podés hacer
+                                                    hasta <b className="text-gray-900">{tope}</b> cambio{tope === 1 ? '' : 's'}.
+                                                </span>
                                             </p>
                                             <section className="mt-4" aria-labelledby="titulo-almuerzos">
                                                 <h2 id="titulo-almuerzos" className="text-lg font-bold text-gray-900 mb-3">
@@ -241,13 +295,28 @@ export default function CambiosSemanaPage() {
 
                                     {error && <p role="alert" className="mt-4 p-3 bg-red-50 text-red-700 text-sm font-medium rounded-xl">{error}</p>}
 
-                                    <button type="button" onClick={handleEnviar} disabled={!listoParaEnviar || enviando}
-                                        className="mt-5 w-full py-4 bg-bikitchen-orange hover:bg-bikitchen-orange-dark text-white text-lg font-bold rounded-2xl shadow-lg active:scale-[0.98] transition-all disabled:opacity-40">
-                                        {enviando ? 'Guardando…' : 'Enviar mis cambios'}
-                                    </button>
-                                    <p className="mt-3 text-center text-xs text-gray-500">
+                                    <p className="mt-5 text-center text-sm text-gray-500">
                                         ¿No querés cambiar nada? No hace falta que hagás nada: te llega tu menú tal cual.
                                     </p>
+                                    <a href={whatsapp} target="_blank" rel="noopener noreferrer"
+                                        className="mt-3 flex items-center justify-center gap-2 text-sm font-semibold text-green-700">
+                                        <MessageCircle size={16} aria-hidden="true" /> ¿Dudas? Escribinos por WhatsApp
+                                    </a>
+
+                                    {/* Fija abajo: el contador y el botón siempre a mano, sin bajar hasta el final */}
+                                    <div className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-200 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] px-4 pt-3 pb-5">
+                                        <div className="max-w-xl mx-auto">
+                                            <p className="text-center text-sm text-gray-600 mb-2">
+                                                {permitido.tipo === 'proteinas'
+                                                    ? <>Elegiste <b className="text-gray-900">{totalProteinas} de {permitido.proteinas.cuantas}</b> proteínas</>
+                                                    : <>Llevás <b className="text-gray-900">{usados} de {tope}</b> cambios</>}
+                                            </p>
+                                            <button type="button" onClick={handleEnviar} disabled={!listoParaEnviar || enviando}
+                                                className="w-full py-4 bg-bikitchen-orange hover:bg-bikitchen-orange-dark text-white text-lg font-bold rounded-2xl shadow-lg active:scale-[0.98] transition-all disabled:opacity-40">
+                                                {enviando ? 'Guardando…' : 'Enviar mis cambios'}
+                                            </button>
+                                        </div>
+                                    </div>
                                 </>
                             )}
                         </>
