@@ -9,6 +9,7 @@ import Footer from '../components/Footer';
 import PageTransition from '../components/PageTransition';
 import BackButton from '../components/BackButton';
 import useOrderHistory from '../hooks/useOrderHistory';
+import TusCambiosDeLaSemana from '../components/cambios/TusCambiosDeLaSemana';
 import { 
     Package, Clock, CheckCircle, Truck, XCircle, ChevronDown,
     ShoppingBag, Calendar, MapPin, CreditCard, ArrowRight,
@@ -328,6 +329,13 @@ export default function MisPedidosPage() {
                                 Revisa el estado de tus pedidos
                             </motion.p>
                         </div>
+                    </div>
+                </section>
+
+                {/* Aparece sola si tiene entrega esta semana (se lo reconoce por su link de WhatsApp) */}
+                <section className="pt-8">
+                    <div className="container">
+                        <TusCambiosDeLaSemana className="max-w-xl mx-auto" />
                     </div>
                 </section>
 

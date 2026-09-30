@@ -7,7 +7,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
  * Las dos pantallas del link de cambios, usadas como las usaría una persona.
  */
 
-const estado = vi.hoisted(() => ({ enviado: null, pedidos: [], opciones: [], buscado: null }));
+const estado = vi.hoisted(() => ({ enviado: null, pedidos: [], opciones: [], buscado: null, mios: null }));
 
 vi.mock('../firebase/config', () => ({ db: {}, auth: { currentUser: { getIdToken: async () => 't' } }, storage: {} }));
 vi.mock('../components/Navbar', () => ({ default: () => null }));
@@ -16,7 +16,7 @@ vi.mock('../components/PageTransition', () => ({ default: ({ children }) => chil
 vi.mock('../hooks/useWhatsApp', () => ({ useWhatsApp: () => ({ getWhatsAppUrl: () => 'https://wa.me/x' }) }));
 vi.mock('../hooks/usePedidosDeFechas', () => ({ default: () => ({ pedidos: estado.pedidos, cargando: false, error: null }) }));
 vi.mock('../hooks/useSubstitutions', () => ({ useSubstitutions: () => ({ substitutions: { proteins: ['Estofado de res casero'], vegetables: [], carbos: ['Arroz blanco'] } }) }));
-vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ isSuperAdmin: () => true }) }));
+vi.mock('../context/AuthContext', () => ({ useAuth: () => ({ isSuperAdmin: () => true, currentUser: null }) }));
 vi.mock('../components/admin/EnvioKommo', () => ({ default: ({ destinatarios }) => <p>Kommo: {destinatarios.length}</p> }));
 vi.mock('../utils/firestoreMenus', () => ({
     getOfficialMenus: async () => ({
@@ -45,6 +45,12 @@ beforeEach(() => {
     globalThis.fetch = vi.fn(async (_url, { body }) => {
         const cuerpo = JSON.parse(body);
         if (cuerpo.accion === 'guardar') { estado.enviado = cuerpo; return { ok: true, json: async () => ({ ok: true }) }; }
+        if (cuerpo.accion === 'mios') {
+            estado.mios = cuerpo;
+            return { ok: true, json: async () => (cuerpo.llaveCliente === 'llave-de-ana'
+                ? { nombre: 'Ana', opciones: [{ pack: 'Pack Mensual Bajo en Calorías', fecha: '2026-10-03', ruta: '/cambios/abc', cierreEnPalabras: 'miércoles 30 de setiembre, 8 p. m.', cerrada: false }] }
+                : { opciones: [] }) };
+        }
         if (cuerpo.accion === 'buscar') {
             estado.buscado = cuerpo;
             return cuerpo.nombre === 'Ana'
@@ -61,6 +67,7 @@ beforeEach(() => {
 const { default: CambiosSemanaPage } = await import('../pages/CambiosSemanaPage');
 const { default: CambiosSemanaView } = await import('../pages/admin/CambiosSemanaView');
 const { default: BuscarCambiosPage } = await import('../pages/BuscarCambiosPage');
+const { default: TusCambiosDeLaSemana } = await import('../components/cambios/TusCambiosDeLaSemana');
 const { proximoCiclo } = await import('../utils/envioDeCambios');
 
 describe('la página del cliente', () => {
@@ -145,6 +152,23 @@ describe('el link fijo /cambios', () => {
         fireEvent.change(screen.getByLabelText('Tu nombre'), { target: { value: 'Pedro' } });
         await act(async () => { fireEvent.click(screen.getByText('Ver mi menú')); });
         expect(screen.getByRole('alert').textContent).toMatch(/No encontramos/);
+    });
+});
+
+describe('la tarjeta del perfil, sin escribir nada', () => {
+    it('con la llave que dejó su link, aparece sola con su pack y el botón a su menú', async () => {
+        localStorage.setItem('bk_llave_cliente', 'llave-de-ana');
+        await act(async () => { render(<MemoryRouter><TusCambiosDeLaSemana /></MemoryRouter>); });
+        expect(screen.getByText('Ana, elegí tus cambios')).toBeTruthy();
+        expect(screen.getByText('Elegir mis cambios').closest('a').getAttribute('href')).toBe('/cambios/abc');
+        localStorage.removeItem('bk_llave_cliente');
+    });
+
+    it('sin llave ni cuenta no pregunta nada ni muestra nada', async () => {
+        estado.mios = null;
+        const { container } = await act(async () => render(<MemoryRouter><TusCambiosDeLaSemana /></MemoryRouter>));
+        expect(estado.mios).toBeNull();
+        expect(container.textContent).toBe('');
     });
 });
 

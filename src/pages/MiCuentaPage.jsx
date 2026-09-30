@@ -20,6 +20,7 @@ import NotificationSettings from '../components/NotificationSettings';
 import { validateCoupon, getWelcomeCoupon, getUserCoupons } from '../utils/firestoreCoupons';
 import { useCart } from '../context/CartContext';
 import toast from 'react-hot-toast';
+import TusCambiosDeLaSemana from '../components/cambios/TusCambiosDeLaSemana';
 
 export default function MiCuentaPage() {
     const navigate = useNavigate();
@@ -312,6 +313,9 @@ export default function MiCuentaPage() {
 
                 {/* Main Content - Overlapping cards */}
                 <main className="container relative z-20 -mt-20 pb-16">
+                    {/* Aparece sola si tiene entrega esta semana (se lo reconoce por su link de WhatsApp) */}
+                    <TusCambiosDeLaSemana className="max-w-2xl mx-auto mb-6" />
+
                     {/* Login/Register Banner si no está logueado */}
                     <AnimatePresence>
                         {!currentUser && (

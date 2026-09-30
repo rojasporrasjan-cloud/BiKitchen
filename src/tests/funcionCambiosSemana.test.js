@@ -11,7 +11,7 @@ const estado = vi.hoisted(() => ({ docs: {}, actualizados: [], guardados: [], co
 
 vi.mock('firebase-admin/app', () => ({ initializeApp: () => ({}), getApps: () => [], getApp: () => ({}) }));
 vi.mock('firebase-admin/auth', () => ({
-    getAuth: () => ({ verifyIdToken: async (t) => ({ email: t === 'dueno' ? 'rojasporrasjan@gmail.com' : 'otro@x.com' }) })
+    getAuth: () => ({ verifyIdToken: async (t) => ({ uid: `uid-${t}`, email: t === 'dueno' ? 'rojasporrasjan@gmail.com' : 'otro@x.com' }) })
 }));
 vi.mock('firebase-admin/firestore', () => {
     const ref = (ruta) => ({
@@ -175,4 +175,43 @@ describe('la función del link de cambios', () => {
             expect((await buscar('88112233', '')).status).toBe(400);
         });
     });
+
+    describe('el cliente, automático (perfil sin escribir su número)', () => {
+        const mios = (cuerpo = {}, headers = {}) => llamar({ accion: 'mios', ...cuerpo }, headers);
+
+        it('al abrir su link recibe su llave, que NO deja ver su número', async () => {
+            const r = await llamar({ accion: 'ver', codigo: codigo() });
+            expect(r.llaveCliente).toBeTruthy();
+            expect(r.llaveCliente).not.toMatch(/88112233/);
+            expect(r.enSuCuenta).toBe(false);
+        });
+
+        it('con esa llave, el perfil encuentra su pedido de la semana solo', async () => {
+            const { llaveCliente } = await llamar({ accion: 'ver', codigo: codigo() });
+            const r = await mios({ llaveCliente });
+            expect(r.nombre).toBe('Ana');
+            expect(r.opciones).toEqual([expect.objectContaining({ fecha: '2026-09-26', ruta: `/cambios/${codigo()}`, cerrada: false })]);
+        });
+
+        it('una llave inventada o sin llave: no encuentra nada (y no es un error)', async () => {
+            expect((await mios({ llaveCliente: 'inventada' })).opciones).toEqual([]);
+            expect((await mios({})).opciones).toEqual([]);
+        });
+
+        it('si abre su link con la sesión iniciada, su cuenta queda unida: después lo encuentra en cualquier aparato', async () => {
+            const r = await llamar({ accion: 'ver', codigo: codigo() }, { authorization: 'Bearer cliente' });
+            expect(r.enSuCuenta).toBe(true);
+            expect(estado.docs['users/uid-cliente'].telefonoCliente).toBe('88112233');
+            const desdeOtroAparato = await mios({}, { authorization: 'Bearer cliente' });
+            expect(desdeOtroAparato.opciones).toHaveLength(1);
+        });
+
+        it('nunca le cambia el teléfono a una cuenta que ya tiene otro', async () => {
+            estado.docs['users/uid-cliente'] = { telefonoCliente: '70001111' };
+            const r = await llamar({ accion: 'ver', codigo: codigo() }, { authorization: 'Bearer cliente' });
+            expect(r.enSuCuenta).toBe(false);
+            expect(estado.docs['users/uid-cliente'].telefonoCliente).toBe('70001111');
+        });
+    });
 });
+

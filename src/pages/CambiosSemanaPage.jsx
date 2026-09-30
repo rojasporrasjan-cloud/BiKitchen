@@ -10,6 +10,7 @@ import ElegirProteinas from '../components/cambios/ElegirProteinas';
 import { useWhatsApp } from '../hooks/useWhatsApp';
 import { WHATSAPP_MESSAGES } from '../config/whatsappMessages';
 import { CODIGO_DE_PRUEBA, PACKS_DE_PRUEBA, armarPrueba, enviarPrueba } from '../utils/cambiosDePrueba';
+import { cabecerasConSesion, guardarLlaveCliente } from '../utils/llaveDelCliente';
 
 /**
  * /cambios/:codigo — el cliente pide los cambios de su pack de esta semana.
@@ -24,7 +25,8 @@ const FUNCION = '/.netlify/functions/cambios-semana';
 const llamar = async (cuerpo) => {
     const res = await fetch(FUNCION, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        // Con la sesión, si la tiene: así su cuenta queda unida a su pedido sola
+        headers: await cabecerasConSesion(),
         body: JSON.stringify(cuerpo)
     });
     const datos = await res.json().catch(() => ({}));
@@ -73,6 +75,8 @@ export default function CambiosSemanaPage() {
             .then((d) => {
                 if (!vigente) return;
                 const previo = desdeLoGuardado(d.guardado);
+                // Su teléfono sellado queda en este aparato: el perfil lo usa cada semana
+                guardarLlaveCliente(d.llaveCliente);
                 setDatos(d);
                 setCambios(previo.cambios);
                 setProteinas(previo.proteinas);

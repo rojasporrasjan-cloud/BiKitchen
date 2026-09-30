@@ -22,6 +22,17 @@
  *   { accion: 'ver', codigo }                         → lo que la página muestra
  *   { accion: 'buscar', telefono, nombre }            → el link fijo /cambios: a qué
  *                                                       /cambios/<código> lo lleva
+ *   { accion: 'mios', llaveCliente? }                 → "Tus cambios de esta semana" en el
+ *                                                       perfil, sin que el cliente escriba nada
+ *
+ * EL CLIENTE, AUTOMÁTICO: al abrir su link personal (el que le llega por
+ * WhatsApp) la respuesta trae una `llaveCliente` —su teléfono SELLADO con el
+ * secreto, que nadie puede leer ni falsificar— y la página la guarda en ese
+ * teléfono. Si además tiene la sesión iniciada, su cuenta queda unida a ese
+ * teléfono (users/{uid}.telefonoCliente). Desde ahí, cada semana, 'mios' le
+ * encuentra sus pedidos solo: con la llave del aparato o con su cuenta, en
+ * cualquier aparato. Ese primer toque al link de WhatsApp es la prueba de que
+ * el pedido es suyo; con nombre o número escritos a mano no alcanza.
  *   { accion: 'guardar', codigo, cambios, proteinas, notas }
  *   { accion: 'generar', pedidos: [{ id, fecha }] }   → solo el dueño (token de Firebase)
  *
@@ -40,6 +51,7 @@ import {
     estaCerrada, horaLimiteDe, horaLimiteEnPalabras
 } from '../../src/utils/cambiosDeLaSemana.js';
 import { entregasDelPedido } from '../../src/utils/proteinasPorEntrega.js';
+import { esTelefonoDeRelleno } from '../../src/utils/telefonoRelleno.js';
 import {
     cicloEnCostaRica, leerPedidosDelCiclo, pedidosParaElLink, indiceDeTelefonos, buscarEnIndice, INDICE_VIGENTE_MS
 } from '../../src/utils/envioDeCambios.js';
@@ -86,6 +98,61 @@ const leerCodigo = (codigo) => {
     const recibida = Buffer.from(firma);
     if (esperada.length !== recibida.length || !crypto.timingSafeEqual(esperada, recibida)) return null;
     return { id, fecha };
+};
+
+// ── La llave del cliente: su teléfono sellado ──────────────────────────────
+
+const claveDeSellado = () => crypto.createHash('sha256').update(`cliente|${SECRETO}`).digest();
+
+/** Los 8 dígitos del teléfono, o '' si no sirve para identificar a nadie. */
+const telefonoDe = (telefono) => {
+    const d = String(telefono || '').replace(/\D/g, '').slice(-8);
+    return d.length === 8 && !esTelefonoDeRelleno(d) ? d : '';
+};
+
+/** El teléfono sellado con AES-256-GCM: opaco y a prueba de falsificaciones. */
+export const llaveDeCliente = (telefono) => {
+    const tel = telefonoDe(telefono);
+    if (!tel) return null;
+    const iv = crypto.randomBytes(12);
+    const c = crypto.createCipheriv('aes-256-gcm', claveDeSellado(), iv);
+    const datos = Buffer.concat([c.update(tel, 'utf8'), c.final()]);
+    return Buffer.concat([iv, c.getAuthTag(), datos]).toString('base64url');
+};
+
+/** El teléfono de una llave legítima, o '' si es inventada o está rota. */
+const telefonoDeLaLlave = (llave) => {
+    try {
+        const b = Buffer.from(String(llave || ''), 'base64url');
+        if (b.length < 29) return '';
+        const d = crypto.createDecipheriv('aes-256-gcm', claveDeSellado(), b.subarray(0, 12));
+        d.setAuthTag(b.subarray(12, 28));
+        return telefonoDe(Buffer.concat([d.update(b.subarray(28)), d.final()]).toString('utf8'));
+    } catch {
+        return '';
+    }
+};
+
+/** El uid de quien tiene la sesión iniciada, o null (sin sesión, o vencida). */
+const uidDeLaSesion = async (authHeader) => {
+    const idToken = String(authHeader || '').replace(/^Bearer\s+/i, '').trim();
+    if (!idToken || !auth) return null;
+    try {
+        return (await auth.verifyIdToken(idToken)).uid;
+    } catch {
+        return null;
+    }
+};
+
+/** Une la cuenta al teléfono del cliente. Nunca pisa uno distinto que ya tenga. */
+const unirCuenta = async (uid, tel, ahora = new Date()) => {
+    const ref = db.collection('users').doc(uid);
+    const snap = await ref.get();
+    const previo = snap.exists ? snap.data()?.telefonoCliente : '';
+    if (previo && previo !== tel) return false;
+    if (previo === tel) return true;
+    await ref.set({ telefonoCliente: tel, telefonoUnidoEn: ahora.toISOString() }, { merge: true });
+    return true;
 };
 
 // ── Lo que se lee de Firestore ────────────────────────────────────────────
@@ -136,11 +203,18 @@ const cargar = async (codigo) => {
 
 // ── Acciones ──────────────────────────────────────────────────────────────
 
-const ver = async ({ codigo }) => {
+const ver = async ({ codigo }, authHeader) => {
     const c = await cargar(codigo);
     if (c.error) return json(c.status, { error: c.error });
     const { pedido, fecha, permitido } = c;
+    // Abrir SU link es la prueba de que el pedido es suyo: se recuerda en el
+    // aparato (llaveCliente) y, si tiene sesión, en su cuenta.
+    const tel = telefonoDe(pedido.telefono);
+    const uid = tel ? await uidDeLaSesion(authHeader) : null;
+    const enSuCuenta = uid ? await unirCuenta(uid, tel) : false;
     return json(200, {
+        llaveCliente: tel ? llaveDeCliente(tel) : null,
+        enSuCuenta,
         // Solo lo que la página necesita: nada de teléfono, dirección ni correo.
         nombre: primerNombre(pedido.cliente),
         pack: pedido.plan || pedido.items?.[0]?.nombre || '',
@@ -217,6 +291,43 @@ const buscar = async ({ telefono, nombre }) => {
     });
 };
 
+/**
+ * Sus pedidos de esta semana, para la tarjeta del perfil: con la llave del
+ * aparato o con la cuenta unida. Sin ninguna de las dos, lista vacía (no error:
+ * la tarjeta simplemente no aparece).
+ */
+const mios = async ({ llaveCliente }, authHeader) => {
+    let tel = telefonoDeLaLlave(llaveCliente);
+    const uid = await uidDeLaSesion(authHeader);
+    if (uid) {
+        if (tel) await unirCuenta(uid, tel);          // la cuenta se une sola en este aparato
+        else {
+            const snap = await db.collection('users').doc(uid).get();
+            tel = telefonoDe(snap.exists ? snap.data()?.telefonoCliente : '');
+        }
+    }
+    if (!tel) return json(200, { opciones: [] });
+
+    const ciclo = cicloEnCostaRica();
+    let indice = await indiceDeLaSemana(ciclo);
+    let suyos = indice.porTelefono?.[tel] || [];
+    const viejo = Date.now() - new Date(indice.armadoEn || 0).getTime() > INDICE_VIGENTE_MS;
+    if (suyos.length === 0 && !indice.recienArmado && viejo) {
+        indice = await indiceDeLaSemana(ciclo, { rearmar: true });
+        suyos = indice.porTelefono?.[tel] || [];
+    }
+    return json(200, {
+        nombre: primerNombre(suyos[0]?.nombre),
+        opciones: suyos.map(x => ({
+            pack: x.pack,
+            fecha: x.fecha,
+            ruta: `/cambios/${codigoPara(x.id, x.fecha)}`,
+            cierreEnPalabras: horaLimiteEnPalabras(x.fecha),
+            cerrada: estaCerrada(x.fecha)
+        }))
+    });
+};
+
 const generar = async (entrada, authHeader) => {
     const idToken = String(authHeader || '').replace(/^Bearer\s+/i, '').trim();
     if (!idToken || !auth) return json(403, { error: 'Falta la sesión.' });
@@ -251,7 +362,8 @@ export const handler = async (event) => {
     }
 
     try {
-        if (entrada.accion === 'ver') return await ver(entrada);
+        if (entrada.accion === 'ver') return await ver(entrada, event.headers?.authorization);
+        if (entrada.accion === 'mios') return await mios(entrada, event.headers?.authorization);
         if (entrada.accion === 'guardar') return await guardar(entrada);
         if (entrada.accion === 'buscar') return await buscar(entrada);
         if (entrada.accion === 'generar') return await generar(entrada, event.headers?.authorization);
