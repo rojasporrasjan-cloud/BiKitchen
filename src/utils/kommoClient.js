@@ -45,6 +45,9 @@ const llamar = async (accion, datos = {}) => {
 /** Qué hay en la cuenta de Kommo: bots y campos personalizados disponibles. */
 export const diagnosticarKommo = () => llamar('diagnostico');
 
+/** Los envíos automáticos: qué está prendido y los últimos que salieron. */
+export const leerEnviosAutomaticos = () => llamar('envios');
+
 /** Trae todos los contactos de Kommo para poder cruzarlos por teléfono. */
 const traerTodosLosContactos = async (avisar) => {
     const todos = [];

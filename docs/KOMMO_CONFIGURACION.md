@@ -105,9 +105,20 @@ disparador**. Su número va en Netlify como `KOMMO_BOT_PAGO_RECIBIDO`.
 **Cómo sale:** la función `pago-recibido` revisa cada 10 minutos los pedidos
 confirmados en la última media hora (al confirmar el pago en el panel o con
 tarjeta) y le escribe una sola vez a cada uno (queda `avisoPagoRecibido` en el
-pedido). `PAGO_RECIBIDO_AUTOMATICO`: sin poner = apagada; `prueba` = solo
-pedidos del `CAMBIOS_TELEFONO_PRUEBA`; `si` = todos. Nunca a teléfonos de relleno.
+pedido). `PAGO_RECIBIDO_AUTOMATICO`: sin poner = apagada; `prueba` = a los
+clientes no les llega nada y a `CAMBIOS_TELEFONO_PRUEBA` le llega UNA muestra
+por cada pago que se confirme; `si` = todos. Nunca a teléfonos de relleno.
 Ojo: con `si`, Gina deja de pegar la confirmación a mano (si no, llega doble).
+
+### Bots que faltan (uno por plantilla, todos SIN disparador)
+| Bot | Plantilla | Variable en Netlify | Interruptor |
+|---|---|---|---|
+| "Renovación" | `renovacion_pack` (84312) | `KOMMO_BOT_RENOVACION` (hoy apunta al 115998, que se borra) | `RENOVACION_AUTOMATICA` |
+| "Recordatorio de pago" | `recordatorio_pago` (84310, aprobada) | `KOMMO_BOT_RECORDATORIO_PAGO` | `RECORDATORIO_PAGO_AUTOMATICO` |
+| "Pago recibido" | `pago_recibido` (85279) | `KOMMO_BOT_PAGO_RECIBIDO` | `PAGO_RECIBIDO_AUTOMATICO` |
+
+Lo que manda cada uno y si está prendido se ve en el panel → Listas de
+Difusión → "WhatsApp automáticos".
 
 ## Los links (ya existen en la página, no hay que crear nada)
 

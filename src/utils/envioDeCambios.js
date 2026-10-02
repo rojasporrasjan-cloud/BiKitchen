@@ -11,7 +11,7 @@
  *     avisa que el pack se termina, para que renueve a tiempo.
  */
 
-import { loQueSePuedeCambiar, HORA_LIMITE_CR, horaLimiteEnPalabras } from './cambiosDeLaSemana';
+import { loQueSePuedeCambiar, HORA_LIMITE_CR, horaLimiteEnPalabras, estaCerrada } from './cambiosDeLaSemana';
 import { entregasDelPedido, esPackDeProteinas, elegidasPara } from './proteinasPorEntrega';
 import { consultasParaFechas } from './consultaPorFechas';
 import { esTelefonoDeRelleno } from './telefonoRelleno';
@@ -56,15 +56,20 @@ const estaVivo = (p) => !/^cancel/i.test(String(p?.status || p?.estado || ''));
  * familia no tiene menú cargado). Un pedido con entregas el sábado Y el lunes
  * recibe el link de la PRIMERA: es la que se está por cocinar.
  *
+ * Con `ahora`, las entregas que ya cerraron quedan afuera: un envío hecho el
+ * viernes no le manda al del sábado un link que abre cerrado (el miércoles a
+ * las 8 a. m. las dos siguen abiertas).
+ *
  * @returns {Array<{ pedido, fecha, permitido, ultima: boolean }>}
  */
-export const pedidosParaElLink = (pedidos = [], fechas = [], menus, sustituciones) => {
+export const pedidosParaElLink = (pedidos = [], fechas = [], menus, sustituciones, ahora = null) => {
     const vistas = new Set();
+    const abiertas = ahora ? fechas.filter(f => !estaCerrada(f, ahora)) : fechas;
     return (pedidos || [])
         .filter(estaVivo)
         .map((pedido) => {
             const entregas = entregasDelPedido(pedido);
-            const fecha = fechas.find(f => entregas.includes(f));
+            const fecha = abiertas.find(f => entregas.includes(f));
             if (!fecha) return null;
             const permitido = loQueSePuedeCambiar(pedido, menus, sustituciones);
             if (!permitido) return null;

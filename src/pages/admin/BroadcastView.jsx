@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import PlantillaEditor from '../../components/admin/PlantillaEditor';
 import DestinatariosTabla from '../../components/admin/DestinatariosTabla';
 import EnvioKommo from '../../components/admin/EnvioKommo';
+import EnviosAutomaticos from '../../components/admin/EnviosAutomaticos';
 import {
     construirClientes,
     aplicarSegmento,
@@ -143,9 +144,13 @@ export default function BroadcastView() {
                     Listas de Difusión
                 </h1>
                 <p className="text-sm text-gray-600 mt-1">
-                    Armá la lista y el mensaje acá. El envío se hace desde Kommo.
+                    Arriba, los WhatsApp que salen solos. Abajo, una difusión armada a mano.
                 </p>
             </header>
+
+            <EnviosAutomaticos orders={orders} loading={loading} />
+
+            <h2 className="text-lg font-black text-gray-900 mb-3">Difusión a mano</h2>
 
             {/* 1. A quién */}
             <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 md:p-5 mb-4">

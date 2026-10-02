@@ -27,6 +27,7 @@ import { enviarPorKommo, soloAlNumeroDePrueba } from './cambios-miercoles.js';
 import {
     renovacionesDelDia, destinatarioDeRenovacion, destinatariosUnicos, leerPedidosDelCiclo
 } from '../../src/utils/envioDeCambios.js';
+import { entradaDeRegistro, anotarEnvio } from '../../src/utils/registroDeEnvios.js';
 
 export const TOPE = 40;
 
@@ -67,7 +68,8 @@ export const correr = async ({ ahora = new Date(), modo = process.env.RENOVACION
     // Hoy y lo que viene: para saber quién termina hoy y quién ya renovó
     const pedidos = await leerPedidosDelCiclo(db, fechas);
     const lista = renovacionesDelDia(pedidos, hoy);
-    let destinatarios = destinatariosUnicos(lista.map(destinatarioDeRenovacion));
+    const todos = destinatariosUnicos(lista.map(destinatarioDeRenovacion));
+    let destinatarios = todos;
     const quienes = destinatarios.map(d => d.nombre);
 
     if (destinatarios.length === 0) {
@@ -92,6 +94,10 @@ export const correr = async ({ ahora = new Date(), modo = process.env.RENOVACION
         [modo === 'si' ? 'clientes' : 'lesHabriaLlegado']: quienes
     };
     await constancia.set({ estado: modo === 'si' ? 'enviado' : 'prueba', enviadoEn: ahora.toISOString(), ...detalle }, { merge: true });
+    await anotarEnvio(db, entradaDeRegistro({
+        tipo: 'renovacion', modo, estado: modo === 'si' ? 'enviado' : 'prueba', ahora,
+        enviados: conId.map(c => c.d), lesHabriaLlegado: modo === 'prueba' ? todos : []
+    }));
     return { estado: modo === 'si' ? 'enviado' : 'prueba', detalle };
 };
 

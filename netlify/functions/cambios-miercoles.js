@@ -40,7 +40,8 @@ import { appDeAdmin } from '../../src/utils/firebaseAdminApp.js';
 import { getFirestore } from 'firebase-admin/firestore';
 import { codigoPara } from './cambios-semana.js';
 import { proximoCiclo, pedidosParaElLink, destinatarioKommo, destinatariosUnicos, leerPedidosDelCiclo, fechaEnPalabras } from '../../src/utils/envioDeCambios.js';
-import { horaLimiteEnPalabras } from '../../src/utils/cambiosDeLaSemana.js';
+import { horaLimiteEnPalabras, estaCerrada } from '../../src/utils/cambiosDeLaSemana.js';
+import { entradaDeRegistro, anotarEnvio } from '../../src/utils/registroDeEnvios.js';
 import {
     payloadContacto, payloadEjecutarBot, telefonosDeContacto, soloDigitos, enLotes, LOTE_CONTACTOS, LOTE_BOTS
 } from '../../src/utils/kommoPayload.js';
@@ -159,15 +160,19 @@ export const correr = async ({ ahora = new Date(), modo = process.env.CAMBIOS_EN
         db.doc('menus_oficial/current').get(),
         db.doc('config/substitutions').get()
     ]);
-    const lista = pedidosParaElLink(pedidos, [sabado, lunes], menusSnap.data(), sustSnap.data() || {});
+    // Con `ahora`: si se corre a mano después del cierre del sábado, solo va el lunes
+    const lista = pedidosParaElLink(pedidos, [sabado, lunes], menusSnap.data(), sustSnap.data() || {}, ahora);
     const conTelefono = lista
         .map(i => destinatarioKommo(i, `${SITIO}/cambios/${codigoPara(i.pedido.id, i.fecha)}`))
         .filter(Boolean);
     const sinTelefono = lista.length - conTelefono.length;     // sin número o con uno de relleno
-    let destinatarios = destinatariosUnicos(conTelefono);      // un mensaje por persona
+    const todos = destinatariosUnicos(conTelefono);            // un mensaje por persona
+    let destinatarios = todos;
 
-    if (modo === 'prueba') destinatarios = soloAlNumeroDePrueba(destinatarios, `${SITIO}/cambios`, sabado);
+    const fechaDeMuestra = [sabado, lunes].find(f => !estaCerrada(f, ahora)) || sabado;
+    if (modo === 'prueba') destinatarios = soloAlNumeroDePrueba(destinatarios, `${SITIO}/cambios`, fechaDeMuestra);
     if (destinatarios.length > TOPE) {
+        await anotarEnvio(db, entradaDeRegistro({ tipo: 'cambios', modo, estado: 'frenado-por-tope', ahora, lesHabriaLlegado: destinatarios }));
         await constancia.set({ estado: 'frenado-por-tope', cuantos: destinatarios.length, revisadoEn: ahora.toISOString() }, { merge: true });
         return { estado: 'frenado-por-tope', detalle: { cuantos: destinatarios.length } };
     }
@@ -191,6 +196,10 @@ export const correr = async ({ ahora = new Date(), modo = process.env.CAMBIOS_EN
         clientes: conId.map(x => x.d.nombre)
     };
     await constancia.set({ estado: modo === 'si' ? 'enviado' : 'prueba', enviadoEn: ahora.toISOString(), ...detalle }, { merge: true });
+    await anotarEnvio(db, entradaDeRegistro({
+        tipo: 'cambios', modo, estado: modo === 'si' ? 'enviado' : 'prueba', ahora,
+        enviados: conId.map(x => x.d), lesHabriaLlegado: modo === 'prueba' ? todos : []
+    }));
     return { estado: modo === 'si' ? 'enviado' : 'prueba', detalle };
 };
 

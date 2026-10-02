@@ -7,7 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * que más importa es CUÁNDO NO manda.
  */
 
-const estado = vi.hoisted(() => ({ docs: {}, pedidos: [], escritos: {}, llamadas: [], kommoContactos: {} }));
+const estado = vi.hoisted(() => ({ docs: {}, pedidos: [], escritos: {}, llamadas: [], kommoContactos: {}, registro: [] }));
 
 vi.mock('firebase-admin/app', () => ({ initializeApp: () => ({}), getApps: () => [], getApp: () => ({}) }));
 vi.mock('firebase-admin/auth', () => ({ getAuth: () => ({}) }));
@@ -21,7 +21,7 @@ vi.mock('firebase-admin/firestore', () => {
     return {
         getFirestore: () => ({
             doc: ref,
-            collection: (c) => ({ doc: (id) => ref(`${c}/${id}`), where: () => consulta() })
+            collection: (c) => ({ doc: (id) => ref(`${c}/${id}`), where: () => consulta(), add: async (datos) => { estado.registro.push({ c, datos }); } })
         })
     };
 });
@@ -59,6 +59,7 @@ const pedido = (id, tel, fechas) => ({
 beforeEach(() => {
     estado.llamadas = [];
     estado.escritos = {};
+    estado.registro = [];
     estado.kommoContactos = { 88110001: 101 };
     estado.docs = {
         'menus_oficial/current': { bajoCalorias: [{ numero: 1, proteina: 'Pollo mostaza miel', vegetal: 'Relish', carbo: 'Arroz' }] },
@@ -89,6 +90,21 @@ describe('el envío automático del miércoles', () => {
         const link = patch.custom_fields_values.find(c => c.field_id === 900).values[0].value;
         expect(link).toMatch(/^https:\/\/bikitchencr\.com\/cambios\/a\.2026-09-26\./);
         expect(estado.escritos['envios_cambios/2026-09-26'].estado).toBe('enviado');
+        // Queda en el registro que muestra Listas de Difusión
+        expect(estado.registro).toHaveLength(1);
+        expect(estado.registro[0].c).toBe('envios_kommo');
+        expect(estado.registro[0].datos).toMatchObject({ tipo: 'cambios', modo: 'si', estado: 'enviado' });
+        expect(estado.registro[0].datos.enviados.map(p => p.nombre)).toEqual(['Cliente a', 'Cliente b']);
+    });
+
+    it('corrido el viernes, después del cierre del sábado, solo le llega al del lunes', async () => {
+        const r = await correr({ ahora: new Date('2026-09-25T15:00:00Z'), modo: 'si' });   // viernes 9 a. m.
+        expect(r.detalle.enviados).toBe(1);
+        const patch = estado.llamadas.find(l => l.method === 'PATCH');
+        const enviadosA = [...(patch?.body || []), ...estado.llamadas.filter(l => l.method === 'POST' && l.url.endsWith('/api/v4/contacts')).flatMap(l => l.body)];
+        const links = enviadosA.flatMap(c => c.custom_fields_values || []).filter(c => c.field_id === 900).map(c => c.values[0].value);
+        expect(links).toHaveLength(1);
+        expect(links[0]).toMatch(/\/cambios\/b\.2026-09-28\./);
     });
 
     it('la misma semana no se manda dos veces', async () => {
@@ -106,6 +122,11 @@ describe('el envío automático del miércoles', () => {
         expect(bots().flat().map(b => b.entity_id)).toEqual([777]);
         const link = estado.llamadas.find(l => l.method === 'PATCH').body[0].custom_fields_values.find(c => c.field_id === 900).values[0].value;
         expect(link).toBe('https://bikitchencr.com/cambios');
+        // En el registro: la muestra que salió y la lista real a la que le habría llegado
+        const { datos } = estado.registro[0];
+        expect(datos.modo).toBe('prueba');
+        expect(datos.enviados.map(p => p.nombre)).toEqual(['Prueba BiKitchen']);
+        expect(datos.lesHabriaLlegado.map(p => p.nombre)).toEqual(['Cliente a', 'Cliente b']);
     });
 
     it('la muestra lleva la fecha y el cierre, para que la plantilla no salga con huecos', async () => {

@@ -93,7 +93,7 @@ la cocina en silencio.
 
 | Link | Qué hace |
 |---|---|
-| `bikitchencr.com/cambios` | El cliente escribe su WhatsApp y su **primer nombre** y llega a SU link firmado (`/cambios/<código>`). Mismas reglas: cierre del miércoles 8 p. m., máximo 2 cambios por pack |
+| `bikitchencr.com/cambios` | El cliente escribe su WhatsApp y su **primer nombre** y llega a SU link firmado (`/cambios/<código>`). Mismas reglas: cierre igual al de pedidos (lunes, jueves o viernes 7 p. m.), máximo 2 cambios por pack |
 | `bikitchencr.com/menu` | El menú de la semana (ya existía: `CatalogPage`) |
 
 Están en Panel → Cambios de la semana → *Links fijos para Kommo*, con botón de
@@ -122,6 +122,38 @@ cambios de esa entrega.
   habría llegado.
 - Bot: `KOMMO_BOT_RENOVACION` = `115998` ("Renovación de pack", plantilla
   `renovacion_pack`), cuando la plantilla esté aprobada y el bot tenga su paso.
+
+## Los avisos de pago y el registro de envíos (2 oct 2026)
+
+Panel → **Listas de Difusión** → "WhatsApp automáticos": una tarjeta por envío
+con su estado en Netlify (apagado / prueba / prendido, y si falta el bot), la
+lista exacta de a quién le toca, qué ya salió y los últimos envíos. Las listas
+salen de los pedidos ya cargados con las MISMAS funciones que usan los envíos;
+el estado y el historial, de la función `kommo` (acción `envios`, ~40 lecturas).
+
+| Envío | Función | Cuándo | Interruptor | Bot |
+|---|---|---|---|---|
+| Menú y cambios | `cambios-miercoles.js` | miércoles 8 a. m. | `CAMBIOS_ENVIO_AUTOMATICO` | `KOMMO_BOT_CAMBIOS` |
+| Renovación | `renovacion-del-dia.js` | L/M/S 10 a. m. | `RENOVACION_AUTOMATICA` | `KOMMO_BOT_RENOVACION` |
+| Recordatorio de pago | `recordatorio-pago.js` | todos los días 10 a. m. | `RECORDATORIO_PAGO_AUTOMATICO` | `KOMMO_BOT_RECORDATORIO_PAGO` |
+| Pago recibido | `pago-recibido.js` | cada 10 min | `PAGO_RECIBIDO_AUTOMATICO` | `KOMMO_BOT_PAGO_RECIBIDO` |
+
+- Todos vienen **apagados**; `prueba` manda UNA muestra a
+  `CAMBIOS_TELEFONO_PRUEBA` y guarda la lista real; `si` manda a los clientes.
+- **`envios_kommo`** (colección nueva, solo el servidor): una entrada por vuelta
+  que manda: `{ tipo, modo, estado, cuando, enviados: [{nombre, telefono, fecha,
+  muestra}], lesHabriaLlegado: [...] }` (`src/utils/registroDeEnvios.js`).
+- Marcas en el pedido (una sola vez por pedido): `avisoPagoRecibido`,
+  `avisoRecordatorioPago`, y en prueba `…Prueba`.
+- **Recordatorio de pago**: `pagosPorRecordar` (`avisosDePago.js`): estado
+  `pending_payment` o `payment_failed`, sin `paymentConfirmed`, próxima entrega
+  en 3 días o menos. Lee solo los pedidos sin pagar. "Sin pagar" es lo que dice
+  el SISTEMA: un pago confirmado en el chat y no en el panel recibiría el
+  recordatorio. Por eso arranca en prueba.
+- **Pago recibido**: lee los pedidos con `pointsAwardedAt` de la última media
+  hora (lo escriben la confirmación del panel y el pago con tarjeta).
+- El envío de cambios corrido a mano después del cierre del sábado (por ejemplo
+  un viernes) ya no le manda link al del sábado: solo al del lunes.
 
 ## El link de Gina: packs mensuales (29 set 2026)
 

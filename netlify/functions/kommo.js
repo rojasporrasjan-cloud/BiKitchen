@@ -1,3 +1,4 @@
+/* global process */
 /**
  * Netlify Serverless Function: kommo
  *
@@ -23,11 +24,15 @@
 
 import { appDeAdmin } from '../../src/utils/firebaseAdminApp.js';
 import { getAuth } from 'firebase-admin/auth';
+import { getFirestore } from 'firebase-admin/firestore';
+import { COLECCION_ENVIOS, modosDeEnvio } from '../../src/utils/registroDeEnvios.js';
 
 let auth;
+let db;
 try {
     // Sin el proyecto, verifyIdToken no sabe contra qué validar la sesión
     auth = getAuth(appDeAdmin());
+    db = getFirestore(appDeAdmin());
 } catch (err) {
     console.error('[Kommo] Firebase init:', err.message);
 }
@@ -145,6 +150,18 @@ export const handler = async (event) => {
     try {
         if (accion === 'diagnostico') {
             return json(200, await diagnostico());
+        }
+
+        // Para Listas de Difusión: qué envío automático está prendido y los
+        // últimos 40 que salieron (40 lecturas; la colección no se baja entera)
+        if (accion === 'envios') {
+            const snap = db
+                ? await db.collection(COLECCION_ENVIOS).orderBy('cuando', 'desc').limit(40).get()
+                : { docs: [] };
+            return json(200, {
+                modos: modosDeEnvio(process.env),
+                registro: snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+            });
         }
 
         if (accion === 'contactos') {

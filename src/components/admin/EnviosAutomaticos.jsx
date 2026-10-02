@@ -1,0 +1,128 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Bot, RefreshCw, AlertTriangle } from 'lucide-react';
+import TarjetaDeEnvio from './TarjetaDeEnvio';
+import { leerEnviosAutomaticos } from '../../utils/kommoClient';
+import { TIPOS_DE_ENVIO, estadoEnRegistro } from '../../utils/registroDeEnvios';
+import { renovacionesDelDia, destinatarioDeRenovacion } from '../../utils/envioDeCambios';
+import { sinPagarConEntregaCerca, hoyEnCostaRica, sumarDias } from '../../utils/avisosDePago';
+
+/**
+ * Los WhatsApp automáticos, en Listas de Difusión: qué está prendido, a quién
+ * le toca cada uno, qué ya salió y qué falta.
+ *
+ * Las listas salen de los pedidos que la pantalla ya cargó (cero lecturas de
+ * más) con las MISMAS funciones que usan los envíos, así lo que se ve es lo que
+ * sale. El estado y el historial vienen de la función `kommo` (~40 lecturas).
+ */
+
+const DIAS_DE_REPARTO = [1, 3, 6];          // lunes, miércoles, sábado
+
+const proximosRepartos = (hoy, cuantos = 3) => {
+    const fechas = [];
+    for (let i = 0; fechas.length < cuantos && i < 14; i++) {
+        const f = sumarDias(hoy, i);
+        if (DIAS_DE_REPARTO.includes(new Date(`${f}T12:00:00`).getDay())) fechas.push(f);
+    }
+    return fechas;
+};
+
+/** Una fila: el cliente y qué pasó con su mensaje (marca del pedido o registro). */
+const filaDe = (item, registro, tipo, marca = '') => {
+    const p = item.pedido;
+    const d = destinatarioDeRenovacion(item);
+    const base = {
+        clave: `${p.id}-${item.fecha}`, nombre: p.cliente || 'Sin nombre', telefono: p.telefono || '',
+        pack: p.plan || p.items?.[0]?.nombre || '', fecha: item.fecha
+    };
+    if (!d) return { ...base, estado: 'sin-telefono' };
+    if (marca && p[marca]) return { ...base, estado: 'enviado', cuando: p[marca] };
+    if (marca && p[`${marca}Prueba`]) return { ...base, estado: 'prueba', cuando: p[`${marca}Prueba`] };
+    const r = estadoEnRegistro(registro, tipo, d.telefono, item.fecha);
+    return r ? { ...base, ...r } : { ...base, estado: 'pendiente' };
+};
+
+export default function EnviosAutomaticos({ orders = [], loading = false }) {
+    const [datos, setDatos] = useState(null);
+    const [error, setError] = useState('');
+    const [vuelta, setVuelta] = useState(0);
+    const [actualizando, setActualizando] = useState(false);
+
+    useEffect(() => {
+        let vivo = true;
+        leerEnviosAutomaticos()
+            .then((r) => { if (vivo) { setDatos(r); setError(''); } })
+            .catch((err) => { if (vivo) setError(err.message); })
+            .finally(() => { if (vivo) setActualizando(false); });
+        return () => { vivo = false; };
+    }, [vuelta]);
+
+    const actualizar = () => {
+        setActualizando(true);
+        setVuelta(v => v + 1);
+    };
+
+    const registro = useMemo(() => datos?.registro || [], [datos]);
+    const hoy = useMemo(() => hoyEnCostaRica(new Date()), []);
+    const delTipo = (id) => registro.filter(e => e.tipo === id);
+
+    const filas = useMemo(() => {
+        const renovacion = proximosRepartos(hoy)
+            .flatMap(f => renovacionesDelDia(orders, f).map(i => filaDe(i, registro, 'renovacion')));
+        const recordatorio = sinPagarConEntregaCerca(orders, hoy)
+            .map(i => filaDe(i, registro, 'recordatorio-pago', 'avisoRecordatorioPago'));
+        const pagoRecibido = orders
+            .filter(p => p.avisoPagoRecibido || p.avisoPagoRecibidoPrueba)
+            .sort((a, b) => String(b.avisoPagoRecibido || b.avisoPagoRecibidoPrueba)
+                .localeCompare(String(a.avisoPagoRecibido || a.avisoPagoRecibidoPrueba)))
+            .slice(0, 15)
+            .map(p => filaDe({ pedido: p, fecha: p.fecha_entrega || '' }, registro, 'pago-recibido', 'avisoPagoRecibido'));
+        return { renovacion, 'recordatorio-pago': recordatorio, 'pago-recibido': pagoRecibido };
+    }, [orders, registro, hoy]);
+
+    const VACIOS = {
+        renovacion: 'Nadie termina su pack en los próximos tres días de reparto.',
+        'recordatorio-pago': 'No hay pedidos sin pagar con entrega en los próximos 3 días.',
+        'pago-recibido': 'Todavía no se ha avisado ningún pago.'
+    };
+
+    return (
+        <section className="mb-6" aria-labelledby="titulo-envios-automaticos">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                <h2 id="titulo-envios-automaticos" className="text-lg font-black text-gray-900 flex items-center gap-2">
+                    <Bot size={20} className="text-bikitchen-orange" aria-hidden="true" /> WhatsApp automáticos
+                </h2>
+                <button type="button" onClick={actualizar} disabled={actualizando}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-100 text-gray-800 text-xs font-bold hover:bg-gray-200 disabled:opacity-40">
+                    <RefreshCw size={13} className={actualizando ? 'animate-spin' : ''} aria-hidden="true" /> Actualizar
+                </button>
+            </div>
+            <p className="text-xs text-gray-600 mb-3">
+                Las listas salen de los pedidos del sistema, igual que los envíos. Si alguien ya pagó y
+                sigue como &quot;pago pendiente&quot;, confirmalo en Pedidos para que no le llegue el recordatorio.
+                {loading && ' Todavía cargando pedidos…'}
+            </p>
+            {error && (
+                <p className="mb-3 flex items-start gap-2 px-3 py-2 bg-red-50 text-red-700 text-xs rounded-xl">
+                    <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
+                    No se pudo leer el estado de los envíos: {error}
+                </p>
+            )}
+            <div className="grid gap-3 lg:grid-cols-2">
+                {TIPOS_DE_ENVIO.map(tipo => (
+                    <TarjetaDeEnvio key={tipo.id} tipo={tipo} modo={datos?.modos?.[tipo.id]} entradas={delTipo(tipo.id)}
+                        filas={tipo.id === 'cambios' ? null : filas[tipo.id]} vacio={VACIOS[tipo.id]}>
+                        {tipo.id === 'cambios' && (
+                            <p className="mt-3 text-sm text-gray-700">
+                                Quién recibe el link y quién ya eligió está en{' '}
+                                <Link to="/admin/cambios-semana" className="font-bold text-bikitchen-orange underline">
+                                    Cambios de la semana
+                                </Link>.
+                            </p>
+                        )}
+                    </TarjetaDeEnvio>
+                ))}
+            </div>
+        </section>
+    );
+}

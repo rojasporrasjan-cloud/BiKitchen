@@ -39,7 +39,7 @@ describe('a quién le toca la renovación hoy', () => {
 });
 
 // ── La función programada ────────────────────────────────────────────────
-const estado = vi.hoisted(() => ({ docs: {}, pedidos: [], escritos: {}, llamadas: [], kommoContactos: {} }));
+const estado = vi.hoisted(() => ({ docs: {}, pedidos: [], escritos: {}, llamadas: [], kommoContactos: {}, registro: [] }));
 vi.mock('firebase-admin/app', () => ({ initializeApp: () => ({}), getApps: () => [], getApp: () => ({}) }));
 vi.mock('firebase-admin/auth', () => ({ getAuth: () => ({}) }));
 vi.mock('firebase-admin/firestore', () => {
@@ -48,7 +48,7 @@ vi.mock('firebase-admin/firestore', () => {
         set: async (datos) => { estado.escritos[ruta] = datos; }
     });
     const consulta = () => ({ where: () => consulta(), get: async () => ({ docs: estado.pedidos.map(p => ({ id: p.id, data: () => p })) }) });
-    return { getFirestore: () => ({ doc: ref, collection: (c) => ({ doc: (id) => ref(`${c}/${id}`), where: () => consulta() }) }) };
+    return { getFirestore: () => ({ doc: ref, collection: (c) => ({ doc: (id) => ref(`${c}/${id}`), where: () => consulta(), add: async (datos) => { estado.registro.push(datos); } }) }) };
 });
 Object.assign(process.env, { CAMBIOS_SECRETO: 's', KOMMO_SUBDOMINIO: 'bk', KOMMO_TOKEN: 't', KOMMO_BOT_RENOVACION: '115998' });
 globalThis.fetch = vi.fn(async (url, { method = 'GET', body } = {}) => {
@@ -70,6 +70,7 @@ describe('el envío de la renovación', () => {
     beforeEach(() => {
         estado.llamadas = [];
         estado.escritos = {};
+        estado.registro = [];
         estado.docs = {};
         estado.kommoContactos = { 88110001: 201, 88990000: 999 };
         estado.pedidos = [
@@ -89,6 +90,9 @@ describe('el envío de la renovación', () => {
         expect(r.estado).toBe('enviado');
         expect(bots()).toEqual([{ bot_id: 115998, entity_id: 201, entity_type: 'contacts' }]);
         expect(estado.escritos[`envios_renovacion/${HOY}`].estado).toBe('enviado');
+        expect(estado.registro).toHaveLength(1);
+        expect(estado.registro[0]).toMatchObject({ tipo: 'renovacion', modo: 'si', estado: 'enviado' });
+        expect(estado.registro[0].enviados).toEqual([{ nombre: 'Cliente a', telefono: '88110001', fecha: HOY, muestra: false }]);
     });
 
     it('el mismo día no se manda dos veces', async () => {
@@ -103,6 +107,7 @@ describe('el envío de la renovación', () => {
         delete process.env.CAMBIOS_TELEFONO_PRUEBA;
         expect(bots()).toEqual([{ bot_id: 115998, entity_id: 999, entity_type: 'contacts' }]);
         expect(r.detalle.lesHabriaLlegado).toEqual(['Cliente a']);
+        expect(estado.registro[0].lesHabriaLlegado.map(p => p.nombre)).toEqual(['Cliente a']);
     });
 
     it('si nadie termina hoy, no manda nada', async () => {
