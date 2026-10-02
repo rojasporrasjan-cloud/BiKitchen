@@ -17,7 +17,7 @@ import { consultasParaFechas } from './consultaPorFechas';
 import { esTelefonoDeRelleno } from './telefonoRelleno';
 
 /** "sábado 3 de octubre", como se dice acá. */
-const fechaEnPalabras = (fecha) => {
+export const fechaEnPalabras = (fecha) => {
     const d = new Date(`${fecha}T12:00:00`);
     if (Number.isNaN(d.getTime())) return '';
     return d.toLocaleDateString('es-CR', { weekday: 'long', day: 'numeric', month: 'long' })

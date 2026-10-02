@@ -108,6 +108,19 @@ describe('el envío automático del miércoles', () => {
         expect(link).toBe('https://bikitchencr.com/cambios');
     });
 
+    it('la muestra lleva la fecha y el cierre, para que la plantilla no salga con huecos', async () => {
+        Object.assign(process.env, { CAMBIOS_TELEFONO_PRUEBA: '8899-0000', KOMMO_CAMPO_ENTREGA: '901', KOMMO_CAMPO_CIERRE_CAMBIOS: '902' });
+        estado.kommoContactos = { 88990000: 777 };
+        await correr({ ahora: MIERCOLES, modo: 'prueba' });
+        delete process.env.CAMBIOS_TELEFONO_PRUEBA;
+        delete process.env.KOMMO_CAMPO_ENTREGA;
+        delete process.env.KOMMO_CAMPO_CIERRE_CAMBIOS;
+        const campos = estado.llamadas.find(l => l.method === 'PATCH').body[0].custom_fields_values;
+        const valor = (id) => campos.find(c => c.field_id === id)?.values[0].value;
+        expect(valor(901)).toBe('sábado 26 de setiembre');
+        expect(valor(902)).toMatch(/^jueves 24 de setiembre, 7 p\. m\.$/);
+    });
+
     it('en prueba le manda SOLO al número de prueba', async () => {
         process.env.CAMBIOS_TELEFONO_PRUEBA = '8811-0001';
         const r = await correr({ ahora: MIERCOLES, modo: 'prueba' });

@@ -39,7 +39,8 @@
 import { appDeAdmin } from '../../src/utils/firebaseAdminApp.js';
 import { getFirestore } from 'firebase-admin/firestore';
 import { codigoPara } from './cambios-semana.js';
-import { proximoCiclo, pedidosParaElLink, destinatarioKommo, destinatariosUnicos, leerPedidosDelCiclo } from '../../src/utils/envioDeCambios.js';
+import { proximoCiclo, pedidosParaElLink, destinatarioKommo, destinatariosUnicos, leerPedidosDelCiclo, fechaEnPalabras } from '../../src/utils/envioDeCambios.js';
+import { horaLimiteEnPalabras } from '../../src/utils/cambiosDeLaSemana.js';
 import {
     payloadContacto, payloadEjecutarBot, telefonosDeContacto, soloDigitos, enLotes, LOTE_CONTACTOS, LOTE_BOTS
 } from '../../src/utils/kommoPayload.js';
@@ -83,12 +84,19 @@ export const contactoPorTelefono = async (telefono) => {
  * En modo prueba solo se le escribe al número de prueba. Si ese número no tiene
  * pedido esa semana, igual le llega UNA muestra (con el link fijo, que no abre
  * el pedido de nadie), para poder ver el mensaje sin esperar a tener un pack.
+ * La muestra lleva la fecha y el cierre del sábado del ciclo: la plantilla
+ * `cambios_personal` los usa y sin ellos el mensaje saldría con huecos.
  */
-export const soloAlNumeroDePrueba = (destinatarios, linkDeMuestra = '') => {
+export const soloAlNumeroDePrueba = (destinatarios, linkDeMuestra = '', sabado = '') => {
     const tel = soloDigitos(process.env.CAMBIOS_TELEFONO_PRUEBA);
     const suyo = destinatarios.find(d => d.telefono === tel);
     if (suyo) return [suyo];
-    return [{ nombre: 'Prueba BiKitchen', telefono: tel, telefonoOriginal: tel, planes: ['Pack de prueba'], linkCambios: linkDeMuestra, muestra: true }];
+    return [{
+        nombre: 'Prueba BiKitchen', telefono: tel, telefonoOriginal: tel, planes: ['Pack de prueba'],
+        linkCambios: linkDeMuestra, muestra: true,
+        entregaEnPalabras: sabado ? fechaEnPalabras(sabado) : '',
+        cierreCambios: sabado ? horaLimiteEnPalabras(sabado) : ''
+    }];
 };
 
 /**
@@ -158,7 +166,7 @@ export const correr = async ({ ahora = new Date(), modo = process.env.CAMBIOS_EN
     const sinTelefono = lista.length - conTelefono.length;     // sin número o con uno de relleno
     let destinatarios = destinatariosUnicos(conTelefono);      // un mensaje por persona
 
-    if (modo === 'prueba') destinatarios = soloAlNumeroDePrueba(destinatarios, `${SITIO}/cambios`);
+    if (modo === 'prueba') destinatarios = soloAlNumeroDePrueba(destinatarios, `${SITIO}/cambios`, sabado);
     if (destinatarios.length > TOPE) {
         await constancia.set({ estado: 'frenado-por-tope', cuantos: destinatarios.length, revisadoEn: ahora.toISOString() }, { merge: true });
         return { estado: 'frenado-por-tope', detalle: { cuantos: destinatarios.length } };
