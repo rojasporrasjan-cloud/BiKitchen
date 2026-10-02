@@ -14,8 +14,13 @@
  * cocina nunca recibe.
  *
  * Lo que se decidió con Jan:
- *   - Se cierra el MIÉRCOLES a las 8 p. m. antes de cocinar (Gina arranca el
- *     jueves con el sábado y el adelanto del lunes).
+ *   - Los cambios cierran A LA MISMA HORA QUE LOS PEDIDOS (decisión de Jan,
+ *     2 oct 2026, para que el cliente y la cocina tengan una sola regla):
+ *       entrega del miércoles → lunes 7 p. m.
+ *       entrega del sábado    → jueves 7 p. m.
+ *       entrega del lunes     → viernes 7 p. m.
+ *     Antes era el miércoles 8 p. m. para sábado y lunes, y Gina les decía a
+ *     los clientes el viernes 7 p. m.: el link les cerraba antes de tiempo.
  *   - Solo se elige de la lista de sustituciones de Gina (config/substitutions):
  *     la cocina nunca recibe algo que no tiene.
  *   - Máximo 2 cambios por pack (limiteDeCambios.js).
@@ -25,19 +30,18 @@ import { mapPackNameToMenuKey } from './packClassification';
 import { esPackDeProteinas, cuantasProteinas, entregasDelPedido, elegidasPara } from './proteinasPorEntrega';
 import { MAX_CAMBIOS_POR_PACK } from './limiteDeCambios';
 
-/** 8 p. m. en Costa Rica (UTC-6, sin horario de verano). */
-export const HORA_LIMITE_CR = 20;
+/** 7 p. m. en Costa Rica (UTC-6, sin horario de verano): la del cierre de pedidos. */
+export const HORA_LIMITE_CR = 19;
 const DESFASE_CR_HORAS = 6;
 
 /**
  * Cuántos días antes de la entrega se cierra, según el día que se entrega.
  *
- * Sábado y lunes se cocinan juntos desde el jueves: los dos cierran el
- * miércoles. Martes y domingo caen en ese mismo ciclo. Miércoles, jueves y
- * viernes no tienen ciclo definido todavía: cierran dos días antes, que es lo
- * que Gina necesita para comprar.
+ * Igual que el cierre de pedidos de Gina: el lunes cierra el viernes (3 días
+ * antes); el miércoles y el sábado, dos días antes. Los días que no son de
+ * reparto, por si acaso, también dos días antes.
  */
-const DIAS_ANTES = { 6: 3, 0: 4, 1: 5, 2: 6, 3: 2, 4: 2, 5: 2 };
+const DIAS_ANTES = { 1: 3, 3: 2, 6: 2, 0: 2, 2: 2, 4: 2, 5: 2 };
 
 const texto = (x) => String(typeof x === 'string' ? x : (x?.nombre || '')).trim();
 
@@ -56,14 +60,15 @@ export const estaCerrada = (fecha, ahora = new Date()) => {
     return !cierre || ahora.getTime() >= cierre.getTime();
 };
 
-/** "miércoles 23 de setiembre, 8 p. m." — para decirle al cliente hasta cuándo. */
+/** "jueves 24 de setiembre, 7 p. m." — para decirle al cliente hasta cuándo. */
 export const horaLimiteEnPalabras = (fecha) => {
     const cierre = horaLimiteDe(fecha);
     if (!cierre) return '';
     const enCR = new Date(cierre.getTime() - DESFASE_CR_HORAS * 3600000);
     const dia = enCR.toLocaleDateString('es-CR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
     // "miércoles, 23 de septiembre" → "miércoles 23 de setiembre", como se dice acá
-    return `${dia.replace(/^(\p{L}+),/u, '$1').replace('septiembre', 'setiembre')}, 8 p. m.`;
+    const hora = HORA_LIMITE_CR > 12 ? `${HORA_LIMITE_CR - 12} p. m.` : `${HORA_LIMITE_CR} a. m.`;
+    return `${dia.replace(/^(\p{L}+),/u, '$1').replace('septiembre', 'setiembre')}, ${hora}`;
 };
 
 /** La entrega que todavía se puede cambiar, o null si ya no queda ninguna. */

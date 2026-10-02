@@ -14,7 +14,7 @@ import { WHATSAPP_MESSAGES } from '../config/whatsappMessages';
  * Es el que se pone en cualquier mensaje o automatización de Kommo, sin
  * variables (como bikitchencr.com/etiquetas para la impresora). El cliente
  * escribe su WhatsApp y su nombre, y lo lleva a su link de siempre
- * (/cambios/<código>), con las mismas reglas: hasta el miércoles 8 p. m. y
+ * (/cambios/<código>), con las mismas reglas: hasta el cierre de pedidos de su entrega y
  * máximo 2 cambios por pack. La búsqueda la hace netlify/functions/cambios-semana.js.
  */
 
@@ -76,7 +76,7 @@ export default function BuscarCambiosPage() {
                     <h1 className="text-3xl font-black text-gray-900 leading-tight">Cambios de tu pack de esta semana</h1>
                     <p className="mt-2 text-gray-600">
                         Escribí el WhatsApp con el que hiciste tu pedido y tu nombre. Podés cambiar hasta 2 cosas por pack,
-                        hasta el miércoles a las 8 p. m. <Link to="/menu" className="font-semibold text-bikitchen-orange underline">Ver el menú de la semana</Link>
+                        hasta el cierre de pedidos de tu entrega. <Link to="/menu" className="font-semibold text-bikitchen-orange underline">Ver el menú de la semana</Link>
                     </p>
 
                     <form onSubmit={handleBuscar} className="mt-6 bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-4">

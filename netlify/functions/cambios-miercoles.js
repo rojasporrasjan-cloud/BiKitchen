@@ -168,7 +168,10 @@ export const correr = async ({ ahora = new Date(), modo = process.env.CAMBIOS_EN
         linkCambios: process.env.KOMMO_CAMPO_LINK_CAMBIOS,
         avance: process.env.KOMMO_CAMPO_AVANCE,
         proximaEntrega: process.env.KOMMO_CAMPO_PROXIMA_ENTREGA,
-        pack: process.env.KOMMO_CAMPO_PACK
+        pack: process.env.KOMMO_CAMPO_PACK,
+        // Las variables de la plantilla `cambios_personal` (docs/KOMMO_CONFIGURACION.md)
+        entrega: process.env.KOMMO_CAMPO_ENTREGA,
+        cierreCambios: process.env.KOMMO_CAMPO_CIERRE_CAMBIOS
     };
     const { conId, nuevos } = await enviarPorKommo(destinatarios, {
         bot: process.env.KOMMO_BOT_CAMBIOS, camposIds, segmentoId: 'cambios-semana'

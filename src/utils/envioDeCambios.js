@@ -11,25 +11,34 @@
  *     avisa que el pack se termina, para que renueve a tiempo.
  */
 
-import { loQueSePuedeCambiar } from './cambiosDeLaSemana';
+import { loQueSePuedeCambiar, HORA_LIMITE_CR, horaLimiteEnPalabras } from './cambiosDeLaSemana';
 import { entregasDelPedido, esPackDeProteinas, elegidasPara } from './proteinasPorEntrega';
 import { consultasParaFechas } from './consultaPorFechas';
 import { esTelefonoDeRelleno } from './telefonoRelleno';
 
+/** "sábado 3 de octubre", como se dice acá. */
+const fechaEnPalabras = (fecha) => {
+    const d = new Date(`${fecha}T12:00:00`);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('es-CR', { weekday: 'long', day: 'numeric', month: 'long' })
+        .replace(/^(\p{L}+),/u, '$1').replace('septiembre', 'setiembre');
+};
+
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 /**
- * El sábado y el lunes que se cocinan juntos esta semana.
+ * El sábado y el lunes de los que todavía se pueden pedir cambios.
  *
- * El miércoles se manda para el sábado que viene y el lunes siguiente. De
- * jueves en adelante ya se está cocinando ese ciclo, así que se toma el
- * siguiente: un link que abre ya cerrado no le sirve a nadie.
+ * Con el cierre igual al de pedidos (cambiosDeLaSemana.js), el lunes se puede
+ * cambiar hasta el VIERNES 7 p. m.: hasta ese momento el ciclo es el sábado de
+ * esta semana y el lunes siguiente. Desde el viernes 7 p. m. (y el sábado, que
+ * ya se entrega) pasa al ciclo de la semana que viene.
  */
 export const proximoCiclo = (hoy = new Date()) => {
     const base = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
     const dia = base.getDay();                     // 0 domingo … 6 sábado
-    // Hasta el miércoles: el sábado de esta semana. Del jueves al sábado: el de la próxima.
-    const hastaSabado = dia <= 3 ? 6 - dia : 13 - dia;
+    let hastaSabado = (6 - dia + 7) % 7 || 7;     // el sábado ya no: el próximo
+    if (dia === 5 && hoy.getHours() >= HORA_LIMITE_CR) hastaSabado += 7;
     const sabado = new Date(base);
     sabado.setDate(base.getDate() + hastaSabado);
     const lunes = new Date(sabado);
@@ -114,6 +123,9 @@ export const destinatarioKommo = ({ pedido, fecha, ultima }, url) => {
         },
         entregasRestantes: Math.max(0, entregas.length - numero),
         linkCambios: url,
+        // Las variables de la plantilla: cuándo es su entrega y hasta cuándo cambia
+        entregaEnPalabras: fechaEnPalabras(fecha),
+        cierreCambios: horaLimiteEnPalabras(fecha),
         ultima: !!ultima
     };
 };

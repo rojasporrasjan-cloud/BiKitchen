@@ -104,6 +104,10 @@ export const payloadContacto = (cliente, { camposIds = {}, segmentoId } = {}) =>
     // El link personal para elegir los cambios de la semana (envioDeCambios.js).
     // Solo lo traen los clientes de la pantalla "Cambios de la semana".
     agregar(camposIds.linkCambios, cliente.linkCambios || '');
+    // Para las variables de la plantilla `cambios_personal`: "sábado 3 de octubre"
+    // y "jueves 1 de octubre, 7 p. m.". En palabras, porque van tal cual al mensaje.
+    agregar(camposIds.entrega, cliente.entregaEnPalabras || '');
+    agregar(camposIds.cierreCambios, cliente.cierreCambios || '');
 
     const payload = {
         name: cliente.nombre || 'Sin nombre',

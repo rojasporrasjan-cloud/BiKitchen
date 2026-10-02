@@ -33,18 +33,24 @@ const PACK = {
 };
 
 describe('la hora límite', () => {
-    it('sábado 26 y lunes 28 cierran el miércoles 23 a las 8 p. m. de Costa Rica', () => {
-        expect(horaLimiteDe('2026-09-26').toISOString()).toBe('2026-09-24T02:00:00.000Z');
-        expect(horaLimiteDe('2026-09-28').toISOString()).toBe('2026-09-24T02:00:00.000Z');
+    // Igual que el cierre de pedidos de Gina (decisión de Jan, 2 oct 2026)
+    it('sábado 26 cierra el jueves 24 y lunes 28 el viernes 25, a las 7 p. m. de Costa Rica', () => {
+        expect(horaLimiteDe('2026-09-26').toISOString()).toBe('2026-09-25T01:00:00.000Z');
+        expect(horaLimiteDe('2026-09-28').toISOString()).toBe('2026-09-26T01:00:00.000Z');
     });
 
-    it('a las 7:59 p. m. todavía se puede; a las 8 ya no', () => {
-        expect(estaCerrada('2026-09-26', new Date('2026-09-24T01:59:00Z'))).toBe(false);
-        expect(estaCerrada('2026-09-26', new Date('2026-09-24T02:00:00Z'))).toBe(true);
+    it('el miércoles 30 cierra el lunes 28 a las 7 p. m.', () => {
+        expect(horaLimiteDe('2026-09-30').toISOString()).toBe('2026-09-29T01:00:00.000Z');
+    });
+
+    it('a las 6:59 p. m. todavía se puede; a las 7 ya no', () => {
+        expect(estaCerrada('2026-09-26', new Date('2026-09-25T00:59:00Z'))).toBe(false);
+        expect(estaCerrada('2026-09-26', new Date('2026-09-25T01:00:00Z'))).toBe(true);
     });
 
     it('se lo dice al cliente en palabras', () => {
-        expect(horaLimiteEnPalabras('2026-09-26')).toMatch(/miércoles 23 de setiembre, 8 p\. m\./);
+        expect(horaLimiteEnPalabras('2026-09-26')).toMatch(/jueves 24 de setiembre, 7 p\. m\./);
+        expect(horaLimiteEnPalabras('2026-09-28')).toMatch(/viernes 25 de setiembre, 7 p\. m\./);
     });
 
     it('la entrega abierta es la primera que no cerró', () => {

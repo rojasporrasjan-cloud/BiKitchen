@@ -50,8 +50,64 @@ descartó porque incluye packs vencidos (les llegaría "tu próxima entrega").
 
 Cada miércoles, cada cliente con entrega el sábado o el lunes recibe por
 WhatsApp el menú de la semana y un link para pedir sus cambios (máximo 2 por
-pack, hasta el miércoles a las 8 p. m.). Lo que elige queda guardado solo en su
+pack, hasta el cierre de pedidos de su entrega). Lo que elige queda guardado solo en su
 pedido y le llega a la hoja de cocina.
+
+**Cierre de los cambios = cierre de pedidos** (decisión de Jan, 1 oct 2026):
+entrega del miércoles → lunes 7 p. m.; del sábado → jueves 7 p. m.; del lunes →
+viernes 7 p. m. Por eso `menu_y_cambios` (que dice "miércoles 8 p. m.") se
+reemplaza por `cambios_personal`, que pone la hora de cada cliente.
+
+## Lo nuevo (1 de octubre de 2026): link personal + pago recibido
+
+**Estado (2 oct 2026, hecho por Claude en Chrome):** casilla "Entrega" **2459925**,
+casilla "Cierre de cambios" **2459927**; plantillas `cambios_personal` **85277** y
+`pago_recibido` **85279** en análisis en Meta. Los 4 bots 115992-115998 estaban
+vacíos (229 lanzamientos sin mandar nada): los borra Jan. Falta el bot
+"Pago recibido" (cuando Meta apruebe).
+
+### Antes de crear nada
+- **Borrar los 4 bots vacíos** 115992, 115994, 115996, 115998. Kommo les vuelve
+  a poner el disparador "Cualquier conversación nueva" al guardar (se ve solo en
+  la LISTA de bots): así como están le escribirían a cualquiera que entre.
+  La renovación tendrá su bot nuevo cuando haga falta.
+
+### Dos casillas nuevas del contacto (tipo texto)
+| Casilla | Qué lleva (lo llena el sistema) | Variable en Netlify |
+|---|---|---|
+| "Entrega" | `sábado 3 de octubre` | `KOMMO_CAMPO_ENTREGA` = su id |
+| "Cierre de cambios" | `jueves 1 de octubre, 7 p. m.` | `KOMMO_CAMPO_CIERRE_CAMBIOS` = su id |
+
+### Plantilla `cambios_personal` (Utilidad, Español, sin encabezado ni botones)
+```
+Hola {{1}} 👋 Ya está listo el menú de tu entrega del {{2}}: https://bikitchencr.com/menu
+Si querés cambiar algo (hasta 2 cambios por pack), entrá a tu link personal: {{3}}
+Podés hacerlo hasta el {{4}}. ¡Gracias por comer rico con nosotros!
+```
+{{1}} nombre del contacto · {{2}} casilla "Entrega" · {{3}} casilla "Link cambios"
+· {{4}} casilla "Cierre de cambios". Ejemplos: `María`, `sábado 3 de octubre`,
+`https://bikitchencr.com/cambios`, `jueves 1 de octubre, 7 p. m.`
+
+Cuando Meta la apruebe: en el bot **115866** cambiar el paso Mensaje de
+`menu_y_cambios` a `cambios_personal` (sin disparador).
+
+### Plantilla `pago_recibido` (Utilidad, Español, sin encabezado ni botones)
+```
+Hola {{1}}, recibimos tu pago ✅ Tu pedido de BiKitchen quedó confirmado.
+Tu entrega es el {{2}}, entre 9 a. m. y 2 p. m. Si tenés alguna duda, respondé este mensaje. ¡Gracias por elegirnos!
+```
+{{1}} nombre del contacto · {{2}} casilla "Entrega". Reemplaza las dos
+confirmaciones que Gina pega a mano.
+
+Bot nuevo "Pago recibido": un solo paso Mensaje con `pago_recibido`, **sin
+disparador**. Su número va en Netlify como `KOMMO_BOT_PAGO_RECIBIDO`.
+
+**Cómo sale:** la función `pago-recibido` revisa cada 10 minutos los pedidos
+confirmados en la última media hora (al confirmar el pago en el panel o con
+tarjeta) y le escribe una sola vez a cada uno (queda `avisoPagoRecibido` en el
+pedido). `PAGO_RECIBIDO_AUTOMATICO`: sin poner = apagada; `prueba` = solo
+pedidos del `CAMBIOS_TELEFONO_PRUEBA`; `si` = todos. Nunca a teléfonos de relleno.
+Ojo: con `si`, Gina deja de pegar la confirmación a mano (si no, llega doble).
 
 ## Los links (ya existen en la página, no hay que crear nada)
 
@@ -146,6 +202,6 @@ aparezca su pedido (si tiene entrega esa semana).
 | Qué pasa | Qué es |
 |---|---|
 | `/cambios` dice "No encontramos un pedido…" | El número o el nombre no calzan con el pedido, o no tiene entrega el sábado/lunes de esa semana. Si el pedido es nuevo, a los 20 minutos ya aparece |
-| El link abre pero dice "Se cerró" | Ya pasó el miércoles 8 p. m. |
+| El link abre pero dice "Se cerró" | Ya pasó el cierre de pedidos de esa entrega (lunes, jueves o viernes 7 p. m.) |
 | "El servicio de cambios no está disponible" | Falta `CAMBIOS_SECRETO` en Netlify |
 | Meta rechaza la plantilla | Anotar el motivo y avisarle a Jan |

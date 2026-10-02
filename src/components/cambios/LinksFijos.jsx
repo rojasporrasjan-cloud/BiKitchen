@@ -12,7 +12,7 @@ import { Copy, CheckCircle2, Link2 } from 'lucide-react';
 const SITIO = 'https://bikitchencr.com';
 
 const LINKS = [
-    { ruta: '/cambios', para: 'Cambios de la semana (máximo 2 por pack, hasta el miércoles 8 p. m.)' },
+    { ruta: '/cambios', para: 'Cambios de la semana (máximo 2 por pack, hasta el cierre de pedidos de su entrega)' },
     { ruta: '/menu', para: 'Menú de la semana' }
 ];
 

@@ -19,8 +19,13 @@ describe('el ciclo del miércoles', () => {
     it('el miércoles 23 manda para el sábado 26 y el lunes 28', () => {
         expect(proximoCiclo(new Date(2026, 8, 23, 9))).toEqual({ sabado: '2026-09-26', lunes: '2026-09-28' });
     });
-    it('el jueves ya se está cocinando ese ciclo: toma el siguiente', () => {
-        expect(proximoCiclo(new Date(2026, 8, 24, 9))).toEqual({ sabado: '2026-10-03', lunes: '2026-10-05' });
+    it('el jueves y el viernes hasta las 7 p. m. sigue siendo ese ciclo: el lunes se puede cambiar hasta el viernes', () => {
+        expect(proximoCiclo(new Date(2026, 8, 24, 9))).toEqual({ sabado: '2026-09-26', lunes: '2026-09-28' });
+        expect(proximoCiclo(new Date(2026, 8, 25, 18, 59))).toEqual({ sabado: '2026-09-26', lunes: '2026-09-28' });
+    });
+    it('desde el viernes 7 p. m. y el sábado, el ciclo de la semana que viene', () => {
+        expect(proximoCiclo(new Date(2026, 8, 25, 19, 0))).toEqual({ sabado: '2026-10-03', lunes: '2026-10-05' });
+        expect(proximoCiclo(new Date(2026, 8, 26, 9))).toEqual({ sabado: '2026-10-03', lunes: '2026-10-05' });
     });
     it('el domingo toma el sábado que viene', () => {
         expect(proximoCiclo(new Date(2026, 8, 20, 9))).toEqual({ sabado: '2026-09-26', lunes: '2026-09-28' });
@@ -117,5 +122,13 @@ describe('que no le llegue a quien no tiene nada que ver', () => {
         const unicos = destinatariosUnicos([d1, d2, null]);
         expect(unicos).toHaveLength(1);
         expect(unicos[0]).toMatchObject({ telefono: '88112233', linkCambios: 'https://bk/cambios/1', ultima: true });
+    });
+});
+
+describe('las variables de la plantilla con el link personal', () => {
+    it('le escribe a Kommo cuándo es su entrega y hasta cuándo puede cambiar, en palabras', () => {
+        const d = destinatarioKommo({ pedido: mensual({ telefono: '8811-2233' }), fecha: '2026-10-03', ultima: false }, 'https://bk/cambios/x');
+        expect(d.entregaEnPalabras).toBe('sábado 3 de octubre');
+        expect(d.cierreCambios).toMatch(/^jueves 1 de octubre, 7 p\. m\.$/);
     });
 });

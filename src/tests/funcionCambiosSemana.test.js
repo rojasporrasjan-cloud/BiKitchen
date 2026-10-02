@@ -112,8 +112,8 @@ describe('la función del link de cambios', () => {
         expect(estado.actualizados).toHaveLength(0);
     });
 
-    it('después del miércoles 8 p. m. ya no se guarda', async () => {
-        vi.setSystemTime(new Date('2026-09-24T02:30:00Z'));   // miércoles 8:30 p. m. en CR
+    it('después del cierre (jueves 7 p. m. para el sábado) ya no se guarda', async () => {
+        vi.setSystemTime(new Date('2026-09-25T01:30:00Z'));   // jueves 7:30 p. m. en CR
         const r = await llamar({ accion: 'guardar', codigo: codigo(), cambios: [{ plato: 1, parte: 'carbo', a: 'Arroz blanco' }] });
         expect(r.status).toBe(409);
         expect(r.error).toMatch(/se cerraron/);
