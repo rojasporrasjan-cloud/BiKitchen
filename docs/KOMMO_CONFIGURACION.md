@@ -216,3 +216,95 @@ aparezca su pedido (si tiene entrega esa semana).
 | El link abre pero dice "Se cerró" | Ya pasó el cierre de pedidos de esa entrega (lunes, jueves o viernes 7 p. m.) |
 | "El servicio de cambios no está disponible" | Falta `CAMBIOS_SECRETO` en Netlify |
 | Meta rechaza la plantilla | Anotar el motivo y avisarle a Jan |
+
+## Los avisos de la entrega + lo que faltaba (4 oct 2026)
+
+> Para pegar en **Claude en Chrome** con Kommo abierto. Son las plantillas y los
+> bots de TODOS los WhatsApp automáticos. El sistema ya los tiene programados
+> (vienen apagados); acá solo se arma lo de Kommo.
+
+### Reglas (no se negocian)
+1. **No mandar ningún mensaje a clientes.** Aquí solo se crean plantillas y bots.
+2. Antes de tocar "Enviar para aprobación", "Guardar", "Activar" o "Borrar",
+   mostrarle a Jan EXACTAMENTE qué se va a guardar y esperar su "sí".
+3. No borrar ni cambiar plantillas, bots, automatizaciones, embudos, etapas ni
+   campos que ya existen, salvo lo que este documento dice.
+4. **Todos los bots van SIN disparador.** Al guardar, Kommo ofrece/mete solo
+   "Cuando se inicia un chat…" o "Cualquier conversación nueva": cancelarlo, y
+   después de guardar confirmarlo en la LISTA de bots (el editor no lo muestra).
+   Un bot con disparador le escribiría a cualquiera que entre al chat.
+5. Kommo no deja guardar un bot vacío: se le agrega un paso, se guarda, y se
+   deja solo el paso Mensaje.
+
+### Paso 0 · Ver cómo está (solo mirar)
+**Automatiza → Plantillas → Plantillas de respuesta**: anotar el estado de
+`menu_y_cambios`, `cambios_personal`, `pago_recibido`, `recordatorio_pago`,
+`renovacion_pack` (aprobada / en revisión / rechazada con su motivo).
+**Salesbots**: anotar cada bot con su id, si tiene disparador y qué plantilla
+manda. Si siguen los bots vacíos **115992, 115994, 115996, 115998**, decírselo a
+Jan: hay que borrarlos (él decide). Entregarle la lista a Jan antes de seguir.
+
+### Paso 1 · Las 4 plantillas nuevas
+Ruta: **Automatiza → Plantillas → Plantillas de respuesta → + Nueva plantilla →
+Plantilla de WhatsApp**. Idioma **Español**. Variable **{{1}}** = nombre del
+contacto (ejemplo: `María`). Pie de página vacío.
+
+**1. `hoy_te_llega`** — Categoría **Utilidad** · sin encabezado · sin botones
+```
+Hola {{1}} 👋 Hoy te llega tu pedido de BiKitchen 🚚 El repartidor pasa entre 9 a. m. y 2 p. m.
+Si no vas a estar, respondé este mensaje y coordinamos. ¡Buen provecho!
+```
+
+**2. `guia_de_congelado`** — Categoría **Utilidad** · encabezado **Imagen**: la
+tarjeta "GUIA CLIENTE - tarjeta para WhatsApp.png" (Jan la tiene; pedírsela
+para subirla) · sin botones
+```
+Hola {{1}}, ¿ya guardaste tu pack? 🧊 Para que todo esté rico hasta el último plato:
+• Platos 1 y 2: al refri, son los primeros que se comen.
+• Platos 3, 4 y 5: al congelador hoy mismo.
+• Para comerlos: pasalos al refri la noche anterior y calentalos bien.
+Cualquier duda, respondé este mensaje.
+```
+
+**3. `que_tal_todo`** — Categoría **Utilidad** · sin encabezado · botones de
+respuesta rápida: `¡Todo excelente!` y `Tengo un comentario`
+```
+Hola {{1}} 😊 Ayer recibiste tu primer pedido de BiKitchen y queremos saber: ¿qué tal todo?
+¿Llegó bien y te gustó la comida? Si algo no te gustó, contanos con confianza para mejorarlo. ¡Gracias por elegirnos!
+```
+(Si Meta la pasa a Marketing, aceptarlo y avisarle a Jan.)
+
+**4. `volver_a_invitar`** — Categoría **Marketing** · sin encabezado · botones
+de respuesta rápida: `¡Quiero pedir!` y `Ahora no`
+```
+Hola {{1}} 👋 ¡Te extrañamos en BiKitchen! Ya está el menú nuevo de la semana: https://bikitchencr.com/menu
+Para que vuelvas a comer rico sin cocinar, tu próximo pack lleva 10% de descuento. Respondé este mensaje y te ayudamos a armar tu pedido 🍽️
+```
+
+Mostrar cada una a Jan → con su "sí" → **Enviar para aprobación**. Meta tarda
+de 1 minuto a 48 horas. Si rechaza alguna: copiar el motivo EXACTO y no
+reintentar sin preguntarle a Jan.
+
+### Paso 2 · Un bot por plantilla (cuando la plantilla esté APROBADA)
+Salesbot nuevo, un solo paso **Mensaje → WhatsApp → la plantilla**, **SIN
+disparador** (regla 4). Nombres:
+
+| Bot | Plantilla | Le pasás a Jan el id para Netlify |
+|---|---|---|
+| "Hoy te llega" | `hoy_te_llega` | `KOMMO_BOT_HOY_TE_LLEGA` |
+| "Guía de congelado" | `guia_de_congelado` | `KOMMO_BOT_GUIA_CONGELADO` |
+| "Qué tal todo" | `que_tal_todo` | `KOMMO_BOT_QUE_TAL` |
+| "Volver a invitar" | `volver_a_invitar` | `KOMMO_BOT_VOLVER_A_INVITAR` |
+| "Recordatorio de pago" | `recordatorio_pago` (ya aprobada) | `KOMMO_BOT_RECORDATORIO_PAGO` |
+| "Pago recibido" | `pago_recibido` | `KOMMO_BOT_PAGO_RECIBIDO` |
+| "Renovación" | `renovacion_pack` | `KOMMO_BOT_RENOVACION` |
+
+Y si `cambios_personal` ya está aprobada: en el bot **115866** ("Menú y cambios")
+cambiar el paso Mensaje de `menu_y_cambios` a `cambios_personal` (sin disparador).
+
+Si alguno de esos bots YA existe con su paso Mensaje y sin disparador, no se
+crea otro: solo se anota su id.
+
+### Al terminar
+Darle a Jan una tabla: plantilla · estado en Meta · bot · id del bot · ¿sin
+disparador? (confirmado en la lista). Con esos ids Jan llena Netlify.

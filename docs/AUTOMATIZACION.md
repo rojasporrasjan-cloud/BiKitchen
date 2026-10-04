@@ -155,6 +155,33 @@ el estado y el historial, de la función `kommo` (acción `envios`, ~40 lecturas
 - El envío de cambios corrido a mano después del cierre del sábado (por ejemplo
   un viernes) ya no le manda link al del sábado: solo al del lunes.
 
+## Los avisos alrededor de la entrega (4 oct 2026)
+
+Pedido de Jan: "todas las difusiones automáticas que necesitamos". Cuatro más,
+con el MISMO recorrido que la renovación (`src/utils/avisoDelDia.js`): apagados
+por defecto, `prueba` = UNA muestra a `CAMBIOS_TELEFONO_PRUEBA` con la lista real
+en `envios_kommo`, constancia en `envios_del_dia/{tipo}_{fecha}` (nunca dos
+veces), sin rellenos, uno por persona y con tope. A quién: `src/utils/avisosDeEntrega.js`
+(la misma función arma la lista del panel). Tests: `avisosDeEntrega.test.js`.
+
+| Envío | Función | Cuándo (Costa Rica) | A quién | Interruptor | Bot | Plantilla |
+|---|---|---|---|---|---|---|
+| Hoy te llega | `hoy-te-llega.js` | L/M/S 7 a. m. | todo el que recibe hoy (pagado, no cancelado) | `HOY_TE_LLEGA_AUTOMATICO` | `KOMMO_BOT_HOY_TE_LLEGA` | `hoy_te_llega` (Utilidad) |
+| Guía de congelado | `guia-de-congelado.js` | L/M/S 3 p. m. | la PRIMERA entrega de cada pedido fue hoy | `GUIA_CONGELADO_AUTOMATICO` | `KOMMO_BOT_GUIA_CONGELADO` | `guia_de_congelado` (Utilidad, imagen) |
+| ¿Qué tal todo? | `que-tal-todo.js` | D/Ma/J 11 a. m. | cliente NUEVO cuya primera entrega fue ayer | `QUE_TAL_AUTOMATICO` | `KOMMO_BOT_QUE_TAL` | `que_tal_todo` (Utilidad) |
+| Volver a invitar | `volver-a-invitar.js` | martes 10 a. m. | última entrega hace 14–21 días y nada después | `VOLVER_A_INVITAR_AUTOMATICO` | `KOMMO_BOT_VOLVER_A_INVITAR` | `volver_a_invitar` (Marketing) |
+
+- **Lecturas:** hoy-te-llega y la guía leen solo los pedidos de HOY; ¿qué tal?
+  los de ayer + una consulta `telefono in [variantes]` por cada primera entrega
+  (para saber si es nuevo); volver a invitar, los pedidos con entregas de hace 3
+  semanas a 6 adelante, una vez por semana.
+- **"Nuevo"** = ningún otro pedido vivo de ese teléfono tiene entregas antes. Si
+  el número está escrito de una forma rara, puede salir como nuevo un cliente
+  viejo: se le pregunta "¿qué tal?" de más, nada grave.
+- **Volver a invitar** es Marketing: Meta lo cobra y puede no entregarlo a quien
+  recibió muchas promociones.
+- Los textos de las plantillas: `docs/KOMMO_CONFIGURACION.md`, "Los avisos de la entrega".
+
 ## El link de Gina: packs mensuales (29 set 2026)
 
 Gina no entra al panel. Su link `bikitchencr.com/packs-mensuales/<código>`

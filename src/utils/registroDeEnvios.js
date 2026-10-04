@@ -34,6 +34,27 @@ export const TIPOS_DE_ENVIO = [
         id: 'pago-recibido', label: 'Pago recibido',
         cuando: 'Cada 10 minutos — apenas se confirma el pago en el panel o con tarjeta',
         interruptor: 'PAGO_RECIBIDO_AUTOMATICO', bot: 'KOMMO_BOT_PAGO_RECIBIDO'
+    },
+    // Los avisos alrededor de la entrega (avisosDeEntrega.js, 4 oct 2026)
+    {
+        id: 'hoy-te-llega', label: 'Hoy te llega',
+        cuando: 'Lunes, miércoles y sábado 7 a. m. — a todos los que reciben ese día',
+        interruptor: 'HOY_TE_LLEGA_AUTOMATICO', bot: 'KOMMO_BOT_HOY_TE_LLEGA'
+    },
+    {
+        id: 'guia-congelado', label: 'Guía de congelado',
+        cuando: 'Lunes, miércoles y sábado 3 p. m. — la primera entrega de cada pedido',
+        interruptor: 'GUIA_CONGELADO_AUTOMATICO', bot: 'KOMMO_BOT_GUIA_CONGELADO'
+    },
+    {
+        id: 'que-tal', label: '¿Qué tal todo?',
+        cuando: 'Domingo, martes y jueves 11 a. m. — clientes nuevos, el día después de su primera entrega',
+        interruptor: 'QUE_TAL_AUTOMATICO', bot: 'KOMMO_BOT_QUE_TAL'
+    },
+    {
+        id: 'volver-a-invitar', label: 'Volver a invitar',
+        cuando: 'Martes 10 a. m. — terminaron hace 2 a 3 semanas y no volvieron a pedir (Marketing)',
+        interruptor: 'VOLVER_A_INVITAR_AUTOMATICO', bot: 'KOMMO_BOT_VOLVER_A_INVITAR'
     }
 ];
 

@@ -6,6 +6,7 @@ import { leerEnviosAutomaticos } from '../../utils/kommoClient';
 import { TIPOS_DE_ENVIO, estadoEnRegistro } from '../../utils/registroDeEnvios';
 import { renovacionesDelDia, destinatarioDeRenovacion } from '../../utils/envioDeCambios';
 import { sinPagarConEntregaCerca, hoyEnCostaRica, sumarDias } from '../../utils/avisosDePago';
+import { entreganHoy, primeraEntregaHoy, nuevosQueRecibieronAyer, paraVolverAInvitar } from '../../utils/avisosDeEntrega';
 
 /**
  * Los WhatsApp automáticos, en Listas de Difusión: qué está prendido, a quién
@@ -77,13 +78,27 @@ export default function EnviosAutomaticos({ orders = [], loading = false }) {
                 .localeCompare(String(a.avisoPagoRecibido || a.avisoPagoRecibidoPrueba)))
             .slice(0, 15)
             .map(p => filaDe({ pedido: p, fecha: p.fecha_entrega || '' }, registro, 'pago-recibido', 'avisoPagoRecibido'));
-        return { renovacion, 'recordatorio-pago': recordatorio, 'pago-recibido': pagoRecibido };
+        // El próximo reparto (hoy, si hoy se reparte) y el día siguiente a él
+        const reparto = proximosRepartos(hoy, 1)[0];
+        const hoyTeLlega = entreganHoy(orders, reparto).map(i => filaDe(i, registro, 'hoy-te-llega'));
+        const guia = primeraEntregaHoy(orders, reparto).map(i => filaDe(i, registro, 'guia-congelado'));
+        // Clientes nuevos: hoy reciben su primera entrega y mañana les llega el "¿qué tal?"
+        const queTal = nuevosQueRecibieronAyer(orders, sumarDias(reparto, 1)).map(i => filaDe(i, registro, 'que-tal'));
+        const invitar = paraVolverAInvitar(orders, hoy).map(i => filaDe(i, registro, 'volver-a-invitar'));
+        return {
+            renovacion, 'recordatorio-pago': recordatorio, 'pago-recibido': pagoRecibido,
+            'hoy-te-llega': hoyTeLlega, 'guia-congelado': guia, 'que-tal': queTal, 'volver-a-invitar': invitar
+        };
     }, [orders, registro, hoy]);
 
     const VACIOS = {
         renovacion: 'Nadie termina su pack en los próximos tres días de reparto.',
         'recordatorio-pago': 'No hay pedidos sin pagar con entrega en los próximos 3 días.',
-        'pago-recibido': 'Todavía no se ha avisado ningún pago.'
+        'pago-recibido': 'Todavía no se ha avisado ningún pago.',
+        'hoy-te-llega': 'Nadie recibe en el próximo reparto.',
+        'guia-congelado': 'Nadie recibe su primera entrega en el próximo reparto.',
+        'que-tal': 'No hay clientes nuevos en el próximo reparto.',
+        'volver-a-invitar': 'Nadie terminó hace 2 a 3 semanas sin volver a pedir.'
     };
 
     return (
