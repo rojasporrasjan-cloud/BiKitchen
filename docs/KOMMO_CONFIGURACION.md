@@ -278,7 +278,7 @@ Hola {{1}} 😊 Ayer recibiste tu primer pedido de BiKitchen y queremos saber: �
 de respuesta rápida: `¡Quiero pedir!` y `Ahora no`
 ```
 Hola {{1}} 👋 ¡Te extrañamos en BiKitchen! Ya está el menú nuevo de la semana: https://bikitchencr.com/menu
-Para que vuelvas a comer rico sin cocinar, tu próximo pack lleva 10% de descuento. Respondé este mensaje y te ayudamos a armar tu pedido 🍽️
+Para que vuelvas a comer rico sin cocinar, tu próximo pack lleva 15% de descuento. Respondé este mensaje y te ayudamos a armar tu pedido 🍽️
 ```
 
 Mostrar cada una a Jan → con su "sí" → **Enviar para aprobación**. Meta tarda
