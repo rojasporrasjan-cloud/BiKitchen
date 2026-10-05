@@ -1490,7 +1490,7 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                                                                     <div>
                                                                         <p className="text-xs text-green-700 font-medium">Costo de envío</p>
                                                                         <p className="text-lg font-black text-green-900">
-                                                                            ₡{getShippingCostFinal().toLocaleString('es-CR')}
+                                                                            {getShippingCostFinal() === 0 ? 'Gratis' : `₡${getShippingCostFinal().toLocaleString('es-CR')}`}
                                                                         </p>
                                                                     </div>
                                                                 </div>
@@ -1833,7 +1833,7 @@ export default function CheckoutSteps({ isOpen, onClose }) {
                                                                 <Truck size={12} />
                                                                 Envío ({getSelectedZoneInfo()?.name?.split('/')?.[0]?.trim() ?? 'Envío'})
                                                             </span>
-                                                            <span>₡{getShippingCostFinal().toLocaleString('es-CR')}</span>
+                                                            <span>{getShippingCostFinal() === 0 ? 'Gratis' : `₡${getShippingCostFinal().toLocaleString('es-CR')}`}</span>
                                                         </div>
                                                     )}
                                                     <div className="flex justify-between font-bold text-lg pt-1 border-t border-gray-200 mt-2">
