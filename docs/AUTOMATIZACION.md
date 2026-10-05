@@ -182,6 +182,33 @@ veces), sin rellenos, uno por persona y con tope. A quién: `src/utils/avisosDeE
   recibió muchas promociones.
 - Los textos de las plantillas: `docs/KOMMO_CONFIGURACION.md`, "Los avisos de la entrega".
 
+## La conexión con Kommo: `kommo-sync` (5 oct 2026)
+
+Fase 1 de `docs/PLAN_DIFUSIONES_AUTOMATICAS.md` (en la carpeta principal). Cada
+10 minutos lee la **API de eventos** de Kommo y deja una ficha por cliente en
+`kommo_contactos/{8 dígitos}`: `ultimoEntrante`, `ultimoSaliente`,
+`contactoBueno` (el del último mensaje = chat vivo), `chatVivo`, `etapa`
+(`{estado, pipeline, leadId, cuando}`), `noMolestarDesde` (etiqueta
+`no-molestar` en Kommo, 30 días) y `contactos` (todos los ids de ese número).
+Lógica pura y pruebas: `src/utils/kommoSync.js`, `kommoSync.test.js`.
+
+- **No le manda nada a nadie.** Solo lee de Kommo y escribe en Firestore.
+- **Kommo entrega SIEMPRE lo más nuevo primero** (ignora `order`). Por eso se lee
+  por ventanas cerradas `[desde, hasta]` de 12 h, de atrás hacia adelante; si una
+  ventana no cabe en la vuelta, se parte a la mitad. `kommo_sync/estado.cursor`
+  = último segundo leído completo.
+- **La primera vez** arranca 30 días atrás (~25.000 eventos) y avanza 20 páginas
+  por vuelta: unas 2–3 h para quedar al día.
+- **Lecturas de Firestore: 2 por vuelta** (`kommo_sync/estado` y
+  `kommo_sync/indice` = contacto → teléfono). Escribe solo las fichas que
+  cambiaron. Nunca baja `kommo_contactos` entero.
+- **WhatsApp viejo:** al número viejo no le entra ni le sale nada (el envío falla
+  con 3137 y no deja evento): todo mensaje del registro es del canal bueno. Un
+  número que no tuvo ningún mensaje no queda marcado como vivo.
+- Apagar: `KOMMO_SYNC_AUTOMATICO=no` en Netlify.
+- Reglas de Firestore de `kommo_contactos` / `kommo_sync`: todavía no (el panel
+  las va a leer en la fase 2; el servidor escribe con el SDK de administrador).
+
 ## El link de Gina: packs mensuales (29 set 2026)
 
 Gina no entra al panel. Su link `bikitchencr.com/packs-mensuales/<código>`
