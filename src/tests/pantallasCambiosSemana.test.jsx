@@ -54,7 +54,7 @@ beforeEach(() => {
         if (cuerpo.accion === 'buscar') {
             estado.buscado = cuerpo;
             return cuerpo.nombre === 'Ana'
-                ? { ok: true, json: async () => ({ opciones: estado.opciones }) }
+                ? { ok: true, json: async () => ({ opciones: estado.opciones, llaveCliente: 'llave-de-ana' }) }
                 : { ok: false, json: async () => ({ error: 'No encontramos un pedido con ese número y ese nombre para esta semana.' }) };
         }
         if (cuerpo.accion === 'generar') {
@@ -117,6 +117,8 @@ describe('la pantalla del panel', () => {
 
 describe('el link fijo /cambios', () => {
     const abrir = async () => {
+        // Un teléfono que nunca entró: si no, la llave del test anterior lo manda directo
+        localStorage.removeItem('bk_llave_cliente');
         await act(async () => {
             render(<MemoryRouter initialEntries={['/cambios']}><Routes>
                 <Route path="/cambios" element={<BuscarCambiosPage />} />
@@ -152,6 +154,41 @@ describe('el link fijo /cambios', () => {
         fireEvent.change(screen.getByLabelText('Tu nombre'), { target: { value: 'Pedro' } });
         await act(async () => { fireEvent.click(screen.getByText('Ver mi menú')); });
         expect(screen.getByRole('alert').textContent).toMatch(/No encontramos/);
+    });
+
+    // Jan, 4 oct 2026: que el cliente ya conocido entre directo, sin escribir nada
+    it('al encontrarlo, guarda la llave en el teléfono para la próxima vez', async () => {
+        localStorage.removeItem('bk_llave_cliente');
+        estado.opciones = [{ pack: 'Pack Mensual Bajo en Calorías', fecha: '2026-10-03', ruta: '/cambios/abc' }];
+        await abrir();
+        fireEvent.change(screen.getByLabelText('Tu nombre'), { target: { value: 'Ana' } });
+        await act(async () => { fireEvent.click(screen.getByText('Ver mi menú')); });
+        expect(localStorage.getItem('bk_llave_cliente')).toBe('llave-de-ana');
+        localStorage.removeItem('bk_llave_cliente');
+    });
+
+    it('con la llave guardada entra DIRECTO a sus cambios, sin formulario', async () => {
+        localStorage.setItem('bk_llave_cliente', 'llave-de-ana');
+        await act(async () => {
+            render(<MemoryRouter initialEntries={['/cambios']}><Routes>
+                <Route path="/cambios" element={<BuscarCambiosPage />} />
+                <Route path="/cambios/:codigo" element={<CambiosSemanaPage />} />
+            </Routes></MemoryRouter>);
+        });
+        expect(screen.getByText('¡Hola, Ana! 👋')).toBeTruthy();
+        expect(screen.queryByLabelText('Tu número de WhatsApp')).toBeNull();
+        localStorage.removeItem('bk_llave_cliente');
+    });
+
+    it('con una llave que ya no tiene entrega esta semana, muestra el formulario', async () => {
+        localStorage.setItem('bk_llave_cliente', 'llave-de-otro');
+        await act(async () => {
+            render(<MemoryRouter initialEntries={['/cambios']}><Routes>
+                <Route path="/cambios" element={<BuscarCambiosPage />} />
+            </Routes></MemoryRouter>);
+        });
+        expect(screen.getByLabelText('Tu número de WhatsApp')).toBeTruthy();
+        localStorage.removeItem('bk_llave_cliente');
     });
 });
 

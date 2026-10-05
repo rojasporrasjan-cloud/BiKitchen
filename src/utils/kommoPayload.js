@@ -98,7 +98,7 @@ export const etiquetaDeSegmento = (segmentoId) => `bk-${segmentoId}`;
  * Gina. Se descubren con la acción `diagnostico`; los que no estén configurados
  * simplemente no se mandan.
  */
-export const payloadContacto = (cliente, { camposIds = {}, segmentoId } = {}) => {
+export const payloadContacto = (cliente, { camposIds = {}, segmentoId, conNombre = true } = {}) => {
     const custom = [];
 
     const agregar = (id, valor) => {
@@ -129,13 +129,38 @@ export const payloadContacto = (cliente, { camposIds = {}, segmentoId } = {}) =>
     // y "jueves 1 de octubre, 7 p. m.". En palabras, porque van tal cual al mensaje.
     agregar(camposIds.entrega, cliente.entregaEnPalabras || '');
     agregar(camposIds.cierreCambios, cliente.cierreCambios || '');
+    // El saludo de TODAS las plantillas ("Hola María"), no el nombre del
+    // contacto. La muestra de prueba no lo toca: el contacto de Jan ya dice el suyo.
+    if (!cliente.muestra) agregar(camposIds.primerNombre, primerNombreParaSaludo(cliente.nombre));
 
-    const payload = {
-        name: cliente.nombre || 'Sin nombre',
-        custom_fields_values: custom
-    };
+    // Al actualizar (conNombre: false) no se pisa el nombre que Gina le puso al
+    // contacto en Kommo ("Adriana Cubillo Montes pavas"): solo al crearlo.
+    const payload = { custom_fields_values: custom };
+    if (conNombre) payload.name = cliente.nombre || 'Sin nombre';
     if (segmentoId) payload._embedded = { tags: [{ name: etiquetaDeSegmento(segmentoId) }] };
     return payload;
+};
+
+const TITULOS = new Set(['don', 'dona', 'doña', 'sr', 'sra', 'srta', 'senor', 'señor', 'senora', 'señora', 'dr', 'dra', 'lic', 'licda']);
+const PARENTESCOS = new Set(['esposa', 'esposo', 'hijo', 'hija', 'mama', 'mamá', 'papa', 'papá', 'hermano', 'hermana', 'novio', 'novia', 'suegra', 'suegro']);
+const conMayuscula = (p) => p.charAt(0).toLocaleUpperCase('es') + p.slice(1).toLocaleLowerCase('es');
+
+/**
+ * El primer nombre para el "Hola …" de las plantillas (4 oct 2026).
+ *
+ * Los pedidos traen el nombre como venga: "karolina soto carballo", "Paula
+ * (nutricionista)", "Doña Carmen". Al cliente se le saluda "Hola Karolina",
+ * "Hola Paula", "Hola Carmen". Si el pedido no es de la persona sino de
+ * alguien de su casa ("Esposa de Rainiero Dinarte"), se deja el nombre entero:
+ * mejor largo que "Hola Esposa".
+ */
+export const primerNombreParaSaludo = (nombre) => {
+    const limpio = String(nombre || '').replace(/\(.*?\)/g, ' ').replace(/[^\p{L}\s'-]/gu, ' ').replace(/\s+/g, ' ').trim();
+    const palabras = limpio.split(' ').filter(Boolean);
+    while (palabras.length > 1 && TITULOS.has(palabras[0].toLocaleLowerCase('es').replace(/\.$/, ''))) palabras.shift();
+    if (!palabras.length) return '';
+    if (PARENTESCOS.has(palabras[0].toLocaleLowerCase('es'))) return limpio;
+    return conMayuscula(palabras[0]);
 };
 
 /** Los que ya existen llevan `id`; los nuevos no. Kommo usa PATCH vs POST. */

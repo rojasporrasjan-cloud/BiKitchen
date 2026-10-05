@@ -110,7 +110,9 @@ export const soloAlNumeroDePrueba = (destinatarios, linkDeMuestra = '', sabado =
  *
  * @returns {Promise<{ conId: Array<{d, id}>, nuevos: Array }>}
  */
-export const enviarPorKommo = async (destinatarios, { bot, camposIds, segmentoId }) => {
+export const enviarPorKommo = async (destinatarios, { bot, camposIds: propios, segmentoId }) => {
+    // El primer nombre va en todos los envíos: es el "Hola …" de las plantillas
+    const camposIds = { primerNombre: process.env.KOMMO_CAMPO_PRIMER_NOMBRE, ...propios };
     // 1. Buscar cada contacto por teléfono
     const conId = [];
     const nuevos = [];
@@ -128,7 +130,7 @@ export const enviarPorKommo = async (destinatarios, { bot, camposIds, segmentoId
     for (const lote of enLotes(conId.filter(x => !nuevos.includes(x.d)), LOTE_CONTACTOS)) {
         await kommo('/api/v4/contacts', {
             method: 'PATCH',
-            body: lote.map(({ d, id }) => ({ id, ...payloadContacto(d, { camposIds, segmentoId }) }))
+            body: lote.map(({ d, id }) => ({ id, ...payloadContacto(d, { camposIds, segmentoId, conNombre: false }) }))
         });
         await dormir(ESPERA_MS);
     }

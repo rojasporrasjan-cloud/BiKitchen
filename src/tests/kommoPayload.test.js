@@ -10,8 +10,38 @@ import {
     payloadEjecutarBot,
     estimarLlamadas,
     LOTE_CONTACTOS,
-    LOTE_BOTS
+    LOTE_BOTS,
+    primerNombreParaSaludo
 } from '../utils/kommoPayload';
+
+// 4 oct 2026: las plantillas saludaban con el nombre entero del contacto
+// ("Hola karolina soto carballo") y cada envío le pisaba el nombre que Gina le
+// había puesto en Kommo.
+describe('el saludo y el nombre del contacto', () => {
+    it('el primer nombre, bien escrito, sin títulos ni paréntesis', () => {
+        expect(primerNombreParaSaludo('karolina soto carballo')).toBe('Karolina');
+        expect(primerNombreParaSaludo('Paula (nutricionista)')).toBe('Paula');
+        expect(primerNombreParaSaludo('Doña Carmen Mora')).toBe('Carmen');
+        expect(primerNombreParaSaludo('MARÍA REBECA LOPEZ')).toBe('María');
+        expect(primerNombreParaSaludo('Álvaro Rivera Madrigal')).toBe('Álvaro');
+    });
+
+    it('si el pedido es de alguien de su casa, el nombre entero (no "Hola Esposa")', () => {
+        expect(primerNombreParaSaludo('Esposa de Rainiero Dinarte')).toBe('Esposa de Rainiero Dinarte');
+    });
+
+    it('va en el campo de primer nombre; al actualizar no se pisa el nombre del contacto', () => {
+        const p = payloadContacto({ nombre: 'karolina soto carballo', telefono: '88103757' }, { camposIds: { primerNombre: 777 }, conNombre: false });
+        expect(p.name).toBeUndefined();
+        expect(p.custom_fields_values).toContainEqual({ field_id: 777, values: [{ value: 'Karolina' }] });
+        expect(payloadContacto({ nombre: 'Ana Mora' }).name).toBe('Ana Mora');
+    });
+
+    it('la muestra de prueba no le cambia el primer nombre al contacto de Jan', () => {
+        const p = payloadContacto({ nombre: 'Prueba BiKitchen', telefono: '72752645', muestra: true }, { camposIds: { primerNombre: 777 } });
+        expect(p.custom_fields_values.some(c => c.field_id === 777)).toBe(false);
+    });
+});
 
 const cliente = {
     nombre: 'Angie Navarro',

@@ -89,7 +89,8 @@ export const sincronizarConKommo = async (clientes, { segmentoId, camposIds, avi
         await llamar('actualizar', {
             contactos: lote.map(({ cliente, id }) => ({
                 id,
-                ...payloadContacto(cliente, { camposIds, segmentoId })
+                // Sin pisar el nombre que Gina le puso al contacto en Kommo
+                ...payloadContacto(cliente, { camposIds, segmentoId, conNombre: false })
             }))
         });
         lote.forEach(({ id }) => ids.push(id));

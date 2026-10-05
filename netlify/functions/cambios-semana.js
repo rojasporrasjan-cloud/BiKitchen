@@ -271,7 +271,7 @@ const indiceDeLaSemana = async ({ sabado, lunes }, { rearmar = false } = {}) => 
     return { ...datos, ref, recienArmado: true };
 };
 
-const buscar = async ({ telefono, nombre }) => {
+const buscar = async ({ telefono, nombre }, authHeader) => {
     const tel = String(telefono || '').replace(/\D/g, '').slice(-8);
     if (tel.length !== 8 || String(nombre || '').trim().length < 2) {
         return json(400, { error: 'Escribí tu número de WhatsApp (8 dígitos) y tu nombre.' });
@@ -285,8 +285,15 @@ const buscar = async ({ telefono, nombre }) => {
         encontrados = buscarEnIndice(indice.porTelefono, tel, nombre);
     }
     if (encontrados.length === 0) return json(404, { error: NO_ENCONTRADO });
+    // Número + nombre calzan: igual que al abrir su link, se recuerda en el
+    // aparato (llaveCliente) y, si tiene sesión, en su cuenta. La próxima vez
+    // /cambios lo reconoce solo (acción 'mios').
+    const uid = await uidDeLaSesion(authHeader);
+    const enSuCuenta = uid ? await unirCuenta(uid, tel) : false;
     // Solo el pack y la fecha: ni dirección ni teléfono ni el nombre completo
     return json(200, {
+        llaveCliente: llaveDeCliente(tel),
+        enSuCuenta,
         opciones: encontrados.map(x => ({ pack: x.pack, fecha: x.fecha, ruta: `/cambios/${codigoPara(x.id, x.fecha)}` }))
     });
 };
@@ -365,7 +372,7 @@ export const handler = async (event) => {
         if (entrada.accion === 'ver') return await ver(entrada, event.headers?.authorization);
         if (entrada.accion === 'mios') return await mios(entrada, event.headers?.authorization);
         if (entrada.accion === 'guardar') return await guardar(entrada);
-        if (entrada.accion === 'buscar') return await buscar(entrada);
+        if (entrada.accion === 'buscar') return await buscar(entrada, event.headers?.authorization);
         if (entrada.accion === 'generar') return await generar(entrada, event.headers?.authorization);
         return json(400, { error: 'Acción desconocida.' });
     } catch (err) {

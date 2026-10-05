@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useWhatsApp } from '../hooks/useWhatsApp';
 import { motion } from 'framer-motion';
 import { Mail, Lock, Eye, EyeOff, LogIn, ArrowLeft, AlertCircle, User, UserPlus } from 'lucide-react';
@@ -21,6 +21,10 @@ export default function LoginPage() {
     const { login, register, resetPassword } = useAuth();
     const { getWhatsAppUrl } = useWhatsApp();
     const navigate = useNavigate();
+    // ?volver=/cambios: al entrar, de vuelta a donde estaba. Solo rutas propias.
+    const [params] = useSearchParams();
+    const pedido = params.get('volver') || '';
+    const volver = /^\/[a-z0-9/-]*$/i.test(pedido) && !pedido.startsWith('//') ? pedido : '/';
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -46,8 +50,8 @@ export default function LoginPage() {
                 setRegisteredName(name);
                 setShowWelcomeModal(true);
             } else {
-                // Si es login, redirigir al inicio
-                navigate('/');
+                // Si es login, al inicio (o a donde venía, con ?volver=)
+                navigate(volver);
             }
         } else {
             setError(result.error);
@@ -58,7 +62,7 @@ export default function LoginPage() {
 
     const handleCloseWelcomeModal = () => {
         setShowWelcomeModal(false);
-        navigate('/');
+        navigate(volver);
     };
 
     const toggleMode = () => {
