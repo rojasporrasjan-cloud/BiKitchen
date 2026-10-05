@@ -43,7 +43,7 @@ import { proximoCiclo, pedidosParaElLink, destinatarioKommo, destinatariosUnicos
 import { horaLimiteEnPalabras, estaCerrada } from '../../src/utils/cambiosDeLaSemana.js';
 import { entradaDeRegistro, anotarEnvio } from '../../src/utils/registroDeEnvios.js';
 import {
-    payloadContacto, payloadEjecutarBot, telefonosDeContacto, soloDigitos, enLotes, LOTE_CONTACTOS, LOTE_BOTS
+    payloadContacto, payloadEjecutarBot, telefonosDeContacto, soloDigitos, enLotes, LOTE_CONTACTOS, LOTE_BOTS, elMasNuevo
 } from '../../src/utils/kommoPayload.js';
 
 export const TOPE = 150;
@@ -73,11 +73,15 @@ const kommo = async (ruta, { method = 'GET', body } = {}) => {
 /** Los pedidos del sábado y el lunes, con las mismas dos consultas que la hoja. */
 export const pedidosDelCiclo = (fechas) => leerPedidosDelCiclo(db, fechas);
 
-/** El id del contacto en Kommo para un teléfono, o null. Una búsqueda por cliente. */
+/**
+ * El id del contacto en Kommo para un teléfono, o null. Una búsqueda por cliente.
+ * Si hay varios con ese número, el más nuevo: el viejo puede tener el chat en el
+ * WhatsApp desconectado y ahí no llega nada (elMasNuevo, kommoPayload.js).
+ */
 export const contactoPorTelefono = async (telefono) => {
     const res = await kommo(`/api/v4/contacts?query=${encodeURIComponent(telefono)}&limit=10`);
     const candidatos = res?._embedded?.contacts || [];
-    const suyo = candidatos.find(c => telefonosDeContacto(c).includes(soloDigitos(telefono)));
+    const suyo = elMasNuevo(candidatos.filter(c => telefonosDeContacto(c).includes(soloDigitos(telefono))));
     return suyo ? suyo.id : null;
 };
 

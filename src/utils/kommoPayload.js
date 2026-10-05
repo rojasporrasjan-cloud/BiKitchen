@@ -56,16 +56,37 @@ export const telefonosDeContacto = (contacto) => {
  * Se arma una sola vez con la lista completa y después se consulta en memoria,
  * en vez de preguntarle a Kommo por cada cliente. Con 300 clientes eso es la
  * diferencia entre 2 llamadas y 300.
+ *
+ * Si el número está en varios contactos gana el MÁS NUEVO (elMasNuevo).
  */
 export const indicePorTelefono = (contactos = []) => {
-    const indice = new Map();
+    const porTel = new Map();
     contactos.forEach((c) => {
         telefonosDeContacto(c).forEach((tel) => {
-            if (!indice.has(tel)) indice.set(tel, c.id);
+            porTel.set(tel, elMasNuevo([porTel.get(tel), c]));
         });
     });
-    return indice;
+    return new Map([...porTel].map(([tel, c]) => [tel, c.id]));
 };
+
+/**
+ * De varios contactos con el mismo teléfono, el más nuevo (fecha de creación;
+ * si no viene, el id más alto).
+ *
+ * Por qué (4 oct 2026): muchos clientes tienen DOS contactos en Kommo. El viejo
+ * (de mayo) quedó con su chat en el número de WhatsApp anterior, que ya no está
+ * conectado: lo que se le manda falla con el error 3137 y no llega. El nuevo se
+ * creó cuando el cliente escribió al 8506-7200. Ganaba el primero que
+ * devolvía Kommo, que podía ser el viejo: así se perdían los mensajes.
+ */
+export const elMasNuevo = (contactos = []) => (contactos || []).filter(Boolean)
+    .reduce((mejor, c) => {
+        if (!mejor) return c;
+        const a = Number(c.created_at) || 0;
+        const b = Number(mejor.created_at) || 0;
+        if (a !== b) return a > b ? c : mejor;
+        return Number(c.id) > Number(mejor.id) ? c : mejor;
+    }, null);
 
 /** Nombre de la etiqueta con la que Gina filtra la difusión en Kommo. */
 export const etiquetaDeSegmento = (segmentoId) => `bk-${segmentoId}`;

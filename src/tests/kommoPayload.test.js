@@ -79,13 +79,25 @@ describe('Cruce de teléfonos con Kommo', () => {
         expect(indice.get('87216592')).toBe(901);
     });
 
-    it('si el número está repetido gana el primero, no se duplica', () => {
+    // 4 oct 2026: el contacto viejo de un cliente quedó en el WhatsApp desconectado
+    // (error 3137); el bueno es el nuevo. Antes ganaba el primero que venía.
+    it('si el número está repetido gana el contacto MÁS NUEVO, no se duplica', () => {
+        const tel = [{ field_code: 'PHONE', values: [{ value: '8849-2466' }] }];
         const indice = indicePorTelefono([
-            { id: 900, custom_fields_values: [{ field_code: 'PHONE', values: [{ value: '8849-2466' }] }] },
-            { id: 999, custom_fields_values: [{ field_code: 'PHONE', values: [{ value: '8849-2466' }] }] }
+            { id: 21470688, created_at: 1759500000, custom_fields_values: tel },
+            { id: 19954060, created_at: 1747000000, custom_fields_values: tel }
         ]);
-        expect(indice.get('88492466')).toBe(900);
+        expect(indice.get('88492466')).toBe(21470688);
         expect(indice.size).toBe(1);
+    });
+
+    it('sin fecha de creación, gana el id más alto', () => {
+        const tel = [{ field_code: 'PHONE', values: [{ value: '+506 7275 2645' }] }];
+        const indice = indicePorTelefono([
+            { id: 21471156, custom_fields_values: tel },
+            { id: 19954024, custom_fields_values: tel }
+        ]);
+        expect(indice.get('72752645')).toBe(21471156);
     });
 });
 
