@@ -6,7 +6,7 @@ import { MemoryRouter } from 'react-router-dom';
 /**
  * Listas de Difusión: el cierre de pedidos automático (6 oct 2026). Jan tiene
  * que ver ANTES de prenderlo a quién le llegaría, si Kommo está conectado y
- * cuánto va gastado de los US$80 del mes.
+ * cuánto va gastado de los US$200 del mes.
  */
 
 vi.mock('../firebase/config', () => ({ db: {}, auth: { currentUser: { getIdToken: async () => 't' } }, storage: {} }));
@@ -46,6 +46,6 @@ describe('el cierre de pedidos en Listas de Difusión', () => {
         expect(within(cierre).queryByText('Caro')).toBeNull();
 
         expect(screen.getByText(/al día/)).toBeTruthy();
-        expect(screen.getByText(/100 mensajes ≈ US\$7\.40 de US\$80/)).toBeTruthy();
+        expect(screen.getByText(/100 mensajes ≈ US\$7\.40 de US\$200/)).toBeTruthy();
     });
 });

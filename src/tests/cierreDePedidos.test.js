@@ -112,9 +112,9 @@ describe('las reglas de marketing', () => {
         expect(r.fuera.map(x => x.motivo)).toEqual(['no-molestar', 'ya-2-esta-semana', 'ya-le-llego-hoy']);
     });
 
-    it('el presupuesto: US$80 al mes a US$0,074 por mensaje', () => {
-        expect(presupuestoDelMes({ mensajesDelMes: 1000, cuantos: 80 }).alcanza).toBe(true);    // US$79,92
-        expect(presupuestoDelMes({ mensajesDelMes: 1000, cuantos: 82 }).alcanza).toBe(false);   // US$80,07
+    it('el presupuesto: US$200 al mes a US$0,074 por mensaje', () => {
+        expect(presupuestoDelMes({ mensajesDelMes: 2600, cuantos: 100 }).alcanza).toBe(true);   // US$199,80
+        expect(presupuestoDelMes({ mensajesDelMes: 2600, cuantos: 103 }).alcanza).toBe(false);  // US$200,02
     });
 
     it('la semana ISO cambia el lunes', () => {
@@ -180,7 +180,7 @@ describe('la función programada', () => {
 
     it('sin presupuesto no manda NADA', async () => {
         conClientes();
-        estado.docs['kommo_presupuesto/2026-10'] = { mensajes: 1081 };   // US$79,99
+        estado.docs['kommo_presupuesto/2026-10'] = { mensajes: 2702 };   // US$199,95
         const r = await correr({ ahora: LUNES, modo: 'si', env: ENV });
         expect(r.estado).toBe('frenado-por-presupuesto');
         expect(estado.enviados).toHaveLength(0);

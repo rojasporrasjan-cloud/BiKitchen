@@ -10,7 +10,7 @@
  * Es MARKETING (Meta lo cobra por mensaje). Reglas que no se negocian:
  *   - máximo 2 de marketing por persona por semana (cuenta en kommo_contactos)
  *   - nada a quien tiene "no molestar" vigente (30 días, lo pone kommo-sync)
- *   - presupuesto de US$80 al mes (kommo_presupuesto/{AAAA-MM}); si no alcanza, NO manda
+ *   - presupuesto de US$200 al mes (kommo_presupuesto/{AAAA-MM}); si no alcanza, NO manda
  *   - con más de TOPE personas no manda NADA (un filtro roto no le escribe a todos)
  *   - una sola vez por fecha de reparto (envios_del_dia/cierre-pedidos_{fecha})
  *

@@ -4,7 +4,7 @@
  * "Hoy cerramos pedidos a las 8 p. m. para la entrega del …": a los clientes que
  * YA compraron para ese día de reparto y esta vez no tienen entrega. Es lo que se
  * mandó a mano el 5 oct 2026 (miércoles, 85 personas) y Jan quiere que salga solo
- * (6 oct 2026: solo clientes que ya compraron, presupuesto US$80 al mes).
+ * (6 oct 2026: solo clientes que ya compraron, presupuesto US$200 al mes).
  *
  *   Lunes 2 p. m.   → cierre del MIÉRCOLES
  *   Jueves 2 p. m.  → cierre del SÁBADO
@@ -31,8 +31,8 @@ export const CIERRES = {
 export const SEMANAS_DE_HISTORIA = 8;
 /** Máximo de mensajes de MARKETING por persona por semana (Jan, 5 oct 2026). */
 export const MARKETING_POR_SEMANA = 2;
-/** Presupuesto mensual de marketing en dólares (Jan, 6 oct 2026). */
-export const PRESUPUESTO_MENSUAL_USD = 80;
+/** Presupuesto mensual de marketing en dólares (Jan, 6 oct 2026: subió de 80 a 200 para ir más rápido). */
+export const PRESUPUESTO_MENSUAL_USD = 200;
 /** Lo que cobra Meta por un mensaje de marketing en Costa Rica (aprox.). */
 export const COSTO_MARKETING_USD = 0.074;
 
