@@ -13,6 +13,8 @@ export default function PromoBanner() {
     const [coupon, setCoupon] = useState(null);
     // Estado para controlar si ya se cerró el banner para ESTE cupón específico
     const [dismissed, setDismissed] = useState(false);
+    // "Copiado" en el botón del código (6 oct 2026: faltaba y tumbaba el sitio entero)
+    const [copied, setCopied] = useState(false);
 
     // Cargar cupón con banner activo
     useEffect(() => {
