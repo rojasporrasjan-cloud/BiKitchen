@@ -33,10 +33,23 @@ Lo de la tabla de abajo YA ESTÁ en producción. Además, ese mismo día:
 - Netlify: `KOMMO_BOT_CIERRE_MIERCOLES` = 117463 y `CIERRE_PEDIDOS_AUTOMATICO` =
   `prueba` (creadas) + redeploy para que las funciones las vean. El primer cierre
   en prueba sale el **lunes 12 oct 2 p. m.**: muestra a Jan, lista real en Listas de Difusión.
-- **Falta:** cuando Meta apruebe las 2 plantillas, crear sus bots (un paso
-  Mensaje, SIN disparador) y poner `KOMMO_BOT_CIERRE_SABADO` /
-  `KOMMO_BOT_CIERRE_LUNES` en Netlify + redeploy. Hasta entonces el jueves y el
-  viernes la función responde `sin-configurar` y no manda nada.
+- ✅ (6 oct ~9:30 a. m.) Meta aprobó las 2 plantillas. Bots creados SIN disparador:
+  **Cierre de pedidos sábado = 117640**, **Cierre de pedidos lunes = 117642**.
+  `KOMMO_BOT_CIERRE_SABADO` y `KOMMO_BOT_CIERRE_LUNES` puestos en Netlify + redeploy.
+  El jueves y el viernes también salen en prueba (muestra a Jan).
+
+### Difusiones a mano del 6 oct 2026 (~9:20 a. m.)
+
+Las pidió Jan para vender más. Se mandaron con `POST /api/v2/salesbot/run`
+desde Chrome (tandas de 50), contacto más nuevo de cada teléfono:
+- **Promo HOY5** (5 % solo el 6 oct, cupón `HOY5` en `coupons`): bot **117648**,
+  plantilla `promo_hoy5_martes_6_oct`. 195 clientes que compraron desde agosto
+  (6 de 201 no tenían contacto en Kommo). Kommo contó 198 lanzamientos.
+- **Two pack renovación** (regalía: 40 desayunos en octubre si renuevan): bot
+  **117650**, plantilla `two_pack_renovacion_regalia`. 5 clientes con Two Pack mensual.
+- **No quedaron en el contador:** `kommo_presupuesto/2026-10` y `marketing.2026-W41` de
+  las fichas solo los escribe el servidor. Son ~203 mensajes (~US$15) que el
+  tope de US$80 del mes no ve: restarlos a mano si el mes viene justo.
 
 | Commit | Qué |
 |---|---|
@@ -66,7 +79,7 @@ repetir. Tope por envío: si la lista sale más grande, NO manda nada.
 | Guía de congelado | `guia-de-congelado` | L/M/S 3 p. m. | `GUIA_CONGELADO_AUTOMATICO` | `KOMMO_BOT_GUIA_CONGELADO` = 117259 | `guia_de_congelado` |
 | ¿Qué tal todo? | `que-tal-todo` | D/M/J 11 a. m. | `QUE_TAL_AUTOMATICO` | `KOMMO_BOT_QUE_TAL` = 117257 | `que_tal_todo` |
 | Volver a invitar (marketing) | `volver-a-invitar` | martes 10 a. m. | `VOLVER_A_INVITAR_AUTOMATICO` | `KOMMO_BOT_VOLVER_A_INVITAR` = 117255 | `volver_a_invitar` (15 % desc.) |
-| **Cierre de pedidos (marketing)** | `cierre-de-pedidos` | L/J/V 2 p. m. | `CIERRE_PEDIDOS_AUTOMATICO` | `KOMMO_BOT_CIERRE_MIERCOLES` = 117463 · `KOMMO_BOT_CIERRE_SABADO` = **falta** · `KOMMO_BOT_CIERRE_LUNES` = **falta** | `cierre_pedidos_miercoles` ✅ · sábado y lunes **por crear** |
+| **Cierre de pedidos (marketing)** | `cierre-de-pedidos` | L/J/V 2 p. m. | `CIERRE_PEDIDOS_AUTOMATICO` | `KOMMO_BOT_CIERRE_MIERCOLES` = 117463 · `KOMMO_BOT_CIERRE_SABADO` = 117640 · `KOMMO_BOT_CIERRE_LUNES` = 117642 | `cierre_pedidos_miercoles` · `cierre_pedidos_sabado` · `cierre_pedidos_lunes` ✅ |
 | Conexión con Kommo | `kommo-sync` | cada 10 min | `KOMMO_SYNC_AUTOMATICO` (sin poner = corre; `no` = apagado) | — | — (solo lee) |
 
 Modos según el último resumen de Netlify (4 oct 2026): todos los avisos en
@@ -97,12 +110,9 @@ colecciones enteras. El panel lee el estado por la función `kommo` (acción
 ## 5. Lo que falta, en orden
 
 1. ~~Publicar~~ ✅ 6 oct.
-2. **Fase 4 — bots del cierre del sábado y del lunes.** Las plantillas ya se
-   mandaron a Meta el 6 oct (se crean por la interfaz en `/chats/tools/templates/`:
-   la API de plantillas está bloqueada, "Only integrations"). Cuando estén
-   **Aprobado**: crear un bot por plantilla (un paso Mensaje, **SIN disparador**)
-   y poner sus ids en Netlify: `KOMMO_BOT_CIERRE_SABADO`,
-   `KOMMO_BOT_CIERRE_LUNES`; después Trigger deploy.
+2. ~~Bots del cierre del sábado y del lunes~~ ✅ 6 oct (117640 y 117642, en Netlify).
+   Las plantillas se crean por la interfaz en `/chats/tools/templates/` (la API
+   de plantillas está bloqueada, "Only integrations"). Meta aprueba en 1–3 h.
 3. ~~Netlify miércoles~~ ✅ 6 oct. Una semana en prueba: cada lunes, jueves y
    viernes a las 2 p. m. le llega la muestra a Jan y la lista real aparece en
    Listas de Difusión → "Cierre de pedidos". Si Jan la aprueba → `si` (+ redeploy).
@@ -143,8 +153,15 @@ colecciones enteras. El panel lee el estado por la función `kommo` (acción
   lee por ventanas cerradas `filter[created_at][from|to]`.
 - Los eventos no traen el texto del mensaje ni distinguen bot de persona.
 - `/api/v4/bots/run` funciona; crear plantillas por API NO.
-- Al guardar un bot, Kommo le mete un disparador solo: cancelarlo y revisar en
-  la lista que ninguno tenga. **Bots SIEMPRE sin disparador** (los dispara el código).
+- Al guardar un bot nuevo, Kommo abre "Condición de ejecución" y le mete el
+  disparador "Cualquier conversación nueva". Lo correcto: **Cancelar → "Salir sin
+  guardar"** (el bot queda guardado y SIN disparador). "Cancelar → Guardar" lo deja
+  CON disparador: el 6 oct así el bot del sábado le escribió a una conversación
+  nueva antes de que se lo quitáramos. Para quitarlo: abrir el bot → clic en el
+  disparador → "Eliminar disparador" → Guardar. Revisar siempre la columna
+  Disparadores de la lista. **Bots SIEMPRE sin disparador** (los dispara el código).
+- Para correr un bot a mano: `POST /api/v2/salesbot/run` con
+  `[{ bot_id, entity_id: <contacto>, entity_type: 'contacts' }]`, de a 50 (responde 202).
 - Un mismo teléfono puede tener 2 contactos: se usa el más nuevo (`elMasNuevo`).
 - Chats en el WhatsApp viejo (source 55646) dan error 3137: no llegan.
 - Plantillas de marketing: Meta puede no entregarlas si la persona recibió
