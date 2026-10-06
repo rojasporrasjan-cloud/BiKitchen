@@ -7,6 +7,16 @@ import { TIPOS_DE_ENVIO, estadoEnRegistro } from '../../utils/registroDeEnvios';
 import { renovacionesDelDia, destinatarioDeRenovacion } from '../../utils/envioDeCambios';
 import { sinPagarConEntregaCerca, hoyEnCostaRica, sumarDias } from '../../utils/avisosDePago';
 import { entreganHoy, primeraEntregaHoy, nuevosQueRecibieronAyer, paraVolverAInvitar } from '../../utils/avisosDeEntrega';
+import { cierreDeHoy, clientesSinEntrega, COSTO_MARKETING_USD, PRESUPUESTO_MENSUAL_USD } from '../../utils/cierresDePedidos';
+
+/** El próximo día en que sale un cierre (hoy incluido) y su reparto. */
+const proximoCierre = (hoy) => {
+    for (let i = 0; i < 7; i++) {
+        const c = cierreDeHoy(sumarDias(hoy, i));
+        if (c) return c;
+    }
+    return null;
+};
 
 /**
  * Los WhatsApp automáticos, en Listas de Difusión: qué está prendido, a quién
@@ -85,9 +95,14 @@ export default function EnviosAutomaticos({ orders = [], loading = false }) {
         // Clientes nuevos: hoy reciben su primera entrega y mañana les llega el "¿qué tal?"
         const queTal = nuevosQueRecibieronAyer(orders, sumarDias(reparto, 1)).map(i => filaDe(i, registro, 'que-tal'));
         const invitar = paraVolverAInvitar(orders, hoy).map(i => filaDe(i, registro, 'volver-a-invitar'));
+        // Antes de las reglas de marketing (2 por semana, "no molestar"): esas
+        // las aplica el envío con las fichas de Kommo, así que pueden salir menos.
+        const cierre = proximoCierre(hoy);
+        const cierres = cierre ? clientesSinEntrega(orders, cierre.fechaEntrega).map(i => filaDe(i, registro, 'cierre-pedidos')) : [];
         return {
             renovacion, 'recordatorio-pago': recordatorio, 'pago-recibido': pagoRecibido,
-            'hoy-te-llega': hoyTeLlega, 'guia-congelado': guia, 'que-tal': queTal, 'volver-a-invitar': invitar
+            'hoy-te-llega': hoyTeLlega, 'guia-congelado': guia, 'que-tal': queTal, 'volver-a-invitar': invitar,
+            'cierre-pedidos': cierres
         };
     }, [orders, registro, hoy]);
 
@@ -98,7 +113,8 @@ export default function EnviosAutomaticos({ orders = [], loading = false }) {
         'hoy-te-llega': 'Nadie recibe en el próximo reparto.',
         'guia-congelado': 'Nadie recibe su primera entrega en el próximo reparto.',
         'que-tal': 'No hay clientes nuevos en el próximo reparto.',
-        'volver-a-invitar': 'Nadie terminó hace 2 a 3 semanas sin volver a pedir.'
+        'volver-a-invitar': 'Nadie terminó hace 2 a 3 semanas sin volver a pedir.',
+        'cierre-pedidos': 'Todos los clientes de ese día de reparto ya tienen entrega (o la pantalla no cargó las últimas 8 semanas).'
     };
 
     return (
@@ -122,6 +138,22 @@ export default function EnviosAutomaticos({ orders = [], loading = false }) {
                     <AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
                     No se pudo leer el estado de los envíos: {error}
                 </p>
+            )}
+            {datos && (
+                <div className="mb-3 grid gap-2 sm:grid-cols-2 text-xs">
+                    <p className="px-3 py-2 rounded-xl bg-gray-50 text-gray-700">
+                        <span className="font-bold text-gray-900">Conexión con Kommo: </span>
+                        {datos.conexion?.ultimaVuelta
+                            ? <>última lectura {new Date(datos.conexion.ultimaVuelta).toLocaleString('es-CR', { dateStyle: 'short', timeStyle: 'short' })}
+                                {datos.conexion.alDia ? ' · al día' : ' · poniéndose al día con los últimos 30 días'}</>
+                            : 'todavía no ha corrido (lee cada 10 minutos).'}
+                    </p>
+                    <p className="px-3 py-2 rounded-xl bg-gray-50 text-gray-700">
+                        <span className="font-bold text-gray-900">Marketing de este mes: </span>
+                        {datos.marketingDelMes?.mensajes || 0} mensajes ≈ US${((datos.marketingDelMes?.mensajes || 0) * COSTO_MARKETING_USD).toFixed(2)} de US${PRESUPUESTO_MENSUAL_USD}.
+                        {' '}Al llegar al tope, los cierres y &quot;volver a invitar&quot; no salen.
+                    </p>
+                </div>
             )}
             <div className="grid gap-3 lg:grid-cols-2">
                 {TIPOS_DE_ENVIO.map(tipo => (

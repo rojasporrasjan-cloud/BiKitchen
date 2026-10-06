@@ -158,9 +158,21 @@ export const handler = async (event) => {
             const snap = db
                 ? await db.collection(COLECCION_ENVIOS).orderBy('cuando', 'desc').limit(40).get()
                 : { docs: [] };
+            // La conexión con Kommo (kommo-sync) y el gasto de marketing del mes:
+            // 2 lecturas más. Esas colecciones solo las toca el servidor.
+            const mes = new Date(Date.now() - 6 * 3600 * 1000).toISOString().slice(0, 7);
+            const [sync, gasto] = db
+                ? await Promise.all([
+                    db.collection('kommo_sync').doc('estado').get(),
+                    db.collection('kommo_presupuesto').doc(mes).get()
+                ])
+                : [null, null];
+            const s = sync?.exists ? sync.data() : null;
             return json(200, {
                 modos: modosDeEnvio(process.env),
-                registro: snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+                registro: snap.docs.map((d) => ({ id: d.id, ...d.data() })),
+                conexion: s ? { ultimaVuelta: s.ultimaVuelta || '', alDia: !!s.alDia, leidoHasta: s.leidoHasta || '', totalEventos: Number(s.totalEventos) || 0 } : null,
+                marketingDelMes: { mes, mensajes: Number(gasto?.data?.()?.mensajes) || 0 }
             });
         }
 

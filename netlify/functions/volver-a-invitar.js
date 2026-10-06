@@ -25,6 +25,8 @@ import { hoyEnCostaRica, sumarDias } from '../../src/utils/avisosDePago.js';
 import { fechasEntre } from '../../src/utils/consultaPorFechas.js';
 import { paraVolverAInvitar, INVITAR_DESDE_DIAS } from '../../src/utils/avisosDeEntrega.js';
 import { correrAviso, responder } from '../../src/utils/avisoDelDia.js';
+import { conReglasDeMarketing } from '../../src/utils/cierresDePedidos.js';
+import { leerFichas, anotarMarketing } from './cierre-de-pedidos.js';
 
 export const TOPE = 40;
 
@@ -44,7 +46,13 @@ export const correr = ({ ahora = new Date(), modo = process.env.VOLVER_A_INVITAR
         lista: async () => {
             const fechas = fechasEntre(sumarDias(hoy, -INVITAR_DESDE_DIAS), sumarDias(hoy, 42));
             return paraVolverAInvitar(await leerPedidosDelCiclo(db, fechas), hoy);
-        }
+        },
+        // Marketing: máximo 2 por semana por persona y nada a "no molestar"
+        filtrar: async (destinatarios) => {
+            const fichas = await leerFichas(db, destinatarios.map(d => d.telefono));
+            return conReglasDeMarketing(destinatarios, { fichas, hoy, ahora }).quedan;
+        },
+        despues: (enviados) => anotarMarketing(db, enviados.map(d => d.telefono), ahora)
     });
 };
 

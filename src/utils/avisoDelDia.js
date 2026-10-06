@@ -34,7 +34,7 @@ export const COLECCION_CONSTANCIAS = 'envios_del_dia';
  * @param {object} o.env          process.env
  * @param {Date} o.ahora
  */
-export const correrAviso = async ({ tipo, clave, modo, bot, tope, lista, db, enviarPorKommo, soloAlNumeroDePrueba, env = {}, ahora = new Date(), variableBot }) => {
+export const correrAviso = async ({ tipo, clave, modo, bot, tope, lista, db, enviarPorKommo, soloAlNumeroDePrueba, env = {}, ahora = new Date(), variableBot, filtrar, despues }) => {
     if (modo !== 'si' && modo !== 'prueba') return { estado: 'apagado' };
     const faltan = ['KOMMO_SUBDOMINIO', 'KOMMO_TOKEN'].filter(v => !env[v]);
     if (!bot) faltan.push(variableBot || 'bot');
@@ -49,7 +49,10 @@ export const correrAviso = async ({ tipo, clave, modo, bot, tope, lista, db, env
     }
 
     const items = await lista();
-    const todos = destinatariosUnicos(items.map(destinatarioDeRenovacion));
+    // Los envíos de MARKETING pasan por las reglas (cierresDePedidos.js):
+    // `filtrar` devuelve los que quedan; los demás no reciben nada.
+    const unicos = destinatariosUnicos(items.map(destinatarioDeRenovacion));
+    const todos = filtrar ? await filtrar(unicos) : unicos;
     if (todos.length === 0) {
         await constancia.set({ estado: 'nadie', revisadoEn: ahora.toISOString() }, { merge: true });
         return { estado: 'nadie', detalle: { clave } };
@@ -68,6 +71,7 @@ export const correrAviso = async ({ tipo, clave, modo, bot, tope, lista, db, env
     });
 
     const estado = modo === 'si' ? 'enviado' : 'prueba';
+    if (modo === 'si' && despues) await despues(conId.map(c => c.d));
     await constancia.set({ estado, enviadoEn: ahora.toISOString(), enviados: conId.length, cuantos: todos.length }, { merge: true });
     await anotarEnvio(db, entradaDeRegistro({
         tipo, modo, estado, ahora,

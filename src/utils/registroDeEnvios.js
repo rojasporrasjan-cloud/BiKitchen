@@ -55,6 +55,14 @@ export const TIPOS_DE_ENVIO = [
         id: 'volver-a-invitar', label: 'Volver a invitar',
         cuando: 'Martes 10 a. m. — terminaron hace 2 a 3 semanas y no volvieron a pedir (Marketing)',
         interruptor: 'VOLVER_A_INVITAR_AUTOMATICO', bot: 'KOMMO_BOT_VOLVER_A_INVITAR'
+    },
+    // Fase 3 de docs/PLAN_DIFUSIONES_AUTOMATICAS.md (6 oct 2026). Un interruptor
+    // para los tres cierres; cada día tiene su bot (KOMMO_BOT_CIERRE_SABADO y
+    // KOMMO_BOT_CIERRE_LUNES además de este). Sin el bot de ese día, ese no sale.
+    {
+        id: 'cierre-pedidos', label: 'Cierre de pedidos',
+        cuando: 'Lunes, jueves y viernes 2 p. m. — clientes de ese día de reparto sin entrega esta vez (Marketing)',
+        interruptor: 'CIERRE_PEDIDOS_AUTOMATICO', bot: 'KOMMO_BOT_CIERRE_MIERCOLES'
     }
 ];
 
