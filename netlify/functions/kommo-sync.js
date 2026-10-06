@@ -87,14 +87,20 @@ const traerEventos = async (cursor, ahoraS, ventanaS) => {
         const hasta = Math.min(ahoraS, desde + ventana - 1);
         const r = await traerVentana(desde, hasta, MAX_PAGINAS - paginasUsadas);
         if (!r) {
-            if (ventana <= VENTANA_MINIMA_S) break;           // ni en 10 minutos cabe: la próxima vuelta
-            ventana = Math.max(VENTANA_MINIMA_S, Math.floor(ventana / 2));
-            paginasUsadas = MAX_PAGINAS;                       // se gastó la vuelta: sigue en 10 min, más chica
+            // No cupo en lo que QUEDABA de la vuelta: se sigue en la próxima con
+            // la misma ventana. Solo se achica si no cupo ni con la vuelta entera
+            // (6 oct 2026: se achicaba por falta de páginas y ponerse al día con
+            // 30 días tomaba horas, un día de eventos por vuelta).
+            if (paginasUsadas === 0 && ventana > VENTANA_MINIMA_S) {
+                ventana = Math.max(VENTANA_MINIMA_S, Math.floor(ventana / 2));
+            }
             break;
         }
         eventos.push(...r.eventos);
         paginasUsadas += r.paginas;
         desde = hasta + 1;
+        // Una ventana que cupo holgada: la próxima puede ser más grande
+        if (r.paginas <= MAX_PAGINAS / 4) ventana = Math.min(VENTANA_INICIAL_S, ventana * 2);
     }
     return { eventos, leidoHasta: desde - 1, alDia: desde > ahoraS, ventana };
 };
