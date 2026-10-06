@@ -28,6 +28,7 @@ import {
     renovacionesDelDia, destinatarioDeRenovacion, destinatariosUnicos, leerPedidosDelCiclo
 } from '../../src/utils/envioDeCambios.js';
 import { entradaDeRegistro, anotarEnvio } from '../../src/utils/registroDeEnvios.js';
+import { normalizarTelefono } from '../../src/utils/telefonoRelleno.js';
 
 export const TOPE = 40;
 
@@ -68,7 +69,11 @@ export const correr = async ({ ahora = new Date(), modo = process.env.RENOVACION
     // Hoy y lo que viene: para saber quién termina hoy y quién ya renovó
     const pedidos = await leerPedidosDelCiclo(db, fechas);
     const lista = renovacionesDelDia(pedidos, hoy);
-    const todos = destinatariosUnicos(lista.map(destinatarioDeRenovacion));
+    // Clientes que Jan pausó a mano (6 oct 2026: una queja abierta). 1 lectura.
+    const pausados = new Set(((await db.collection('admin_config').doc('envios_pausados').get()).data()?.telefonos || [])
+        .map(normalizarTelefono));
+    const todos = destinatariosUnicos(lista.map(destinatarioDeRenovacion))
+        .filter(d => !pausados.has(normalizarTelefono(d.telefono)));
     let destinatarios = todos;
     const quienes = destinatarios.map(d => d.nombre);
 

@@ -110,6 +110,12 @@ describe('el envío de la renovación', () => {
         expect(estado.registro[0].lesHabriaLlegado.map(p => p.nombre)).toEqual(['Cliente a']);
     });
 
+    it('no al cliente que Jan pausó a mano (admin_config/envios_pausados)', async () => {
+        estado.docs['admin_config/envios_pausados'] = { telefonos: ['8811 0001'] };
+        expect((await correr({ ahora: SABADO_10AM, modo: 'si' })).estado).toBe('nadie');
+        expect(bots()).toEqual([]);
+    });
+
     it('si nadie termina hoy, no manda nada', async () => {
         estado.pedidos = [pedido('b', '8811-0002', [HOY, '2026-10-10'])];
         expect((await correr({ ahora: SABADO_10AM, modo: 'si' })).estado).toBe('nadie');
