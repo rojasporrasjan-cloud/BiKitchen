@@ -206,8 +206,37 @@ Lógica pura y pruebas: `src/utils/kommoSync.js`, `kommoSync.test.js`.
   con 3137 y no deja evento): todo mensaje del registro es del canal bueno. Un
   número que no tuvo ningún mensaje no queda marcado como vivo.
 - Apagar: `KOMMO_SYNC_AUTOMATICO=no` en Netlify.
-- Reglas de Firestore de `kommo_contactos` / `kommo_sync`: todavía no (el panel
-  las va a leer en la fase 2; el servidor escribe con el SDK de administrador).
+- Reglas de Firestore de `kommo_contactos` / `kommo_sync`: no hacen falta. El
+  servidor escribe con el SDK de administrador y el panel recibe el estado por
+  la función `kommo` (acción `envios` → `conexion` y `marketingDelMes`).
+- Publicado el 6 oct 2026 (primera vuelta: 1.843 eventos, 178 fichas). Ese día
+  se arregló que al ponerse al día achicaba la ventana por falta de páginas
+  (avanzaba un día por vuelta); ahora solo se achica si no cabe ni con la vuelta entera.
+
+## El cierre de pedidos automático + reglas de marketing (6 oct 2026)
+
+Fase 3 del plan. `netlify/functions/cierre-de-pedidos.js` (lunes, jueves y
+viernes 20:00 UTC = 2 p. m. CR): "hoy cerramos pedidos" a los clientes que
+compraron para ese día de reparto en las últimas 8 semanas y no tienen entrega
+esta vez (lunes → miércoles, jueves → sábado, viernes → lunes). Lógica pura:
+`src/utils/cierresDePedidos.js`; pruebas: `cierreDePedidos.test.js`,
+`cierreEnElPanel.test.jsx`.
+
+- **Reglas de marketing** (`conReglasDeMarketing`): nada a `no molestar`
+  vigente, máximo 2 de marketing por persona por semana ISO
+  (`kommo_contactos.marketing['AAAA-Www']`), nada a quien ya le llegó una hoy.
+  `volver-a-invitar` pasa por las mismas (ganchos `filtrar` y `despues` de
+  `correrAviso`).
+- **Presupuesto:** `kommo_presupuesto/{AAAA-MM}.mensajes` × US$0,074, tope
+  US$80 (`PRESUPUESTO_MENSUAL_USD`). Si no alcanza, no manda NADA.
+- En `prueba` no cuenta marketing ni gasta presupuesto.
+- Interruptor `CIERRE_PEDIDOS_AUTOMATICO`; un bot por día:
+  `KOMMO_BOT_CIERRE_MIERCOLES` (117463), `KOMMO_BOT_CIERRE_SABADO`,
+  `KOMMO_BOT_CIERRE_LUNES`. Sin el bot de ese día, ese cierre no sale.
+- Listas de Difusión: tarjeta "Cierre de pedidos" con la lista del próximo
+  cierre (ANTES de las reglas de marketing, que se aplican al mandar), más la
+  conexión con Kommo y el gasto del mes.
+- Estado y cómo seguir: **`docs/KOMMO_TRASPASO.md`**.
 
 ## El link de Gina: packs mensuales (29 set 2026)
 
