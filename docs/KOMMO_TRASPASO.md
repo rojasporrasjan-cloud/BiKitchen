@@ -24,7 +24,19 @@ programador: se le habla **en español** (voseo, Costa Rica), simple, sin jerga.
 | Pago recibido / recordatorio de pago / renovación / cambios del miércoles | — | Publicados. Ver tabla de la sección 3 |
 | Link fijo `/cambios` que reconoce al cliente | — | Publicado |
 
-### Construido y probado, SIN publicar (rama `automatizacion/link-personal-y-pago`)
+### Publicado el 6 oct 2026 ~8 a. m. (deploy `dd3effe`, etiqueta `deploy-2026-10-06-cierres`)
+
+Lo de la tabla de abajo YA ESTÁ en producción. Además, ese mismo día:
+- Plantillas **`cierre_pedidos_sabado`** (cierra 8:00 p. m.) y **`cierre_pedidos_lunes`**
+  (cierra 8:30 p. m., la hora que usó Gina el 2 oct) enviadas a Meta → **En análisis**.
+  Mismo texto que `cierre_pedidos_miercoles`, Marketing, Español ES, sin encabezado.
+- Netlify: `KOMMO_BOT_CIERRE_MIERCOLES` = 117463 y `CIERRE_PEDIDOS_AUTOMATICO` =
+  `prueba` (creadas) + redeploy para que las funciones las vean. El primer cierre
+  en prueba sale el **lunes 12 oct 2 p. m.**: muestra a Jan, lista real en Listas de Difusión.
+- **Falta:** cuando Meta apruebe las 2 plantillas, crear sus bots (un paso
+  Mensaje, SIN disparador) y poner `KOMMO_BOT_CIERRE_SABADO` /
+  `KOMMO_BOT_CIERRE_LUNES` en Netlify + redeploy. Hasta entonces el jueves y el
+  viernes la función responde `sin-configurar` y no manda nada.
 
 | Commit | Qué |
 |---|---|
@@ -32,7 +44,10 @@ programador: se le habla **en español** (voseo, Costa Rica), simple, sin jerga.
 | `7e4d8bd` | Arreglo de `kommo-sync`: al ponerse al día ya no achica la ventana por falta de páginas |
 
 Pruebas: `src/tests/cierreDePedidos.test.js` (14), `src/tests/cierreEnElPanel.test.jsx` (1),
-`src/tests/kommoSync.test.js` (12). Build OK. **Falta el sí de Jan para publicar.**
+`src/tests/kommoSync.test.js` (12). Build OK. Publicado con el sí de Jan.
+
+**OJO Netlify:** un cambio de variable NO llega a las funciones hasta el próximo
+deploy (Deploys → Trigger deploy → Deploy project).
 
 ## 3. Todos los envíos automáticos
 
@@ -81,17 +96,16 @@ colecciones enteras. El panel lee el estado por la función `kommo` (acción
 
 ## 5. Lo que falta, en orden
 
-1. **Publicar** `2a13180` + `7e4d8bd` (con el sí de Jan; ver sección 6).
-2. **Fase 4 — plantillas de cierre del sábado y del lunes** en Kommo
-   (`/chats/tools/templates/`, por la interfaz: la API de plantillas está
-   bloqueada, "Only integrations"). Copiar la de `cierre_pedidos_miercoles`
-   cambiando el día. Esperar aprobación de Meta. Crear un bot por plantilla
-   (un paso Mensaje, **SIN disparador**) y poner sus ids en Netlify:
-   `KOMMO_BOT_CIERRE_SABADO`, `KOMMO_BOT_CIERRE_LUNES`.
-3. Netlify: `KOMMO_BOT_CIERRE_MIERCOLES` = 117463 y
-   `CIERRE_PEDIDOS_AUTOMATICO` = `prueba`. Una semana en prueba: cada lunes,
-   jueves y viernes a las 2 p. m. le llega la muestra a Jan y la lista real
-   aparece en Listas de Difusión → "Cierre de pedidos". Si Jan la aprueba → `si`.
+1. ~~Publicar~~ ✅ 6 oct.
+2. **Fase 4 — bots del cierre del sábado y del lunes.** Las plantillas ya se
+   mandaron a Meta el 6 oct (se crean por la interfaz en `/chats/tools/templates/`:
+   la API de plantillas está bloqueada, "Only integrations"). Cuando estén
+   **Aprobado**: crear un bot por plantilla (un paso Mensaje, **SIN disparador**)
+   y poner sus ids en Netlify: `KOMMO_BOT_CIERRE_SABADO`,
+   `KOMMO_BOT_CIERRE_LUNES`; después Trigger deploy.
+3. ~~Netlify miércoles~~ ✅ 6 oct. Una semana en prueba: cada lunes, jueves y
+   viernes a las 2 p. m. le llega la muestra a Jan y la lista real aparece en
+   Listas de Difusión → "Cierre de pedidos". Si Jan la aprueba → `si` (+ redeploy).
 4. Prender de a uno los avisos que siguen en `prueba`, con el sí de Jan.
 5. Bot "Ahora no": que ponga la etiqueta `no-molestar` en el lead (kommo-sync
    ya la lee y deja 30 días sin marketing).
