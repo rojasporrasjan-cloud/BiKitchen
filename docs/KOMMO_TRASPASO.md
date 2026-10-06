@@ -62,6 +62,18 @@ Pruebas: `src/tests/cierreDePedidos.test.js` (14), `src/tests/cierreEnElPanel.te
 **OJO Netlify:** un cambio de variable NO llega a las funciones hasta el próximo
 deploy (Deploys → Trigger deploy → Deploy project).
 
+### Plan para vender más (6 oct 2026, tarde) — ver `docs/PLAN_VENDER_MAS.md`
+
+- Jan: ir rápido. Publicar lo probado de martes a jueves sin preguntar cada vez; prender cada
+  envío con UNA muestra; presupuesto de marketing **US$200/mes** (publicado `f88120d`).
+- Plantillas mandadas a Meta (Marketing, ES, sin encabezado), faltan sus bots SIN disparador:
+  `pasate_al_mensual_desayunos` (oferta: desayunos de regalo el primer mes),
+  `menu_semana_keto`, `menu_semana_bajo_calorias`, `menu_semana_casaditos`,
+  `menu_semana_familiar` (link a /packs), `te_extranamos` (inactivos 2–3 meses, "¿qué no le gustó?").
+- En Kommo YA hay bots de entrada: "Bot- Bievenida" (50218, disparador: lead creado en la etapa,
+  7.962 lanzamientos) y "Seguimiento" (53594, al mover de etapa). Mejorar esos, no duplicar.
+- El bot del cierre del LUNES también se lanzó 1 vez por el disparador que Kommo puso solo.
+
 ## 3. Todos los envíos automáticos
 
 Todos usan el mismo patrón: interruptor en Netlify `no` (o sin poner) → nada ·
@@ -171,7 +183,7 @@ colecciones enteras. El panel lee el estado por la función `kommo` (acción
 
 - Máximo **2 mensajes de marketing por persona por semana** (5 oct).
 - "No me interesa" / etiqueta `no-molestar` = **30 días** sin marketing (5 oct).
-- **Presupuesto de marketing: US$80 al mes** (6 oct).
+- **Presupuesto de marketing: US$200 al mes** (6 oct; era US$80, Jan lo subió para ir más rápido).
 - Cierres: **solo a clientes que ya compraron**, no a interesados (6 oct).
 - Calendario de cierres: lunes → miércoles, jueves → sábado, viernes → lunes,
   a las 2 p. m. (aprobado el 5 oct).
