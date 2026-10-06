@@ -301,6 +301,11 @@ export function CartProvider({ children }) {
         const baseCost = getShippingCostBase();
         if (baseCost === null || baseCost === 0) return baseCost;
 
+        // Cupón de envío gratis: el envío es 0 también en lo que se muestra y en
+        // lo que se guarda en el pedido, no solo en el total. Antes la compra decía
+        // "Envío ₡6.000" con el total ya sin envío (Priscilla Garro, 5 oct 2026).
+        if (appliedCoupon?.type === 'free_shipping') return 0;
+
         const discount = Math.round(baseCost * (shippingDiscount / 100));
         return baseCost - discount;
     };
