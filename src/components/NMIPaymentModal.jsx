@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, CreditCard, Shield, Loader2, AlertCircle, CheckCircle, Lock as LucideLock, ChevronDown, ChevronUp } from 'lucide-react';
-import { initGateway, authenticate3DS, preInit3DS, processTransaction, unmount3DS, isValidCardNumber, isValidExpiration, isValidCVV } from '../utils/nmiClient';
+import { initGateway, authenticate3DS, preInit3DS, processTransaction, unmount3DS, isValidCardNumber, isValidExpiration, isValidCVV, reportarPagoFallido } from '../utils/nmiClient';
 
 // Helper to detect card type
 const getCardType = (number) => {
@@ -135,6 +135,8 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
 
         setLoading(true);
         setError(null);
+        // En qué paso iba (para el reporte de falla; `step` aquí quedaría viejo)
+        let etapa = 'validacion';
 
         try {
             // ========== FIX #1: VALIDACIONES LUHN + EXP + CVV ==========
@@ -196,7 +198,8 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
             delete authOptions.orderid;
 
             setStep('3ds');
-            
+            etapa = '3ds';
+
             // Start 3DS Authentication
             const authData = await authenticate3DS(gateway, authOptions);
             
@@ -206,6 +209,7 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
             
             // Finalize Transaction
             setStep('processing');
+            etapa = 'cobro';
             
             const result = await processTransaction({
                 ...paymentInfo,
@@ -262,8 +266,10 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
             }
         } catch (err) {
             console.error('[NMI] Payment Error:', err);
-            
+
             const errorMessage = err.message || '';
+            // Constancia en el servidor (el cliente no puede escribir el pedido)
+            reportarPagoFallido({ numeroOrden: orderId, etapa, mensaje: errorMessage, detalle: err.detalle });
             
             if (errorMessage.includes('TIMEOUT') || errorMessage.includes('502') || errorMessage.includes('504')) {
                 setError(
@@ -320,7 +326,17 @@ const CardIcon = ({ type, className = "h-6 w-auto" }) => {
                                     </div>
                                 </div>
                             </div>
-                            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-2xl transition-all text-gray-400">
+                            <button
+                                onClick={() => {
+                                    // Cerró a mitad del banco: que quede la constancia de en qué paso
+                                    if (step === '3ds' || step === 'processing') {
+                                        reportarPagoFallido({ numeroOrden: orderId, etapa: step, mensaje: 'El cliente cerró la caja de pago durante la verificación' });
+                                    }
+                                    onClose();
+                                }}
+                                aria-label="Cerrar caja de pago"
+                                className="p-2 hover:bg-gray-100 rounded-2xl transition-all text-gray-400"
+                            >
                                 <X size={24} />
                             </button>
                         </div>

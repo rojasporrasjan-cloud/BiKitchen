@@ -95,6 +95,39 @@ function sanitize3DS(value, maxLen = 50, defaultVal = 'N/A') {
     return clean || defaultVal;
 }
 
+/**
+ * Le pega a un Error lo que devolvió el banco/Gateway.js (sin datos de tarjeta),
+ * para poder reportarlo con reportarPagoFallido. Antes ese detalle solo iba a la
+ * consola del cliente y se perdía (7 oct 2026).
+ */
+function conDetalle(err, crudo) {
+    try {
+        err.detalle = typeof crudo === 'string' ? crudo : JSON.stringify(crudo, (k, v) => (v instanceof Error ? v.message : v));
+    } catch {
+        err.detalle = String(crudo);
+    }
+    return err;
+}
+
+/**
+ * Deja constancia de un pago con tarjeta que falló (registro de Netlify + el pedido).
+ * No bloquea nada: si falla, el cliente sigue igual. Nunca manda datos de tarjeta.
+ */
+export function reportarPagoFallido({ numeroOrden, etapa, mensaje, detalle }) {
+    try {
+        fetch('/.netlify/functions/pago-fallido', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            keepalive: true,
+            body: JSON.stringify({
+                numeroOrden, etapa, mensaje,
+                detalle: String(detalle || '').slice(0, 1500),
+                navegador: typeof navigator !== 'undefined' ? navigator.userAgent : ''
+            })
+        }).catch(() => {});
+    } catch { /* nada: es solo un registro */ }
+}
+
 // Module-level ref to the active ThreeDSecureUI instance.
 // CRITICAL: Must be unmounted before starting a new one (Gateway.js requirement).
 let _activeThreeDSInterface = null;
@@ -285,6 +318,12 @@ export function authenticate3DS(gateway, paymentInfo) {
                 
                 console.log('[NMI] createUI options (minimal):', { ...options, cardNumber: 'XXXX' });
 
+                // Gateway.js (versión del 6 oct 2026) valida las opciones y, si algo
+                // no le gusta, devuelve null y avisa por el evento 'error'. Se guarda
+                // ese motivo para reportarlo (antes se perdía).
+                const motivosCreateUI = [];
+                try { threeDS.on('error', (e) => motivosCreateUI.push(e?.error?.message || e?.message || JSON.stringify(e))); } catch { /* versión vieja sin eventos */ }
+
                 // The documentation uses createUI(options) and then .start()
                 let threeDSInterface = threeDS.createUI(options);
                 
@@ -295,12 +334,8 @@ export function authenticate3DS(gateway, paymentInfo) {
                     threeDSInterface = threeDS.createUI(options);
                 }
                 
-                // If still null, try with USD
-                if (!threeDSInterface) {
-                    console.warn('[NMI] createUI still null. Retrying with USD...');
-                    options.currency = 'USD';
-                    threeDSInterface = threeDS.createUI(options);
-                }
+                // (7 oct 2026) Se quitó el reintento en USD: mandaba el monto en
+                // colones como si fueran dólares (₡181 780 → US$181 780) al banco.
 
                 // Last resort: try with absolute minimum (just card + amount)
                 if (!threeDSInterface) {
@@ -320,7 +355,7 @@ export function authenticate3DS(gateway, paymentInfo) {
                     // FIX #2: Si el usuario tiene AdBlock, Gateway.js no lanza error pero createUI puede retornar null
                     // o fallar silenciosamente. Verificamos si _preInitializedThreeDS existe pero createUI falló.
                     if (_preInitializedThreeDS) {
-                         reject(new Error('⚠️ Error de Seguridad del Banco\n\nTu navegador bloqueó la ventana de verificación de tu tarjeta. Esto suele pasar por:\n\n1. Tienes un AdBlocker encendido (apágalo para esta página).\n2. Estás usando el navegador Brave (apaga los escudos).\n3. Estás usando Safari en iPhone (intenta con Chrome u otro navegador).\n\n👉 Soluciónalo recargando la página sin bloqueadores, o elige "Transferencia / SINPE" como método de pago.'));
+                         reject(conDetalle(new Error('⚠️ Error de Seguridad del Banco\n\nTu navegador bloqueó la ventana de verificación de tu tarjeta. Esto suele pasar por:\n\n1. Tienes un AdBlocker encendido (apágalo para esta página).\n2. Estás usando el navegador Brave (apaga los escudos).\n3. Estás usando Safari en iPhone (intenta con Chrome u otro navegador).\n\n👉 Soluciónalo recargando la página sin bloqueadores, o elige "Transferencia / SINPE" como método de pago.'), { createUI: 'null', motivos: motivosCreateUI }));
                          return;
                     }
                     
@@ -372,7 +407,7 @@ export function authenticate3DS(gateway, paymentInfo) {
                     try { threeDSInterface.unmount(); } catch (e) { }
                     _activeThreeDSInterface = null;
                     console.error('[NMI] 3DS Failure:', error);
-                    reject(new Error('La autenticación 3D Secure fue rechazada o cancelada.'));
+                    reject(conDetalle(new Error('La autenticación 3D Secure fue rechazada o cancelada.'), error));
                 });
 
                 threeDSInterface.on('error', (error) => {
@@ -380,7 +415,7 @@ export function authenticate3DS(gateway, paymentInfo) {
                     try { threeDSInterface.unmount(); } catch (e) { }
                     _activeThreeDSInterface = null;
                     console.error('[NMI] 3DS Error:', error);
-                    reject(new Error(`Error técnico en 3DS: ${error?.message || 'Error desconocido'}`));
+                    reject(conDetalle(new Error(`Error técnico en 3DS: ${error?.message || 'Error desconocido'}`), error));
                 });
 
                 // Start the process (mount to our container)
