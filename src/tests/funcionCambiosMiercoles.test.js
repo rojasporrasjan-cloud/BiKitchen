@@ -7,7 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * que más importa es CUÁNDO NO manda.
  */
 
-const estado = vi.hoisted(() => ({ docs: {}, pedidos: [], escritos: {}, llamadas: [], kommoContactos: {}, registro: [] }));
+const estado = vi.hoisted(() => ({ docs: {}, pedidos: [], escritos: {}, llamadas: [], kommoContactos: {}, kommoNombres: {}, registro: [] }));
 
 vi.mock('firebase-admin/app', () => ({ initializeApp: () => ({}), getApps: () => [], getApp: () => ({}) }));
 vi.mock('firebase-admin/auth', () => ({ getAuth: () => ({}) }));
@@ -37,7 +37,7 @@ globalThis.fetch = vi.fn(async (url, { method = 'GET', body } = {}) => {
     if (method === 'GET' && u.pathname === '/api/v4/contacts') {
         const tel = u.searchParams.get('query');
         const id = estado.kommoContactos[tel];
-        const texto = id ? JSON.stringify({ _embedded: { contacts: [{ id, custom_fields_values: [{ field_code: 'PHONE', values: [{ value: tel }] }] }] } }) : '';
+        const texto = id ? JSON.stringify({ _embedded: { contacts: [{ id, name: estado.kommoNombres[tel], custom_fields_values: [{ field_code: 'PHONE', values: [{ value: tel }] }] }] } }) : '';
         return { ok: true, status: id ? 200 : 204, text: async () => texto };
     }
     if (method === 'POST' && u.pathname === '/api/v4/contacts') {
@@ -47,7 +47,7 @@ globalThis.fetch = vi.fn(async (url, { method = 'GET', body } = {}) => {
     return { ok: true, status: 200, text: async () => '' };
 });
 
-const { correr, TOPE } = await import('../../netlify/functions/cambios-miercoles.js');
+const { correr, TOPE, enviarPorKommo } = await import('../../netlify/functions/cambios-miercoles.js');
 
 const MIERCOLES = new Date('2026-09-23T14:00:00Z');
 const pedido = (id, tel, fechas) => ({
@@ -172,5 +172,17 @@ describe('el envío automático del miércoles', () => {
         process.env.KOMMO_CAMPO_LINK_CAMBIOS = campo;
         expect(r.estado).toBe('enviado');
         expect(bots().length).toBeGreaterThan(0);
+    });
+});
+
+describe('el nombre de quien recibe (8 oct 2026)', () => {
+    it('si el envío no trae nombre (seguimiento), queda el del contacto de Kommo; si lo trae, se respeta', async () => {
+        estado.kommoContactos = { 88110001: 7001, 88110002: 7002 };
+        estado.kommoNombres = { 88110001: 'Laura Mora', 88110002: 'Otro Nombre' };
+        const { conId } = await enviarPorKommo([
+            { nombre: '', telefono: '88110001' },
+            { nombre: 'Ana Pérez', telefono: '88110002' }
+        ], { bot: '118342', camposIds: {}, segmentoId: 'seguimiento' });
+        expect(conId.map(c => c.d.nombre)).toEqual(['Laura Mora', 'Ana Pérez']);
     });
 });
