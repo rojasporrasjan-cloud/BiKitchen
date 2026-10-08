@@ -39,16 +39,29 @@ function Cifra({ icono: Icono, titulo, valor, detalle, children }) {
 
 function Envio({ entrada }) {
     const real = entrada.modo === 'si';
-    const cuantos = real ? (entrada.enviados?.length || 0) : (entrada.lesHabriaLlegado?.length || 0);
+    const personas = (real ? entrada.enviados : entrada.lesHabriaLlegado) || [];
+    const cuantos = personas.length;
     return (
-        <li className="flex flex-wrap items-center justify-between gap-2 py-2 border-b border-gray-100 last:border-0 text-sm">
-            <span className="font-semibold text-gray-900">{nombreDelEnvio(entrada)}</span>
-            <span className="flex items-center gap-2 text-xs text-gray-600">
-                {fechaYHora(entrada.cuando)}
-                <span className={real ? 'px-2 py-0.5 rounded-full bg-green-100 text-green-800 font-bold' : 'px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold'}>
-                    {real ? `A ${cuantos} cliente${cuantos === 1 ? '' : 's'}` : `Prueba a Jan · le habría llegado a ${cuantos}`}
+        <li className="py-2 border-b border-gray-100 last:border-0 text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-semibold text-gray-900">{nombreDelEnvio(entrada)}</span>
+                <span className="flex items-center gap-2 text-xs text-gray-600">
+                    {fechaYHora(entrada.cuando)}
+                    <span className={real ? 'px-2 py-0.5 rounded-full bg-green-100 text-green-800 font-bold' : 'px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold'}>
+                        {real ? `A ${cuantos} cliente${cuantos === 1 ? '' : 's'}` : `Prueba a Jan · le habría llegado a ${cuantos}`}
+                    </span>
                 </span>
-            </span>
+            </div>
+            {cuantos > 0 && (
+                <details className="mt-1">
+                    <summary className="text-xs text-bikitchen-orange font-bold cursor-pointer">
+                        {real ? 'Ver a quién le llegó' : 'Ver a quién le habría llegado'}
+                    </summary>
+                    <ul className="mt-1 grid gap-x-4 sm:grid-cols-2 text-xs text-gray-700">
+                        {personas.map((p, i) => <li key={`${p.telefono}-${i}`}>{p.nombre || 'Sin nombre'} · {p.telefono}</li>)}
+                    </ul>
+                </details>
+            )}
         </li>
     );
 }

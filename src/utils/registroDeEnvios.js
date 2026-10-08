@@ -121,7 +121,6 @@ export const TIPOS_DE_ENVIO = [
         plantilla: 'Sin plantilla: mensaje libre del bot (dentro de las 24 h)',
         a: 'Escribió hace 18 a 24 h y no tiene pedido (de 8 a. m. a 8 p. m., una vez cada 7 días)',
         texto: '¡Hola! 👋 ¿Pudiste ver los planes de BiKitchen? Si querés, te ayudo a escoger el pack que mejor te queda (bajo en calorías, keto, casaditos o familiar) y te digo qué días entregamos en tu zona. ¿Para cuántas personas sería? 🍽️',
-        pendiente: 'El bot ya está en Kommo (118342, sin disparador). Falta ponerlo en Netlify.'
     },
     {
         id: 'pasate-mensual', label: 'Pasate al mensual',
