@@ -54,6 +54,8 @@ const CambiosSemanaPage = lazyWithRetry(() => import('./pages/CambiosSemanaPage'
 const BuscarCambiosPage = lazyWithRetry(() => import('./pages/BuscarCambiosPage'));
 // Los packs mensuales para Gina, por link, sin entrar al panel
 const PacksGinaPage = lazyWithRetry(() => import('./pages/PacksGinaPage'));
+// El reloj de entrada y salida, para el iPad de la cocina
+const RelojPage = lazyWithRetry(() => import('./pages/RelojPage'));
 const GiftCardsPage = lazyWithRetry(() => import('./pages/GiftCardsPage'));
 const FidelidadPage = lazyWithRetry(() => import('./pages/FidelidadPage'));
 const RewardStore = lazyWithRetry(() => import('./pages/RewardStore'));
@@ -97,6 +99,7 @@ const BroadcastView = lazyWithRetry(() => import('./pages/admin/BroadcastView'))
 const CambiosSemanaView = lazyWithRetry(() => import('./pages/admin/CambiosSemanaView'));
 const PointsAuditView = lazyWithRetry(() => import('./pages/admin/PointsAuditView'));
 const PrinterView = lazyWithRetry(() => import('./pages/admin/PrinterView'));
+const PlanillaView = lazyWithRetry(() => import('./pages/admin/PlanillaView'));
 const DriverPortalView = lazyWithRetry(() => import('./pages/driver/DriverPortalView'));
 
 import SmoothScroll from './components/SmoothScroll';
@@ -207,6 +210,8 @@ function PublicRouteExtras() {
   ].some((re) => re.test(pathname)) || isMobileMenuOpen || isCartOpen || isLoginPage;
   // El link de Gina es una herramienta interna: sin promos, carrito ni botones flotantes
   if (/^\/packs-mensuales\//.test(pathname)) return null;
+  // El reloj del iPad tampoco: es una pantalla de cocina
+  if (/^\/reloj\//.test(pathname)) return null;
   return (
     <>
       <ShippingDiscountBanner />
@@ -263,6 +268,7 @@ function AnimatedRoutes() {
             <Route path="/cambios" element={<BuscarCambiosPage />} />
             <Route path="/cambios/:codigo" element={<CambiosSemanaPage />} />
             <Route path="/packs-mensuales/:codigo" element={<PacksGinaPage />} />
+            <Route path="/reloj/:codigo" element={<RelojPage />} />
             <Route path="/gift-cards" element={<GiftCardsPage />} />
             <Route path="/tarjetas-regalo" element={<GiftCardsPage />} />
             <Route path="/regalar" element={<GiftCardsPage />} />
@@ -324,6 +330,7 @@ function AnimatedRoutes() {
               <Route path="cambios-semana" element={<CambiosSemanaView />} />
               <Route path="points-audit" element={<PointsAuditView />} />
               <Route path="impresion" element={<PrinterView />} />
+              <Route path="planilla" element={<PlanillaView />} />
             </Route>
 
             {/* 404 - Catch all */}
