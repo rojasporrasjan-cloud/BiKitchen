@@ -16,6 +16,7 @@ import { entregasDelPedido } from './proteinasPorEntrega';
 import { sumarDias } from './avisosDePago';
 import { normalizarTelefono, esTelefonoDeRelleno } from './telefonoRelleno';
 import { imprimeEnHoja } from './estadosPedido';
+import { nombreClave } from './cierresDePedidos';
 
 const esCancelado = (p) => /^cancel|rechaz|reembols/i.test(String(p?.status || p?.estado || ''));
 const telDe = (p) => normalizarTelefono(p?.telefono);
@@ -112,9 +113,15 @@ export const paraMenuDeLaSemana = (pedidos = [], hoy) => {
         const previa = ultimaPorTelefono.get(tel);
         if (!previa || ultima > previa.fecha) ultimaPorTelefono.set(tel, { pedido: p, fecha: ultima, ultima: false });
     });
+    // Quien volvió con OTRO teléfono o sin teléfono (Evelyn Montes, 8 oct 2026)
+    // se reconoce por el nombre completo: no se le manda "ya está el menú".
+    const volvieron = new Set((pedidos || [])
+        .filter(p => p && !esCancelado(p) && entregasDelPedido(p).some(f => f > hasta))
+        .map(nombreClave).filter(n => n.includes(' ')));
     const salida = Object.fromEntries(FAMILIAS_DE_MENU.map(f => [f.id, []]));
     [...ultimaPorTelefono.values()]
-        .filter(({ pedido, fecha }) => imprimeEnHoja(pedido) && fecha >= desde && fecha <= hasta)
+        .filter(({ pedido, fecha }) => imprimeEnHoja(pedido) && fecha >= desde && fecha <= hasta
+            && !volvieron.has(nombreClave(pedido)))
         .forEach((item) => {
             const fam = familiaDelPedido(item.pedido);
             if (fam) salida[fam].push(item);

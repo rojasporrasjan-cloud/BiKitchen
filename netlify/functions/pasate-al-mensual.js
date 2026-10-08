@@ -45,9 +45,9 @@ export const correr = ({ ahora = new Date(), modo = process.env.PASATE_MENSUAL_A
         lista: async () => paraPasarseAlMensual(await leerPedidosDelCiclo(db, fechasEntre(sumarDias(hoy, -7), sumarDias(hoy, 42))), hoy),
         filtrar: async (destinatarios) => {
             const fichas = await leerFichas(db, destinatarios.map(d => d.telefono));
-            return conReglasDeMarketing(destinatarios, { fichas, hoy, ahora }).quedan;
+            return conReglasDeMarketing(destinatarios, { fichas, hoy, ahora, tipo: 'pasate-mensual' }).quedan;
         },
-        despues: (enviados) => anotarMarketing(db, enviados.map(d => d.telefono), ahora)
+        despues: (enviados) => anotarMarketing(db, enviados.map(d => d.telefono), ahora, 'pasate-mensual')
     });
 };
 

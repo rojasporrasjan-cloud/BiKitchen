@@ -59,9 +59,9 @@ export const correr = async ({ ahora = new Date(), modo = process.env.MENU_SEMAN
             },
             filtrar: async (destinatarios) => {
                 const fichas = await leerFichas(db, destinatarios.map(d => d.telefono));
-                return conReglasDeMarketing(destinatarios, { fichas, hoy, ahora }).quedan;
+                return conReglasDeMarketing(destinatarios, { fichas, hoy, ahora, tipo: 'menu-semana' }).quedan;
             },
-            despues: (enviados) => anotarMarketing(db, enviados.map(d => d.telefono), ahora)
+            despues: (enviados) => anotarMarketing(db, enviados.map(d => d.telefono), ahora, 'menu-semana')
         });
     }
     return { estado: 'ok', detalle: resultados };

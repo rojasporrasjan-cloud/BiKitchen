@@ -61,9 +61,11 @@ export const leerFichas = async (base, telefonos = []) => {
 
 /**
  * Anota el marketing que salió: +1 en la semana de cada persona y el gasto del
- * mes. Lo usan también otros envíos de marketing (volver-a-invitar).
+ * mes. Lo usan también otros envíos de marketing (volver-a-invitar) y las
+ * difusiones a mano del panel. `tipo` deja la fecha de ESE mensaje, para no
+ * repetirlo antes de 14 días (conReglasDeMarketing).
  */
-export const anotarMarketing = async (base, telefonos = [], ahora = new Date()) => {
+export const anotarMarketing = async (base, telefonos = [], ahora = new Date(), tipo = '') => {
     const hoy = hoyEnCostaRica(ahora);
     const semana = semanaIso(hoy);
     const tels = [...new Set(telefonos.map(normalizarTelefono).filter(t => t.length === 8))];
@@ -71,7 +73,8 @@ export const anotarMarketing = async (base, telefonos = [], ahora = new Date()) 
         const tanda = base.batch();
         tels.slice(i, i + 400).forEach(t => tanda.set(base.collection('kommo_contactos').doc(t), {
             marketing: { [semana]: FieldValue.increment(1) },
-            ultimaDifusion: ahora.toISOString()
+            ultimaDifusion: ahora.toISOString(),
+            ...(tipo ? { ultimoPorTipo: { [tipo]: ahora.toISOString() } } : {})
         }, { merge: true }));
         await tanda.commit();
     }
@@ -105,7 +108,7 @@ export const correr = async ({ ahora = new Date(), modo = process.env.CIERRE_PED
     const pedidos = await leerPedidosDelCiclo(db, fechas);
     const todos = destinatariosUnicos(clientesSinEntrega(pedidos, clave).map(destinatarioDeRenovacion));
     const fichas = await leerFichas(db, todos.map(d => d.telefono));
-    const { quedan, fuera } = conReglasDeMarketing(todos, { fichas, hoy, ahora });
+    const { quedan, fuera } = conReglasDeMarketing(todos, { fichas, hoy, ahora, tipo: TIPO });
 
     const anotar = (estado, extra = {}) => Promise.all([
         constancia.set({ estado, cuantos: quedan.length, fuera: fuera.length, revisadoEn: ahora.toISOString(), ...extra }, { merge: true }),
@@ -137,7 +140,7 @@ export const correr = async ({ ahora = new Date(), modo = process.env.CIERRE_PED
     });
 
     const estado = modo === 'si' ? 'enviado' : 'prueba';
-    if (modo === 'si') await anotarMarketing(db, conId.map(c => c.d.telefono), ahora);
+    if (modo === 'si') await anotarMarketing(db, conId.map(c => c.d.telefono), ahora, TIPO);
     await constancia.set({ estado, enviadoEn: ahora.toISOString(), enviados: conId.length, cuantos: quedan.length, fuera: fuera.length }, { merge: true });
     await anotarEnvio(db, entradaDeRegistro({
         tipo: TIPO, modo, estado, ahora,

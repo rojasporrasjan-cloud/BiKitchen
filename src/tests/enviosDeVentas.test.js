@@ -70,4 +70,14 @@ describe('menú de la semana por tipo de pack', () => {
         expect(g.keto.map(i => i.pedido.cliente)).toEqual(['Keto']);
         expect(g['bajo-calorias']).toEqual([]);
     });
+
+    it('si volvió con otro teléfono o sin teléfono, se reconoce por el nombre completo', () => {
+        const g = paraMenuDeLaSemana([
+            pedido({ cliente: 'Evelyn Montes', telefono: '88595208', fechas_entrega: ['2026-09-12'] }),
+            pedido({ cliente: 'Evelyn Montes', telefono: '', fechas_entrega: ['2026-10-10'] }),
+            pedido({ cliente: 'Ana Maria Rojas', telefono: '81110000', fechas_entrega: ['2026-09-12'] }),
+            pedido({ cliente: 'Maria Rojas', telefono: '81119999', fechas_entrega: ['2026-10-10'] })
+        ], HOY);
+        expect(g['bajo-calorias'].map(i => i.pedido.cliente)).toEqual(['Ana Maria Rojas']);
+    });
 });

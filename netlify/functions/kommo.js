@@ -27,6 +27,7 @@ import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import { COLECCION_ENVIOS, modosDeEnvio, entradaDeRegistro, anotarEnvio } from '../../src/utils/registroDeEnvios.js';
 import { calcularVentas, COLECCION_ESTADISTICAS, DOC_VENTAS } from './ventas-por-envio.js';
+import { anotarMarketing } from './cierre-de-pedidos.js';
 
 let auth;
 let db;
@@ -200,6 +201,9 @@ export const handler = async (event) => {
                     nombre: String(payload.nombre || 'Difusión').slice(0, 80),
                     enviados: destinatarios
                 }));
+                // Cuenta para el tope de 2 por semana y el presupuesto, igual que
+                // los automáticos: si no, el cierre de mañana le escribe de más.
+                await anotarMarketing(db, destinatarios.map(d => d.telefono), new Date(), 'difusion');
             }
             return json(200, { ok: true, registrados: destinatarios.length });
         }

@@ -50,9 +50,9 @@ export const correr = ({ ahora = new Date(), modo = process.env.VOLVER_A_INVITAR
         // Marketing: máximo 2 por semana por persona y nada a "no molestar"
         filtrar: async (destinatarios) => {
             const fichas = await leerFichas(db, destinatarios.map(d => d.telefono));
-            return conReglasDeMarketing(destinatarios, { fichas, hoy, ahora }).quedan;
+            return conReglasDeMarketing(destinatarios, { fichas, hoy, ahora, tipo: 'volver-a-invitar' }).quedan;
         },
-        despues: (enviados) => anotarMarketing(db, enviados.map(d => d.telefono), ahora)
+        despues: (enviados) => anotarMarketing(db, enviados.map(d => d.telefono), ahora, 'volver-a-invitar')
     });
 };
 

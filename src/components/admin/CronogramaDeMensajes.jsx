@@ -48,7 +48,7 @@ export default function CronogramaDeMensajes({ modos = {} }) {
             </h3>
             <p className="text-xs text-gray-600 mb-3">
                 Hora de Costa Rica. Verde = les llega a los clientes · Azul = prueba, solo le llega una muestra a Jan · Gris = apagado.
-                Marketing: máximo 2 por persona por semana, nada a &quot;no molestar&quot;, tope US$200 al mes.
+                Marketing: máximo 2 por persona por semana, el mismo mensaje no se repite antes de 14 días, nada a quien ya tiene pedido ni a &quot;no molestar&quot;, tope US$200 al mes.
             </p>
 
             {/* La semana */}
