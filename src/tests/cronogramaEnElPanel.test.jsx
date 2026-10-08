@@ -26,8 +26,8 @@ describe('el cronograma de los WhatsApp en el panel', () => {
         const renov = screen.getAllByText('Renovación del pack').find(e => e.tagName === 'P').closest('tr');
         expect(within(renov).getByText('Prendido')).toBeTruthy();
 
-        // Volver a invitar avisa que falta la plantilla del 10 %
-        expect(screen.getByText(/falta la plantilla nueva en Kommo/)).toBeTruthy();
+        // Volver a invitar avisa que la plantilla del 10 % está en revisión
+        expect(screen.getByText(/volver_a_invitar_10 está en revisión/)).toBeTruthy();
         // Lo de Kommo y lo que se manda a mano
         expect(screen.getByText(/Bot- Bievenida/)).toBeTruthy();
         expect(screen.getByText('pasate_al_mensual_desayunos')).toBeTruthy();

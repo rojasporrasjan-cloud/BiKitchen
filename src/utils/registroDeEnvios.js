@@ -108,7 +108,7 @@ export const TIPOS_DE_ENVIO = [
         plantilla: 'volver_a_invitar (botones "¡Quiero pedir!" / "Ahora no")',
         a: 'Terminaron hace 2 a 3 semanas y no volvieron',
         texto: 'Hola [nombre] 👋 ¡Te extrañamos en BiKitchen! Ya está el menú nuevo de la semana. Tu próximo pack lleva 15% de descuento. Respondé este mensaje y te ayudamos a armar tu pedido 🍽️',
-        pendiente: 'Jan pidió 10 % (8 oct): falta la plantilla nueva en Kommo; esta aprobada dice 15 %.'
+        pendiente: 'Jan pidió 10 % (8 oct): la plantilla nueva volver_a_invitar_10 está en revisión de Meta. Cuando la aprueben se cambia en el bot 117255; hasta entonces la aprobada dice 15 %.'
     },
     // Para vender más (Jan, 8 oct 2026: "si, deja todo listo"). Vienen APAGADOS.
     {
@@ -121,7 +121,7 @@ export const TIPOS_DE_ENVIO = [
         plantilla: 'Sin plantilla: mensaje libre del bot (dentro de las 24 h)',
         a: 'Escribió hace 18 a 24 h y no tiene pedido (de 8 a. m. a 8 p. m., una vez cada 7 días)',
         texto: '¡Hola! 👋 ¿Pudiste ver los planes de BiKitchen? Si querés, te ayudo a escoger el pack que mejor te queda (bajo en calorías, keto, casaditos o familiar) y te digo qué días entregamos en tu zona. ¿Para cuántas personas sería? 🍽️',
-        pendiente: 'Falta crear en Kommo el bot con este texto (sin plantilla y sin disparador) y ponerlo en Netlify.'
+        pendiente: 'El bot ya está en Kommo (118342, sin disparador). Falta ponerlo en Netlify.'
     },
     {
         id: 'pasate-mensual', label: 'Pasate al mensual',

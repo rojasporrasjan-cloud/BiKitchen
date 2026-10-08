@@ -210,7 +210,8 @@ colecciones enteras. El panel lee el estado por la función `kommo` (acción
 ### 8 oct 2026 — decisiones de Jan y estadísticas
 - **Cierre de pedidos a las 9 a. m.** (L/J/V), para que la gente responda desde temprano.
 - **Volver a invitar: 10 %** en vez de 15 %. El 15 % está escrito en la plantilla aprobada
-  `volver_a_invitar`: hay que crear una plantilla nueva con 10 % en Kommo y cambiarla en el
+  `volver_a_invitar`. La nueva **`volver_a_invitar_10`** (Marketing, ES, botones "¡Quiero pedir!" /
+  "Ahora no") se mandó a Meta el 8 oct en la tarde: cuando la aprueben, cambiarla en el
   bot 117255. Hasta entonces sigue en prueba.
 - **Pago recibido y recordatorio de pago: apagados.** Confirmar un pedido = pagado.
 - **Nada se prende todavía:** todo sigue en `prueba` hasta que Jan diga.
@@ -224,7 +225,7 @@ colecciones enteras. El panel lee el estado por la función `kommo` (acción
 ### 8 oct 2026 (tarde) — envíos nuevos para vender más (APAGADOS hasta que Jan diga)
 | Envío | Función | Cuándo (CR) | Interruptor | Bot | Plantilla |
 |---|---|---|---|---|---|
-| Seguimiento a quien preguntó | `seguimiento-consulta` | cada hora 8 a. m.–8 p. m. (escribió hace 18–24 h, sin pedido; 1 cada 7 días; en prueba 1 muestra al día) | `SEGUIMIENTO_AUTOMATICO` | `KOMMO_BOT_SEGUIMIENTO` (FALTA crearlo: mensaje libre, sin plantilla, sin disparador) | — |
+| Seguimiento a quien preguntó | `seguimiento-consulta` | cada hora 8 a. m.–8 p. m. (escribió hace 18–24 h, sin pedido; 1 cada 7 días; en prueba 1 muestra al día) | `SEGUIMIENTO_AUTOMATICO` | `KOMMO_BOT_SEGUIMIENTO` = 118342 (mensaje libre, sin plantilla, sin disparador; falta ponerlo en Netlify) | — |
 | Pasate al mensual | `pasate-al-mensual` | martes 11 a. m. | `PASATE_MENSUAL_AUTOMATICO` | `KOMMO_BOT_PASATE_MENSUAL` = 117990 | `pasate_al_mensual_desayunos` |
 | Menú de la semana por tipo | `menu-de-la-semana` | lunes 4 p. m. (terminó ese tipo hace 3–8 semanas) | `MENU_SEMANA_AUTOMATICO` | `KOMMO_BOT_MENU_KETO` = 117996 · `_BAJO_CALORIAS` = 117998 · `_CASADITOS` = 118000 · `_FAMILIAR` = 118002 | `menu_semana_*` |
 

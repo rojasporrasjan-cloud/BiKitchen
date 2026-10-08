@@ -37,7 +37,7 @@ export const PLANTILLAS_A_MANO = [
 /** Lo que Jan aprobó y todavía se está haciendo (8 oct 2026). */
 export const EN_CONSTRUCCION = [
     { nombre: 'Bot de bienvenida mejorado', detalle: 'En segundos: precios, link a planes, días, zonas y "¿qué buscás?". El texto está en docs/BIENVENIDA_PARA_GINA.md: falta que Gina lo apruebe.' },
-    { nombre: 'Volver a invitar al 10 %', detalle: 'Plantilla nueva con 10 % (la aprobada dice 15 %).' },
+    { nombre: 'Volver a invitar al 10 %', detalle: 'Plantilla volver_a_invitar_10 mandada a Meta el 8 oct (en revisión). Al aprobarse se cambia en el bot 117255.' },
     { nombre: 'Renovar antes', detalle: 'Una semana antes de la última entrega, además del día final. Necesita plantilla nueva.' },
     { nombre: 'Ofrecer cenas, desayunos e individuales al confirmar', detalle: 'Para que cada cliente lleve más. Necesita plantilla nueva.' }
 ]
