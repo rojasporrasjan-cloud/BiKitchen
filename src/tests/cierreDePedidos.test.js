@@ -205,6 +205,14 @@ describe('la función programada', () => {
         expect(estado.enviados).toHaveLength(1);
     });
 
+    it('con "si" antes del lunes 12 oct 2026 sigue en prueba (semana sin contar)', async () => {
+        estado.pedidos = [pedido('a', '88110001', ['2026-10-05'])];               // cliente de lunes
+        const r = await correr({ ahora: new Date('2026-10-09T15:00:00Z'), modo: 'si', env: { ...ENV, KOMMO_BOT_CIERRE_LUNES: '117642' } });
+        expect(r.estado).toBe('prueba');
+        expect(estado.enviados[0]).toHaveLength(1);                                 // solo la muestra a Jan
+        expect(estado.enviados[0][0].telefono).toBe('87776666');
+    });
+
     it('a quien tiene "no molestar" no le llega', async () => {
         conClientes();
         estado.docs['kommo_contactos/88110002'] = { noMolestarDesde: '2026-10-10T00:00:00Z' };

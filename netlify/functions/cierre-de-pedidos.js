@@ -42,6 +42,13 @@ import {
 
 export const TOPE = 150;
 const TIPO = 'cierre-pedidos';
+/**
+ * Con "si", el cierre manda de verdad DESDE este día. Antes sigue en prueba:
+ * las promociones del 6 y 7 oct 2026 (HOY5, proteínas) no quedaron contadas en
+ * kommo_contactos, y el cierre del viernes 9 le habría mandado la tercera de la
+ * semana a la gente del lunes. El lunes 12 empieza una semana limpia.
+ */
+export const CIERRE_DE_VERDAD_DESDE = '2026-10-12';
 
 let db;
 try {
@@ -84,9 +91,10 @@ export const anotarMarketing = async (base, telefonos = [], ahora = new Date(), 
     }
 };
 
-export const correr = async ({ ahora = new Date(), modo = process.env.CIERRE_PEDIDOS_AUTOMATICO, env = process.env } = {}) => {
-    if (modo !== 'si' && modo !== 'prueba') return { estado: 'apagado' };
+export const correr = async ({ ahora = new Date(), modo: modoPedido = process.env.CIERRE_PEDIDOS_AUTOMATICO, env = process.env } = {}) => {
+    if (modoPedido !== 'si' && modoPedido !== 'prueba') return { estado: 'apagado' };
     const hoy = hoyEnCostaRica(ahora);
+    const modo = modoPedido === 'si' && hoy < CIERRE_DE_VERDAD_DESDE ? 'prueba' : modoPedido;
     const cierre = cierreDeHoy(hoy);
     if (!cierre) return { estado: 'hoy-no-toca', detalle: { hoy } };
 
