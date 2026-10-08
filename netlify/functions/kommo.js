@@ -195,9 +195,13 @@ export const handler = async (event) => {
                 .slice(0, 2000)
                 .map(d => ({ nombre: d?.nombre || '', telefono: String(d?.telefono || '').replace(/\D/g, '').slice(-8) }));
             if (!destinatarios.length) return json(400, { error: 'La difusión no trae destinatarios.' });
+            // `cuando`: para anotar una difusión que salió antes (máx. 31 días), con su fecha real
+            const pedida = new Date(payload.cuando || Date.now());
+            const cuando = Number.isNaN(pedida.getTime()) || pedida > new Date()
+                || Date.now() - pedida.getTime() > 31 * 86400000 ? new Date() : pedida;
             if (db) {
                 await anotarEnvio(db, entradaDeRegistro({
-                    tipo: 'difusion', modo: 'si', estado: 'enviado',
+                    tipo: 'difusion', modo: 'si', estado: 'enviado', ahora: cuando,
                     nombre: String(payload.nombre || 'Difusión').slice(0, 80),
                     enviados: destinatarios
                 }));
@@ -207,7 +211,7 @@ export const handler = async (event) => {
                 // no repetir ESE mensaje antes de 14 días.
                 const TIPOS_DE_MARKETING = ['cierre-pedidos', 'menu-semana', 'pasate-mensual', 'volver-a-invitar'];
                 const tipo = TIPOS_DE_MARKETING.includes(payload.tipo) ? payload.tipo : 'difusion';
-                await anotarMarketing(db, destinatarios.map(d => d.telefono), new Date(), tipo);
+                await anotarMarketing(db, destinatarios.map(d => d.telefono), cuando, tipo);
             }
             return json(200, { ok: true, registrados: destinatarios.length });
         }
