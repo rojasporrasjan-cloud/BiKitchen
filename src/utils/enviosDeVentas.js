@@ -50,6 +50,19 @@ export const leTocaSeguimiento = (ficha, { ahora = new Date(), tienePedido = fal
 };
 
 /** ¿Este teléfono ya tiene un pedido vivo (con una entrega de hoy en adelante, o hecho en los últimos 3 días)? */
+/**
+ * Los teléfonos (8 dígitos) de quienes tienen pedidos no cancelados, sin importar
+ * cómo quedó escrito el número (88172430, "8817 2430", +506…, o como número).
+ * El 8 oct 2026 a Priscilla Montoya, con entrega el sábado, le llegó "¿pudiste
+ * ver los planes?" porque la búsqueda exigía el teléfono escrito igual.
+ */
+export const telefonosDeClientes = (pedidos = []) => new Set((pedidos || [])
+    .filter(p => p && !esCancelado(p) && !esTelefonoDeRelleno(p.telefono))
+    .map(telDe).filter(t => t.length === 8));
+
+/** El seguimiento es para quien preguntó y NUNCA compró: un cliente que escribe por su pedido no recibe "¿te ayudo a escoger?". */
+export const yaEsCliente = (pedidos = []) => (pedidos || []).some(p => p && !esCancelado(p));
+
 export const tienePedidoVivo = (pedidos = [], hoy, ahora = new Date()) => vivos(pedidos).some((p) => {
     if (entregasDelPedido(p).some(f => f >= hoy)) return true;
     const creado = p.createdAt?.toMillis?.() ?? (p.createdAt?.seconds ? p.createdAt.seconds * 1000 : Date.parse(p.createdAt || ''));

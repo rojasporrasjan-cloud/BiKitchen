@@ -3,7 +3,8 @@
  * Netlify Scheduled Function: seguimiento-consulta
  *
  * Cada hora, de 8 a. m. a 8 p. m. de Costa Rica: a quien escribió por WhatsApp
- * hace 18 a 23,5 horas y no tiene un pedido vivo, un "¿te ayudo a escoger tu
+ * hace 18 a 23,5 horas y NUNCA ha comprado (8 oct 2026: antes era "sin pedido
+ * vivo" y le llegó a clientas con entrega esa semana), un "¿te ayudo a escoger tu
  * pack?". Como cae dentro de las 24 h desde su último mensaje, va como mensaje
  * libre del bot (sin plantilla) y no lo cobra Meta como marketing. Uno por
  * persona cada 7 días (`seguimientoEn` en su ficha de kommo_contactos).
@@ -19,7 +20,9 @@
  * y SIN disparador).
  *
  * Lecturas: las fichas de kommo_contactos con último mensaje en esa ventana
- * (consulta por rango) y, por cada una, sus pedidos (consulta `in` por teléfono).
+ * (consulta por rango); si hay alguien, los pedidos con entregas de 2 semanas
+ * atrás a 2 adelante (consulta por fechas) y, por cada uno que quede, sus
+ * pedidos (consulta `in` por teléfono, con el número también como número).
  */
 
 import { getFirestore } from 'firebase-admin/firestore';
@@ -28,9 +31,13 @@ import { enviarPorKommo, soloAlNumeroDePrueba } from './cambios-miercoles.js';
 import { hoyEnCostaRica } from '../../src/utils/avisosDePago.js';
 import { correrAviso, responder, COLECCION_CONSTANCIAS } from '../../src/utils/avisoDelDia.js';
 import { variantesDeTelefono } from '../../src/utils/avisosDeEntrega.js';
+import { leerPedidosDelCiclo } from '../../src/utils/envioDeCambios.js';
+import { fechasEntre } from '../../src/utils/consultaPorFechas.js';
+import { sumarDias } from '../../src/utils/avisosDePago.js';
+import { normalizarTelefono } from '../../src/utils/telefonoRelleno.js';
 import { noMolestarVigente } from '../../src/utils/kommoSync.js';
 import {
-    leTocaSeguimiento, tienePedidoVivo, SEGUIMIENTO_DESDE_HORAS, SEGUIMIENTO_HASTA_HORAS
+    leTocaSeguimiento, telefonosDeClientes, yaEsCliente, SEGUIMIENTO_DESDE_HORAS, SEGUIMIENTO_HASTA_HORAS
 } from '../../src/utils/enviosDeVentas.js';
 
 export const TOPE = 40;
@@ -65,15 +72,18 @@ export const correr = async ({ ahora = new Date(), modo = process.env.SEGUIMIENT
             const hasta = new Date(ahora.getTime() - SEGUIMIENTO_DESDE_HORAS * 3600000).toISOString();
             const snap = await base.collection('kommo_contactos')
                 .where('ultimoEntrante', '>=', desde).where('ultimoEntrante', '<=', hasta).limit(200).get();
+            const candidatos = snap.docs.filter(doc => leTocaSeguimiento(doc.data(), { ahora, noMolestar: noMolestarVigente(doc.data(), ahora) }));
+            if (!candidatos.length) return [];
+            // Clientes con entregas cerca, por teléfono normalizado (no importa cómo quedó escrito)
+            const cerca = telefonosDeClientes(await leerPedidosDelCiclo(base, fechasEntre(sumarDias(hoy, -14), sumarDias(hoy, 14))));
             const items = [];
-            for (const doc of snap.docs) {
-                const ficha = doc.data();
-                if (!leTocaSeguimiento(ficha, { ahora, noMolestar: noMolestarVigente(ficha, ahora) })) continue;
+            for (const doc of candidatos) {
+                const tel = normalizarTelefono(doc.id);
                 const variantes = variantesDeTelefono(doc.id);
-                if (!variantes.length) continue;
-                const pedidos = await base.collection('pedidos').where('telefono', 'in', variantes).limit(10).get();
-                if (tienePedidoVivo(pedidos.docs.map(d => ({ id: d.id, ...d.data() })), hoy, ahora)) continue;
-                items.push({ pedido: { id: doc.id, cliente: ficha.nombre || '', telefono: doc.id }, fecha: hoy, ultima: false });
+                if (!variantes.length || cerca.has(tel)) continue;
+                const pedidos = await base.collection('pedidos').where('telefono', 'in', [...variantes, Number(tel)]).limit(5).get();
+                if (yaEsCliente(pedidos.docs.map(d => ({ id: d.id, ...d.data() })))) continue;
+                items.push({ pedido: { id: doc.id, cliente: doc.data().nombre || '', telefono: doc.id }, fecha: hoy, ultima: false });
             }
             return items;
         },

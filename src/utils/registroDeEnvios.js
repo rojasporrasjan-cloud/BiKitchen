@@ -113,13 +113,13 @@ export const TIPOS_DE_ENVIO = [
     // Para vender más (Jan, 8 oct 2026: "si, deja todo listo"). Vienen APAGADOS.
     {
         id: 'seguimiento', label: 'Seguimiento a quien preguntó',
-        cuando: 'Cada hora de 8 a. m. a 8 p. m. — escribió hace 18 a 24 h y no tiene pedido',
+        cuando: 'Cada hora de 8 a. m. a 8 p. m. — escribió hace 18 a 24 h y nunca ha comprado',
         interruptor: 'SEGUIMIENTO_AUTOMATICO', bot: 'KOMMO_BOT_SEGUIMIENTO',
         funcion: 'seguimiento-consulta',
         horario: '15 * * * *',
         clase: 'Servicio',
         plantilla: 'Sin plantilla: mensaje libre del bot (dentro de las 24 h)',
-        a: 'Escribió hace 18 a 24 h y no tiene pedido (de 8 a. m. a 8 p. m., una vez cada 7 días)',
+        a: 'Escribió hace 18 a 24 h y nunca ha comprado (de 8 a. m. a 8 p. m., una vez cada 7 días)',
         texto: '¡Hola! 👋 ¿Pudiste ver los planes de BiKitchen? Si querés, te ayudo a escoger el pack que mejor te queda (bajo en calorías, keto, casaditos o familiar) y te digo qué días entregamos en tu zona. ¿Para cuántas personas sería? 🍽️',
     },
     {

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-    leTocaSeguimiento, tienePedidoVivo, paraPasarseAlMensual, paraMenuDeLaSemana, familiaDelPedido
+    leTocaSeguimiento, tienePedidoVivo, paraPasarseAlMensual, paraMenuDeLaSemana, familiaDelPedido,
+    telefonosDeClientes, yaEsCliente
 } from '../utils/enviosDeVentas';
 
 /** Jan, 8 oct 2026: "si, deja todo listo" — seguimiento, pasate al mensual y menú por tipo. */
@@ -11,6 +12,25 @@ const AHORA = new Date('2026-10-13T16:00:00Z'); // 10 a. m. CR
 const pedido = (extra = {}) => ({
     id: Math.random().toString(36).slice(2), cliente: 'Ana', telefono: '8888-4678', status: 'confirmed',
     paymentConfirmed: true, items: [{ nombre: 'Pack Semanal Bajo en Calorías' }], fechas_entrega: ['2026-10-10'], ...extra
+});
+
+describe('el seguimiento es solo para quien nunca compró (8 oct 2026)', () => {
+    it('reconoce al cliente aunque el teléfono esté escrito distinto o como número', () => {
+        const tels = telefonosDeClientes([
+            pedido({ telefono: 88172430 }),
+            pedido({ telefono: '+506 8817-2431' }),
+            pedido({ telefono: '8817 2432' }),
+            pedido({ telefono: '88172433', status: 'cancelled' }),
+            pedido({ telefono: '88888888' })
+        ]);
+        expect([...tels].sort()).toEqual(['88172430', '88172431', '88172432']);
+    });
+
+    it('cualquier pedido no cancelado, aunque ya se haya entregado, lo hace cliente', () => {
+        expect(yaEsCliente([pedido({ fechas_entrega: ['2026-08-01'] })])).toBe(true);
+        expect(yaEsCliente([pedido({ status: 'cancelled' })])).toBe(false);
+        expect(yaEsCliente([])).toBe(false);
+    });
 });
 
 describe('seguimiento a las 20 horas', () => {
