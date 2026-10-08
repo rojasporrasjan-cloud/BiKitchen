@@ -38,7 +38,8 @@ describe('el reloj del iPad', () => {
         montar();
         expect(await screen.findByText('Rosa Mora')).toBeTruthy();
         expect(screen.getByText(/Adentro desde 7:00 a\. m\./)).toBeTruthy();
-        expect(screen.getByText('1 persona adentro')).toBeTruthy();
+        expect(screen.getByText('persona adentro')).toBeTruthy();
+        expect(screen.getAllByRole('button', { name: /marcar salida/ })).toHaveLength(1);
         expect(JSON.parse(fetchEspia.mock.calls[0][1].body)).toEqual({ accion: 'reloj', codigo: 'ABC' });
     });
 

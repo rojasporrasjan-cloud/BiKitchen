@@ -15,9 +15,9 @@ const saludo = (en) => {
 };
 
 const COLORES = {
-    entrada: 'bg-emerald-600',
-    salida: 'bg-bikitchen-orange',
-    repetida: 'bg-amber-500'
+    entrada: 'bg-gradient-to-br from-emerald-500 to-teal-600',
+    salida: 'bg-gradient-to-br from-bikitchen-orange to-amber-500',
+    repetida: 'bg-gradient-to-br from-amber-400 to-amber-600'
 };
 
 export default function AvisoMarcado({ resultado, onCerrar }) {
@@ -60,11 +60,12 @@ export default function AvisoMarcado({ resultado, onCerrar }) {
                     ? <Clock size={72} strokeWidth={3} className="text-amber-500" />
                     : <Check size={84} strokeWidth={3.5} className={tipo === 'salida' ? 'text-bikitchen-orange' : 'text-emerald-600'} />}
             </motion.span>
-            <h2 className="mt-8 text-5xl md:text-6xl font-black leading-tight">{titulo}</h2>
-            <p className="mt-3 text-2xl md:text-3xl font-bold text-white/90">{detalle}</p>
+            <h2 className="mt-8 text-5xl md:text-6xl font-black leading-tight text-white">{titulo}</h2>
+            <p className="mt-3 text-2xl md:text-3xl font-bold text-white/90 lining-nums">{detalle}</p>
             {!repetida && tipo === 'salida' && minutos > 0 && (
-                <p className="mt-6 px-6 py-3 bg-white/20 rounded-full text-xl font-bold">Este turno: {duracion(minutos)}</p>
+                <p className="mt-6 px-6 py-3 bg-white/20 rounded-full text-xl font-bold lining-nums">Este turno: {duracion(minutos)}</p>
             )}
+            <img src="/assets/logo.png" alt="" aria-hidden="true" className="absolute bottom-10 w-36 h-auto brightness-0 invert opacity-80" />
         </motion.div>
     );
 }

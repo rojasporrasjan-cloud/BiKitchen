@@ -13,7 +13,7 @@ const fechaLarga = (fecha) => new Date(`${fecha}T12:00:00`)
     .replace('septiembre', 'setiembre');
 
 export default function DetalleDelDia({ empleado, fecha, dia, onCambio, onCerrar }) {
-    const sugerido = dia.avisos.some(a => /Falta la salida/.test(a)) ? 'salida' : 'entrada';
+    const sugerido = dia.enTurno || dia.avisos.some(a => /Falta la salida/.test(a)) ? 'salida' : 'entrada';
     const [tipo, setTipo] = useState(sugerido);
     const [hora, setHora] = useState('');
     const [ocupado, setOcupado] = useState(false);
@@ -57,6 +57,12 @@ export default function DetalleDelDia({ empleado, fecha, dia, onCambio, onCerrar
                 <h2 id="titulo-detalle" className="text-xl font-black text-gray-900">{empleado.nombre}</h2>
                 <p className="text-sm font-semibold text-gray-500 first-letter:uppercase">{fechaLarga(fecha)}</p>
 
+                {dia.enTurno && (
+                    <p className="flex items-start gap-2 mt-3 p-3 bg-sky-50 border border-sky-200 rounded-xl text-sm font-bold text-sky-800">
+                        <span className="shrink-0 w-2.5 h-2.5 mt-1 bg-sky-500 rounded-full" aria-hidden="true" />
+                        Está trabajando desde las {horaCR(dia.enTurno)}. Cuando marque la salida en el iPad se calcula el pago de hoy.
+                    </p>
+                )}
                 {dia.avisos.map(a => (
                     <p key={a} className="flex items-start gap-2 mt-3 p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm font-bold text-amber-800">
                         <AlertTriangle size={16} className="shrink-0 mt-0.5" aria-hidden="true" /> {a}. Hasta corregirlo, ese rato no se paga.

@@ -114,8 +114,11 @@ export const diasDeLaSemana = (lunes) =>
 /**
  * La planilla de varios días: por empleado, cada día con sus tramos, horas y
  * plata, y el total.
+ *
+ * Con `hoy`, el turno que sigue abierto HOY no es un olvido: la persona todavía
+ * está trabajando. Ese día lleva `enTurno` (desde cuándo) y no cuenta como aviso.
  */
-export const planillaDe = (empleados = [], marcas = [], dias = []) => (empleados || []).map((empleado) => {
+export const planillaDe = (empleados = [], marcas = [], dias = [], hoy = null) => (empleados || []).map((empleado) => {
     const suyas = (marcas || []).filter(m => m.empleadoId === empleado.id);
     const porDia = {};
     let totalMinutos = 0;
@@ -123,10 +126,13 @@ export const planillaDe = (empleados = [], marcas = [], dias = []) => (empleados
     let avisos = 0;
     dias.forEach((fecha) => {
         const delDia = suyas.filter(m => m.fecha === fecha);
-        const { tramos, avisos: avisosDia } = tramosDelDia(delDia);
+        const { tramos, avisos: todos } = tramosDelDia(delDia);
+        const abierto = tramos.at(-1)?.salida === null ? tramos.at(-1).entrada.en : null;
+        const enTurno = fecha === hoy ? abierto : null;
+        const avisosDia = enTurno ? todos.filter(a => !/^Falta la salida/.test(a)) : todos;
         const minutos = tramos.reduce((s, t) => s + t.minutos, 0);
         const pago = pagoDelDia(minutos, empleado.tarifaHora);
-        porDia[fecha] = { tramos, avisos: avisosDia, minutos, ...pago, marcas: delDia };
+        porDia[fecha] = { tramos, avisos: avisosDia, minutos, ...pago, marcas: delDia, enTurno };
         totalMinutos += minutos;
         totalMonto += pago.monto;
         avisos += avisosDia.length;

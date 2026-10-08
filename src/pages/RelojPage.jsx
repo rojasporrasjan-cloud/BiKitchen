@@ -29,6 +29,11 @@ const partesCR = (ahora) => {
     };
 };
 
+const saludoDe = (ahora) => {
+    const h = new Date(ahora.getTime() - SEIS_HORAS).getUTCHours();
+    return h < 12 ? 'Buenos días' : h < 18 ? 'Buenas tardes' : 'Buenas noches';
+};
+
 const fechaLarga = (ahora) => ahora
     .toLocaleDateString('es-CR', { timeZone: 'America/Costa_Rica', weekday: 'long', day: 'numeric', month: 'long' })
     .replace(/^(\p{L}+),/u, '$1')
@@ -118,28 +123,49 @@ export default function RelojPage() {
     const adentro = empleados.filter(e => e.adentro).length;
 
     return (
-        <div className="min-h-screen bg-gradient-to-b from-stone-900 via-stone-950 to-stone-950 text-white select-none">
+        <div className="min-h-screen lg:flex bg-bikitchen-beige select-none">
             <SEOHead title="Reloj | BiKitchen" description="Herramienta interna: marcar entrada y salida." noindex />
+            <h1 className="sr-only">Reloj de entrada y salida de BiKitchen</h1>
 
-            <main className="max-w-5xl mx-auto px-4 sm:px-8 pt-8 pb-12">
-                <header className="flex flex-col items-center text-center">
-                    <p className="inline-flex items-center gap-2 text-sm font-black uppercase tracking-[0.3em] text-bikitchen-orange">
-                        <Clock3 size={16} aria-hidden="true" /> BiKitchen
-                    </p>
-                    <h1 className="sr-only">Reloj de entrada y salida</h1>
-                    <p className="mt-4 flex items-baseline gap-2 font-black tabular-nums leading-none" aria-live="off">
-                        <span className="text-7xl sm:text-8xl md:text-9xl">{hora}</span>
-                        <span className="text-3xl sm:text-4xl text-white/30">{segundos}</span>
-                        <span className="text-2xl sm:text-3xl text-white/60">{ampm}</span>
-                    </p>
-                    <p className="mt-3 text-xl sm:text-2xl font-semibold text-white/70 first-letter:uppercase">{fechaLarga(ahora)}</p>
-                </header>
+            {/* El reloj: naranja de la marca, a la izquierda en el iPad acostado, arriba si está parado */}
+            <aside className="relative flex flex-col justify-between gap-8 overflow-hidden px-8 py-8 lg:w-[40%] lg:h-screen lg:sticky lg:top-0 lg:py-12 bg-gradient-to-br from-bikitchen-orange via-orange-500 to-amber-500 text-white">
+                <span className="absolute -top-28 -right-28 w-80 h-80 rounded-full bg-white/10" aria-hidden="true" />
+                <span className="absolute -bottom-40 -left-32 w-80 h-80 rounded-full bg-white/10" aria-hidden="true" />
 
+                <img src="/assets/logo.png" alt="BiKitchen Food" className="relative w-44 lg:w-56 h-auto brightness-0 invert" />
+
+                <div className="relative">
+                    <p className="text-xl lg:text-2xl font-bold text-white/90">{saludoDe(ahora)}</p>
+                    <p className="flex items-baseline gap-2 mt-1 font-black leading-none tabular-nums lining-nums" aria-live="off">
+                        <span className="text-8xl lg:text-[6.5rem] xl:text-[8rem] tracking-tight">{hora}</span>
+                        <span className="flex flex-col gap-1 whitespace-nowrap">
+                            <span className="text-2xl lg:text-3xl text-white/60">{segundos}</span>
+                            <span className="text-2xl lg:text-3xl">{ampm}</span>
+                        </span>
+                    </p>
+                    <p className="mt-3 text-xl lg:text-2xl font-semibold text-white/90 first-letter:uppercase">{fechaLarga(ahora)}</p>
+                </div>
+
+                {datos && (
+                    <div className="relative flex gap-3">
+                        <span className="flex-1 px-4 py-3 bg-white/20 rounded-2xl">
+                            <span className="block text-3xl font-black lining-nums">{adentro}</span>
+                            <span className="text-sm font-bold text-white/90">{adentro === 1 ? 'persona adentro' : 'personas adentro'}</span>
+                        </span>
+                        <span className="flex-1 px-4 py-3 bg-white/10 rounded-2xl">
+                            <span className="block text-3xl font-black lining-nums">{empleados.length - adentro}</span>
+                            <span className="text-sm font-bold text-white/90">afuera</span>
+                        </span>
+                    </div>
+                )}
+            </aside>
+
+            <main className="flex-1 px-5 py-8 sm:px-8 lg:py-12 lg:overflow-y-auto">
                 {error && (
-                    <div role="alert" className="flex flex-wrap items-center justify-center gap-3 mt-8 p-4 bg-red-500/15 ring-1 ring-red-400/40 rounded-2xl text-red-200 font-bold">
+                    <div role="alert" className="flex flex-wrap items-center justify-center gap-3 mb-6 p-4 bg-red-50 border border-red-200 rounded-2xl text-red-700 font-bold">
                         {error}
                         <button type="button" onClick={cargar}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/10 rounded-lg text-sm text-white">
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-red-200 rounded-lg text-sm">
                             <RefreshCw size={14} aria-hidden="true" /> Reintentar
                         </button>
                     </div>
@@ -147,27 +173,24 @@ export default function RelojPage() {
 
                 {datos && (
                     <>
-                        <div className="flex flex-wrap items-center justify-between gap-2 mt-10 mb-4">
-                            <h2 className="text-2xl font-black">Tocá tu nombre para marcar</h2>
-                            <span className="px-3 py-1 bg-emerald-500/15 text-emerald-300 text-sm font-bold rounded-full">
-                                {adentro === 1 ? '1 persona adentro' : `${adentro} personas adentro`}
-                            </span>
-                        </div>
+                        <h2 className="text-3xl lg:text-4xl font-black text-gray-900">Tocá tu nombre</h2>
+                        <p className="mt-1 mb-6 text-lg text-gray-500">para marcar tu entrada o tu salida</p>
                         {empleados.length === 0 ? (
-                            <p className="p-8 bg-white/5 rounded-3xl text-center text-white/60 text-lg">
+                            <p className="p-8 bg-white rounded-3xl text-center text-gray-500 text-lg">
                                 Todavía no hay empleados. Jan los agrega en el panel → Planilla.
                             </p>
                         ) : (
-                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 lg:gap-5">
                                 {empleados.map(e => <TarjetaEmpleado key={e.id} empleado={e} onElegir={setElegido} />)}
                             </div>
                         )}
-                        <p className="mt-10 text-center text-sm text-white/40">
-                            ¿Te equivocaste o se te olvidó marcar? Avisale a Gina o a Jan para corregirlo.
+                        <p className="flex items-center justify-center gap-2 mt-8 text-sm text-gray-400">
+                            <Clock3 size={14} aria-hidden="true" />
+                            ¿Te equivocaste o se te olvidó marcar? Avisale a Gina o a Jan.
                         </p>
                     </>
                 )}
-                {!datos && !error && <p className="mt-16 text-center text-white/50 text-lg">Cargando…</p>}
+                {!datos && !error && <p className="mt-16 text-center text-gray-400 text-lg">Cargando…</p>}
             </main>
 
             <AnimatePresence>

@@ -98,6 +98,17 @@ describe('la semana', () => {
     });
 });
 
+describe('el turno de hoy', () => {
+    it('si hoy sigue adentro no es un olvido: está en turno', () => {
+        const empleados = [{ id: 'rosa', nombre: 'Rosa', tarifaHora: 1500 }];
+        const marcas = [m('entrada', '2026-10-07', '07:00'), m('entrada', '2026-10-08', '07:15')];
+        const [rosa] = planillaDe(empleados, marcas, ['2026-10-07', '2026-10-08'], '2026-10-08');
+        expect(rosa.porDia['2026-10-08']).toMatchObject({ enTurno: momentoCR('2026-10-08', '07:15'), avisos: [] });
+        expect(rosa.porDia['2026-10-07'].avisos[0]).toMatch(/Falta la salida/);   // ayer sí es olvido
+        expect(rosa.avisos).toBe(1);
+    });
+});
+
 describe('lo que se ve', () => {
     it('duración e iniciales', () => {
         expect(duracion(455)).toBe('7 h 35 min');

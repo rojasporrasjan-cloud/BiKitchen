@@ -33,7 +33,7 @@ export default function LinkDelReloj() {
 
     return (
         <section className="p-5 bg-gradient-to-br from-stone-900 to-stone-800 text-white rounded-3xl shadow-lg" aria-labelledby="titulo-link-reloj">
-            <h2 id="titulo-link-reloj" className="flex items-center gap-2 text-lg font-black">
+            <h2 id="titulo-link-reloj" className="flex items-center gap-2 text-lg font-black text-white">
                 <Tablet size={20} className="text-bikitchen-orange" aria-hidden="true" /> El reloj del iPad
             </h2>
             <p className="mt-1 text-sm text-white/70">
