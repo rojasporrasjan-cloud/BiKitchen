@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { UserPlus, Pencil, Lock } from 'lucide-react';
+import { UserPlus, Pencil, Lock, Users } from 'lucide-react';
 import FormularioEmpleado from './FormularioEmpleado';
-import { tonoDe } from '../../data/planilla';
+import { tonoDe, EMPLEADOS_INICIALES, COLORES_EMPLEADO } from '../../data/planilla';
 import { colones, iniciales } from '../../utils/planilla';
 import { pedirALaPlanilla } from '../../utils/planillaClient';
 
 /** Quiénes trabajan y cuánto gana cada uno por hora. */
-export default function EmpleadosPlanilla({ empleados, onCambio }) {
+export default function EmpleadosPlanilla({ empleados, listos = true, onCambio }) {
     const [editando, setEditando] = useState(null);       // null | {} (nuevo) | empleado
     const [guardando, setGuardando] = useState(false);
     const [error, setError] = useState('');
@@ -22,6 +22,22 @@ export default function EmpleadosPlanilla({ empleados, onCambio }) {
             setError(e.message);
         } finally {
             setGuardando(false);
+        }
+    };
+
+    // Uno por uno: si algo falla a medias, lo que ya se guardó queda y el botón desaparece
+    const handleCargarLista = async () => {
+        setGuardando(true);
+        setError('');
+        try {
+            for (const [i, e] of EMPLEADOS_INICIALES.entries()) {
+                await pedirALaPlanilla('guardarEmpleado', { empleado: { ...e, color: COLORES_EMPLEADO[i % COLORES_EMPLEADO.length] } });
+            }
+        } catch (e) {
+            setError(e.message);
+        } finally {
+            setGuardando(false);
+            onCambio();
         }
     };
 
@@ -49,10 +65,19 @@ export default function EmpleadosPlanilla({ empleados, onCambio }) {
                 </div>
             )}
 
-            {empleados.length === 0 && !editando && (
-                <p className="mt-4 p-6 bg-gray-50 rounded-2xl text-center text-gray-600">
-                    Agregá a las personas que trabajan en la cocina con lo que ganan por hora. Después aparecen en el reloj del iPad.
-                </p>
+            {listos && empleados.length === 0 && !editando && (
+                <div className="mt-4 p-6 bg-gray-50 rounded-2xl text-center text-gray-600">
+                    <p>Agregá a las personas que trabajan en la cocina con lo que ganan por hora. Después aparecen en el reloj del iPad.</p>
+                    <button type="button" onClick={handleCargarLista} disabled={guardando}
+                        className="inline-flex items-center gap-1.5 mt-4 px-5 py-2.5 bg-gray-900 hover:bg-gray-800 text-white text-sm font-bold rounded-xl disabled:opacity-40">
+                        <Users size={16} aria-hidden="true" />
+                        {guardando ? 'Cargando…' : `Cargar las ${EMPLEADOS_INICIALES.length} de la lista de Gina`}
+                    </button>
+                    <p className="mt-2 text-xs text-gray-500">
+                        {EMPLEADOS_INICIALES.map(e => `${e.nombre} ${colones(e.tarifaHora)}`).join(' · ')}
+                    </p>
+                    {error && <p role="alert" className="mt-2 text-sm font-bold text-red-700">{error}</p>}
+                </div>
             )}
 
             <ul className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-4">

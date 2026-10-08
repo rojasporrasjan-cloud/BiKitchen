@@ -4,6 +4,7 @@ import LinkDelReloj from '../../components/planilla/LinkDelReloj';
 import EmpleadosPlanilla from '../../components/planilla/EmpleadosPlanilla';
 import TablaSemanal from '../../components/planilla/TablaSemanal';
 import DetalleDelDia from '../../components/planilla/DetalleDelDia';
+import MarcaEnGrupo from '../../components/planilla/MarcaEnGrupo';
 import { useAuth } from '../../context/AuthContext';
 import { pedirALaPlanilla } from '../../utils/planillaClient';
 import { fechaCR, lunesDe, diasDeLaSemana, planillaDe, estadoActual, colones, duracion } from '../../utils/planilla';
@@ -51,6 +52,7 @@ function Planilla() {
     const hoy = fechaCR();
     const [lunes, setLunes] = useState(() => lunesDe(hoy));
     const [empleados, setEmpleados] = useState([]);
+    const [empleadosListos, setEmpleadosListos] = useState(false);   // para no ofrecer "cargar la lista" antes de saber
     const [marcas, setMarcas] = useState([]);
     const [cargando, setCargando] = useState(true);
     const [error, setError] = useState('');
@@ -61,6 +63,7 @@ function Planilla() {
         const r = await pedirALaPlanilla('empleados');
         anotarLecturas(r.empleados.length, 'Planilla');
         setEmpleados(r.empleados);
+        setEmpleadosListos(true);
     }, []);
 
     const cargarMarcas = useCallback(async () => {
@@ -153,9 +156,14 @@ function Planilla() {
             <TablaSemanal planilla={planilla} dias={dias} hoy={hoy}
                 onElegirDia={(empleado, fecha) => setElegido({ empleadoId: empleado.id, fecha })} />
 
+            {/* Solo en la semana de hoy: usa las marcas cargadas para saber quién está adentro */}
+            {dias.includes(hoy) && (
+                <MarcaEnGrupo empleados={empleados} marcas={marcas} hoy={hoy} desde={dias[0]} onCambio={() => cargar('marcas')} />
+            )}
+
             <div className="grid lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2">
-                    <EmpleadosPlanilla empleados={empleados} onCambio={() => cargar('empleados')} />
+                    <EmpleadosPlanilla empleados={empleados} listos={empleadosListos} onCambio={() => cargar('empleados')} />
                 </div>
                 <LinkDelReloj />
             </div>

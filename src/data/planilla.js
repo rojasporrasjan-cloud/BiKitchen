@@ -31,3 +31,20 @@ export const TONOS_EMPLEADO = {
 };
 
 export const tonoDe = (color) => TONOS_EMPLEADO[color] || TONOS_EMPLEADO.orange;
+
+/**
+ * La lista de Gina (8 oct 2026): quién trabaja y cuánto gana por hora.
+ * Sale como botón en Planilla solo mientras no hay ningún empleado cargado;
+ * después todo se cambia desde el panel, no aquí.
+ */
+export const EMPLEADOS_INICIALES = [
+    { nombre: 'Doña Carmen', tarifaHora: 2500 },
+    { nombre: 'Rosa', tarifaHora: 2000 },
+    { nombre: 'Fernanda', tarifaHora: 2200 },
+    { nombre: 'Osmany', tarifaHora: 1800 },
+    { nombre: 'Paula', tarifaHora: 2000 },
+    { nombre: 'Natasha', tarifaHora: 1800 },
+    { nombre: 'Tannia', tarifaHora: 1900 },
+    { nombre: 'Allison', tarifaHora: 1800 },
+    { nombre: 'Isabel', tarifaHora: 1800 }      // "Novia Ever Isa" en la lista de Gina
+];
