@@ -295,6 +295,7 @@ export default function SheetsView() {
 
         orders.forEach(order => {
             const qtyMenus = order.cantidadMenus || 1;
+            const cliente = String(order.cliente || 'Anónimo').replace(/"/g, '""');
             const parts = [];
             if (order.observaciones && order.observaciones.trim()) parts.push(order.observaciones.trim());
             if (order.details?.notes && order.details.notes.trim() && !parts.includes(order.details.notes.trim())) {

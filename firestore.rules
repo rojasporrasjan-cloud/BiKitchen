@@ -201,6 +201,11 @@ service cloud.firestore {
     // repetiria la del jueves y se cocinaria dos veces.
     match /tandas_cocina/{id} { allow read, write: if isAdmin(); }
 
+    // Las plantillas de las difusiones (Listas de Difusión): solo el panel.
+    // No tenían regla y la regla por defecto las bloqueaba ("insufficient
+    // permissions" en Listas de Difusión y Cambios de la semana).
+    match /difusion_plantillas/{id} { allow read, write: if isAdmin(); }
+
     // ==========================================
     // REGLA POR DEFECTO - DENEGAR TODO
     // ==========================================

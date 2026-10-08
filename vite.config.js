@@ -29,6 +29,13 @@ export default defineConfig(({ command }) => ({
       },
     },
   },
+  // Solo localhost: preparar TODAS las librerías al arrancar (también las de las
+  // pantallas que cargan aparte: PDF, mapa, avisos…). Si no, la primera vez que
+  // se abre Pedidos, Clientes o la Hoja después de reiniciar, Vite las rehace y
+  // la pantalla se queda cargando ("504 Outdated Optimize Dep").
+  optimizeDeps: {
+    entries: ['index.html', 'src/**/*.{js,jsx}', '!src/tests/**'],
+  },
   build: {
     rollupOptions: {
       output: {

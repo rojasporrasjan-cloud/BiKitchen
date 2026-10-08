@@ -49,7 +49,7 @@ export default function PhoneAuditView() {
                 getDocs(collection(db, 'pedidos'))
             ]);
 
-            anotarLecturas(pedidosSnap.size + clientesSnap.size, 'Revisar teléfonos');
+            anotarLecturas(ordersSnap.size + clientesSnap.size, 'Revisar teléfonos');
 
             const rows = [];
             let okCount = 0;
