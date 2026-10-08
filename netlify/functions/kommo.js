@@ -25,7 +25,9 @@
 import { appDeAdmin } from '../../src/utils/firebaseAdminApp.js';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
-import { COLECCION_ENVIOS, modosDeEnvio } from '../../src/utils/registroDeEnvios.js';
+import { COLECCION_ENVIOS, modosDeEnvio, entradaDeRegistro, anotarEnvio } from '../../src/utils/registroDeEnvios.js';
+import { calcularVentas, COLECCION_ESTADISTICAS, DOC_VENTAS } from './ventas-por-envio.js';
+import { anotarMarketing } from './cierre-de-pedidos.js';
 
 let auth;
 let db;
@@ -161,19 +163,57 @@ export const handler = async (event) => {
             // La conexión con Kommo (kommo-sync) y el gasto de marketing del mes:
             // 2 lecturas más. Esas colecciones solo las toca el servidor.
             const mes = new Date(Date.now() - 6 * 3600 * 1000).toISOString().slice(0, 7);
-            const [sync, gasto] = db
+            // + 1 lectura: cuánto vendió cada envío (lo calcula ventas-por-envio cada noche)
+            const [sync, gasto, ventas] = db
                 ? await Promise.all([
                     db.collection('kommo_sync').doc('estado').get(),
-                    db.collection('kommo_presupuesto').doc(mes).get()
+                    db.collection('kommo_presupuesto').doc(mes).get(),
+                    db.collection(COLECCION_ESTADISTICAS).doc(DOC_VENTAS).get()
                 ])
-                : [null, null];
+                : [null, null, null];
             const s = sync?.exists ? sync.data() : null;
             return json(200, {
                 modos: modosDeEnvio(process.env),
                 registro: snap.docs.map((d) => ({ id: d.id, ...d.data() })),
                 conexion: s ? { ultimaVuelta: s.ultimaVuelta || '', alDia: !!s.alDia, leidoHasta: s.leidoHasta || '', totalEventos: Number(s.totalEventos) || 0 } : null,
-                marketingDelMes: { mes, mensajes: Number(gasto?.data?.()?.mensajes) || 0 }
+                marketingDelMes: { mes, mensajes: Number(gasto?.data?.()?.mensajes) || 0 },
+                ventas: ventas?.exists ? ventas.data() : null
             });
+        }
+
+        // El botón "Recalcular" de las estadísticas: lo mismo que corre cada noche
+        if (accion === 'recalcularVentas') {
+            const r = await calcularVentas(db);
+            const doc = db ? await db.collection(COLECCION_ESTADISTICAS).doc(DOC_VENTAS).get() : null;
+            return json(200, { ...r, ventas: doc?.exists ? doc.data() : null });
+        }
+
+        // Una difusión mandada a mano desde el panel queda en el mismo registro que
+        // los envíos automáticos, para medir cuánto vendió (tipo 'difusion').
+        if (accion === 'registrarDifusion') {
+            const destinatarios = (payload.destinatarios || [])
+                .slice(0, 2000)
+                .map(d => ({ nombre: d?.nombre || '', telefono: String(d?.telefono || '').replace(/\D/g, '').slice(-8) }));
+            if (!destinatarios.length) return json(400, { error: 'La difusión no trae destinatarios.' });
+            // `cuando`: para anotar una difusión que salió antes (máx. 31 días), con su fecha real
+            const pedida = new Date(payload.cuando || Date.now());
+            const cuando = Number.isNaN(pedida.getTime()) || pedida > new Date()
+                || Date.now() - pedida.getTime() > 31 * 86400000 ? new Date() : pedida;
+            if (db) {
+                await anotarEnvio(db, entradaDeRegistro({
+                    tipo: 'difusion', modo: 'si', estado: 'enviado', ahora: cuando,
+                    nombre: String(payload.nombre || 'Difusión').slice(0, 80),
+                    enviados: destinatarios
+                }));
+                // Cuenta para el tope de 2 por semana y el presupuesto, igual que
+                // los automáticos: si no, el cierre de mañana le escribe de más.
+                // `tipo`: si la difusión fue un cierre o un menú mandado a mano, cuenta para
+                // no repetir ESE mensaje antes de 14 días.
+                const TIPOS_DE_MARKETING = ['cierre-pedidos', 'menu-semana', 'pasate-mensual', 'volver-a-invitar'];
+                const tipo = TIPOS_DE_MARKETING.includes(payload.tipo) ? payload.tipo : 'difusion';
+                await anotarMarketing(db, destinatarios.map(d => d.telefono), cuando, tipo);
+            }
+            return json(200, { ok: true, registrados: destinatarios.length });
         }
 
         if (accion === 'contactos') {

@@ -4,7 +4,8 @@ import {
     diagnosticarKommo,
     sincronizarConKommo,
     enviarPorKommo,
-    probarConUnNumero
+    probarConUnNumero,
+    registrarDifusion
 } from '../../utils/kommoClient';
 
 /**
@@ -83,6 +84,9 @@ export default function EnvioKommo({ destinatarios, segmentoId }) {
 
         const { ids, creados, actualizados } = await sincronizarConKommo(destinatarios, opciones);
         const { enviados } = await enviarPorKommo(botId, ids, opciones);
+        // Para "¿Cuánto vendió cada mensaje?" en WhatsApp automáticos
+        const nombreBot = (info?.bots || []).find?.(b => String(b.id) === String(botId))?.nombre;
+        await registrarDifusion(nombreBot || `Bot ${botId}${segmentoId ? ` · ${segmentoId}` : ''}`, destinatarios);
         setEstado(`Listo: ${enviados} enviados (${creados} contactos nuevos, ${actualizados} actualizados).`);
     });
 

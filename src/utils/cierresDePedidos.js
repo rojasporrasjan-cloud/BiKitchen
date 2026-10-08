@@ -6,9 +6,10 @@
  * mandó a mano el 5 oct 2026 (miércoles, 85 personas) y Jan quiere que salga solo
  * (6 oct 2026: solo clientes que ya compraron, presupuesto US$200 al mes).
  *
- *   Lunes 2 p. m.   → cierre del MIÉRCOLES
- *   Jueves 2 p. m.  → cierre del SÁBADO
- *   Viernes 2 p. m. → cierre del LUNES
+ *   Lunes 9 a. m.   → cierre del MIÉRCOLES
+ *   Jueves 9 a. m.  → cierre del SÁBADO
+ *   Viernes 9 a. m. → cierre del LUNES
+ *   (hasta el 8 oct 2026 salía a las 2 p. m.; Jan lo pasó a las 9 a. m.)
  *
  * Aquí vive el QUIÉN y las reglas de marketing; la función programada
  * (netlify/functions/cierre-de-pedidos.js) solo lee, llama y anota. La pantalla
@@ -31,6 +32,14 @@ export const CIERRES = {
 export const SEMANAS_DE_HISTORIA = 8;
 /** Máximo de mensajes de MARKETING por persona por semana (Jan, 5 oct 2026). */
 export const MARKETING_POR_SEMANA = 2;
+/**
+ * El MISMO mensaje no se le repite a una persona antes de estos días (Jan, 8 oct
+ * 2026: "que no reciban mucho mensaje diciendo lo mismo, más bien sería peor").
+ * Así el cierre del sábado le llega a un cliente una semana sí y otra no.
+ */
+export const DIAS_ENTRE_MENSAJES_IGUALES = 14;
+/** Si tiene una entrega en estos días alrededor del reparto, ya es cliente activo: no se le ofrece. */
+export const DIAS_DE_CLIENTE_ACTIVO = 7;
 /** Presupuesto mensual de marketing en dólares (Jan, 6 oct 2026: subió de 80 a 200 para ir más rápido). */
 export const PRESUPUESTO_MENSUAL_USD = 200;
 /** Lo que cobra Meta por un mensaje de marketing en Costa Rica (aprox.). */
@@ -38,6 +47,13 @@ export const COSTO_MARKETING_USD = 0.074;
 
 const diaDeLaSemana = (fecha) => new Date(`${fecha}T12:00:00`).getDay();
 const esCancelado = (p) => /^cancel|rechaz|reembols/i.test(String(p?.status || p?.estado || ''));
+
+/**
+ * El nombre completo, sin tildes ni mayúsculas. Solo se compara ENTERO: "Maria
+ * Rojas" no es "Ana Maria Rojas" (ver la memoria del bug de fusión por nombre).
+ */
+export const nombreClave = (p) => String(p?.cliente || p?.nombre || '')
+    .normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/\s+/g, ' ').trim();
 
 /**
  * El cierre que toca hoy, o null si hoy no sale ninguno.
@@ -61,14 +77,23 @@ export const clientesSinEntrega = (pedidos = [], fechaEntrega, { semanas = SEMAN
     const vivos = (pedidos || []).filter(p => p && !esCancelado(p) && !esTelefonoDeRelleno(p.telefono)
         && normalizarTelefono(p.telefono).length === 8);
 
-    const yaTienen = new Set(vivos
-        .filter(p => entregasDelPedido(p).includes(fechaEntrega))
-        .map(p => normalizarTelefono(p.telefono)));
+    // "Ya es cliente activo": una entrega cerca de ese reparto (ese día, el lunes
+    // siguiente, su mensual de los miércoles…). Se busca en TODOS los pedidos
+    // vivos, también los que no tienen teléfono, y por teléfono O por nombre
+    // completo: el 8 oct a Evelyn Montes (pedido sin teléfono), Jennifer Flores
+    // (otro número) y Zujeily (8888-8887) les iba a llegar "hoy cerramos" con
+    // su pedido del sábado ya hecho.
+    const desdeActivo = sumarDias(fechaEntrega, -3);
+    const hastaActivo = sumarDias(fechaEntrega, DIAS_DE_CLIENTE_ACTIVO);
+    const activos = (pedidos || []).filter(p => p && !esCancelado(p)
+        && entregasDelPedido(p).some(f => f >= desdeActivo && f <= hastaActivo));
+    const yaTienen = new Set(activos.map(p => normalizarTelefono(p.telefono)).filter(t => t.length === 8));
+    const nombresActivos = new Set(activos.map(nombreClave).filter(n => n.includes(' ')));
 
     const porTelefono = new Map();
     vivos.forEach((p) => {
         const tel = normalizarTelefono(p.telefono);
-        if (yaTienen.has(tel)) return;
+        if (yaTienen.has(tel) || nombresActivos.has(nombreClave(p))) return;
         const ultima = entregasDelPedido(p)
             .filter(f => f >= desde && f < fechaEntrega && diaDeLaSemana(f) === dia)
             .slice(-1)[0];
@@ -99,9 +124,13 @@ export const semanaIso = (fecha) => {
  * @param {Map|object} o.fichas  teléfono → ficha de kommo_contactos
  * @param {string} o.hoy         AAAA-MM-DD en Costa Rica
  * @param {Date}   o.ahora
+ * @param {string} [o.tipo]      el envío (cierre-pedidos, menu-semana…): el mismo no se repite antes de 14 días
  * @returns {{ quedan: Array, fuera: Array<{ telefono, nombre, motivo }> }}
  */
-export const conReglasDeMarketing = (destinatarios = [], { fichas = new Map(), hoy, ahora = new Date(), maximo = MARKETING_POR_SEMANA } = {}) => {
+export const conReglasDeMarketing = (destinatarios = [], {
+    fichas = new Map(), hoy, ahora = new Date(), maximo = MARKETING_POR_SEMANA,
+    tipo = '', diasEntreIguales = DIAS_ENTRE_MENSAJES_IGUALES
+} = {}) => {
     const ficha = (tel) => (fichas instanceof Map ? fichas.get(tel) : fichas?.[tel]) || null;
     const semana = semanaIso(hoy);
     const quedan = [];
@@ -112,6 +141,8 @@ export const conReglasDeMarketing = (destinatarios = [], { fichas = new Map(), h
         if (noMolestarVigente(f, ahora)) motivo = 'no-molestar';
         else if ((Number(f?.marketing?.[semana]) || 0) >= maximo) motivo = `ya-${maximo}-esta-semana`;
         else if (f?.ultimaDifusion && String(f.ultimaDifusion).slice(0, 10) === hoy) motivo = 'ya-le-llego-hoy';
+        else if (tipo && f?.ultimoPorTipo?.[tipo]
+            && ahora - new Date(f.ultimoPorTipo[tipo]) < diasEntreIguales * 86400000) motivo = 'mismo-mensaje-hace-poco';
         if (motivo) fuera.push({ telefono: d.telefono, nombre: d.nombre, motivo });
         else quedan.push(d);
     });

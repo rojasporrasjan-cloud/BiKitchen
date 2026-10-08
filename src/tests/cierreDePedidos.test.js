@@ -95,6 +95,28 @@ describe('a quién le toca el cierre del miércoles', () => {
     });
 });
 
+describe('no se le escribe "hoy cerramos" a quien ya es cliente activo (8 oct 2026)', () => {
+    const MIE = '2026-10-14';
+    it('si ya pidió ese día con OTRO teléfono o SIN teléfono, se reconoce por el nombre completo', () => {
+        expect(tels(clientesSinEntrega([
+            pedido('a', '63636465', ['2026-10-07'], { cliente: 'Jennifer Flores Fuentes' }),
+            pedido('a2', '83277816', [MIE], { cliente: 'Jennifer  Flores Fuentes' }),
+            pedido('b', '88595208', ['2026-10-07'], { cliente: 'Evelyn Montes' }),
+            pedido('b2', '', [MIE], { cliente: 'evelyn montés' }),
+            pedido('c', '88110003', ['2026-10-07'], { cliente: 'Ana Maria Rojas' }),
+            pedido('c2', '88110009', [MIE], { cliente: 'Maria Rojas' })            // otra persona: sí le llega
+        ], MIE))).toEqual(['88110003']);
+    });
+
+    it('si tiene una entrega en los días de alrededor (el lunes siguiente, su mensual), tampoco', () => {
+        expect(tels(clientesSinEntrega([
+            pedido('a', '88110001', ['2026-10-07', '2026-10-19']),      // ya pidió para el lunes 19
+            pedido('b', '88110002', ['2026-10-07', '2026-10-12']),      // recibe el lunes 12
+            pedido('c', '88110003', ['2026-10-07'])
+        ], MIE))).toEqual(['88110003']);
+    });
+});
+
 describe('las reglas de marketing', () => {
     const HOY = '2026-10-12';
     const AHORA = new Date('2026-10-12T20:00:00Z');
@@ -110,6 +132,17 @@ describe('las reglas de marketing', () => {
         const r = conReglasDeMarketing(['88110001', '88110002', '88110003', '88110004', '88110005'].map(d), { fichas, hoy: HOY, ahora: AHORA });
         expect(r.quedan.map(x => x.telefono)).toEqual(['88110004', '88110005']);
         expect(r.fuera.map(x => x.motivo)).toEqual(['no-molestar', 'ya-2-esta-semana', 'ya-le-llego-hoy']);
+    });
+
+    it('el MISMO mensaje no se repite antes de 14 días; otro mensaje sí puede salir', () => {
+        const fichas = new Map([
+            ['88110001', { ultimoPorTipo: { 'cierre-pedidos': '2026-10-01T15:00:00Z' } }],   // hace 11 días
+            ['88110002', { ultimoPorTipo: { 'cierre-pedidos': '2026-09-27T15:00:00Z' } }],   // hace 15 días
+            ['88110003', { ultimoPorTipo: { 'menu-semana': '2026-10-05T15:00:00Z' } }]       // fue otro mensaje
+        ]);
+        const r = conReglasDeMarketing(['88110001', '88110002', '88110003'].map(d), { fichas, hoy: HOY, ahora: AHORA, tipo: 'cierre-pedidos' });
+        expect(r.quedan.map(x => x.telefono)).toEqual(['88110002', '88110003']);
+        expect(r.fuera).toEqual([{ telefono: '88110001', nombre: '88110001', motivo: 'mismo-mensaje-hace-poco' }]);
     });
 
     it('el presupuesto: US$200 al mes a US$0,074 por mensaje', () => {
@@ -166,9 +199,18 @@ describe('la función programada', () => {
         expect((await correr({ ahora: LUNES, modo: 'si', env: ENV })).estado).toBe('enviado');
         expect(estado.enviados[0].map(x => x.telefono).sort()).toEqual(['88110001', '88110002']);
         expect(estado.escritos['kommo_contactos/88110001'].marketing).toEqual({ [semanaIso('2026-10-12')]: { incremento: 1 } });
+        expect(estado.escritos['kommo_contactos/88110001'].ultimoPorTipo).toEqual({ 'cierre-pedidos': LUNES.toISOString() });
         expect(estado.escritos['kommo_presupuesto/2026-10'].mensajes).toEqual({ incremento: 2 });
         expect((await correr({ ahora: LUNES, modo: 'si', env: ENV })).estado).toBe('ya-enviado');
         expect(estado.enviados).toHaveLength(1);
+    });
+
+    it('con "si" antes del lunes 12 oct 2026 sigue en prueba (semana sin contar)', async () => {
+        estado.pedidos = [pedido('a', '88110001', ['2026-10-05'])];               // cliente de lunes
+        const r = await correr({ ahora: new Date('2026-10-09T15:00:00Z'), modo: 'si', env: { ...ENV, KOMMO_BOT_CIERRE_LUNES: '117642' } });
+        expect(r.estado).toBe('prueba');
+        expect(estado.enviados[0]).toHaveLength(1);                                 // solo la muestra a Jan
+        expect(estado.enviados[0][0].telefono).toBe('87776666');
     });
 
     it('a quien tiene "no molestar" no le llega', async () => {

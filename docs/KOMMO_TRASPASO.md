@@ -73,6 +73,22 @@ deploy (Deploys → Trigger deploy → Deploy project).
 - En Kommo YA hay bots de entrada: "Bot- Bievenida" (50218, disparador: lead creado en la etapa,
   7.962 lanzamientos) y "Seguimiento" (53594, al mover de etapa). Mejorar esos, no duplicar.
 - El bot del cierre del LUNES también se lanzó 1 vez por el disparador que Kommo puso solo.
+- **7 oct:** Meta aprobó todo. Bots creados SIN disparador (Cancelar → "Salir sin guardar"):
+  Pasate al mensual **117990** · Promo miércoles proteínas **117994** · Menú semana keto **117996** ·
+  Menú semana bajo en calorías **117998** · Menú semana casaditos **118000** · Menú semana familiar
+  **118002** · Te extrañamos **118004**. Ninguno se ha corrido.
+- **Promo miércoles proteínas** (5 proteínas de 500 g → 2 guarniciones de 500 g de regalo; pedida
+  por Gina): plantilla `promo_miercoles_proteinas`. Público apartado en
+  `admin_config/difusion_2026-10-07_promo-proteinas` (92: compraron packs de proteínas, o pack familiar
+  en los últimos 90 días; sin los que ya tienen proteínas en curso; sin la prima de Gina). 88 tienen
+  contacto en Kommo, 0 con no-molestar. Para mandar: `/api/v2/salesbot/run` con bot 117994, de a 50.
+  Jan (7 oct): la promo es SOLO los miércoles hasta las 8 p. m. y va con la imagen de "Packs de
+  Proteínas". Plantilla nueva con esa imagen de encabezado: `promo_miercoles_proteinas_foto`
+  (la vieja, sin imagen ni hora, ya no se usa). El bot 117994 tiene que usar la nueva.
+- **Renovación PRENDIDA** el 7 oct (`RENOVACION_AUTOMATICA=si`). Para dejar fuera a alguien:
+  `admin_config/envios_pausados.telefonos` (hoy: María José Corella, por una queja abierta).
+- Truco para elegir plantilla en el editor de bots: el clic en "plantilla" abre/cierra la lista;
+  ubicar el `li` con JS (getBoundingClientRect) y hacer clic en esas coordenadas.
 
 ## 3. Todos los envíos automáticos
 
@@ -91,7 +107,8 @@ repetir. Tope por envío: si la lista sale más grande, NO manda nada.
 | Guía de congelado | `guia-de-congelado` | L/M/S 3 p. m. | `GUIA_CONGELADO_AUTOMATICO` | `KOMMO_BOT_GUIA_CONGELADO` = 117259 | `guia_de_congelado` |
 | ¿Qué tal todo? | `que-tal-todo` | D/M/J 11 a. m. | `QUE_TAL_AUTOMATICO` | `KOMMO_BOT_QUE_TAL` = 117257 | `que_tal_todo` |
 | Volver a invitar (marketing) | `volver-a-invitar` | martes 10 a. m. | `VOLVER_A_INVITAR_AUTOMATICO` | `KOMMO_BOT_VOLVER_A_INVITAR` = 117255 | `volver_a_invitar` (15 % desc.) |
-| **Cierre de pedidos (marketing)** | `cierre-de-pedidos` | L/J/V 2 p. m. | `CIERRE_PEDIDOS_AUTOMATICO` | `KOMMO_BOT_CIERRE_MIERCOLES` = 117463 · `KOMMO_BOT_CIERRE_SABADO` = 117640 · `KOMMO_BOT_CIERRE_LUNES` = 117642 | `cierre_pedidos_miercoles` · `cierre_pedidos_sabado` · `cierre_pedidos_lunes` ✅ |
+| **Cierre de pedidos (marketing)** | `cierre-de-pedidos` | L/J/V **9 a. m.** (antes 2 p. m.; Jan, 8 oct) | `CIERRE_PEDIDOS_AUTOMATICO` | `KOMMO_BOT_CIERRE_MIERCOLES` = 117463 · `KOMMO_BOT_CIERRE_SABADO` = 117640 · `KOMMO_BOT_CIERRE_LUNES` = 117642 | `cierre_pedidos_miercoles` · `cierre_pedidos_sabado` · `cierre_pedidos_lunes` ✅ |
+| Ventas por envío (no manda nada) | `ventas-por-envio` | diario 11:30 p. m. | — (siempre corre) | — | — · guarda `kommo_estadisticas/ventas`; el panel la lee en 1 lectura |
 | Conexión con Kommo | `kommo-sync` | cada 10 min | `KOMMO_SYNC_AUTOMATICO` (sin poner = corre; `no` = apagado) | — | — (solo lee) |
 
 Modos según el último resumen de Netlify (4 oct 2026): todos los avisos en
@@ -189,3 +206,28 @@ colecciones enteras. El panel lee el estado por la función `kommo` (acción
   a las 2 p. m. (aprobado el 5 oct).
 - Volver a invitar con **15 % de descuento** (4 oct).
 - Toda programación nueva arranca en **prueba**.
+
+### 8 oct 2026 — decisiones de Jan y estadísticas
+- **Cierre de pedidos a las 9 a. m.** (L/J/V), para que la gente responda desde temprano.
+- **Volver a invitar: 10 %** en vez de 15 %. El 15 % está escrito en la plantilla aprobada
+  `volver_a_invitar`. La nueva **`volver_a_invitar_10`** (Marketing, ES, botones "¡Quiero pedir!" /
+  "Ahora no") se mandó a Meta el 8 oct en la tarde: cuando la aprueben, cambiarla en el
+  bot 117255. Hasta entonces sigue en prueba.
+- **Pago recibido y recordatorio de pago: apagados.** Confirmar un pedido = pagado.
+- **Nada se prende todavía:** todo sigue en `prueba` hasta que Jan diga.
+- **¿Cuánto vendió cada mensaje?** En Listas de Difusión → WhatsApp automáticos. La calcula
+  `ventas-por-envio` cada noche: compras de quienes lo recibieron en las 72 h siguientes.
+  "Recalcular" lo corre a pedido (acción `recalcularVentas`). Las difusiones mandadas
+  desde el panel quedan registradas (`tipo: 'difusion'`, acción `registrarDifusion`).
+  Las de antes del 8 oct NO están en el registro (HOY5, proteínas, two pack): la
+  medición a mano está en la Bitácora de CONTEXTO.md (8 oct (7)).
+
+### 8 oct 2026 (tarde) — envíos nuevos para vender más (APAGADOS hasta que Jan diga)
+| Envío | Función | Cuándo (CR) | Interruptor | Bot | Plantilla |
+|---|---|---|---|---|---|
+| Seguimiento a quien preguntó | `seguimiento-consulta` | cada hora 8 a. m.–8 p. m. (escribió hace 18–24 h, sin pedido; 1 cada 7 días; en prueba 1 muestra al día) | `SEGUIMIENTO_AUTOMATICO` | `KOMMO_BOT_SEGUIMIENTO` = 118342 (mensaje libre, sin plantilla, sin disparador; falta ponerlo en Netlify) | — |
+| Pasate al mensual | `pasate-al-mensual` | martes 11 a. m. | `PASATE_MENSUAL_AUTOMATICO` | `KOMMO_BOT_PASATE_MENSUAL` = 117990 | `pasate_al_mensual_desayunos` |
+| Menú de la semana por tipo | `menu-de-la-semana` | lunes 4 p. m. (terminó ese tipo hace 3–8 semanas) | `MENU_SEMANA_AUTOMATICO` | `KOMMO_BOT_MENU_KETO` = 117996 · `_BAJO_CALORIAS` = 117998 · `_CASADITOS` = 118000 · `_FAMILIAR` = 118002 | `menu_semana_*` |
+
+Bienvenida: el texto está en `docs/BIENVENIDA_PARA_GINA.md` (falta que Gina lo apruebe).
+Todo aparece en el panel: Listas de Difusión → Cronograma de los WhatsApp.

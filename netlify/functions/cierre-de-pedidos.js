@@ -2,7 +2,8 @@
 /**
  * Netlify Scheduled Function: cierre-de-pedidos
  *
- * Lunes, jueves y viernes a las 2 p. m. de Costa Rica: "hoy cerramos pedidos a
+ * Lunes, jueves y viernes a las 9 a. m. de Costa Rica (Jan, 8 oct 2026: a las 2 p. m.
+ * era tarde, la gente tiene que poder responder desde temprano): "hoy cerramos pedidos a
  * las 8 p. m." a los clientes que YA compraron para ese día de reparto y esta
  * vez no tienen entrega. Lunes → miércoles, jueves → sábado, viernes → lunes.
  * Quién y las reglas: src/utils/cierresDePedidos.js.
@@ -41,6 +42,13 @@ import {
 
 export const TOPE = 150;
 const TIPO = 'cierre-pedidos';
+/**
+ * Con "si", el cierre manda de verdad DESDE este día. Antes sigue en prueba:
+ * las promociones del 6 y 7 oct 2026 (HOY5, proteínas) no quedaron contadas en
+ * kommo_contactos, y el cierre del viernes 9 le habría mandado la tercera de la
+ * semana a la gente del lunes. El lunes 12 empieza una semana limpia.
+ */
+export const CIERRE_DE_VERDAD_DESDE = '2026-10-12';
 
 let db;
 try {
@@ -60,9 +68,11 @@ export const leerFichas = async (base, telefonos = []) => {
 
 /**
  * Anota el marketing que salió: +1 en la semana de cada persona y el gasto del
- * mes. Lo usan también otros envíos de marketing (volver-a-invitar).
+ * mes. Lo usan también otros envíos de marketing (volver-a-invitar) y las
+ * difusiones a mano del panel. `tipo` deja la fecha de ESE mensaje, para no
+ * repetirlo antes de 14 días (conReglasDeMarketing).
  */
-export const anotarMarketing = async (base, telefonos = [], ahora = new Date()) => {
+export const anotarMarketing = async (base, telefonos = [], ahora = new Date(), tipo = '') => {
     const hoy = hoyEnCostaRica(ahora);
     const semana = semanaIso(hoy);
     const tels = [...new Set(telefonos.map(normalizarTelefono).filter(t => t.length === 8))];
@@ -70,7 +80,8 @@ export const anotarMarketing = async (base, telefonos = [], ahora = new Date()) 
         const tanda = base.batch();
         tels.slice(i, i + 400).forEach(t => tanda.set(base.collection('kommo_contactos').doc(t), {
             marketing: { [semana]: FieldValue.increment(1) },
-            ultimaDifusion: ahora.toISOString()
+            ultimaDifusion: ahora.toISOString(),
+            ...(tipo ? { ultimoPorTipo: { [tipo]: ahora.toISOString() } } : {})
         }, { merge: true }));
         await tanda.commit();
     }
@@ -80,9 +91,10 @@ export const anotarMarketing = async (base, telefonos = [], ahora = new Date()) 
     }
 };
 
-export const correr = async ({ ahora = new Date(), modo = process.env.CIERRE_PEDIDOS_AUTOMATICO, env = process.env } = {}) => {
-    if (modo !== 'si' && modo !== 'prueba') return { estado: 'apagado' };
+export const correr = async ({ ahora = new Date(), modo: modoPedido = process.env.CIERRE_PEDIDOS_AUTOMATICO, env = process.env } = {}) => {
+    if (modoPedido !== 'si' && modoPedido !== 'prueba') return { estado: 'apagado' };
     const hoy = hoyEnCostaRica(ahora);
+    const modo = modoPedido === 'si' && hoy < CIERRE_DE_VERDAD_DESDE ? 'prueba' : modoPedido;
     const cierre = cierreDeHoy(hoy);
     if (!cierre) return { estado: 'hoy-no-toca', detalle: { hoy } };
 
@@ -104,7 +116,7 @@ export const correr = async ({ ahora = new Date(), modo = process.env.CIERRE_PED
     const pedidos = await leerPedidosDelCiclo(db, fechas);
     const todos = destinatariosUnicos(clientesSinEntrega(pedidos, clave).map(destinatarioDeRenovacion));
     const fichas = await leerFichas(db, todos.map(d => d.telefono));
-    const { quedan, fuera } = conReglasDeMarketing(todos, { fichas, hoy, ahora });
+    const { quedan, fuera } = conReglasDeMarketing(todos, { fichas, hoy, ahora, tipo: TIPO });
 
     const anotar = (estado, extra = {}) => Promise.all([
         constancia.set({ estado, cuantos: quedan.length, fuera: fuera.length, revisadoEn: ahora.toISOString(), ...extra }, { merge: true }),
@@ -136,7 +148,7 @@ export const correr = async ({ ahora = new Date(), modo = process.env.CIERRE_PED
     });
 
     const estado = modo === 'si' ? 'enviado' : 'prueba';
-    if (modo === 'si') await anotarMarketing(db, conId.map(c => c.d.telefono), ahora);
+    if (modo === 'si') await anotarMarketing(db, conId.map(c => c.d.telefono), ahora, TIPO);
     await constancia.set({ estado, enviadoEn: ahora.toISOString(), enviados: conId.length, cuantos: quedan.length, fuera: fuera.length }, { merge: true });
     await anotarEnvio(db, entradaDeRegistro({
         tipo: TIPO, modo, estado, ahora,
@@ -147,7 +159,7 @@ export const correr = async ({ ahora = new Date(), modo = process.env.CIERRE_PED
 
 export default () => responder('CierreDePedidos', correr);
 
-// Lunes, jueves y viernes a las 20:00 UTC = 2:00 p. m. en Costa Rica
+// Lunes, jueves y viernes a las 15:00 UTC = 9:00 a. m. en Costa Rica
 export const config = {
-    schedule: '0 20 * * 1,4,5'
+    schedule: '0 15 * * 1,4,5'
 };
