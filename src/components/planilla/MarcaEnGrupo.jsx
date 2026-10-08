@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { UsersRound, Check } from 'lucide-react';
 import { tonoDe } from '../../data/planilla';
 import { estadoActual, iniciales } from '../../utils/planilla';
@@ -17,6 +17,7 @@ export default function MarcaEnGrupo({ empleados, marcas, hoy, desde, onCambio }
     const [ocupado, setOcupado] = useState(false);
     const [mensaje, setMensaje] = useState('');
     const [error, setError] = useState('');
+    const enCurso = useRef(false);
 
     const activos = useMemo(() => empleados.filter(e => e.activo !== false), [empleados]);
     const puede = (e) => estadoActual(marcas.filter(m => m.empleadoId === e.id && m.fecha === fecha)).adentro === (tipo === 'salida');
@@ -30,6 +31,8 @@ export default function MarcaEnGrupo({ empleados, marcas, hoy, desde, onCambio }
 
     const handleMarcar = async (ev) => {
         ev.preventDefault();
+        if (enCurso.current) return;                     // dos clics rápidos: cuenta uno
+        enCurso.current = true;
         setOcupado(true);
         setError('');
         setMensaje('');
@@ -43,6 +46,7 @@ export default function MarcaEnGrupo({ empleados, marcas, hoy, desde, onCambio }
         } catch (e) {
             setError(`Se marcaron ${hechas}. ${e.message}`);
         } finally {
+            enCurso.current = false;
             setOcupado(false);
             setQuitados(new Set());
             onCambio();

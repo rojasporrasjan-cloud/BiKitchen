@@ -11,7 +11,7 @@ import { iniciales, horaCR } from '../../utils/planilla';
 const CIERRE_SOLO_MS = 30000;
 const TECLAS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'borrar'];
 
-export default function VentanaMarcar({ empleado, enviando, error, onMarcar, onCerrar }) {
+export default function VentanaMarcar({ empleado, enviando, error, ahora, onMarcar, onCerrar }) {
     const [pin, setPin] = useState('');
     const tono = tonoDe(empleado.color);
     const esSalida = empleado.adentro;
@@ -64,7 +64,7 @@ export default function VentanaMarcar({ empleado, enviando, error, onMarcar, onC
                         <Icono size={18} aria-hidden="true" />
                         {esSalida ? 'Vas a marcar tu SALIDA' : 'Vas a marcar tu ENTRADA'}
                     </p>
-                    <p className="mt-3 text-gray-600 font-semibold lining-nums">Son las {horaCR(new Date())}</p>
+                    <p className="mt-3 text-gray-600 font-semibold lining-nums">Son las {horaCR(ahora || new Date())}</p>
                 </div>
 
                 <div className="px-8 pb-8">

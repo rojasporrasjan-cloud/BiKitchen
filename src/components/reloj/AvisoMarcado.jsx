@@ -26,18 +26,20 @@ export default function AvisoMarcado({ resultado, onCerrar }) {
         return () => clearTimeout(t);
     }, [onCerrar]);
 
-    const { tipo, en, nombre, minutos, repetida } = resultado;
+    const { tipo, en, nombre, minutos, repetida, sinInternet, error } = resultado;
     const primerNombre = String(nombre || '').split(' ')[0];
 
     let titulo = `¡${saludo(en)}, ${primerNombre}!`;
-    let detalle = `Entrada marcada a las ${horaCR(en)}`;
+    let detalle = `Entrada ${sinInternet ? 'guardada' : 'marcada'} a las ${horaCR(en)}`;
     if (tipo === 'salida') {
         titulo = `¡Gracias, ${primerNombre}!`;
-        detalle = `Salida marcada a las ${horaCR(en)}`;
+        detalle = `Salida ${sinInternet ? 'guardada' : 'marcada'} a las ${horaCR(en)}`;
     }
     if (repetida) {
-        titulo = 'Ya habías marcado';
-        detalle = `Tu ${tipo} quedó a las ${horaCR(en)}. No hace falta marcar otra vez.`;
+        titulo = error || 'Ya habías marcado';
+        detalle = en
+            ? `Tu ${tipo} quedó a las ${horaCR(en)} No hace falta marcar otra vez.`   // horaCR ya termina en "m."
+            : 'Tocá tu nombre de nuevo para marcar.';
     }
 
     return (
@@ -62,6 +64,9 @@ export default function AvisoMarcado({ resultado, onCerrar }) {
             </motion.span>
             <h2 className="mt-8 text-5xl md:text-6xl font-black leading-tight text-white">{titulo}</h2>
             <p className="mt-3 text-2xl md:text-3xl font-bold text-white/90 lining-nums">{detalle}</p>
+            {sinInternet && (
+                <p className="mt-6 px-6 py-3 bg-white/20 rounded-full text-lg font-bold">Sin internet: se manda sola cuando vuelva</p>
+            )}
             {!repetida && tipo === 'salida' && minutos > 0 && (
                 <p className="mt-6 px-6 py-3 bg-white/20 rounded-full text-xl font-bold lining-nums">Este turno: {duracion(minutos)}</p>
             )}

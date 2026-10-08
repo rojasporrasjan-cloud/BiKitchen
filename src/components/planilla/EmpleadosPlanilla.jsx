@@ -31,7 +31,11 @@ export default function EmpleadosPlanilla({ empleados, listos = true, onCambio }
         setError('');
         try {
             for (const [i, e] of EMPLEADOS_INICIALES.entries()) {
-                await pedirALaPlanilla('guardarEmpleado', { empleado: { ...e, color: COLORES_EMPLEADO[i % COLORES_EMPLEADO.length] } });
+                try {
+                    await pedirALaPlanilla('guardarEmpleado', { empleado: { ...e, color: COLORES_EMPLEADO[i % COLORES_EMPLEADO.length] } });
+                } catch (err) {
+                    if (err.status !== 409) throw err;           // ya estaba (otra pestaña la cargó): se sigue
+                }
             }
         } catch (e) {
             setError(e.message);

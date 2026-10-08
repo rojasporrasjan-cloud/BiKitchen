@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { X, Trash2, Plus, AlertTriangle, LogIn, LogOut } from 'lucide-react';
 import { horaCR, duracion, colones } from '../../utils/planilla';
 import { FACTOR_EXTRA } from '../../data/planilla';
@@ -19,7 +19,10 @@ export default function DetalleDelDia({ empleado, fecha, dia, onCambio, onCerrar
     const [ocupado, setOcupado] = useState(false);
     const [error, setError] = useState('');
 
+    const enCurso = useRef(false);                      // dos clics rápidos: cuenta uno
     const correr = async (accion, datos) => {
+        if (enCurso.current) return false;
+        enCurso.current = true;
         setOcupado(true);
         setError('');
         try {
@@ -30,6 +33,7 @@ export default function DetalleDelDia({ empleado, fecha, dia, onCambio, onCerrar
             setError(e.message);
             return false;
         } finally {
+            enCurso.current = false;
             setOcupado(false);
         }
     };

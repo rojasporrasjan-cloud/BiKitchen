@@ -1,5 +1,5 @@
 import React from 'react';
-import { Lock, LogIn, LogOut } from 'lucide-react';
+import { Lock, LogIn, LogOut, CloudUpload } from 'lucide-react';
 import { tonoDe } from '../../data/planilla';
 import { horaCR, iniciales } from '../../utils/planilla';
 
@@ -23,6 +23,9 @@ export default function TarjetaEmpleado({ empleado, onElegir }) {
             className="relative flex flex-col items-center w-full overflow-hidden bg-white rounded-[1.75rem] ring-1 ring-black/5 shadow-sm text-center hover:shadow-lg transition duration-150 active:scale-95"
         >
             {adentro && <span className={`absolute inset-x-0 top-0 h-1.5 ${tono.solido}`} aria-hidden="true" />}
+            {empleado.pendiente && (
+                <CloudUpload size={16} className="absolute top-4 left-4 text-amber-500" aria-label="Guardada en el iPad, por enviar" />
+            )}
             {empleado.tienePin && (
                 <Lock size={14} className="absolute top-4 right-4 text-gray-300" aria-hidden="true" />
             )}

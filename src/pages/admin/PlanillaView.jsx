@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Lock } from 'lucide-react';
 import EncabezadoPlanilla from '../../components/planilla/EncabezadoPlanilla';
 import HoyEnLaCocina from '../../components/planilla/HoyEnLaCocina';
@@ -56,10 +56,13 @@ function Planilla() {
         setEmpleadosListos(true);
     }, []);
 
+    // Si se cambia de semana rápido, la respuesta de una semana vieja no tapa la nueva
+    const vuelta = useRef(0);
     const cargarMarcas = useCallback(async () => {
+        const mia = ++vuelta.current;
         const r = await pedirALaPlanilla('marcas', { desde: dias[0], hasta: dias[6] });
         anotarLecturas(r.marcas.length, 'Planilla');
-        setMarcas(r.marcas);
+        if (mia === vuelta.current) setMarcas(r.marcas);
     }, [dias]);
 
     const cargar = useCallback(async (que = 'todo') => {

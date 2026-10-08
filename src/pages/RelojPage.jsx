@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { Clock3, RefreshCw } from 'lucide-react';
@@ -6,7 +6,12 @@ import SEOHead from '../components/SEOHead';
 import TarjetaEmpleado from '../components/reloj/TarjetaEmpleado';
 import VentanaMarcar from '../components/reloj/VentanaMarcar';
 import AvisoMarcado from '../components/reloj/AvisoMarcado';
+import AvisosDeConexion from '../components/reloj/AvisosDeConexion';
+import useColaDelReloj from '../hooks/useColaDelReloj';
 import { pedirAlReloj } from '../utils/planillaClient';
+import { nuevaMarca, conPendientes } from '../utils/colaDelReloj';
+import { fechaCR } from '../utils/planilla';
+import { SEGUNDOS_ENTRE_MARCAS } from '../data/planilla';
 
 /**
  * /reloj/:codigo — el reloj de entrada y salida, para el iPad de la cocina.
@@ -56,23 +61,56 @@ const useSinApagarPantalla = () => {
     }, []);
 };
 
+/**
+ * La última lista que se cargó, para que el reloj abra aunque se recargue sin
+ * internet. Si es de otro día, nadie está "adentro" todavía.
+ */
+const ULTIMA_LISTA = 'bikitchen-reloj-ultima-lista-v1';
+
+const listaGuardada = () => {
+    try {
+        const d = JSON.parse(localStorage.getItem(ULTIMA_LISTA) || 'null');
+        if (!d || !Array.isArray(d.empleados)) return null;
+        if (d.hoy === fechaCR()) return d;
+        return { ...d, empleados: d.empleados.map(e => ({ ...e, adentro: false, desde: null })) };
+    } catch {
+        return null;
+    }
+};
+
+const guardarLista = (d) => {
+    try { localStorage.setItem(ULTIMA_LISTA, JSON.stringify(d)); } catch { /* sin espacio: no importa */ }
+};
+
 export default function RelojPage() {
     const { codigo } = useParams();
-    const [datos, setDatos] = useState(null);
+    const [datos, setDatos] = useState(listaGuardada);
     const [error, setError] = useState('');
+    const [desfase, setDesfase] = useState(0);              // reloj del servidor − reloj del iPad
     const [ahora, setAhora] = useState(() => new Date());
     const [elegido, setElegido] = useState(null);
     const [enviando, setEnviando] = useState(false);
     const [errorMarca, setErrorMarca] = useState('');
     const [resultado, setResultado] = useState(null);
+    const { cola, marcar, rechazadas, olvidarRechazadas } = useColaDelReloj(codigo);
+    const vuelta = useRef(0);
+    const ocupado = useRef(false);
     useSinApagarPantalla();
 
     const cargar = useCallback(async () => {
+        const mia = ++vuelta.current;
+        const salio = Date.now();
         try {
-            setDatos(await pedirAlReloj('reloj', { codigo }));
+            const r = await pedirAlReloj('reloj', { codigo });
+            if (mia !== vuelta.current) return;                // ya llegó una más nueva: esta está vieja
+            const desfaseNuevo = Date.parse(r.ahora) - (salio + Date.now()) / 2;
+            if (Number.isFinite(desfaseNuevo)) setDesfase(desfaseNuevo);
+            setDatos(r);
+            guardarLista(r);
             setError('');
         } catch (e) {
-            setError(e.status === 404 ? e.message : 'No hay conexión. Revisá el internet del iPad.');
+            if (mia !== vuelta.current) return;
+            setError(e.status === 404 ? e.message : 'Sin internet');
         }
     }, [codigo]);
 
@@ -94,33 +132,54 @@ export default function RelojPage() {
 
     const handleCerrarAviso = useCallback(() => setResultado(null), []);
 
+    /** Lo que se ve después de marcar. Devuelve false si hay que quedarse en la ventana (PIN malo). */
+    const mostrar = (r, marca, quien) => {
+        const minutosDesde = (en) => (marca.tipo === 'salida' && quien.desde
+            ? Math.max(0, Math.round((new Date(en) - new Date(quien.desde)) / 60000)) : 0);
+        if (r && !r.ok && r.status !== 409) {
+            setErrorMarca(r.error);
+            return false;
+        }
+        if (!r) {
+            const en = new Date(marca.tocado + desfase).toISOString();
+            setResultado({ tipo: marca.tipo, en, nombre: quien.nombre, sinInternet: true, minutos: minutosDesde(en) });
+        } else if (r.ok) {
+            setResultado({ ...r.datos, minutos: minutosDesde(r.datos.en) });
+        } else {
+            setResultado({ ...r.datos, nombre: quien.nombre, repetida: true });
+        }
+        setElegido(null);
+        cargar();
+        return true;
+    };
+
     const handleMarcar = async (pin) => {
+        if (ocupado.current) return false;                     // dos toques al botón: cuenta uno
+        ocupado.current = true;
         setEnviando(true);
         setErrorMarca('');
+        const quien = elegido;
         try {
-            const r = await pedirAlReloj('marcar', { codigo, empleadoId: elegido.id, pin });
-            const minutos = r.tipo === 'salida' && elegido.desde
-                ? Math.round((new Date(r.en) - new Date(elegido.desde)) / 60000) : 0;
-            setResultado({ ...r, minutos });
-            setElegido(null);
-            cargar();
-            return true;
-        } catch (e) {
-            if (e.status === 409) {
-                setResultado({ ...e.datos, nombre: elegido.nombre, repetida: true });
+            // Recién marcó (con o sin internet): no se le cambia de entrada a salida por un dedo doble
+            if (quien.desde && Date.now() + desfase - Date.parse(quien.desde) < SEGUNDOS_ENTRE_MARCAS * 1000) {
+                setResultado({ tipo: quien.adentro ? 'entrada' : 'salida', en: quien.desde, nombre: quien.nombre, repetida: true, error: 'Ya marcaste hace un momento.' });
                 setElegido(null);
                 return true;
             }
-            setErrorMarca(e.status ? e.message : 'No hay conexión. Probá de nuevo.');
-            return false;
+            const marca = nuevaMarca(quien, quien.adentro ? 'salida' : 'entrada', pin);
+            return mostrar(await marcar(marca), marca, quien);
         } finally {
+            ocupado.current = false;
             setEnviando(false);
         }
     };
 
-    const { hora, segundos, ampm } = partesCR(ahora);
-    const empleados = datos?.empleados || [];
+    const momento = new Date(ahora.getTime() + desfase);
+    const { hora, segundos, ampm } = partesCR(momento);
+    const empleados = conPendientes(datos?.empleados || [], cola, desfase);
     const adentro = empleados.filter(e => e.adentro).length;
+    // Un toque que lleva rato sin salir = no hay internet (no avisar por el segundo que tarda uno normal)
+    const porEnviar = cola.filter(m => ahora.getTime() - m.tocado > 15000).length;
 
     return (
         <div className="min-h-screen lg:flex bg-bikitchen-beige select-none">
@@ -135,7 +194,7 @@ export default function RelojPage() {
                 <img src="/assets/logo.png" alt="BiKitchen Food" className="relative w-44 lg:w-56 h-auto brightness-0 invert" />
 
                 <div className="relative">
-                    <p className="text-xl lg:text-2xl font-bold text-white/90">{saludoDe(ahora)}</p>
+                    <p className="text-xl lg:text-2xl font-bold text-white/90">{saludoDe(momento)}</p>
                     <p className="flex items-baseline gap-2 mt-1 font-black leading-none tabular-nums lining-nums" aria-live="off">
                         <span className="text-8xl lg:text-[6.5rem] xl:text-[8rem] tracking-tight">{hora}</span>
                         <span className="flex flex-col gap-1 whitespace-nowrap">
@@ -143,7 +202,7 @@ export default function RelojPage() {
                             <span className="text-2xl lg:text-3xl">{ampm}</span>
                         </span>
                     </p>
-                    <p className="mt-3 text-xl lg:text-2xl font-semibold text-white/90 first-letter:uppercase">{fechaLarga(ahora)}</p>
+                    <p className="mt-3 text-xl lg:text-2xl font-semibold text-white/90 first-letter:uppercase">{fechaLarga(momento)}</p>
                 </div>
 
                 {datos && (
@@ -161,9 +220,11 @@ export default function RelojPage() {
             </aside>
 
             <main className="flex-1 px-5 py-8 sm:px-8 lg:py-12 lg:overflow-y-auto">
-                {error && (
+                <AvisosDeConexion sinConexion={!!error && !!datos} porEnviar={porEnviar}
+                    rechazadas={rechazadas} desfase={desfase} onEntendido={olvidarRechazadas} />
+                {error && !datos && (
                     <div role="alert" className="flex flex-wrap items-center justify-center gap-3 mb-6 p-4 bg-red-50 border border-red-200 rounded-2xl text-red-700 font-bold">
-                        {error}
+                        {error === 'Sin internet' ? 'No hay internet. Revisá el wifi del iPad.' : error}
                         <button type="button" onClick={cargar}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-red-200 rounded-lg text-sm">
                             <RefreshCw size={14} aria-hidden="true" /> Reintentar
@@ -195,7 +256,7 @@ export default function RelojPage() {
 
             <AnimatePresence>
                 {elegido && (
-                    <VentanaMarcar key="ventana" empleado={elegido} enviando={enviando} error={errorMarca}
+                    <VentanaMarcar key="ventana" empleado={elegido} enviando={enviando} error={errorMarca} ahora={momento}
                         onMarcar={handleMarcar} onCerrar={handleCerrar} />
                 )}
                 {resultado && <AvisoMarcado key="aviso" resultado={resultado} onCerrar={handleCerrarAviso} />}

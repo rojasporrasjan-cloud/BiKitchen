@@ -4,7 +4,8 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import RelojPage from '../pages/RelojPage';
 import { filasDelResumen, filasDelDetalle } from '../utils/excelPlanilla';
-import { planillaDe, diasDeLaSemana, momentoCR } from '../utils/planilla';
+import { planillaDe, diasDeLaSemana, momentoCR, fechaCR } from '../utils/planilla';
+import { leerCola, guardarCola, enviarCola } from '../utils/colaDelReloj';
 
 /**
  * El reloj del iPad (Jan, 8 oct 2026): cada persona toca su nombre y marca.
@@ -30,6 +31,74 @@ const montar = () => render(
 beforeEach(() => {
     fetchEspia.mockReset();
     globalThis.fetch = fetchEspia;
+    localStorage.clear();
+    guardarCola([]);
+});
+
+const sinInternet = () => Promise.reject(new TypeError('Failed to fetch'));
+const cuerpos = (accion) => fetchEspia.mock.calls.map(c => JSON.parse(c[1].body)).filter(b => b.accion === accion);
+
+describe('sin internet', () => {
+    it('el toque se guarda en el iPad, se avisa, y se manda solo cuando vuelve el internet', async () => {
+        let hayInternet = true;
+        fetchEspia.mockImplementation((url, { body }) => {
+            if (!hayInternet) return sinInternet();
+            return JSON.parse(body).accion === 'marcar'
+                ? responder(200, { tipo: 'entrada', en: '2026-10-08T13:02:00.000Z', nombre: 'Rosa Mora' })
+                : responder(200, { hoy: '2026-10-08', empleados: EMPLEADOS });
+        });
+        montar();
+        const tarjeta = await screen.findByRole('button', { name: /Rosa Mora: marcar entrada/ });
+        hayInternet = false;
+        fireEvent.click(tarjeta);
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Marcar entrada/ })); });
+        expect(await screen.findByText('Sin internet: se manda sola cuando vuelva')).toBeTruthy();
+        expect(screen.getByText(/^Entrada guardada a las/)).toBeTruthy();
+        expect(leerCola()).toHaveLength(1);
+        // La tarjeta ya la muestra adentro, aunque no se haya mandado
+        expect(screen.getByRole('button', { name: /Rosa Mora: marcar salida/ })).toBeTruthy();
+
+        hayInternet = true;
+        await act(async () => { window.dispatchEvent(new Event('online')); });
+        await vi.waitFor(() => expect(leerCola()).toHaveLength(0));
+        const enviadas = cuerpos('marcar');
+        expect(enviadas.length).toBeGreaterThanOrEqual(2);                       // el intento sin internet y el bueno
+        expect(new Set(enviadas.map(b => b.idMarca)).size).toBe(1);             // el MISMO toque: no se duplica
+        expect(enviadas.at(-1).hace).toBeGreaterThanOrEqual(0);
+    });
+
+    it('si se recarga la página sin internet, sigue mostrando la lista para marcar', async () => {
+        localStorage.setItem('bikitchen-reloj-ultima-lista-v1', JSON.stringify({ hoy: fechaCR(), empleados: EMPLEADOS }));
+        fetchEspia.mockImplementation(sinInternet);
+        montar();
+        expect(await screen.findByText('Rosa Mora')).toBeTruthy();
+        expect(await screen.findByText(/Sin internet, pero se puede marcar igual/)).toBeTruthy();
+    });
+
+    it('una marca vieja que el servidor rechaza (PIN malo) se avisa para corregirla a mano', async () => {
+        guardarCola([{ idMarca: 'toque-viejo-1', empleadoId: 'tannia', nombre: 'Tannia', tipo: 'salida', pin: '9999', tocado: Date.now() - 60000 }]);
+        fetchEspia.mockImplementation((url, { body }) => JSON.parse(body).accion === 'marcar'
+            ? responder(403, { error: 'El PIN no es correcto.' })
+            : responder(200, { hoy: '2026-10-08', empleados: EMPLEADOS }));
+        montar();
+        expect(await screen.findByText('Una marca no se pudo guardar')).toBeTruthy();
+        expect(screen.getByText(/Tannia: salida de las .* — El PIN no es correcto\./)).toBeTruthy();
+        expect(leerCola()).toEqual([]);
+    });
+});
+
+describe('la cola', () => {
+    it('se manda en orden y se detiene en el primer "sin internet" (lo de atrás espera)', async () => {
+        const cola = ['a', 'b', 'c'].map((x, i) => ({ idMarca: `toque-${x}xxxxx`, empleadoId: x, tipo: 'entrada', tocado: 1000 + i }));
+        const vistos = [];
+        const r = await enviarCola(cola, async (d) => {
+            vistos.push(d.empleadoId);
+            if (d.empleadoId === 'b') { const e = new Error('x'); e.sinInternet = true; throw e; }
+            return { ok: 1 };
+        }, () => 5000);
+        expect(vistos).toEqual(['a', 'b']);
+        expect([...r.keys()]).toEqual(['toque-axxxxx']);
+    });
 });
 
 describe('el reloj del iPad', () => {
@@ -54,7 +123,9 @@ describe('el reloj del iPad', () => {
         expect(await screen.findByText('¡Buenos días, Rosa!')).toBeTruthy();
         expect(screen.getByText('Entrada marcada a las 7:02 a. m.')).toBeTruthy();
         const marca = fetchEspia.mock.calls.map(c => JSON.parse(c[1].body)).find(b => b.accion === 'marcar');
-        expect(marca).toEqual({ accion: 'marcar', codigo: 'ABC', empleadoId: 'rosa', pin: '' });
+        expect(marca).toMatchObject({ accion: 'marcar', codigo: 'ABC', empleadoId: 'rosa', pin: '', tipo: 'entrada' });
+        expect(marca.idMarca).toMatch(/^[A-Za-z0-9_-]{8,64}$/);
+        expect(leerCola()).toEqual([]);                                     // ya se mandó: no queda nada pendiente
     });
 
     it('con PIN: teclado, y al cuarto número marca la salida con el turno', async () => {
@@ -89,7 +160,8 @@ describe('el reloj del iPad', () => {
         montar();
         fireEvent.click(await screen.findByRole('button', { name: /Rosa Mora/ }));
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Marcar entrada/ })); });
-        expect(await screen.findByText('Ya habías marcado')).toBeTruthy();
+        expect(await screen.findByText('Ya marcaste hace un momento.')).toBeTruthy();
+        expect(screen.getByText('Tu entrada quedó a las 7:02 a. m. No hace falta marcar otra vez.')).toBeTruthy();
     });
 
     it('con un link malo lo dice claro', async () => {

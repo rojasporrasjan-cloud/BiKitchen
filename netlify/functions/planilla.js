@@ -45,6 +45,8 @@ const VERSION = 'v1';
 const SITIO = (process.env.SITIO_URL || 'https://bikitchencr.com').replace(/\/+$/, '');
 const EMPLEADOS = 'empleados';
 const MARCAS = 'marcas_reloj';
+const ESTADO = 'estado_reloj';            // un candado por persona (ver `marcar`)
+const HORA = /^([01]\d|2[0-3]):[0-5]\d$/;
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
 const json = (statusCode, body) => ({
@@ -92,7 +94,7 @@ const reloj = async ({ ahora = new Date() } = {}) => {
     const [empleados, marcas] = await Promise.all([leerEmpleados(), marcasDeHoy(hoy)]);
     return json(200, {
         hoy,
-        ahora: ahora.toISOString(),
+        ahora: ahora.toISOString(),             // el iPad corrige su reloj con esto
         empleados: empleados.filter(e => e.activo !== false).map(e => ({
             id: e.id,
             nombre: e.nombre,
@@ -103,29 +105,76 @@ const reloj = async ({ ahora = new Date() } = {}) => {
     });
 };
 
-const marcar = async ({ empleadoId, pin }, ahora = new Date()) => {
-    const snap = await db.collection(EMPLEADOS).doc(String(empleadoId || '_')).get();
+/**
+ * Marcar desde el iPad. Tres cosas para que no se dañe con mala señal:
+ *
+ * - `idMarca` lo inventa el iPad UNA vez por toque y lo repite en cada
+ *   reintento: es el id del documento, así que un reintento devuelve la marca
+ *   que ya estaba en vez de hacer otra (una respuesta perdida no duplica).
+ * - Todo va en una transacción que lee y escribe el candado de la persona
+ *   (`estado_reloj/<id>`): dos toques al mismo tiempo se hacen uno detrás del otro.
+ * - `tipo` es lo que la persona confirmó en la pantalla. Si no calza con lo que
+ *   ya hay (ya estaba adentro, ya había salido), no se marca y se le dice.
+ *
+ * Sin internet, el iPad guarda el toque y lo manda después con `hace` (ms desde
+ * que se tocó): la hora sale del reloj del SERVIDOR menos ese rato, así que
+ * cambiarle la hora al iPad no cambia la marca.
+ */
+const ID_MARCA = /^[A-Za-z0-9_-]{8,64}$/;
+const HACE_MAXIMO = 24 * 60 * 60 * 1000;
+const SIN_INTERNET_DESDE = 2 * 60 * 1000;
+
+const marcar = async ({ empleadoId, pin, idMarca, tipo, hace }, ahora = new Date()) => {
+    if (idMarca !== undefined && !ID_MARCA.test(String(idMarca))) return json(400, { error: 'Marca inválida.' });
+    if (tipo !== undefined && !['entrada', 'salida'].includes(tipo)) return json(400, { error: 'Marca inválida.' });
+    const atraso = Number(hace || 0);
+    if (!Number.isFinite(atraso) || atraso < 0 || atraso > HACE_MAXIMO) return json(400, { error: 'Esa marca es de hace más de un día. Avisale a Jan.' });
+
+    const ref = db.collection(EMPLEADOS).doc(String(empleadoId || '_'));
+    const snap = await ref.get();
     if (!snap.exists || snap.data().activo === false) return json(404, { error: 'No encontramos a esa persona. Avisale a Jan.' });
     const empleado = snap.data();
     if (empleado.pin && String(pin || '') !== String(empleado.pin)) return json(403, { error: 'El PIN no es correcto.' });
 
-    const hoy = fechaCR(ahora);
-    const suyas = (await db.collection(MARCAS).where('fecha', '==', hoy).where('empleadoId', '==', snap.id).get())
-        .docs.map(d => d.data());
-    const ultima = [...suyas].sort((a, b) => String(a.en).localeCompare(String(b.en))).at(-1);
-    if (ultima && (ahora - new Date(ultima.en)) / 1000 < SEGUNDOS_ENTRE_MARCAS) {
-        return json(409, { error: 'Ya marcaste hace un momento.', tipo: ultima.tipo, en: ultima.en });
-    }
-    const marca = {
-        empleadoId: snap.id,
-        nombre: empleado.nombre,
-        tipo: siguienteMarca(suyas),
-        en: ahora.toISOString(),
-        fecha: hoy,
-        origen: 'reloj'
-    };
-    await db.collection(MARCAS).add(marca);
-    return json(200, { tipo: marca.tipo, en: marca.en, nombre: empleado.nombre });
+    const en = new Date(ahora.getTime() - atraso);
+    const fecha = fechaCR(en);
+    const marcaRef = idMarca ? db.collection(MARCAS).doc(String(idMarca)) : db.collection(MARCAS).doc();
+
+    return db.runTransaction(async (t) => {
+        const yaEsta = await t.get(marcaRef);
+        if (yaEsta.exists) {
+            const m = yaEsta.data();
+            return json(200, { tipo: m.tipo, en: m.en, nombre: m.nombre, repetida: false });
+        }
+        const candado = db.collection(ESTADO).doc(snap.id);
+        await t.get(candado);
+        const suyas = (await t.get(db.collection(MARCAS).where('fecha', '==', fecha).where('empleadoId', '==', snap.id)))
+            .docs.map(d => d.data());
+
+        const cerca = suyas.find(m => Math.abs(new Date(m.en) - en) < SEGUNDOS_ENTRE_MARCAS * 1000);
+        if (cerca) return json(409, { error: 'Ya marcaste hace un momento.', tipo: cerca.tipo, en: cerca.en });
+        const antes = suyas.filter(m => String(m.en) < en.toISOString());
+        const toca = siguienteMarca(antes);
+        if (tipo && tipo !== toca) {
+            const { adentro, desde } = estadoActual(antes);
+            let error = 'Ya tenías la salida marcada.';
+            if (tipo === 'entrada') error = 'Ya estabas adentro.';
+            else if (!desde) error = 'Hoy no tenés la entrada marcada.';
+            return json(409, { error, tipo: adentro ? 'entrada' : 'salida', en: desde });
+        }
+
+        const marca = {
+            empleadoId: snap.id,
+            nombre: empleado.nombre,
+            tipo: toca,
+            en: en.toISOString(),
+            fecha,
+            origen: atraso > SIN_INTERNET_DESDE ? 'reloj-sin-internet' : 'reloj'
+        };
+        t.set(candado, { ultima: marca.en, actualizado: ahora.toISOString() });
+        t.create(marcaRef, marca);
+        return json(200, { tipo: marca.tipo, en: marca.en, nombre: empleado.nombre });
+    });
 };
 
 // ── El panel ──────────────────────────────────────────────────────────────
@@ -150,6 +199,10 @@ const guardarEmpleado = async ({ empleado = {} }) => {
         await ref.update(datos);                      // update: nunca crea uno fantasma
         return json(200, { id: ref.id });
     }
+    // Dos pestañas (o dos clics) cargando la misma lista no duplican a nadie
+    const llave = (t) => String(t || '').normalize('NFD').replace(/\p{Diacritic}/gu, '').trim().toLowerCase();
+    const repetido = (await leerEmpleados()).find(e => llave(e.nombre) === llave(nombre));
+    if (repetido) return json(409, { error: `Ya hay alguien que se llama ${repetido.nombre}.`, id: repetido.id });
     const ref = await db.collection(EMPLEADOS).add({ ...datos, creado: datos.actualizado });
     return json(200, { id: ref.id });
 };
@@ -160,26 +213,39 @@ const marcas = async ({ desde, hasta }) => {
     return json(200, { marcas: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
 };
 
+// Las correcciones del panel pasan por el mismo candado que el iPad
 const agregarMarca = async ({ marca = {} }) => {
     const { empleadoId, fecha, hora, tipo, nota } = marca;
     if (!['entrada', 'salida'].includes(tipo)) return json(400, { error: 'Tiene que ser entrada o salida.' });
     if (!FECHA.test(String(fecha))) return json(400, { error: 'Fecha inválida.' });
+    if (!HORA.test(String(hora))) return json(400, { error: 'Hora inválida.' });
     const en = momentoCR(fecha, hora);
-    if (!en) return json(400, { error: 'Hora inválida.' });
     const snap = await db.collection(EMPLEADOS).doc(String(empleadoId || '_')).get();
     if (!snap.exists) return json(404, { error: 'Ese empleado no existe.' });
-    const ref = await db.collection(MARCAS).add({
-        empleadoId: snap.id, nombre: snap.data().nombre, tipo, en, fecha,
-        origen: 'panel', nota: String(nota || 'Corregida a mano')
+    const ref = db.collection(MARCAS).doc();
+    await db.runTransaction(async (t) => {
+        const candado = db.collection(ESTADO).doc(snap.id);
+        await t.get(candado);
+        t.set(candado, { ultima: en, actualizado: new Date().toISOString() });
+        t.create(ref, {
+            empleadoId: snap.id, nombre: snap.data().nombre, tipo, en, fecha,
+            origen: 'panel', nota: String(nota || 'Corregida a mano')
+        });
     });
     return json(200, { id: ref.id });
 };
 
 const borrarMarca = async ({ id }) => {
     const ref = db.collection(MARCAS).doc(String(id || '_'));
-    if (!(await ref.get()).exists) return json(404, { error: 'Esa marca ya no existe.' });
-    await ref.delete();
-    return json(200, { ok: true });
+    return db.runTransaction(async (t) => {
+        const snap = await t.get(ref);
+        if (!snap.exists) return json(404, { error: 'Esa marca ya no existe.' });
+        const candado = db.collection(ESTADO).doc(String(snap.data().empleadoId || '_'));
+        await t.get(candado);
+        t.set(candado, { borrada: snap.id, actualizado: new Date().toISOString() });
+        t.delete(ref);
+        return json(200, { ok: true });
+    });
 };
 
 export const handler = async (event) => {
