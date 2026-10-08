@@ -12,6 +12,7 @@ const DIAS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
 const ESTILOS = {
     turno: 'bg-sky-50 ring-1 ring-sky-200 hover:bg-sky-100',
+    almuerzo: 'bg-yellow-50 ring-1 ring-yellow-300 hover:bg-yellow-100',
     aviso: 'bg-amber-50 ring-1 ring-amber-300 hover:bg-amber-100',
     vacio: 'hover:bg-gray-100',
     ok: 'bg-emerald-50 hover:bg-emerald-100'
@@ -19,6 +20,7 @@ const ESTILOS = {
 
 const estadoDe = (dia) => {
     if (dia.enTurno) return 'turno';
+    if (dia.enAlmuerzo) return 'almuerzo';
     if (dia.avisos.length) return 'aviso';
     if (dia.marcas.length === 0) return 'vacio';
     return 'ok';
@@ -34,6 +36,14 @@ const Celda = ({ dia }) => {
                     <span className="w-2 h-2 bg-sky-500 rounded-full" aria-hidden="true" /> En turno
                 </span>
                 <span className="block text-xs font-semibold text-sky-600">desde {horaCR(dia.enTurno)}</span>
+            </>
+        );
+    }
+    if (estado === 'almuerzo') {
+        return (
+            <>
+                <span className="block font-bold text-yellow-800">Almorzando</span>
+                <span className="block text-xs font-semibold text-yellow-700">desde {horaCR(dia.enAlmuerzo)}</span>
             </>
         );
     }
@@ -71,6 +81,7 @@ export default function TablaSemanal({ planilla, dias, hoy, onElegirDia }) {
                 <ul className="flex flex-wrap gap-3 text-xs font-semibold text-gray-500" aria-label="Qué significa cada color">
                     <li className="flex items-center gap-1.5"><span className="w-3 h-3 bg-emerald-100 rounded" aria-hidden="true" /> Trabajado</li>
                     <li className="flex items-center gap-1.5"><span className="w-3 h-3 bg-sky-100 ring-1 ring-sky-300 rounded" aria-hidden="true" /> En turno</li>
+                    <li className="flex items-center gap-1.5"><span className="w-3 h-3 bg-yellow-100 ring-1 ring-yellow-300 rounded" aria-hidden="true" /> Almorzando</li>
                     <li className="flex items-center gap-1.5"><span className="w-3 h-3 bg-amber-100 ring-1 ring-amber-300 rounded" aria-hidden="true" /> Falta una marca</li>
                 </ul>
             </div>
@@ -109,7 +120,7 @@ export default function TablaSemanal({ planilla, dias, hoy, onElegirDia }) {
                                     return (
                                         <td key={fecha} className="px-1 py-1.5">
                                             <button type="button" onClick={() => onElegirDia(empleado, fecha)}
-                                                aria-label={`${empleado.nombre}, ${fecha}: ${dia.enTurno ? 'en turno' : duracion(dia.minutos)}${dia.avisos.length ? ', falta una marca' : ''}`}
+                                                aria-label={`${empleado.nombre}, ${fecha}: ${dia.enTurno ? 'en turno' : dia.enAlmuerzo ? 'almorzando' : duracion(dia.minutos)}${dia.avisos.length ? ', falta una marca' : ''}`}
                                                 className={`w-full min-h-[3.25rem] px-2 py-1.5 rounded-xl text-center whitespace-nowrap lining-nums tabular-nums transition-colors ${ESTILOS[estadoDe(dia)]}`}>
                                                 <Celda dia={dia} />
                                             </button>

@@ -56,6 +56,8 @@ const BuscarCambiosPage = lazyWithRetry(() => import('./pages/BuscarCambiosPage'
 const PacksGinaPage = lazyWithRetry(() => import('./pages/PacksGinaPage'));
 // El reloj de entrada y salida, para el iPad de la cocina
 const RelojPage = lazyWithRetry(() => import('./pages/RelojPage'));
+// La planilla para Gina (solo ver), por link
+const PlanillaGinaPage = lazyWithRetry(() => import('./pages/PlanillaGinaPage'));
 const GiftCardsPage = lazyWithRetry(() => import('./pages/GiftCardsPage'));
 const FidelidadPage = lazyWithRetry(() => import('./pages/FidelidadPage'));
 const RewardStore = lazyWithRetry(() => import('./pages/RewardStore'));
@@ -213,7 +215,7 @@ function PublicRouteExtras() {
   // El link de Gina es una herramienta interna: sin promos, carrito ni botones flotantes
   if (/^\/packs-mensuales\//.test(pathname)) return null;
   // El reloj del iPad tampoco: es una pantalla de cocina
-  if (/^\/reloj\//.test(pathname)) return null;
+  if (/^\/(reloj|planilla)\//.test(pathname)) return null;
   return (
     <>
       <ShippingDiscountBanner />
@@ -271,6 +273,7 @@ function AnimatedRoutes() {
             <Route path="/cambios/:codigo" element={<CambiosSemanaPage />} />
             <Route path="/packs-mensuales/:codigo" element={<PacksGinaPage />} />
             <Route path="/reloj/:codigo" element={<RelojPage />} />
+            <Route path="/planilla/:codigo" element={<PlanillaGinaPage />} />
             <Route path="/gift-cards" element={<GiftCardsPage />} />
             <Route path="/tarjetas-regalo" element={<GiftCardsPage />} />
             <Route path="/regalar" element={<GiftCardsPage />} />

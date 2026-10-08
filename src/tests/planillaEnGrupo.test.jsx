@@ -54,7 +54,7 @@ describe('marcar a varias a la vez', () => {
         fireEvent.change(container.querySelector('input[type="time"]'), { target: { value: '07:15' } });
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Marcar entrada a 3 personas' })); });
         expect(pedidos.map(p => p.marca)).toEqual(['carmen', 'rosa', 'tannia'].map(id => ({
-            empleadoId: id, fecha: '2026-10-08', hora: '07:15', tipo: 'entrada', nota: 'Entrada en grupo'
+            empleadoId: id, fecha: '2026-10-08', hora: '07:15', tipo: 'entrada', motivo: null, nota: 'Entrada en grupo'
         })));
         expect(screen.getByRole('status').textContent).toBe('Listo: entrada de 3 personas a las 07:15.');
     });
@@ -67,6 +67,23 @@ describe('marcar a varias a la vez', () => {
         fireEvent.change(container.querySelector('input[type="time"]'), { target: { value: '07:15' } });
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Marcar entrada a 1 persona' })); });
         expect(pedidos.map(p => p.marca.empleadoId)).toEqual(['carmen']);
+    });
+
+    it('almuerzo en grupo: solo a quien está adentro, y la vuelta solo a quien está almorzando', async () => {
+        const marcas = [
+            { empleadoId: 'carmen', tipo: 'entrada', fecha: '2026-10-08', en: momentoCR('2026-10-08', '07:15') },
+            { empleadoId: 'rosa', tipo: 'entrada', fecha: '2026-10-08', en: momentoCR('2026-10-08', '07:15') },
+            { empleadoId: 'rosa', tipo: 'salida', motivo: 'almuerzo', fecha: '2026-10-08', en: momentoCR('2026-10-08', '12:00') }
+        ];
+        const { container } = render(<MarcaEnGrupo empleados={empleados} marcas={marcas} hoy="2026-10-08" desde="2026-10-05" onCambio={() => {}} />);
+        fireEvent.change(screen.getByLabelText('Qué marca'), { target: { value: 'almuerzo' } });
+        expect(screen.getByRole('button', { name: /Rosa/ }).disabled).toBe(true);           // ya está almorzando
+        fireEvent.change(container.querySelector('input[type="time"]'), { target: { value: '12:00' } });
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Marcar salida a almorzar a 1 persona' })); });
+        expect(pedidos.at(-1).marca).toMatchObject({ empleadoId: 'carmen', tipo: 'salida', motivo: 'almuerzo', nota: 'Salida a almorzar en grupo' });
+
+        fireEvent.change(screen.getByLabelText('Qué marca'), { target: { value: 'vuelta' } });
+        expect(screen.getByRole('button', { name: 'Marcar vuelta del almuerzo a 1 persona' })).toBeTruthy();   // Rosa
     });
 
     it('con la entrada de las 7:15 y la salida de la tarde, sale el pago del día', () => {

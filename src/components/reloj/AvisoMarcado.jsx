@@ -17,6 +17,7 @@ const saludo = (en) => {
 const COLORES = {
     entrada: 'bg-gradient-to-br from-emerald-500 to-teal-600',
     salida: 'bg-gradient-to-br from-bikitchen-orange to-amber-500',
+    almuerzo: 'bg-gradient-to-br from-amber-500 to-yellow-500',
     repetida: 'bg-gradient-to-br from-amber-400 to-amber-600'
 };
 
@@ -26,14 +27,28 @@ export default function AvisoMarcado({ resultado, onCerrar }) {
         return () => clearTimeout(t);
     }, [onCerrar]);
 
-    const { tipo, en, nombre, minutos, repetida, sinInternet, error } = resultado;
-    const primerNombre = String(nombre || '').split(' ')[0];
+    const { tipo, motivo, en, nombre, minutos, repetida, sinInternet, error } = resultado;
+    // "Rosa Mora" → "Rosa"; pero "Doña Carmen" se queda entero
+    const partes = String(nombre || '').trim().split(/\s+/);
+    const primerNombre = /^(doña|don)$/i.test(partes[0]) ? partes.slice(0, 2).join(' ') : partes[0];
+    const quedo = sinInternet ? 'guardada' : 'marcada';
+    const almuerzo = motivo === 'almuerzo';
 
     let titulo = `¡${saludo(en)}, ${primerNombre}!`;
-    let detalle = `Entrada ${sinInternet ? 'guardada' : 'marcada'} a las ${horaCR(en)}`;
-    if (tipo === 'salida') {
+    let detalle = `Entrada ${quedo} a las ${horaCR(en)}`;
+    let pie = '';
+    if (tipo === 'salida' && almuerzo) {
+        titulo = `¡Buen provecho, ${primerNombre}!`;
+        detalle = `Salida a almorzar ${quedo} a las ${horaCR(en)}`;
+        pie = 'Cuando vuelvas, tocá tu nombre otra vez';
+    } else if (tipo === 'salida') {
         titulo = `¡Gracias, ${primerNombre}!`;
-        detalle = `Salida ${sinInternet ? 'guardada' : 'marcada'} a las ${horaCR(en)}`;
+        detalle = `Salida ${quedo} a las ${horaCR(en)}`;
+        if (minutos > 0) pie = `Este turno: ${duracion(minutos)}`;
+    } else if (almuerzo) {
+        titulo = `¡De vuelta, ${primerNombre}!`;
+        detalle = `Vuelta del almuerzo ${quedo} a las ${horaCR(en)}`;
+        if (minutos > 0) pie = `Almorzaste ${duracion(minutos)}`;
     }
     if (repetida) {
         titulo = error || 'Ya habías marcado';
@@ -49,7 +64,7 @@ export default function AvisoMarcado({ resultado, onCerrar }) {
             exit={{ opacity: 0 }}
             onClick={onCerrar}
             role="status"
-            className={`fixed inset-0 z-50 flex flex-col items-center justify-center p-8 ${COLORES[repetida ? 'repetida' : tipo]} text-white text-center`}
+            className={`fixed inset-0 z-50 flex flex-col items-center justify-center p-8 ${COLORES[repetida ? 'repetida' : (tipo === 'salida' && almuerzo ? 'almuerzo' : tipo)]} text-white text-center`}
         >
             <motion.span
                 initial={{ scale: 0.4, opacity: 0 }}
@@ -60,15 +75,15 @@ export default function AvisoMarcado({ resultado, onCerrar }) {
             >
                 {repetida
                     ? <Clock size={72} strokeWidth={3} className="text-amber-500" />
-                    : <Check size={84} strokeWidth={3.5} className={tipo === 'salida' ? 'text-bikitchen-orange' : 'text-emerald-600'} />}
+                    : <Check size={84} strokeWidth={3.5} className={tipo === 'salida' ? (almuerzo ? 'text-amber-500' : 'text-bikitchen-orange') : 'text-emerald-600'} />}
             </motion.span>
             <h2 className="mt-8 text-5xl md:text-6xl font-black leading-tight text-white">{titulo}</h2>
             <p className="mt-3 text-2xl md:text-3xl font-bold text-white/90 lining-nums">{detalle}</p>
             {sinInternet && (
                 <p className="mt-6 px-6 py-3 bg-white/20 rounded-full text-lg font-bold">Sin internet: se manda sola cuando vuelva</p>
             )}
-            {!repetida && tipo === 'salida' && minutos > 0 && (
-                <p className="mt-6 px-6 py-3 bg-white/20 rounded-full text-xl font-bold lining-nums">Este turno: {duracion(minutos)}</p>
+            {!repetida && pie && (
+                <p className="mt-6 px-6 py-3 bg-white/20 rounded-full text-xl font-bold lining-nums">{pie}</p>
             )}
             <img src="/assets/logo.png" alt="" aria-hidden="true" className="absolute bottom-10 w-36 h-auto brightness-0 invert opacity-80" />
         </motion.div>

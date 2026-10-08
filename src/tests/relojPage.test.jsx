@@ -56,7 +56,7 @@ describe('sin internet', () => {
         expect(screen.getByText(/^Entrada guardada a las/)).toBeTruthy();
         expect(leerCola()).toHaveLength(1);
         // La tarjeta ya la muestra adentro, aunque no se haya mandado
-        expect(screen.getByRole('button', { name: /Rosa Mora: marcar salida/ })).toBeTruthy();
+        expect(screen.getByRole('button', { name: /Rosa Mora: almorzar o marcar salida/ })).toBeTruthy();
 
         hayInternet = true;
         await act(async () => { window.dispatchEvent(new Event('online')); });
@@ -128,13 +128,15 @@ describe('el reloj del iPad', () => {
         expect(leerCola()).toEqual([]);                                     // ya se mandó: no queda nada pendiente
     });
 
-    it('con PIN: teclado, y al cuarto número marca la salida con el turno', async () => {
+    it('con PIN: elige terminar el día, teclado, y al cuarto número marca la salida con el turno', async () => {
         fetchEspia.mockImplementation((url, { body }) => JSON.parse(body).accion === 'marcar'
             ? responder(200, { tipo: 'salida', en: '2026-10-08T21:00:00.000Z', nombre: 'Tannia' })
             : responder(200, { hoy: '2026-10-08', empleados: EMPLEADOS }));
         montar();
-        fireEvent.click(await screen.findByRole('button', { name: /Tannia: marcar salida/ }));
-        expect(screen.getByText('Vas a marcar tu SALIDA')).toBeTruthy();
+        fireEvent.click(await screen.findByRole('button', { name: /Tannia: almorzar o marcar salida/ }));
+        expect(screen.getByText('¿Qué vas a hacer?')).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: /Terminar el día/ }));
+        expect(screen.getByText(/Vas a TERMINAR el día/)).toBeTruthy();
         for (const n of ['1', '2', '3']) fireEvent.click(screen.getByRole('button', { name: n }));
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: '4' })); });
         expect(await screen.findByText('¡Gracias, Tannia!')).toBeTruthy();
@@ -147,6 +149,7 @@ describe('el reloj del iPad', () => {
             : responder(200, { hoy: '2026-10-08', empleados: EMPLEADOS }));
         montar();
         fireEvent.click(await screen.findByRole('button', { name: /Tannia/ }));
+        fireEvent.click(screen.getByRole('button', { name: /Terminar el día/ }));
         for (const n of ['9', '9', '9']) fireEvent.click(screen.getByRole('button', { name: n }));
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: '9' })); });
         expect((await screen.findByRole('alert')).textContent).toBe('El PIN no es correcto.');
@@ -162,6 +165,31 @@ describe('el reloj del iPad', () => {
         await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Marcar entrada/ })); });
         expect(await screen.findByText('Ya marcaste hace un momento.')).toBeTruthy();
         expect(screen.getByText('Tu entrada quedó a las 7:02 a. m. No hace falta marcar otra vez.')).toBeTruthy();
+    });
+
+    it('el almuerzo: sale a almorzar, la tarjeta dice "almorzando", y al volver dice cuánto almorzó', async () => {
+        let lista = [{ id: 'carmen', nombre: 'Doña Carmen', color: 'orange', tienePin: false, adentro: true, almorzando: false, desde: '2026-10-08T13:00:00.000Z' }];
+        fetchEspia.mockImplementation((url, { body }) => {
+            const b = JSON.parse(body);
+            if (b.accion !== 'marcar') return responder(200, { hoy: '2026-10-08', empleados: lista });
+            return b.motivo === 'almuerzo' && b.tipo === 'salida'
+                ? responder(200, { tipo: 'salida', motivo: 'almuerzo', en: '2026-10-08T18:00:00.000Z', nombre: 'Doña Carmen' })
+                : responder(200, { tipo: 'entrada', motivo: 'almuerzo', en: '2026-10-08T18:35:00.000Z', nombre: 'Doña Carmen' });
+        });
+        montar();
+        fireEvent.click(await screen.findByRole('button', { name: /Doña Carmen: almorzar o marcar salida/ }));
+        lista = [{ ...lista[0], adentro: false, almorzando: true, desde: '2026-10-08T18:00:00.000Z' }];
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Salir a almorzar/ })); });
+        expect(await screen.findByText('¡Buen provecho, Doña Carmen!')).toBeTruthy();
+        expect(cuerpos('marcar').at(-1)).toMatchObject({ tipo: 'salida', motivo: 'almuerzo' });
+
+        fireEvent.click(screen.getByRole('status'));                              // cierra el aviso
+        const tarjeta = await screen.findByRole('button', { name: /Doña Carmen: volver de almorzar/ });
+        expect(screen.getByText('Almorzando desde 12:00 p. m.')).toBeTruthy();
+        fireEvent.click(tarjeta);
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Volver de almorzar/ })); });
+        expect(await screen.findByText('Almorzaste 35 min')).toBeTruthy();
+        expect(cuerpos('marcar').at(-1)).toMatchObject({ tipo: 'entrada', motivo: 'almuerzo' });
     });
 
     it('con un link malo lo dice claro', async () => {

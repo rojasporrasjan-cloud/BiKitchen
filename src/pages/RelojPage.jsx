@@ -11,7 +11,7 @@ import useColaDelReloj from '../hooks/useColaDelReloj';
 import { pedirAlReloj } from '../utils/planillaClient';
 import { nuevaMarca, conPendientes } from '../utils/colaDelReloj';
 import { fechaCR } from '../utils/planilla';
-import { SEGUNDOS_ENTRE_MARCAS } from '../data/planilla';
+import { SEGUNDOS_ENTRE_MARCAS, ACCIONES_RELOJ } from '../data/planilla';
 
 /**
  * /reloj/:codigo — el reloj de entrada y salida, para el iPad de la cocina.
@@ -72,7 +72,7 @@ const listaGuardada = () => {
         const d = JSON.parse(localStorage.getItem(ULTIMA_LISTA) || 'null');
         if (!d || !Array.isArray(d.empleados)) return null;
         if (d.hoy === fechaCR()) return d;
-        return { ...d, empleados: d.empleados.map(e => ({ ...e, adentro: false, desde: null })) };
+        return { ...d, empleados: d.empleados.map(e => ({ ...e, adentro: false, almorzando: false, desde: null })) };
     } catch {
         return null;
     }
@@ -134,7 +134,9 @@ export default function RelojPage() {
 
     /** Lo que se ve después de marcar. Devuelve false si hay que quedarse en la ventana (PIN malo). */
     const mostrar = (r, marca, quien) => {
-        const minutosDesde = (en) => (marca.tipo === 'salida' && quien.desde
+        // Al irse: cuánto duró este turno. Al volver de almorzar: cuánto almorzó.
+        const cuenta = (marca.tipo === 'salida' && !marca.motivo) || (marca.tipo === 'entrada' && marca.motivo === 'almuerzo');
+        const minutosDesde = (en) => (cuenta && quien.desde
             ? Math.max(0, Math.round((new Date(en) - new Date(quien.desde)) / 60000)) : 0);
         if (r && !r.ok && r.status !== 409) {
             setErrorMarca(r.error);
@@ -142,7 +144,7 @@ export default function RelojPage() {
         }
         if (!r) {
             const en = new Date(marca.tocado + desfase).toISOString();
-            setResultado({ tipo: marca.tipo, en, nombre: quien.nombre, sinInternet: true, minutos: minutosDesde(en) });
+            setResultado({ tipo: marca.tipo, motivo: marca.motivo, en, nombre: quien.nombre, sinInternet: true, minutos: minutosDesde(en) });
         } else if (r.ok) {
             setResultado({ ...r.datos, minutos: minutosDesde(r.datos.en) });
         } else {
@@ -153,7 +155,7 @@ export default function RelojPage() {
         return true;
     };
 
-    const handleMarcar = async (pin) => {
+    const handleMarcar = async (pin, accion) => {
         if (ocupado.current) return false;                     // dos toques al botón: cuenta uno
         ocupado.current = true;
         setEnviando(true);
@@ -166,7 +168,9 @@ export default function RelojPage() {
                 setElegido(null);
                 return true;
             }
-            const marca = nuevaMarca(quien, quien.adentro ? 'salida' : 'entrada', pin);
+            let cual = accion;
+            if (!cual) cual = quien.adentro ? 'salida' : quien.almorzando ? 'vuelta' : 'entrada';
+            const marca = nuevaMarca(quien, ACCIONES_RELOJ[cual], pin);
             return mostrar(await marcar(marca), marca, quien);
         } finally {
             ocupado.current = false;
@@ -178,6 +182,7 @@ export default function RelojPage() {
     const { hora, segundos, ampm } = partesCR(momento);
     const empleados = conPendientes(datos?.empleados || [], cola, desfase);
     const adentro = empleados.filter(e => e.adentro).length;
+    const almorzando = empleados.filter(e => e.almorzando).length;
     // Un toque que lleva rato sin salir = no hay internet (no avisar por el segundo que tarda uno normal)
     const porEnviar = cola.filter(m => ahora.getTime() - m.tocado > 15000).length;
 
@@ -211,8 +216,14 @@ export default function RelojPage() {
                             <span className="block text-3xl font-black lining-nums">{adentro}</span>
                             <span className="text-sm font-bold text-white/90">{adentro === 1 ? 'persona adentro' : 'personas adentro'}</span>
                         </span>
+                        {almorzando > 0 && (
+                            <span className="flex-1 px-4 py-3 bg-white/15 rounded-2xl">
+                                <span className="block text-3xl font-black lining-nums">{almorzando}</span>
+                                <span className="text-sm font-bold text-white/90">almorzando</span>
+                            </span>
+                        )}
                         <span className="flex-1 px-4 py-3 bg-white/10 rounded-2xl">
-                            <span className="block text-3xl font-black lining-nums">{empleados.length - adentro}</span>
+                            <span className="block text-3xl font-black lining-nums">{empleados.length - adentro - almorzando}</span>
                             <span className="text-sm font-bold text-white/90">afuera</span>
                         </span>
                     </div>

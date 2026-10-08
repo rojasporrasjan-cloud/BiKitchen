@@ -11,6 +11,22 @@ export const FACTOR_EXTRA = 1.5;
 /** Si alguien marca dos veces seguidas en este rato, la segunda no cuenta (dedo doble). */
 export const SEGUNDOS_ENTRE_MARCAS = 60;
 
+/**
+ * Las cuatro marcas posibles. El almuerzo es una salida (o entrada) con
+ * `motivo: 'almuerzo'`: el rato almorzando no se paga, pero queda anotado.
+ */
+export const ACCIONES_RELOJ = {
+    entrada: { tipo: 'entrada', motivo: null, nombre: 'Entrada' },
+    almuerzo: { tipo: 'salida', motivo: 'almuerzo', nombre: 'Salida a almorzar' },
+    vuelta: { tipo: 'entrada', motivo: 'almuerzo', nombre: 'Vuelta del almuerzo' },
+    salida: { tipo: 'salida', motivo: null, nombre: 'Salida' }
+};
+
+export const accionDeMarca = (m) => {
+    if (m?.tipo === 'entrada') return m.motivo === 'almuerzo' ? 'vuelta' : 'entrada';
+    return m?.motivo === 'almuerzo' ? 'almuerzo' : 'salida';
+};
+
 /** Colores de las tarjetas del reloj (se elige uno al crear el empleado). */
 export const COLORES_EMPLEADO = [
     'orange', 'emerald', 'sky', 'violet', 'rose', 'amber', 'teal', 'indigo', 'lime', 'pink'

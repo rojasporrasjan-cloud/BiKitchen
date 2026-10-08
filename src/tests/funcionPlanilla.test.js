@@ -14,8 +14,9 @@ vi.mock('firebase-admin/app', () => ({ initializeApp: () => ({}), getApps: () =>
 vi.mock('firebase-admin/auth', () => ({
     getAuth: () => ({
         verifyIdToken: async (t) => {
-            if (t === 'dueno') return { email: 'rojasporrasjan@gmail.com' };
-            if (t === 'otro') return { email: 'alguien@x.com' };
+            if (t === 'dueno') return { email: 'rojasporrasjan@gmail.com', uid: 'uJan' };
+            if (t === 'gina') return { email: 'gina@x.com', uid: 'uGina' };
+            if (t === 'otro') return { email: 'alguien@x.com', uid: 'uOtro' };
             throw new Error('mal');
         }
     })
@@ -72,7 +73,7 @@ vi.mock('firebase-admin/firestore', () => {
 });
 
 Object.assign(process.env, { CAMBIOS_SECRETO: 'secreto-de-prueba' });
-const { handler, codigoDelReloj } = await import('../../netlify/functions/planilla.js');
+const { handler, codigoDelReloj, codigoDeGina } = await import('../../netlify/functions/planilla.js');
 
 const llamar = (cuerpo, token) => handler({
     httpMethod: 'POST',
@@ -91,8 +92,79 @@ beforeEach(() => {
             rosa: { nombre: 'Rosa', tarifaHora: 1500, activo: true, pin: '' },
             tannia: { nombre: 'Tannia', tarifaHora: 1600, activo: true, pin: '1234' },
             viejo: { nombre: 'Ya no trabaja', tarifaHora: 1000, activo: false, pin: '' }
-        }
+        },
+        users: { uGina: { role: 'admin' }, uOtro: { role: 'user' } }
     };
+});
+
+describe('el almuerzo', () => {
+    it('salir a almorzar y volver quedan con su motivo; el reloj la muestra almorzando', async () => {
+        fijarHora('2026-10-08T13:00:00Z');
+        await enReloj({ empleadoId: 'rosa', idMarca: 'toque-a001', tipo: 'entrada' });
+        vi.setSystemTime(new Date('2026-10-08T18:00:00Z'));                 // 12:00 m.d.
+        const a = await enReloj({ empleadoId: 'rosa', idMarca: 'toque-a002', tipo: 'salida', motivo: 'almuerzo' });
+        expect(a).toMatchObject({ status: 200, tipo: 'salida', motivo: 'almuerzo' });
+        const r = await llamar({ accion: 'reloj', codigo: codigoDelReloj() });
+        expect(r.empleados[0]).toMatchObject({ adentro: false, almorzando: true });
+
+        vi.setSystemTime(new Date('2026-10-08T18:30:00Z'));
+        const v = await enReloj({ empleadoId: 'rosa', idMarca: 'toque-a003', tipo: 'entrada', motivo: 'almuerzo' });
+        expect(v).toMatchObject({ status: 200, tipo: 'entrada', motivo: 'almuerzo' });
+        expect(marcas().map(m => m.motivo || '-')).toEqual(['-', 'almuerzo', 'almuerzo']);
+    });
+
+    it('otro motivo no se acepta', async () => {
+        expect((await enReloj({ empleadoId: 'rosa', idMarca: 'toque-a004', tipo: 'entrada', motivo: 'cafe' })).status).toBe(400);
+    });
+
+    it('el panel también puede poner el almuerzo a mano', async () => {
+        const r = await llamar({ accion: 'agregarMarca', marca: { empleadoId: 'rosa', fecha: '2026-10-08', hora: '12:00', tipo: 'salida', motivo: 'almuerzo' } }, 'dueno');
+        expect(estado.tablas.marcas_reloj[r.id]).toMatchObject({ tipo: 'salida', motivo: 'almuerzo', origen: 'panel' });
+    });
+});
+
+describe('Gina', () => {
+    it('en el panel (admin) VE la planilla, sin los PIN', async () => {
+        const e = await llamar({ accion: 'empleados' }, 'gina');
+        expect(e.status).toBe(200);
+        expect(e.empleados.find(x => x.id === 'tannia')).toMatchObject({ tienePin: true });
+        expect(JSON.stringify(e)).not.toContain('1234');
+        expect((await llamar({ accion: 'marcas', desde: '2026-10-05', hasta: '2026-10-11' }, 'gina')).status).toBe(200);
+    });
+
+    it('en el panel no puede cambiar nada: tarifas, marcas ni links son de Jan', async () => {
+        for (const cuerpo of [
+            { accion: 'guardarEmpleado', empleado: { id: 'rosa', nombre: 'Rosa', tarifaHora: 9999 } },
+            { accion: 'agregarMarca', marca: { empleadoId: 'rosa', fecha: '2026-10-08', hora: '07:00', tipo: 'entrada' } },
+            { accion: 'borrarMarca', id: 'x' },
+            { accion: 'link' }, { accion: 'linkGina' }
+        ]) {
+            expect(await llamar(cuerpo, 'gina')).toMatchObject({ status: 403, error: 'Solo Jan puede cambiar la planilla.' });
+        }
+        expect(estado.tablas.empleados.rosa.tarifaHora).toBe(1500);
+        expect(marcas()).toHaveLength(0);
+    });
+
+    it('alguien que no es admin no ve nada', async () => {
+        expect((await llamar({ accion: 'empleados' }, 'otro')).status).toBe(403);
+    });
+
+    it('con su link (sin entrar al panel) ve empleados y marcas; el link del iPad no abre su planilla', async () => {
+        const r = await llamar({ accion: 'verGina', codigo: codigoDeGina(), desde: '2026-10-05', hasta: '2026-10-11' });
+        expect(r.status).toBe(200);
+        expect(r.empleados).toHaveLength(3);
+        expect(JSON.stringify(r)).not.toContain('1234');
+        expect((await llamar({ accion: 'verGina', codigo: codigoDelReloj(), desde: '2026-10-05', hasta: '2026-10-11' })).status).toBe(404);
+        expect((await llamar({ accion: 'marcar', codigo: codigoDeGina(), empleadoId: 'rosa' })).status).toBe(404);
+    });
+
+    it('nunca más de dos meses de una vez (regla 17)', async () => {
+        expect((await llamar({ accion: 'verGina', codigo: codigoDeGina(), desde: '2026-01-01', hasta: '2026-10-11' })).status).toBe(400);
+    });
+
+    it('Jan saca el link de Gina', async () => {
+        expect((await llamar({ accion: 'linkGina' }, 'dueno')).url).toBe(`https://bikitchencr.com/planilla/${codigoDeGina()}`);
+    });
 });
 
 describe('el reloj del iPad', () => {
@@ -189,7 +261,7 @@ describe('con mala señal', () => {
 });
 
 describe('el panel', () => {
-    it('es solo del dueño', async () => {
+    it('sin sesión o sin ser admin no se ve; el dueño ve todo (con PIN)', async () => {
         expect((await llamar({ accion: 'empleados' })).status).toBe(403);
         expect((await llamar({ accion: 'empleados' }, 'otro')).status).toBe(403);
         expect((await llamar({ accion: 'empleados' }, 'dueno')).empleados).toHaveLength(3);

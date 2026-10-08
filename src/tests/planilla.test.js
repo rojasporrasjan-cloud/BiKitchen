@@ -30,7 +30,7 @@ describe('entrada o salida', () => {
 
     it('sabe si está adentro y desde cuándo', () => {
         const e = m('entrada', '2026-10-08', '07:00');
-        expect(estadoActual([e])).toEqual({ adentro: true, desde: e.en });
+        expect(estadoActual([e])).toEqual({ adentro: true, almorzando: false, desde: e.en });
         expect(estadoActual([]).adentro).toBe(false);
     });
 });
@@ -95,6 +95,37 @@ describe('la semana', () => {
         expect(rosa.porDia['2026-10-07'].monto).toBe(0);
         expect(rosa).toMatchObject({ totalMinutos: 12 * 60, totalMonto: 18000, avisos: 0 });
         expect(tannia.totalMonto).toBe(7200);   // 4,5 h × 1.600
+    });
+});
+
+describe('el almuerzo', () => {
+    const almuerzo = (tipo, fecha, hora) => ({ ...m(tipo, fecha, hora), motivo: 'almuerzo' });
+
+    it('no se paga, pero queda anotado cuánto duró', () => {
+        const { tramos, avisos, almuerzo: minutos } = tramosDelDia([
+            m('entrada', '2026-10-08', '07:00'), almuerzo('salida', '2026-10-08', '12:00'),
+            almuerzo('entrada', '2026-10-08', '12:30'), m('salida', '2026-10-08', '16:00')
+        ]);
+        expect(tramos.map(t => t.minutos)).toEqual([300, 210]);              // 8 h 30 trabajadas, sin la media hora
+        expect(minutos).toBe(30);
+        expect(avisos).toEqual([]);
+    });
+
+    it('sabe si alguien está almorzando', () => {
+        const marcas = [m('entrada', '2026-10-08', '07:00'), almuerzo('salida', '2026-10-08', '12:00')];
+        expect(estadoActual(marcas)).toMatchObject({ adentro: false, almorzando: true });
+        expect(siguienteMarca(marcas)).toBe('entrada');
+    });
+
+    it('si salió a almorzar y no volvió a marcar, se avisa (otro día); hoy, está almorzando', () => {
+        const empleados = [{ id: 'rosa', nombre: 'Rosa', tarifaHora: 1500 }];
+        const marcas = [
+            m('entrada', '2026-10-07', '07:00'), almuerzo('salida', '2026-10-07', '12:00'),
+            m('entrada', '2026-10-08', '07:00'), almuerzo('salida', '2026-10-08', '12:00')
+        ];
+        const [rosa] = planillaDe(empleados, marcas, ['2026-10-07', '2026-10-08'], '2026-10-08');
+        expect(rosa.porDia['2026-10-07'].avisos[0]).toMatch(/Salió a almorzar a las 12:00 p\. m\. y no volvió a marcar/);
+        expect(rosa.porDia['2026-10-08']).toMatchObject({ enAlmuerzo: momentoCR('2026-10-08', '12:00'), avisos: [], minutos: 300 });
     });
 });
 
