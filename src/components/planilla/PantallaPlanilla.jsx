@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, RefreshCw } from 'lucide-react';
 import EncabezadoPlanilla from './EncabezadoPlanilla';
 import HoyEnLaCocina from './HoyEnLaCocina';
 import LinkDelReloj from './LinkDelReloj';
@@ -67,6 +67,23 @@ export default function PantallaPlanilla({ cargarDatos, puedeEditar = false }) {
         seccionEmpleados.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     };
 
+    // Hasta que llegue la primera respuesta no se muestran ceros ("₡0 · Todo bien"
+    // con un link malo engaña): o "Cargando…", o el error solo, con "Reintentar"
+    if (!listos) {
+        return error ? (
+            <div role="alert" className="flex flex-col items-center gap-4 p-8 bg-white border border-red-200 rounded-3xl text-center shadow-sm">
+                <AlertTriangle size={36} className="text-red-500" aria-hidden="true" />
+                <p className="text-lg font-black text-red-700">{error}</p>
+                <button type="button" onClick={cargar}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-white border border-red-200 text-sm font-bold text-red-700 rounded-xl">
+                    <RefreshCw size={15} aria-hidden="true" /> Reintentar
+                </button>
+            </div>
+        ) : (
+            <p className="p-8 bg-white border border-gray-100 rounded-3xl text-center text-gray-500 font-semibold">Cargando la planilla…</p>
+        );
+    }
+
     return (
         <div className="space-y-6 lining-nums">
             <EncabezadoPlanilla dias={dias} esEstaSemana={esEstaSemana} cargando={cargando}
@@ -86,7 +103,7 @@ export default function PantallaPlanilla({ cargarDatos, puedeEditar = false }) {
 
             {esEstaSemana && <HoyEnLaCocina planilla={planilla} hoy={hoy} />}
 
-            <TablaSemanal planilla={planilla} dias={dias} hoy={hoy}
+            <TablaSemanal planilla={planilla} dias={dias} hoy={hoy} soloVer={!puedeEditar}
                 onElegirDia={(empleado, fecha) => setElegido({ empleadoId: empleado.id, fecha })} />
 
             {/* Solo en la semana de hoy: usa las marcas cargadas para saber quién está adentro */}

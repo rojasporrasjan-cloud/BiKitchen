@@ -65,7 +65,7 @@ const Celda = ({ dia }) => {
     );
 };
 
-export default function TablaSemanal({ planilla, dias, hoy, onElegirDia }) {
+export default function TablaSemanal({ planilla, dias, hoy, soloVer = false, onElegirDia }) {
     const totalDelDia = (fecha) => planilla.reduce((s, p) => s + (p.porDia[fecha]?.monto || 0), 0);
     const totalSemana = planilla.reduce((s, p) => s + p.totalMonto, 0);
 
@@ -76,7 +76,9 @@ export default function TablaSemanal({ planilla, dias, hoy, onElegirDia }) {
             <div className="flex flex-wrap items-end justify-between gap-3 px-5 pt-5">
                 <div>
                     <h2 id="titulo-semana" className="text-lg font-black text-gray-900">Horas y salario por día</h2>
-                    <p className="text-sm text-gray-500">Tocá un día para ver las marcas o corregir una que se olvidó.</p>
+                    <p className="text-sm text-gray-500">
+                        {soloVer ? 'Tocá un día para ver a qué hora marcó cada persona.' : 'Tocá un día para ver las marcas o corregir una que se olvidó.'}
+                    </p>
                 </div>
                 <ul className="flex flex-wrap gap-3 text-xs font-semibold text-gray-500" aria-label="Qué significa cada color">
                     <li className="flex items-center gap-1.5"><span className="w-3 h-3 bg-emerald-100 rounded" aria-hidden="true" /> Trabajado</li>
