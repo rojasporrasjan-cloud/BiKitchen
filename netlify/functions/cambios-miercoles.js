@@ -78,12 +78,15 @@ export const pedidosDelCiclo = (fechas) => leerPedidosDelCiclo(db, fechas);
  * Si hay varios con ese número, el más nuevo: el viejo puede tener el chat en el
  * WhatsApp desconectado y ahí no llega nada (elMasNuevo, kommoPayload.js).
  */
-export const contactoPorTelefono = async (telefono) => {
+/** El contacto de Kommo de ese teléfono: { id, nombre } o null. */
+export const contactoDeKommo = async (telefono) => {
     const res = await kommo(`/api/v4/contacts?query=${encodeURIComponent(telefono)}&limit=10`);
     const candidatos = res?._embedded?.contacts || [];
     const suyo = elMasNuevo(candidatos.filter(c => telefonosDeContacto(c).includes(soloDigitos(telefono))));
-    return suyo ? suyo.id : null;
+    return suyo ? { id: suyo.id, nombre: String(suyo.name || '').trim() } : null;
 };
+
+export const contactoPorTelefono = async (telefono) => (await contactoDeKommo(telefono))?.id || null;
 
 /**
  * En modo prueba solo se le escribe al número de prueba. Si ese número no tiene
@@ -117,8 +120,10 @@ export const enviarPorKommo = async (destinatarios, { bot, camposIds: propios, s
     const conId = [];
     const nuevos = [];
     for (const d of destinatarios) {
-        const id = await contactoPorTelefono(d.telefono);
-        if (id) conId.push({ d, id }); else nuevos.push(d);
+        const c = await contactoDeKommo(d.telefono);
+        // Sin nombre en el pedido (el seguimiento sale de los chats): el de Kommo,
+        // para que el panel diga a QUIÉN le llegó y no solo el número
+        if (c) conId.push({ d: d.nombre ? d : { ...d, nombre: c.nombre }, id: c.id }); else nuevos.push(d);
         await dormir(ESPERA_MS);
     }
     // 2. Crear los que no están y escribirle sus datos a todos
