@@ -28,11 +28,13 @@ export const guardarCola = (cola) => {
 const idNuevo = () => globalThis.crypto?.randomUUID?.()
     || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
 
-export const nuevaMarca = (empleado, tipo, pin) => ({
+/** Un toque: `accion` es una de ACCIONES_RELOJ ({ tipo, motivo }). */
+export const nuevaMarca = (empleado, { tipo, motivo }, pin) => ({
     idMarca: idNuevo(),
     empleadoId: empleado.id,
     nombre: empleado.nombre,
     tipo,
+    motivo: motivo || null,
     pin: pin || '',
     tocado: Date.now()
 });
@@ -41,7 +43,13 @@ export const nuevaMarca = (empleado, tipo, pin) => ({
 export const conPendientes = (empleados, cola, desfase = 0) => empleados.map((e) => {
     const ultima = cola.filter(m => m.empleadoId === e.id).at(-1);
     if (!ultima) return e;
-    return { ...e, adentro: ultima.tipo === 'entrada', desde: new Date(ultima.tocado + desfase).toISOString(), pendiente: true };
+    return {
+        ...e,
+        adentro: ultima.tipo === 'entrada',
+        almorzando: ultima.tipo === 'salida' && ultima.motivo === 'almuerzo',
+        desde: new Date(ultima.tocado + desfase).toISOString(),
+        pendiente: true
+    };
 });
 
 /**
@@ -55,6 +63,7 @@ export const enviarCola = async (cola, enviar, ahora = Date.now) => {
         try {
             const datos = await enviar({
                 empleadoId: m.empleadoId, pin: m.pin, idMarca: m.idMarca, tipo: m.tipo,
+                ...(m.motivo ? { motivo: m.motivo } : {}),
                 hace: Math.max(0, ahora() - m.tocado)
             });
             resultados.set(m.idMarca, { ok: true, datos });

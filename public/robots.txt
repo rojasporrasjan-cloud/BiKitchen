@@ -23,6 +23,7 @@ Disallow: /mi-impacto
 Disallow: /cambios
 Disallow: /packs-mensuales/
 Disallow: /reloj/
+Disallow: /planilla/
 
 # APIs y funciones
 Disallow: /api/

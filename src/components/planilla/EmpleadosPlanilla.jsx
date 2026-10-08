@@ -5,9 +5,12 @@ import { tonoDe, EMPLEADOS_INICIALES, COLORES_EMPLEADO } from '../../data/planil
 import { colones, iniciales } from '../../utils/planilla';
 import { pedirALaPlanilla } from '../../utils/planillaClient';
 
-/** Quiénes trabajan y cuánto gana cada uno por hora. */
-export default function EmpleadosPlanilla({ empleados, listos = true, onCambio }) {
-    const [editando, setEditando] = useState(null);       // null | {} (nuevo) | empleado
+/**
+ * Quiénes trabajan y cuánto gana cada uno por hora. El formulario abierto
+ * (`editando`) lo maneja la pantalla, para que "Agregar empleado" de arriba lo abra.
+ */
+export default function EmpleadosPlanilla({ empleados, listos = true, editando = null, onEditar = () => {}, onCambio }) {
+    const setEditando = onEditar;
     const [guardando, setGuardando] = useState(false);
     const [error, setError] = useState('');
 
@@ -57,7 +60,7 @@ export default function EmpleadosPlanilla({ empleados, listos = true, onCambio }
                 {!editando && (
                     <button type="button" onClick={() => setEditando({})}
                         className="inline-flex items-center gap-1.5 px-4 py-2 bg-bikitchen-orange hover:bg-bikitchen-orange-dark text-white text-sm font-bold rounded-xl">
-                        <UserPlus size={16} aria-hidden="true" /> Agregar
+                        <UserPlus size={16} aria-hidden="true" /> Agregar empleado
                     </button>
                 )}
             </div>

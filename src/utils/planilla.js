@@ -48,42 +48,55 @@ export const siguienteMarca = (marcasDelDia = []) => {
     return ultima?.tipo === 'entrada' ? 'salida' : 'entrada';
 };
 
-/** ¿Está adentro ahora? y desde cuándo. */
+/** Salir a almorzar es una salida con `motivo: 'almuerzo'`; volver, una entrada con el mismo motivo. */
+export const esAlmuerzo = (m) => m?.motivo === 'almuerzo';
+
+/** ¿Está adentro ahora? desde cuándo, y si salió a almorzar. */
 export const estadoActual = (marcasDelDia = []) => {
     const ultima = ordenar(marcasDelDia).at(-1);
-    return ultima?.tipo === 'entrada'
-        ? { adentro: true, desde: ultima.en }
-        : { adentro: false, desde: ultima?.en || null };
+    if (ultima?.tipo === 'entrada') return { adentro: true, almorzando: false, desde: ultima.en };
+    return { adentro: false, almorzando: ultima?.tipo === 'salida' && esAlmuerzo(ultima), desde: ultima?.en || null };
 };
+
+const minutosEntre = (a, b) => Math.max(0, Math.round((new Date(b) - new Date(a)) / 60000));
 
 /**
  * Los tramos trabajados de un día: cada entrada con su salida.
  * Una entrada sin salida queda ABIERTA (no se paga hasta que se corrija) y una
  * salida sin entrada se avisa: las dos son olvidos que hay que arreglar.
+ *
+ * El almuerzo NO se paga: es el rato entre "salir a almorzar" y la entrada que
+ * sigue. Queda en `almuerzo` (minutos) para que se vea cuánto duró. Si el día
+ * termina en "salir a almorzar", se avisa: o no volvió a marcar, o se fue.
  */
 export const tramosDelDia = (marcasDelDia = []) => {
     const tramos = [];
     const avisos = [];
     let abierta = null;
+    let almuerzo = 0;
+    let saliendoAAlmorzar = null;
     ordenar(marcasDelDia).forEach((m) => {
         if (m.tipo === 'entrada') {
             if (abierta) avisos.push(`Entrada de las ${horaCR(abierta.en)} sin salida`);
+            if (saliendoAAlmorzar) almuerzo += minutosEntre(saliendoAAlmorzar.en, m.en);
+            saliendoAAlmorzar = null;
             abierta = m;
         } else if (m.tipo === 'salida') {
             if (!abierta) {
                 avisos.push(`Salida de las ${horaCR(m.en)} sin entrada`);
                 return;
             }
-            const minutos = Math.max(0, Math.round((new Date(m.en) - new Date(abierta.en)) / 60000));
-            tramos.push({ entrada: abierta, salida: m, minutos });
+            tramos.push({ entrada: abierta, salida: m, minutos: minutosEntre(abierta.en, m.en) });
             abierta = null;
+            saliendoAAlmorzar = esAlmuerzo(m) ? m : null;
         }
     });
     if (abierta) {
         tramos.push({ entrada: abierta, salida: null, minutos: 0 });
         avisos.push(`Falta la salida (entró a las ${horaCR(abierta.en)})`);
     }
-    return { tramos, avisos };
+    if (saliendoAAlmorzar) avisos.push(`Salió a almorzar a las ${horaCR(saliendoAAlmorzar.en)} y no volvió a marcar`);
+    return { tramos, avisos, almuerzo, almorzandoDesde: saliendoAAlmorzar?.en || null };
 };
 
 /** Lo que se le paga por los minutos de UN día. */
@@ -117,6 +130,7 @@ export const diasDeLaSemana = (lunes) =>
  *
  * Con `hoy`, el turno que sigue abierto HOY no es un olvido: la persona todavía
  * está trabajando. Ese día lleva `enTurno` (desde cuándo) y no cuenta como aviso.
+ * Igual el almuerzo de hoy sin vuelta: `enAlmuerzo` (todavía está almorzando).
  */
 export const planillaDe = (empleados = [], marcas = [], dias = [], hoy = null) => (empleados || []).map((empleado) => {
     const suyas = (marcas || []).filter(m => m.empleadoId === empleado.id);
@@ -126,13 +140,14 @@ export const planillaDe = (empleados = [], marcas = [], dias = [], hoy = null) =
     let avisos = 0;
     dias.forEach((fecha) => {
         const delDia = suyas.filter(m => m.fecha === fecha);
-        const { tramos, avisos: todos } = tramosDelDia(delDia);
+        const { tramos, avisos: todos, almuerzo, almorzandoDesde } = tramosDelDia(delDia);
         const abierto = tramos.at(-1)?.salida === null ? tramos.at(-1).entrada.en : null;
         const enTurno = fecha === hoy ? abierto : null;
-        const avisosDia = enTurno ? todos.filter(a => !/^Falta la salida/.test(a)) : todos;
+        const enAlmuerzo = fecha === hoy ? almorzandoDesde : null;
+        const avisosDia = todos.filter(a => !(enTurno && /^Falta la salida/.test(a)) && !(enAlmuerzo && /^Salió a almorzar/.test(a)));
         const minutos = tramos.reduce((s, t) => s + t.minutos, 0);
         const pago = pagoDelDia(minutos, empleado.tarifaHora);
-        porDia[fecha] = { tramos, avisos: avisosDia, minutos, ...pago, marcas: delDia, enTurno };
+        porDia[fecha] = { tramos, avisos: avisosDia, minutos, ...pago, marcas: delDia, enTurno, enAlmuerzo, almuerzo };
         totalMinutos += minutos;
         totalMonto += pago.monto;
         avisos += avisosDia.length;

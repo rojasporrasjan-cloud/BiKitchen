@@ -22,8 +22,9 @@ export const filasDelDetalle = (planilla, dias) => planilla.flatMap(({ empleado,
         Fecha: fecha,
         Empleado: empleado.nombre,
         Entrada: horaCR(t.entrada.en),
-        Salida: t.salida ? horaCR(t.salida.en) : 'FALTA',
+        Salida: t.salida ? `${horaCR(t.salida.en)}${t.salida.motivo === 'almuerzo' ? ' (almuerzo)' : ''}` : 'FALTA',
         Horas: horas(t.minutos),
+        'Almuerzo (min)': i === 0 && dia.almuerzo ? dia.almuerzo : '',
         '₡ del día': i === dia.tramos.length - 1 ? dia.monto : '',
         Avisos: i === 0 ? dia.avisos.join(' · ') : ''
     }));
@@ -36,7 +37,7 @@ export const descargarPlanilla = async (planilla, dias) => {
     resumen['!cols'] = [{ wch: 20 }, { wch: 11 }, ...dias.map(() => ({ wch: 13 })), { wch: 11 }, { wch: 11 }, { wch: 12 }];
     XLSX.utils.book_append_sheet(libro, resumen, 'Resumen');
     const detalle = XLSX.utils.json_to_sheet(filasDelDetalle(planilla, dias));
-    detalle['!cols'] = [{ wch: 12 }, { wch: 20 }, { wch: 11 }, { wch: 11 }, { wch: 8 }, { wch: 11 }, { wch: 40 }];
+    detalle['!cols'] = [{ wch: 12 }, { wch: 20 }, { wch: 11 }, { wch: 22 }, { wch: 8 }, { wch: 14 }, { wch: 11 }, { wch: 40 }];
     XLSX.utils.book_append_sheet(libro, detalle, 'Detalle por día');
     XLSX.writeFile(libro, `Planilla BiKitchen ${dias[0]} al ${dias[6]}.xlsx`);
 };

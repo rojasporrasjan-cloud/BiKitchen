@@ -7,12 +7,17 @@
  *
  * EL RELOJ (sin sesión, con el código del link):
  *   { accion: 'reloj', codigo }                       → empleados activos y si están adentro hoy
- *   { accion: 'marcar', codigo, empleadoId, pin }     → marca entrada o salida con la hora DEL SERVIDOR
+ *   { accion: 'marcar', codigo, empleadoId, pin, idMarca, tipo, motivo, hace }
+ *                                                     → entrada, salida, o almuerzo (motivo: 'almuerzo')
  *
- * EL PANEL (solo el dueño, token de Firebase):
+ * GINA (sin sesión, con SU código, solo ver):
+ *   { accion: 'verGina', codigo, desde, hasta }       → empleados (sin PIN) y marcas de esas fechas
+ *
+ * EL PANEL (token de Firebase): las admins (Gina) solo 'empleados' y 'marcas', para VER;
+ * todo lo demás, solo el dueño:
  *   { accion: 'empleados' } · { accion: 'guardarEmpleado', empleado }
  *   { accion: 'marcas', desde, hasta } · { accion: 'agregarMarca', marca } · { accion: 'borrarMarca', id }
- *   { accion: 'link' }                                → el link del reloj
+ *   { accion: 'link' } · { accion: 'linkGina' }       → el link del reloj / el de Gina
  *
  * Todo pasa por acá y no por las reglas de Firestore: el iPad no tiene sesión,
  * y así las colecciones `empleados` y `marcas_reloj` quedan cerradas al navegador.
@@ -55,14 +60,18 @@ const json = (statusCode, body) => ({
     body: JSON.stringify(body)
 });
 
-export const codigoDelReloj = () => crypto
+const firma = (texto) => crypto
     .createHmac('sha256', process.env.CAMBIOS_SECRETO || '')
-    .update(`reloj|bikitchen|${VERSION}`)
+    .update(`${texto}|${VERSION}`)
     .digest('base64url')
     .slice(0, 24);
 
-const codigoValido = (codigo) => {
-    const esperado = Buffer.from(codigoDelReloj());
+/** El link del iPad (marcar) y el de Gina (ver la planilla): firmas distintas, uno no abre el otro. */
+export const codigoDelReloj = () => firma('reloj|bikitchen');
+export const codigoDeGina = () => firma('planilla-gina|bikitchen');
+
+const codigoValido = (codigo, deQuien = codigoDelReloj) => {
+    const esperado = Buffer.from(deQuien());
     const recibido = Buffer.from(String(codigo || ''));
     return esperado.length === recibido.length && crypto.timingSafeEqual(esperado, recibido);
 };
@@ -70,16 +79,33 @@ const codigoValido = (codigo) => {
 const superAdmins = () => (process.env.SUPER_ADMIN_EMAILS || 'rojasporrasjan@gmail.com')
     .split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
 
-const esDueno = async (authHeader) => {
+// Los mismos admins que deja entrar el panel: la lista de correos o el rol 'admin' del usuario
+const correosDeAdmin = () => (process.env.ADMIN_EMAILS || process.env.VITE_ADMIN_EMAILS || '')
+    .split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
+
+/**
+ * Quién llama: 'dueno' (todo), 'admin' (solo VER la planilla: Gina en el
+ * panel) o un error. El rol de admin se lee del usuario solo si el correo no
+ * está en las listas (una lectura).
+ */
+const quienEs = async (authHeader) => {
     const idToken = String(authHeader || '').replace(/^Bearer\s+/i, '').trim();
-    if (!idToken || !auth) return 'Falta la sesión.';
+    if (!idToken || !auth) return { error: 'Falta la sesión.' };
+    let decoded;
     try {
-        const decoded = await auth.verifyIdToken(idToken);
-        return superAdmins().includes(String(decoded.email || '').toLowerCase()) ? null : 'Esta pantalla es solo para el dueño.';
+        decoded = await auth.verifyIdToken(idToken);
     } catch {
-        return 'La sesión venció. Volvé a entrar.';
+        return { error: 'La sesión venció. Volvé a entrar.' };
     }
+    const correo = String(decoded.email || '').toLowerCase();
+    if (superAdmins().includes(correo)) return { rol: 'dueno' };
+    if (correosDeAdmin().includes(correo)) return { rol: 'admin' };
+    const usuario = await db.collection('users').doc(decoded.uid).get();
+    const rol = String(usuario.exists ? usuario.data().role || '' : '').toLowerCase();
+    return rol === 'admin' ? { rol: 'admin' } : { error: 'Esta pantalla es solo para administradores.' };
 };
+
+const SOLO_VER = ['empleados', 'marcas'];
 
 const leerEmpleados = async () => (await db.collection(EMPLEADOS).get()).docs
     .map(d => ({ id: d.id, ...d.data() }))
@@ -124,9 +150,12 @@ const ID_MARCA = /^[A-Za-z0-9_-]{8,64}$/;
 const HACE_MAXIMO = 24 * 60 * 60 * 1000;
 const SIN_INTERNET_DESDE = 2 * 60 * 1000;
 
-const marcar = async ({ empleadoId, pin, idMarca, tipo, hace }, ahora = new Date()) => {
+const motivoValido = (motivo) => [undefined, null, '', 'almuerzo'].includes(motivo);
+
+const marcar = async ({ empleadoId, pin, idMarca, tipo, motivo, hace }, ahora = new Date()) => {
     if (idMarca !== undefined && !ID_MARCA.test(String(idMarca))) return json(400, { error: 'Marca inválida.' });
     if (tipo !== undefined && !['entrada', 'salida'].includes(tipo)) return json(400, { error: 'Marca inválida.' });
+    if (!motivoValido(motivo)) return json(400, { error: 'Marca inválida.' });
     const atraso = Number(hace || 0);
     if (!Number.isFinite(atraso) || atraso < 0 || atraso > HACE_MAXIMO) return json(400, { error: 'Esa marca es de hace más de un día. Avisale a Jan.' });
 
@@ -144,7 +173,7 @@ const marcar = async ({ empleadoId, pin, idMarca, tipo, hace }, ahora = new Date
         const yaEsta = await t.get(marcaRef);
         if (yaEsta.exists) {
             const m = yaEsta.data();
-            return json(200, { tipo: m.tipo, en: m.en, nombre: m.nombre, repetida: false });
+            return json(200, { tipo: m.tipo, motivo: m.motivo || null, en: m.en, nombre: m.nombre });
         }
         const candado = db.collection(ESTADO).doc(snap.id);
         await t.get(candado);
@@ -169,11 +198,12 @@ const marcar = async ({ empleadoId, pin, idMarca, tipo, hace }, ahora = new Date
             tipo: toca,
             en: en.toISOString(),
             fecha,
-            origen: atraso > SIN_INTERNET_DESDE ? 'reloj-sin-internet' : 'reloj'
+            origen: atraso > SIN_INTERNET_DESDE ? 'reloj-sin-internet' : 'reloj',
+            ...(motivo === 'almuerzo' ? { motivo } : {})
         };
         t.set(candado, { ultima: marca.en, actualizado: ahora.toISOString() });
         t.create(marcaRef, marca);
-        return json(200, { tipo: marca.tipo, en: marca.en, nombre: empleado.nombre });
+        return json(200, { tipo: marca.tipo, motivo: marca.motivo || null, en: marca.en, nombre: empleado.nombre });
     });
 };
 
@@ -207,16 +237,33 @@ const guardarEmpleado = async ({ empleado = {} }) => {
     return json(200, { id: ref.id });
 };
 
-const marcas = async ({ desde, hasta }) => {
-    if (!FECHA.test(String(desde)) || !FECHA.test(String(hasta))) return json(400, { error: 'Fechas inválidas.' });
+// Regla 17: nunca más de dos meses de marcas en una consulta
+const DIAS_MAXIMOS = 62;
+const leerMarcas = async (desde, hasta) => {
+    if (!FECHA.test(String(desde)) || !FECHA.test(String(hasta)) || desde > hasta) return null;
+    if ((new Date(hasta) - new Date(desde)) / 86400000 > DIAS_MAXIMOS) return null;
     const snap = await db.collection(MARCAS).where('fecha', '>=', desde).where('fecha', '<=', hasta).get();
-    return json(200, { marcas: snap.docs.map(d => ({ id: d.id, ...d.data() })) });
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+};
+
+const marcas = async ({ desde, hasta }) => {
+    const lista = await leerMarcas(desde, hasta);
+    return lista ? json(200, { marcas: lista }) : json(400, { error: 'Fechas inválidas.' });
+};
+
+/** Lo que ve Gina con su link: lo mismo que la planilla del panel, sin PIN y sin poder cambiar nada. */
+const verGina = async ({ desde, hasta }) => {
+    const lista = await leerMarcas(desde, hasta);
+    if (!lista) return json(400, { error: 'Fechas inválidas.' });
+    const empleados = (await leerEmpleados()).map(({ pin, ...e }) => ({ ...e, tienePin: !!pin }));
+    return json(200, { empleados, marcas: lista, ahora: new Date().toISOString() });
 };
 
 // Las correcciones del panel pasan por el mismo candado que el iPad
 const agregarMarca = async ({ marca = {} }) => {
-    const { empleadoId, fecha, hora, tipo, nota } = marca;
+    const { empleadoId, fecha, hora, tipo, motivo, nota } = marca;
     if (!['entrada', 'salida'].includes(tipo)) return json(400, { error: 'Tiene que ser entrada o salida.' });
+    if (!motivoValido(motivo)) return json(400, { error: 'Marca inválida.' });
     if (!FECHA.test(String(fecha))) return json(400, { error: 'Fecha inválida.' });
     if (!HORA.test(String(hora))) return json(400, { error: 'Hora inválida.' });
     const en = momentoCR(fecha, hora);
@@ -229,7 +276,8 @@ const agregarMarca = async ({ marca = {} }) => {
         t.set(candado, { ultima: en, actualizado: new Date().toISOString() });
         t.create(ref, {
             empleadoId: snap.id, nombre: snap.data().nombre, tipo, en, fecha,
-            origen: 'panel', nota: String(nota || 'Corregida a mano')
+            origen: 'panel', nota: String(nota || 'Corregida a mano'),
+            ...(motivo === 'almuerzo' ? { motivo } : {})
         });
     });
     return json(200, { id: ref.id });
@@ -266,14 +314,24 @@ export const handler = async (event) => {
             if (!codigoValido(entrada.codigo)) return json(404, { error: 'Este link del reloj no es válido. Pedile uno nuevo a Jan.' });
             return accion === 'reloj' ? await reloj() : await marcar(entrada);
         }
-        const motivo = await esDueno(event.headers?.authorization);
-        if (motivo) return json(403, { error: motivo });
-        if (accion === 'empleados') return json(200, { empleados: await leerEmpleados() });
+        if (accion === 'verGina') {
+            if (!codigoValido(entrada.codigo, codigoDeGina)) return json(404, { error: 'Este link no es válido. Pedile uno nuevo a Jan.' });
+            return await verGina(entrada);
+        }
+        const quien = await quienEs(event.headers?.authorization);
+        if (quien.error) return json(403, { error: quien.error });
+        if (quien.rol !== 'dueno' && !SOLO_VER.includes(accion)) return json(403, { error: 'Solo Jan puede cambiar la planilla.' });
+        if (accion === 'empleados') {
+            const empleados = await leerEmpleados();
+            // El PIN de cada persona solo lo ve el dueño
+            return json(200, { empleados: quien.rol === 'dueno' ? empleados : empleados.map(({ pin, ...e }) => ({ ...e, tienePin: !!pin })) });
+        }
         if (accion === 'guardarEmpleado') return await guardarEmpleado(entrada);
         if (accion === 'marcas') return await marcas(entrada);
         if (accion === 'agregarMarca') return await agregarMarca(entrada);
         if (accion === 'borrarMarca') return await borrarMarca(entrada);
         if (accion === 'link') return json(200, { url: `${SITIO}/reloj/${codigoDelReloj()}` });
+        if (accion === 'linkGina') return json(200, { url: `${SITIO}/planilla/${codigoDeGina()}` });
         return json(400, { error: 'Acción desconocida.' });
     } catch (err) {
         console.error('[Planilla] Error:', err);

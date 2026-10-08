@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChevronLeft, ChevronRight, Download, RefreshCw, Wallet, Clock, UserCheck, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download, RefreshCw, Wallet, Clock, UserCheck, AlertTriangle, CheckCircle2, UserPlus } from 'lucide-react';
 import { colones, duracion } from '../../utils/planilla';
 
 /** Arriba de la planilla: la semana, los botones y los cuatro números que importan. */
@@ -22,7 +22,7 @@ const Numero = ({ icono: Icono, valor, etiqueta, tono }) => (
 
 export default function EncabezadoPlanilla({
     dias, esEstaSemana, cargando, totalSemana, totalMinutos, adentro, olvidos,
-    onSemana, onEstaSemana, onActualizar, onExcel, puedeExcel
+    onSemana, onEstaSemana, onActualizar, onExcel, puedeExcel, onAgregarEmpleado
 }) {
     const boton = 'inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-bold rounded-xl transition-colors';
     return (
@@ -61,6 +61,11 @@ export default function EncabezadoPlanilla({
                     <button type="button" onClick={onExcel} disabled={!puedeExcel} className={`${boton} bg-white text-orange-600 hover:bg-orange-50 shadow-sm disabled:opacity-50`}>
                         <Download size={15} aria-hidden="true" /> Descargar Excel
                     </button>
+                    {onAgregarEmpleado && (
+                        <button type="button" onClick={onAgregarEmpleado} className={`${boton} bg-gray-900 text-white hover:bg-gray-800 shadow-sm`}>
+                            <UserPlus size={15} aria-hidden="true" /> Agregar empleado
+                        </button>
+                    )}
                 </div>
             </header>
 

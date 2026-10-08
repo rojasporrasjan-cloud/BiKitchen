@@ -14,8 +14,13 @@ const estadoDeHoy = ({ empleado, porDia }, hoy, ahora) => {
     if (!dia || dia.marcas.length === 0) return { tipo: 'sinMarcar' };
     const minutos = dia.minutos + (dia.enTurno ? Math.max(0, Math.round((ahora - new Date(dia.enTurno)) / MINUTO)) : 0);
     const { monto } = pagoDelDia(minutos, empleado.tarifaHora);
-    return { tipo: dia.enTurno ? 'adentro' : 'salio', minutos, monto, desde: dia.enTurno, avisos: dia.avisos.length };
+    let tipo = 'salio';
+    if (dia.enTurno) tipo = 'adentro';
+    else if (dia.enAlmuerzo) tipo = 'almorzando';
+    return { tipo, minutos, monto, desde: dia.enTurno || dia.enAlmuerzo, avisos: dia.avisos.length };
 };
+
+const FONDOS = { adentro: 'bg-emerald-50', almorzando: 'bg-yellow-50', salio: 'bg-gray-50', sinMarcar: 'bg-gray-50' };
 
 export default function HoyEnLaCocina({ planilla, hoy }) {
     const [ahora, setAhora] = useState(() => Date.now());
@@ -29,7 +34,7 @@ export default function HoyEnLaCocina({ planilla, hoy }) {
         .map(p => ({ ...p, hoyEs: estadoDeHoy(p, hoy, ahora) }));
     if (filas.length === 0) return null;
 
-    const orden = { adentro: 0, salio: 1, sinMarcar: 2 };
+    const orden = { adentro: 0, almorzando: 1, salio: 2, sinMarcar: 3 };
     filas.sort((a, b) => orden[a.hoyEs.tipo] - orden[b.hoyEs.tipo]);
     const adentro = filas.filter(f => f.hoyEs.tipo === 'adentro').length;
     const llevaHoy = filas.reduce((s, f) => s + (f.hoyEs.monto || 0), 0);
@@ -50,7 +55,7 @@ export default function HoyEnLaCocina({ planilla, hoy }) {
             </div>
             <ul className="grid sm:grid-cols-2 xl:grid-cols-3 gap-2 mt-4">
                 {filas.map(({ empleado, hoyEs }) => (
-                    <li key={empleado.id} className={`flex items-center gap-3 p-3 rounded-2xl ${hoyEs.tipo === 'adentro' ? 'bg-emerald-50' : 'bg-gray-50'}`}>
+                    <li key={empleado.id} className={`flex items-center gap-3 p-3 rounded-2xl ${FONDOS[hoyEs.tipo]}`}>
                         <span className="relative shrink-0" aria-hidden="true">
                             <span className={`flex items-center justify-center w-10 h-10 rounded-full ${tonoDe(empleado.color).solido} text-white text-sm font-black ${hoyEs.tipo === 'sinMarcar' ? 'opacity-40' : ''}`}>
                                 {iniciales(empleado.nombre)}
@@ -61,12 +66,13 @@ export default function HoyEnLaCocina({ planilla, hoy }) {
                             <span className={`block font-bold truncate ${hoyEs.tipo === 'sinMarcar' ? 'text-gray-400' : 'text-gray-900'}`}>{empleado.nombre}</span>
                             <span className="block text-xs font-semibold text-gray-500">
                                 {hoyEs.tipo === 'adentro' && `Desde ${horaCR(hoyEs.desde)} · lleva ${duracion(hoyEs.minutos)}`}
+                                {hoyEs.tipo === 'almorzando' && `Almorzando desde ${horaCR(hoyEs.desde)} · lleva ${duracion(hoyEs.minutos)}`}
                                 {hoyEs.tipo === 'salio' && `Ya se fue · ${duracion(hoyEs.minutos)}${hoyEs.avisos ? ' · revisar' : ''}`}
                                 {hoyEs.tipo === 'sinMarcar' && 'No ha marcado hoy'}
                             </span>
                         </span>
                         {hoyEs.tipo !== 'sinMarcar' && (
-                            <span className={`shrink-0 text-sm font-black ${hoyEs.tipo === 'adentro' ? 'text-emerald-700' : 'text-gray-700'}`}>{colones(hoyEs.monto)}</span>
+                            <span className={`shrink-0 text-sm font-black ${hoyEs.tipo === 'adentro' ? 'text-emerald-700' : 'text-gray-700'}`}>{hoyEs.monto ? colones(hoyEs.monto) : '—'}</span>
                         )}
                     </li>
                 ))}
