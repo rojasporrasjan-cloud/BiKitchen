@@ -222,12 +222,27 @@ colecciones enteras. El panel lee el estado por la función `kommo` (acción
   Las de antes del 8 oct NO están en el registro (HOY5, proteínas, two pack): la
   medición a mano está en la Bitácora de CONTEXTO.md (8 oct (7)).
 
-### 8 oct 2026 (tarde) — envíos nuevos para vender más (APAGADOS hasta que Jan diga)
+### 8 oct 2026 (tarde) — envíos nuevos para vender más (PRENDIDOS el 8 oct, ver abajo)
 | Envío | Función | Cuándo (CR) | Interruptor | Bot | Plantilla |
 |---|---|---|---|---|---|
-| Seguimiento a quien preguntó | `seguimiento-consulta` | cada hora 8 a. m.–8 p. m. (escribió hace 18–24 h, sin pedido; 1 cada 7 días; en prueba 1 muestra al día) | `SEGUIMIENTO_AUTOMATICO` | `KOMMO_BOT_SEGUIMIENTO` = 118342 (mensaje libre, sin plantilla, sin disparador; falta ponerlo en Netlify) | — |
+| Seguimiento a quien preguntó | `seguimiento-consulta` | cada hora 8 a. m.–8 p. m. (escribió hace 18–24 h y NUNCA compró; 1 cada 7 días; en prueba 1 muestra al día) | `SEGUIMIENTO_AUTOMATICO` | `KOMMO_BOT_SEGUIMIENTO` = 118342 (mensaje libre, sin plantilla, sin disparador) | — |
 | Pasate al mensual | `pasate-al-mensual` | martes 11 a. m. | `PASATE_MENSUAL_AUTOMATICO` | `KOMMO_BOT_PASATE_MENSUAL` = 117990 | `pasate_al_mensual_desayunos` |
 | Menú de la semana por tipo | `menu-de-la-semana` | lunes 4 p. m. (terminó ese tipo hace 3–8 semanas) | `MENU_SEMANA_AUTOMATICO` | `KOMMO_BOT_MENU_KETO` = 117996 · `_BAJO_CALORIAS` = 117998 · `_CASADITOS` = 118000 · `_FAMILIAR` = 118002 | `menu_semana_*` |
 
 Bienvenida: el texto está en `docs/BIENVENIDA_PARA_GINA.md` (falta que Gina lo apruebe).
-Todo aparece en el panel: Listas de Difusión → Cronograma de los WhatsApp.
+
+### 8 oct 2026 (noche) — qué quedó prendido (Jan: "que todo esté prendido si funciona bien")
+- En "si" (les llega a los clientes): seguimiento, pasate al mensual, menú de la semana,
+  renovación, cierre de pedidos, hoy te llega, guía de congelado y ¿qué tal todo?
+- El cierre con "si" manda de verdad desde el **lunes 12 oct** (`CIERRE_DE_VERDAD_DESDE`):
+  los envíos a mano del 6–8 oct no quedaron contados en `kommo_contactos`.
+- Siguen en prueba:
+  - Link de cambios del miércoles: Jan dice que no explica cómo usarlo y la gente se
+    confunde.
+  - Recordatorio de pago y pago recibido: decisión de Jan, confirmar = pagado.
+  - Volver a invitar: espera que Meta apruebe `volver_a_invitar_10`.
+- Reglas contra spam: máximo 2 de marketing por semana, el mismo mensaje no se repite
+  antes de 14 días, nada a clientes activos (por teléfono o nombre completo) ni a
+  "no molestar". El seguimiento es solo para quien nunca compró.
+- Todo se ve en el panel → **WhatsApp (Kommo)** (`/admin/kommo`): qué está prendido,
+  mensajes de hoy, gasto del mes, conexión y a quién le llegó cada envío.
