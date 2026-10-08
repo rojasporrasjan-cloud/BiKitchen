@@ -31,6 +31,7 @@ describe('el cronograma de los WhatsApp en el panel', () => {
         // Lo de Kommo y lo que se manda a mano
         expect(screen.getByText(/Bot- Bievenida/)).toBeTruthy();
         expect(screen.getByText('pasate_al_mensual_desayunos')).toBeTruthy();
-        expect(screen.getByText('Seguimiento a las 20 horas')).toBeTruthy();
+        expect(screen.getByText('Bot de bienvenida mejorado')).toBeTruthy();
+        expect(screen.getByText('Seguimiento a quien preguntó')).toBeTruthy();
     });
 });

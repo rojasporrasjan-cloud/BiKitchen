@@ -34,6 +34,7 @@ export const leerCron = (cron) => {
     const [min, hora, , , dow] = String(cron || '').trim().split(/\s+/);
     const diasUtc = !dow || dow === '*' ? [0, 1, 2, 3, 4, 5, 6] : dow.split(',').map(Number);
     if (/^\*\/\d+$/.test(min)) return { cadaMinutos: Number(min.slice(2)), hora: null, minuto: 0, dias: diasUtc };
+    if (hora === '*') return { cadaMinutos: 60, hora: null, minuto: Number(min) || 0, dias: diasUtc };
     const hUtc = Number(hora);
     let hCr = hUtc + OFFSET_CR;
     let corrimiento = 0;
@@ -47,6 +48,7 @@ export const cronEnPalabras = (cron) => {
     const c = leerCron(cron);
     const todos = c.dias.length === 7;
     const dias = todos ? 'Todos los días' : mayuscula(lista(c.dias.map(d => DIAS[d])));
+    if (c.cadaMinutos === 60) return `${dias} · cada hora`;
     return c.cadaMinutos ? `${dias} · cada ${c.cadaMinutos} min` : `${dias} · ${horaEnPalabras(c.hora, c.minuto)}`;
 };
 

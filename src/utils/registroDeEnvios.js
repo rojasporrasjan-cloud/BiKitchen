@@ -110,6 +110,42 @@ export const TIPOS_DE_ENVIO = [
         texto: 'Hola [nombre] 👋 ¡Te extrañamos en BiKitchen! Ya está el menú nuevo de la semana. Tu próximo pack lleva 15% de descuento. Respondé este mensaje y te ayudamos a armar tu pedido 🍽️',
         pendiente: 'Jan pidió 10 % (8 oct): falta la plantilla nueva en Kommo; esta aprobada dice 15 %.'
     },
+    // Para vender más (Jan, 8 oct 2026: "si, deja todo listo"). Vienen APAGADOS.
+    {
+        id: 'seguimiento', label: 'Seguimiento a quien preguntó',
+        cuando: 'Cada hora de 8 a. m. a 8 p. m. — escribió hace 18 a 24 h y no tiene pedido',
+        interruptor: 'SEGUIMIENTO_AUTOMATICO', bot: 'KOMMO_BOT_SEGUIMIENTO',
+        funcion: 'seguimiento-consulta',
+        horario: '15 * * * *',
+        clase: 'Servicio',
+        plantilla: 'Sin plantilla: mensaje libre del bot (dentro de las 24 h)',
+        a: 'Escribió hace 18 a 24 h y no tiene pedido (de 8 a. m. a 8 p. m., una vez cada 7 días)',
+        texto: '¡Hola! 👋 ¿Pudiste ver los planes de BiKitchen? Si querés, te ayudo a escoger el pack que mejor te queda (bajo en calorías, keto, casaditos o familiar) y te digo qué días entregamos en tu zona. ¿Para cuántas personas sería? 🍽️',
+        pendiente: 'Falta crear en Kommo el bot con este texto (sin plantilla y sin disparador) y ponerlo en Netlify.'
+    },
+    {
+        id: 'pasate-mensual', label: 'Pasate al mensual',
+        cuando: 'Martes 11 a. m. — compran semanal y no tienen mensual (Marketing)',
+        interruptor: 'PASATE_MENSUAL_AUTOMATICO', bot: 'KOMMO_BOT_PASATE_MENSUAL',
+        funcion: 'pasate-al-mensual',
+        horario: '0 17 * * 2',
+        clase: 'Marketing',
+        plantilla: 'pasate_al_mensual_desayunos (bot 117990)',
+        a: 'Compran pack semanal (entrega en los últimos 7 días o por venir) y no tienen un mensual',
+        texto: 'Oferta: pasarse al pack mensual con los desayunos de regalo el primer mes. El texto exacto está en Kommo → Plantillas.'
+    },
+    {
+        id: 'menu-semana', label: 'Menú de la semana por tipo de pack',
+        cuando: 'Lunes 4 p. m. — compraron ese tipo hace 3 a 8 semanas y no volvieron (Marketing)',
+        interruptor: 'MENU_SEMANA_AUTOMATICO', bot: 'KOMMO_BOT_MENU_BAJO_CALORIAS',
+        botsExtra: ['KOMMO_BOT_MENU_KETO', 'KOMMO_BOT_MENU_CASADITOS', 'KOMMO_BOT_MENU_FAMILIAR'],
+        funcion: 'menu-de-la-semana',
+        horario: '0 22 * * 1',
+        clase: 'Marketing',
+        plantilla: 'menu_semana_bajo_calorias (117998) · menu_semana_keto (117996) · menu_semana_casaditos (118000) · menu_semana_familiar (118002)',
+        a: 'Compraron ese tipo de pack y su última entrega fue hace 3 a 8 semanas, sin nada después',
+        texto: 'El menú de la semana de su tipo de pack. El texto exacto de cada uno está en Kommo → Plantillas. Si Gina no pasó el menú nuevo a tiempo, dejarlo apagado esa semana.'
+    },
     // Fase 3 de docs/PLAN_DIFUSIONES_AUTOMATICAS.md (6 oct 2026). Un interruptor
     // para los tres cierres; cada día tiene su bot (KOMMO_BOT_CIERRE_SABADO y
     // KOMMO_BOT_CIERRE_LUNES además de este). Sin el bot de ese día, ese no sale.

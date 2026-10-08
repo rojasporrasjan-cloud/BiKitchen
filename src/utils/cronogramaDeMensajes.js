@@ -23,7 +23,7 @@ export const BOTS_DE_KOMMO = [
 
 /** Plantillas aprobadas por Meta, con bot, que hoy se mandan a mano desde Listas de Difusión. */
 export const PLANTILLAS_A_MANO = [
-    { nombre: 'Pasate al mensual', plantilla: 'pasate_al_mensual_desayunos', bot: '117990', clase: 'Marketing', para: 'A quien compra semanal: desayunos de regalo el primer mes' },
+    { nombre: 'Pasate al mensual', plantilla: 'pasate_al_mensual_desayunos', bot: '117990', clase: 'Marketing', para: 'A quien compra semanal: desayunos de regalo el primer mes (también sale solo los martes, ver arriba)' },
     { nombre: 'Menú de la semana — Keto', plantilla: 'menu_semana_keto', bot: '117996', clase: 'Marketing', para: 'Clientes keto' },
     { nombre: 'Menú de la semana — Bajo en calorías', plantilla: 'menu_semana_bajo_calorias', bot: '117998', clase: 'Marketing', para: 'Clientes bajo en calorías' },
     { nombre: 'Menú de la semana — Casaditos', plantilla: 'menu_semana_casaditos', bot: '118000', clase: 'Marketing', para: 'Clientes de casaditos' },
@@ -36,14 +36,11 @@ export const PLANTILLAS_A_MANO = [
 
 /** Lo que Jan aprobó y todavía se está haciendo (8 oct 2026). */
 export const EN_CONSTRUCCION = [
-    { nombre: 'Bot de bienvenida mejorado', detalle: 'En segundos: precios, link a planes, días, zonas y "¿qué buscás?". Texto para que Gina lo apruebe.' },
-    { nombre: 'Seguimiento a las 20 horas', detalle: 'Al que preguntó y no compró: "¿te ayudo a escoger tu pack?". Gratis (dentro de las 24 h).' },
-    { nombre: 'Menú de la semana por tipo de pack, solo', detalle: 'Que las plantillas de menú salgan solas a cada tipo de cliente.' },
-    { nombre: '"Pasate al mensual", solo', detalle: 'A quien compra semanal, con desayunos de regalo.' },
+    { nombre: 'Bot de bienvenida mejorado', detalle: 'En segundos: precios, link a planes, días, zonas y "¿qué buscás?". El texto está en docs/BIENVENIDA_PARA_GINA.md: falta que Gina lo apruebe.' },
     { nombre: 'Volver a invitar al 10 %', detalle: 'Plantilla nueva con 10 % (la aprobada dice 15 %).' },
-    { nombre: 'Renovar antes', detalle: 'Una semana antes de la última entrega, además del día final.' },
-    { nombre: 'Ofrecer cenas, desayunos e individuales al confirmar', detalle: 'Para que cada cliente lleve más.' }
-];
+    { nombre: 'Renovar antes', detalle: 'Una semana antes de la última entrega, además del día final. Necesita plantilla nueva.' },
+    { nombre: 'Ofrecer cenas, desayunos e individuales al confirmar', detalle: 'Para que cada cliente lleve más. Necesita plantilla nueva.' }
+]
 
 /** Costo aproximado por mensaje (Meta, Costa Rica). Servicio dentro de 24 h es gratis. */
 export const COSTO_POR_CLASE = { Marketing: 'US$0,074 c/u (cuenta en el tope de US$200 al mes)', Servicio: 'Más barato que marketing; gratis si el cliente escribió en las últimas 24 h' };

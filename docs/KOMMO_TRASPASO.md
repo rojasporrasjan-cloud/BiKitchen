@@ -220,3 +220,13 @@ colecciones enteras. El panel lee el estado por la función `kommo` (acción
   desde el panel quedan registradas (`tipo: 'difusion'`, acción `registrarDifusion`).
   Las de antes del 8 oct NO están en el registro (HOY5, proteínas, two pack): la
   medición a mano está en la Bitácora de CONTEXTO.md (8 oct (7)).
+
+### 8 oct 2026 (tarde) — envíos nuevos para vender más (APAGADOS hasta que Jan diga)
+| Envío | Función | Cuándo (CR) | Interruptor | Bot | Plantilla |
+|---|---|---|---|---|---|
+| Seguimiento a quien preguntó | `seguimiento-consulta` | cada hora 8 a. m.–8 p. m. (escribió hace 18–24 h, sin pedido; 1 cada 7 días; en prueba 1 muestra al día) | `SEGUIMIENTO_AUTOMATICO` | `KOMMO_BOT_SEGUIMIENTO` (FALTA crearlo: mensaje libre, sin plantilla, sin disparador) | — |
+| Pasate al mensual | `pasate-al-mensual` | martes 11 a. m. | `PASATE_MENSUAL_AUTOMATICO` | `KOMMO_BOT_PASATE_MENSUAL` = 117990 | `pasate_al_mensual_desayunos` |
+| Menú de la semana por tipo | `menu-de-la-semana` | lunes 4 p. m. (terminó ese tipo hace 3–8 semanas) | `MENU_SEMANA_AUTOMATICO` | `KOMMO_BOT_MENU_KETO` = 117996 · `_BAJO_CALORIAS` = 117998 · `_CASADITOS` = 118000 · `_FAMILIAR` = 118002 | `menu_semana_*` |
+
+Bienvenida: el texto está en `docs/BIENVENIDA_PARA_GINA.md` (falta que Gina lo apruebe).
+Todo aparece en el panel: Listas de Difusión → Cronograma de los WhatsApp.

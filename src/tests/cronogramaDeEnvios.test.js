@@ -14,6 +14,9 @@ import { config as volver } from '../../netlify/functions/volver-a-invitar.js';
 import { config as cierre } from '../../netlify/functions/cierre-de-pedidos.js';
 import { config as sync } from '../../netlify/functions/kommo-sync.js';
 import { config as ventas } from '../../netlify/functions/ventas-por-envio.js';
+import { config as seguimiento } from '../../netlify/functions/seguimiento-consulta.js';
+import { config as pasate } from '../../netlify/functions/pasate-al-mensual.js';
+import { config as menuSemana } from '../../netlify/functions/menu-de-la-semana.js';
 
 /**
  * Jan, 8 oct 2026: el panel tiene que decir a qué hora sale cada mensaje.
@@ -24,7 +27,8 @@ const FUNCIONES = {
     'cambios-miercoles': cambios, 'renovacion-del-dia': renovacion, 'recordatorio-pago': recordatorio,
     'pago-recibido': pagoRecibido, 'hoy-te-llega': hoyTeLlega, 'guia-de-congelado': guia,
     'que-tal-todo': queTal, 'volver-a-invitar': volver, 'cierre-de-pedidos': cierre,
-    'kommo-sync': sync, 'ventas-por-envio': ventas
+    'kommo-sync': sync, 'ventas-por-envio': ventas,
+    'seguimiento-consulta': seguimiento, 'pasate-al-mensual': pasate, 'menu-de-la-semana': menuSemana
 };
 
 describe('el horario del panel es el horario real', () => {
@@ -47,6 +51,7 @@ describe('los horarios en palabras, en hora de Costa Rica', () => {
         expect(cronEnPalabras('0 14 * * 3')).toBe('Miércoles · 8:00 a. m.');
         expect(cronEnPalabras('*/10 * * * *')).toBe('Todos los días · cada 10 min');
         expect(cronEnPalabras('30 5 * * *')).toBe('Todos los días · 11:30 p. m.');
+        expect(cronEnPalabras('15 * * * *')).toBe('Todos los días · cada hora');
     });
 
     it('si al restar 6 horas cambia el día, cambia el día', () => {

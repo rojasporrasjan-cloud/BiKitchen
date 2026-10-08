@@ -10,6 +10,7 @@ import { renovacionesDelDia, destinatarioDeRenovacion } from '../../utils/envioD
 import { sinPagarConEntregaCerca, hoyEnCostaRica, sumarDias } from '../../utils/avisosDePago';
 import { entreganHoy, primeraEntregaHoy, nuevosQueRecibieronAyer, paraVolverAInvitar } from '../../utils/avisosDeEntrega';
 import { cierreDeHoy, clientesSinEntrega, COSTO_MARKETING_USD, PRESUPUESTO_MENSUAL_USD } from '../../utils/cierresDePedidos';
+import { paraPasarseAlMensual, paraMenuDeLaSemana } from '../../utils/enviosDeVentas';
 
 /** El próximo día en que sale un cierre (hoy incluido) y su reparto. */
 const proximoCierre = (hoy) => {
@@ -101,7 +102,10 @@ export default function EnviosAutomaticos({ orders = [], loading = false }) {
         // las aplica el envío con las fichas de Kommo, así que pueden salir menos.
         const cierre = proximoCierre(hoy);
         const cierres = cierre ? clientesSinEntrega(orders, cierre.fechaEntrega).map(i => filaDe(i, registro, 'cierre-pedidos')) : [];
+        const pasate = paraPasarseAlMensual(orders, hoy).map(i => filaDe(i, registro, 'pasate-mensual'));
+        const menu = Object.values(paraMenuDeLaSemana(orders, hoy)).flat().map(i => filaDe(i, registro, 'menu-semana'));
         return {
+            'pasate-mensual': pasate, 'menu-semana': menu,
             renovacion, 'recordatorio-pago': recordatorio, 'pago-recibido': pagoRecibido,
             'hoy-te-llega': hoyTeLlega, 'guia-congelado': guia, 'que-tal': queTal, 'volver-a-invitar': invitar,
             'cierre-pedidos': cierres
@@ -116,6 +120,8 @@ export default function EnviosAutomaticos({ orders = [], loading = false }) {
         'guia-congelado': 'Nadie recibe su primera entrega en el próximo reparto.',
         'que-tal': 'No hay clientes nuevos en el próximo reparto.',
         'volver-a-invitar': 'Nadie terminó hace 2 a 3 semanas sin volver a pedir.',
+        'pasate-mensual': 'Nadie compra semanal sin tener ya un mensual.',
+        'menu-semana': 'Nadie terminó hace 3 a 8 semanas sin volver (o la pantalla no cargó tantas semanas).',
         'cierre-pedidos': 'Todos los clientes de ese día de reparto ya tienen entrega (o la pantalla no cargó las últimas 8 semanas).'
     };
 
@@ -164,7 +170,13 @@ export default function EnviosAutomaticos({ orders = [], loading = false }) {
             <div className="grid gap-3 lg:grid-cols-2">
                 {TIPOS_DE_ENVIO.map(tipo => (
                     <TarjetaDeEnvio key={tipo.id} tipo={tipo} modo={datos?.modos?.[tipo.id]} entradas={delTipo(tipo.id)}
-                        filas={tipo.id === 'cambios' ? null : filas[tipo.id]} vacio={VACIOS[tipo.id]}>
+                        filas={tipo.id === 'cambios' || tipo.id === 'seguimiento' ? null : filas[tipo.id]} vacio={VACIOS[tipo.id]}>
+                        {tipo.id === 'seguimiento' && (
+                            <p className="mt-3 text-sm text-gray-700">
+                                La lista sale de los chats de Kommo (no de los pedidos): se arma cada hora con quien
+                                escribió hace 18 a 24 h y no tiene pedido. Lo que salió queda en &quot;Últimos envíos&quot;.
+                            </p>
+                        )}
                         {tipo.id === 'cambios' && (
                             <p className="mt-3 text-sm text-gray-700">
                                 Quién recibe el link y quién ya eligió está en{' '}
