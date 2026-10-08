@@ -125,6 +125,7 @@ export default function AdminLayout() {
         { type: 'divider', label: 'Solo Dueño', superOnly: true },
         { to: '/admin/whatsapp-import', label: 'Importar WhatsApp', icon: MessageCircle, superOnly: true },
         { to: '/admin/monthly-packs', label: 'Packs Mensuales', icon: CalendarDays, superOnly: true },
+        { to: '/admin/kommo', label: 'WhatsApp (Kommo)', icon: MessageCircle, superOnly: true },
         { to: '/admin/broadcast', label: 'Listas de Difusión', icon: Send, superOnly: true },
         { to: '/admin/cambios-semana', label: 'Cambios de la semana', icon: RefreshCw, superOnly: true },
         { to: '/admin/points-audit', label: 'Auditoría BiPuntos', icon: Award, superOnly: true },

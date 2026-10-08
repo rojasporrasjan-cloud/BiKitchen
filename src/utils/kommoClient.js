@@ -55,10 +55,11 @@ export const recalcularVentasPorEnvio = () => llamar('recalcularVentas');
  * Deja anotada una difusión mandada a mano, para medir después cuánto vendió.
  * Si falla, la difusión ya salió: se avisa en la consola y sigue.
  */
-export const registrarDifusion = async (nombre, destinatarios = []) => {
+export const registrarDifusion = async (nombre, destinatarios = [], tipo = '') => {
     try {
         return await llamar('registrarDifusion', {
             nombre,
+            tipo,
             destinatarios: destinatarios.map(d => ({ nombre: d.nombre || '', telefono: d.telefonoOriginal || d.telefono || '' }))
         });
     } catch (err) {

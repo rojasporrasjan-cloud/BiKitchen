@@ -95,6 +95,8 @@ const WhatsAppImportView = lazyWithRetry(() => import('./pages/admin/WhatsAppImp
 const MonthlyPacksView = lazyWithRetry(() => import('./pages/admin/MonthlyPacksView'));
 const ProteinasSemanalesView = lazyWithRetry(() => import('./pages/admin/ProteinasSemanalesView'));
 const BroadcastView = lazyWithRetry(() => import('./pages/admin/BroadcastView'));
+// WhatsApp (Kommo): qué está prendido, qué salió hoy y el gasto (Jan, 8 oct 2026)
+const KommoView = lazyWithRetry(() => import('./pages/admin/KommoView'));
 // El link de cambios del miércoles: quién lo recibe y qué contestó (docs/AUTOMATIZACION.md)
 const CambiosSemanaView = lazyWithRetry(() => import('./pages/admin/CambiosSemanaView'));
 const PointsAuditView = lazyWithRetry(() => import('./pages/admin/PointsAuditView'));
@@ -327,6 +329,7 @@ function AnimatedRoutes() {
               <Route path="monthly-packs" element={<MonthlyPacksView />} />
               <Route path="proteinas-semanales" element={<ProteinasSemanalesView />} />
               <Route path="broadcast" element={<BroadcastView />} />
+              <Route path="kommo" element={<KommoView />} />
               <Route path="cambios-semana" element={<CambiosSemanaView />} />
               <Route path="points-audit" element={<PointsAuditView />} />
               <Route path="impresion" element={<PrinterView />} />

@@ -203,7 +203,11 @@ export const handler = async (event) => {
                 }));
                 // Cuenta para el tope de 2 por semana y el presupuesto, igual que
                 // los automáticos: si no, el cierre de mañana le escribe de más.
-                await anotarMarketing(db, destinatarios.map(d => d.telefono), new Date(), 'difusion');
+                // `tipo`: si la difusión fue un cierre o un menú mandado a mano, cuenta para
+                // no repetir ESE mensaje antes de 14 días.
+                const TIPOS_DE_MARKETING = ['cierre-pedidos', 'menu-semana', 'pasate-mensual', 'volver-a-invitar'];
+                const tipo = TIPOS_DE_MARKETING.includes(payload.tipo) ? payload.tipo : 'difusion';
+                await anotarMarketing(db, destinatarios.map(d => d.telefono), new Date(), tipo);
             }
             return json(200, { ok: true, registrados: destinatarios.length });
         }
