@@ -18,6 +18,16 @@ export default defineConfig(({ command }) => ({
     host: true,
     port: 5173,
     strictPort: true,
+    // En localhost no corren las funciones de Netlify (daban 404). Solo estas,
+    // que piden la sesión del dueño o un código, se mandan a las publicadas;
+    // pagos y lo demás NO (no se quiere tocar producción desde localhost).
+    proxy: {
+      '^/\\.netlify/functions/(planilla|packs-gina)$': {
+        target: 'https://www.bikitchencr.com',
+        changeOrigin: true,
+        secure: true,
+      },
+    },
   },
   build: {
     rollupOptions: {
