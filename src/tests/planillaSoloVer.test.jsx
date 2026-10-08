@@ -35,6 +35,16 @@ describe('la planilla solo para ver (Gina)', () => {
     });
 });
 
+describe('si no se puede cargar', () => {
+    it('con un link malo se ve el aviso solo, no una planilla en cero que parece "todo bien"', async () => {
+        render(<PantallaPlanilla cargarDatos={async () => { throw new Error('Este link no es válido. Pedile uno nuevo a Jan.'); }} />);
+        expect((await screen.findByRole('alert')).textContent).toMatch(/Este link no es válido/);
+        expect(screen.queryByText('Todo bien')).toBeNull();
+        expect(screen.queryByText('A pagar esta semana')).toBeNull();
+        expect(screen.getByRole('button', { name: /Reintentar/ })).toBeTruthy();
+    });
+});
+
 describe('la planilla de Jan', () => {
     it('tiene todo: agregar empleado arriba, marcar en grupo, los dos links y corregir', async () => {
         render(<PantallaPlanilla cargarDatos={cargarDatos} puedeEditar />);

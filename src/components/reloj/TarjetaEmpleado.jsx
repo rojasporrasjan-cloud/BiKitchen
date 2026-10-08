@@ -8,17 +8,20 @@ import { horaCR, iniciales } from '../../utils/planilla';
  * Abajo dice en grande lo que toca: entrar, volver de almorzar, o (si está
  * adentro) almorzar o irse — eso se elige en la ventana que se abre.
  */
+// La hora nunca se parte en dos renglones ("12:00" arriba y "p. m." abajo)
+const hora = (d) => horaCR(d).replace(/ /g, ' ');
+
 const ESTADOS = {
     adentro: {
-        texto: (d) => `Adentro desde ${horaCR(d)}`, color: 'text-emerald-700',
+        texto: (d) => `Adentro desde ${hora(d)}`, color: 'text-emerald-700',
         pie: 'bg-orange-50 text-bikitchen-orange', accion: <><LogOut size={18} aria-hidden="true" /> Almuerzo o salida</>, etiqueta: 'almorzar o marcar salida'
     },
     almorzando: {
-        texto: (d) => `Almorzando desde ${horaCR(d)}`, color: 'text-yellow-700',
+        texto: (d) => `Almorzando desde ${hora(d)}`, color: 'text-yellow-700',
         pie: 'bg-emerald-50 text-emerald-700', accion: <><UtensilsCrossed size={18} aria-hidden="true" /> Volver de almorzar</>, etiqueta: 'volver de almorzar'
     },
     afuera: {
-        texto: (d) => (d ? `Salió a las ${horaCR(d)}` : 'Todavía no marca hoy'), color: 'text-gray-400',
+        texto: (d) => (d ? `Salió a las ${hora(d)}` : 'Todavía no marca hoy'), color: 'text-gray-400',
         pie: 'bg-emerald-50 text-emerald-700', accion: <><LogIn size={18} aria-hidden="true" /> Marcar entrada</>, etiqueta: 'marcar entrada'
     }
 };
@@ -60,7 +63,7 @@ export default function TarjetaEmpleado({ empleado, onElegir }) {
                 )}
             </span>
             <span className="mt-3 px-3 text-xl font-black text-gray-900 leading-tight">{empleado.nombre}</span>
-            <span className={`mt-1 px-3 text-sm font-semibold whitespace-nowrap lining-nums ${estado.color}`}>
+            <span className={`mt-1 px-3 text-sm font-semibold leading-snug lining-nums ${estado.color}`}>
                 {estado.texto(empleado.desde)}
             </span>
             <span className={`flex items-center justify-center gap-2 w-full mt-5 py-3.5 text-base font-black ${estado.pie}`}>
