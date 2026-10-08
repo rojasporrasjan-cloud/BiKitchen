@@ -1,6 +1,7 @@
 import React from 'react';
 import { CheckCircle2, Clock, FlaskConical, PhoneOff } from 'lucide-react';
 import { fechaEnPalabras } from '../../utils/envioDeCambios';
+import { cronEnPalabras } from '../../utils/horarioDeEnvios';
 
 /**
  * Una tarjeta por envío automático (Listas de Difusión): si está prendido, a
@@ -85,7 +86,7 @@ export default function TarjetaDeEnvio({ tipo, modo, entradas = [], filas = null
             <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
                     <h3 id={`envio-${tipo.id}`} className="font-bold text-gray-900">{tipo.label}</h3>
-                    <p className="text-xs text-gray-500">{tipo.cuando}</p>
+                    <p className="text-xs text-gray-500">{tipo.horario ? `${cronEnPalabras(tipo.horario)} — ${tipo.a}` : tipo.cuando}</p>
                 </div>
                 <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${clase}`}>{texto}</span>
             </div>

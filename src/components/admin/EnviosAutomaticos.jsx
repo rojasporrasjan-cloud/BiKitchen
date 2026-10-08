@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Bot, RefreshCw, AlertTriangle } from 'lucide-react';
 import TarjetaDeEnvio from './TarjetaDeEnvio';
 import VentasPorEnvio from './VentasPorEnvio';
+import CronogramaDeMensajes from './CronogramaDeMensajes';
 import { leerEnviosAutomaticos } from '../../utils/kommoClient';
 import { TIPOS_DE_ENVIO, estadoEnRegistro } from '../../utils/registroDeEnvios';
 import { renovacionesDelDia, destinatarioDeRenovacion } from '../../utils/envioDeCambios';
@@ -156,6 +157,7 @@ export default function EnviosAutomaticos({ orders = [], loading = false }) {
                     </p>
                 </div>
             )}
+            {datos && <CronogramaDeMensajes modos={datos.modos || {}} />}
             {datos && (
                 <VentasPorEnvio ventas={datos.ventas} onActualizado={(ventas) => setDatos(d => ({ ...d, ventas }))} />
             )}

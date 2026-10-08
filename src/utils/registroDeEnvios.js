@@ -9,6 +9,11 @@
  * En modo prueba la entrada lleva `enviados` (la muestra que le llegó al número
  * de prueba) y `lesHabriaLlegado` (la lista real): así se revisa la lista antes
  * de prender el envío para clientes.
+ *
+ * Cada tipo trae además lo que muestra el cronograma del panel: `horario` (el
+ * MISMO cron en UTC del `config` de su función; la prueba cronogramaDeEnvios
+ * los compara), `plantilla` de Meta, `texto`, a quién (`a`) y si es Servicio o
+ * Marketing (`clase`).
  */
 
 export const COLECCION_ENVIOS = 'envios_kommo';
@@ -18,43 +23,92 @@ export const TIPOS_DE_ENVIO = [
     {
         id: 'cambios', label: 'Menú y cambios de la semana',
         cuando: 'Miércoles 8 a. m. — a los que reciben el sábado o el lunes',
-        interruptor: 'CAMBIOS_ENVIO_AUTOMATICO', bot: 'KOMMO_BOT_CAMBIOS'
+        interruptor: 'CAMBIOS_ENVIO_AUTOMATICO', bot: 'KOMMO_BOT_CAMBIOS',
+        funcion: 'cambios-miercoles',
+        horario: '0 14 * * 3',
+        clase: 'Servicio',
+        plantilla: 'cambios_personal',
+        a: 'Los que reciben el sábado o el lunes',
+        texto: 'Hola [nombre] 👋 Ya está listo el menú de tu entrega del [fecha]: bikitchencr.com/menu. Si querés cambiar algo (hasta 2 cambios por pack), entrá a tu link personal: [link]. Podés hacerlo hasta el [cierre]. ¡Gracias por comer rico con nosotros!'
     },
     {
         id: 'renovacion', label: 'Renovación del pack',
         cuando: 'Lunes, miércoles y sábado 10 a. m. — el día de su última entrega',
-        interruptor: 'RENOVACION_AUTOMATICA', bot: 'KOMMO_BOT_RENOVACION'
+        interruptor: 'RENOVACION_AUTOMATICA', bot: 'KOMMO_BOT_RENOVACION',
+        funcion: 'renovacion-del-dia',
+        horario: '0 16 * * 1,3,6',
+        clase: 'Servicio',
+        plantilla: 'renovacion_pack',
+        a: 'Los que hoy reciben la ÚLTIMA entrega de su pack',
+        texto: 'Hola [nombre] 👋 Esta semana te llega la última entrega de tu pack de BiKitchen. Para seguir recibiendo tu comida sin pausa, respondé este mensaje y te ayudamos a renovar. ¡Gracias por confiar en nosotros!'
     },
     {
         id: 'recordatorio-pago', label: 'Recordatorio de pago',
         cuando: 'Todos los días 10 a. m. — sin pagar y con entrega en los próximos 3 días',
-        interruptor: 'RECORDATORIO_PAGO_AUTOMATICO', bot: 'KOMMO_BOT_RECORDATORIO_PAGO'
+        interruptor: 'RECORDATORIO_PAGO_AUTOMATICO', bot: 'KOMMO_BOT_RECORDATORIO_PAGO',
+        funcion: 'recordatorio-pago',
+        horario: '0 16 * * *',
+        clase: 'Servicio',
+        plantilla: 'recordatorio_pago',
+        a: 'Sin pagar y con entrega en los próximos 3 días',
+        texto: 'Hola [nombre] 👋 Tu pedido de BiKitchen todavía aparece pendiente de pago. Si ya pagaste, mandanos el comprobante por este chat y listo. Si necesitás los datos para pagar, respondé este mensaje. ¡Gracias!'
     },
     {
         id: 'pago-recibido', label: 'Pago recibido',
         cuando: 'Cada 10 minutos — apenas se confirma el pago en el panel o con tarjeta',
-        interruptor: 'PAGO_RECIBIDO_AUTOMATICO', bot: 'KOMMO_BOT_PAGO_RECIBIDO'
+        interruptor: 'PAGO_RECIBIDO_AUTOMATICO', bot: 'KOMMO_BOT_PAGO_RECIBIDO',
+        funcion: 'pago-recibido',
+        horario: '*/10 * * * *',
+        clase: 'Servicio',
+        plantilla: 'pago_recibido',
+        a: 'A quien le confirmaron el pago en la última media hora',
+        texto: 'Hola [nombre], recibimos tu pago ✅ Tu pedido de BiKitchen quedó confirmado. Tu entrega es el [fecha], entre 9 a. m. y 2 p. m. Si tenés alguna duda, respondé este mensaje. ¡Gracias por elegirnos!'
     },
     // Los avisos alrededor de la entrega (avisosDeEntrega.js, 4 oct 2026)
     {
         id: 'hoy-te-llega', label: 'Hoy te llega',
         cuando: 'Lunes, miércoles y sábado 7 a. m. — a todos los que reciben ese día',
-        interruptor: 'HOY_TE_LLEGA_AUTOMATICO', bot: 'KOMMO_BOT_HOY_TE_LLEGA'
+        interruptor: 'HOY_TE_LLEGA_AUTOMATICO', bot: 'KOMMO_BOT_HOY_TE_LLEGA',
+        funcion: 'hoy-te-llega',
+        horario: '0 13 * * 1,3,6',
+        clase: 'Servicio',
+        plantilla: 'hoy_te_llega',
+        a: 'Todos los que reciben ese día',
+        texto: 'Hola [nombre] 👋 Hoy te llega tu pedido de BiKitchen 🚚 El repartidor pasa entre 9 a. m. y 2 p. m. Si no vas a estar, respondé este mensaje y coordinamos. ¡Buen provecho!'
     },
     {
         id: 'guia-congelado', label: 'Guía de congelado',
         cuando: 'Lunes, miércoles y sábado 3 p. m. — la primera entrega de cada pedido',
-        interruptor: 'GUIA_CONGELADO_AUTOMATICO', bot: 'KOMMO_BOT_GUIA_CONGELADO'
+        interruptor: 'GUIA_CONGELADO_AUTOMATICO', bot: 'KOMMO_BOT_GUIA_CONGELADO',
+        funcion: 'guia-de-congelado',
+        horario: '0 21 * * 1,3,6',
+        clase: 'Servicio',
+        plantilla: 'guia_de_congelado (con imagen)',
+        a: 'Los que hoy recibieron su PRIMERA entrega',
+        texto: 'Hola [nombre], ¿ya guardaste tu pack? 🧊 Platos 1 y 2: al refri. Platos 3, 4 y 5: al congelador hoy mismo. Para comerlos: pasalos al refri la noche anterior y calentalos bien.'
     },
     {
         id: 'que-tal', label: '¿Qué tal todo?',
         cuando: 'Domingo, martes y jueves 11 a. m. — clientes nuevos, el día después de su primera entrega',
-        interruptor: 'QUE_TAL_AUTOMATICO', bot: 'KOMMO_BOT_QUE_TAL'
+        interruptor: 'QUE_TAL_AUTOMATICO', bot: 'KOMMO_BOT_QUE_TAL',
+        funcion: 'que-tal-todo',
+        horario: '0 17 * * 0,2,4',
+        clase: 'Servicio',
+        plantilla: 'que_tal_todo (botones "¡Todo excelente!" / "Tengo un comentario")',
+        a: 'Clientes nuevos, el día después de su primera entrega',
+        texto: 'Hola [nombre] 😊 Ayer recibiste tu primer pedido de BiKitchen y queremos saber: ¿qué tal todo? ¿Llegó bien y te gustó la comida? Si algo no te gustó, contanos con confianza para mejorarlo.'
     },
     {
         id: 'volver-a-invitar', label: 'Volver a invitar',
         cuando: 'Martes 10 a. m. — terminaron hace 2 a 3 semanas y no volvieron a pedir (Marketing)',
-        interruptor: 'VOLVER_A_INVITAR_AUTOMATICO', bot: 'KOMMO_BOT_VOLVER_A_INVITAR'
+        interruptor: 'VOLVER_A_INVITAR_AUTOMATICO', bot: 'KOMMO_BOT_VOLVER_A_INVITAR',
+        funcion: 'volver-a-invitar',
+        horario: '0 16 * * 2',
+        clase: 'Marketing',
+        plantilla: 'volver_a_invitar (botones "¡Quiero pedir!" / "Ahora no")',
+        a: 'Terminaron hace 2 a 3 semanas y no volvieron',
+        texto: 'Hola [nombre] 👋 ¡Te extrañamos en BiKitchen! Ya está el menú nuevo de la semana. Tu próximo pack lleva 15% de descuento. Respondé este mensaje y te ayudamos a armar tu pedido 🍽️',
+        pendiente: 'Jan pidió 10 % (8 oct): falta la plantilla nueva en Kommo; esta aprobada dice 15 %.'
     },
     // Fase 3 de docs/PLAN_DIFUSIONES_AUTOMATICAS.md (6 oct 2026). Un interruptor
     // para los tres cierres; cada día tiene su bot (KOMMO_BOT_CIERRE_SABADO y
@@ -62,7 +116,14 @@ export const TIPOS_DE_ENVIO = [
     {
         id: 'cierre-pedidos', label: 'Cierre de pedidos',
         cuando: 'Lunes, jueves y viernes 9 a. m. — clientes de ese día de reparto sin entrega esta vez (Marketing)',
-        interruptor: 'CIERRE_PEDIDOS_AUTOMATICO', bot: 'KOMMO_BOT_CIERRE_MIERCOLES'
+        interruptor: 'CIERRE_PEDIDOS_AUTOMATICO', bot: 'KOMMO_BOT_CIERRE_MIERCOLES',
+        funcion: 'cierre-de-pedidos',
+        horario: '0 15 * * 1,4,5',
+        clase: 'Marketing',
+        plantilla: 'cierre_pedidos_miercoles · cierre_pedidos_sabado · cierre_pedidos_lunes',
+        a: 'Clientes de ese día de reparto que esta vez no tienen pedido',
+        texto: 'Aviso de que HOY cierran los pedidos para esa entrega (lunes → miércoles, jueves → sábado, viernes → lunes; se cierra a las 8 p. m.). El texto exacto está en Kommo → Plantillas.',
+        botsExtra: ['KOMMO_BOT_CIERRE_SABADO', 'KOMMO_BOT_CIERRE_LUNES']
     }
 ];
 
@@ -114,6 +175,8 @@ export const modosDeEnvio = (env = {}) => {
     return Object.fromEntries(TIPOS_DE_ENVIO.map(t => [t.id, {
         modo: ['si', 'prueba'].includes(env[t.interruptor]) ? env[t.interruptor] : 'no',
         botListo: !!env[t.bot],
+        // Los ids de los bots no son secretos: el panel los muestra para buscarlos en Kommo
+        bots: [t.bot, ...(t.botsExtra || [])].map(v => String(env[v] || '')).filter(Boolean),
         numeroDePrueba: prueba ? `…${prueba.slice(-4)}` : ''
     }]));
 };
