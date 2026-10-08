@@ -6,9 +6,10 @@
  * mandó a mano el 5 oct 2026 (miércoles, 85 personas) y Jan quiere que salga solo
  * (6 oct 2026: solo clientes que ya compraron, presupuesto US$200 al mes).
  *
- *   Lunes 2 p. m.   → cierre del MIÉRCOLES
- *   Jueves 2 p. m.  → cierre del SÁBADO
- *   Viernes 2 p. m. → cierre del LUNES
+ *   Lunes 9 a. m.   → cierre del MIÉRCOLES
+ *   Jueves 9 a. m.  → cierre del SÁBADO
+ *   Viernes 9 a. m. → cierre del LUNES
+ *   (hasta el 8 oct 2026 salía a las 2 p. m.; Jan lo pasó a las 9 a. m.)
  *
  * Aquí vive el QUIÉN y las reglas de marketing; la función programada
  * (netlify/functions/cierre-de-pedidos.js) solo lee, llama y anota. La pantalla

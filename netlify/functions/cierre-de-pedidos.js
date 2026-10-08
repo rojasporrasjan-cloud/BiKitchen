@@ -2,7 +2,8 @@
 /**
  * Netlify Scheduled Function: cierre-de-pedidos
  *
- * Lunes, jueves y viernes a las 2 p. m. de Costa Rica: "hoy cerramos pedidos a
+ * Lunes, jueves y viernes a las 9 a. m. de Costa Rica (Jan, 8 oct 2026: a las 2 p. m.
+ * era tarde, la gente tiene que poder responder desde temprano): "hoy cerramos pedidos a
  * las 8 p. m." a los clientes que YA compraron para ese día de reparto y esta
  * vez no tienen entrega. Lunes → miércoles, jueves → sábado, viernes → lunes.
  * Quién y las reglas: src/utils/cierresDePedidos.js.
@@ -147,7 +148,7 @@ export const correr = async ({ ahora = new Date(), modo = process.env.CIERRE_PED
 
 export default () => responder('CierreDePedidos', correr);
 
-// Lunes, jueves y viernes a las 20:00 UTC = 2:00 p. m. en Costa Rica
+// Lunes, jueves y viernes a las 15:00 UTC = 9:00 a. m. en Costa Rica
 export const config = {
-    schedule: '0 20 * * 1,4,5'
+    schedule: '0 15 * * 1,4,5'
 };

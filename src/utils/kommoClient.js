@@ -48,6 +48,25 @@ export const diagnosticarKommo = () => llamar('diagnostico');
 /** Los envíos automáticos: qué está prendido y los últimos que salieron. */
 export const leerEnviosAutomaticos = () => llamar('envios');
 
+/** Recalcula ahora cuánto vendió cada envío (normalmente corre solo cada noche). */
+export const recalcularVentasPorEnvio = () => llamar('recalcularVentas');
+
+/**
+ * Deja anotada una difusión mandada a mano, para medir después cuánto vendió.
+ * Si falla, la difusión ya salió: se avisa en la consola y sigue.
+ */
+export const registrarDifusion = async (nombre, destinatarios = []) => {
+    try {
+        return await llamar('registrarDifusion', {
+            nombre,
+            destinatarios: destinatarios.map(d => ({ nombre: d.nombre || '', telefono: d.telefonoOriginal || d.telefono || '' }))
+        });
+    } catch (err) {
+        console.error('[Kommo] No se pudo registrar la difusión:', err.message);
+        return null;
+    }
+};
+
 /** Trae todos los contactos de Kommo para poder cruzarlos por teléfono. */
 const traerTodosLosContactos = async (avisar) => {
     const todos = [];

@@ -61,7 +61,7 @@ export const TIPOS_DE_ENVIO = [
     // KOMMO_BOT_CIERRE_LUNES además de este). Sin el bot de ese día, ese no sale.
     {
         id: 'cierre-pedidos', label: 'Cierre de pedidos',
-        cuando: 'Lunes, jueves y viernes 2 p. m. — clientes de ese día de reparto sin entrega esta vez (Marketing)',
+        cuando: 'Lunes, jueves y viernes 9 a. m. — clientes de ese día de reparto sin entrega esta vez (Marketing)',
         interruptor: 'CIERRE_PEDIDOS_AUTOMATICO', bot: 'KOMMO_BOT_CIERRE_MIERCOLES'
     }
 ];
@@ -74,8 +74,10 @@ const persona = (d = {}) => ({
 });
 
 /** La entrada que se guarda. Sin `undefined`: Firestore los rechaza. */
-export const entradaDeRegistro = ({ tipo, modo, estado, ahora = new Date(), enviados = [], lesHabriaLlegado = [] }) => ({
+export const entradaDeRegistro = ({ tipo, modo, estado, ahora = new Date(), enviados = [], lesHabriaLlegado = [], nombre = '' }) => ({
     tipo: String(tipo || ''),
+    // Las difusiones a mano (tipo 'difusion') guardan qué fue: "Promo HOY5", el bot…
+    nombre: String(nombre || ''),
     modo: String(modo || ''),
     estado: String(estado || ''),
     cuando: ahora.toISOString(),

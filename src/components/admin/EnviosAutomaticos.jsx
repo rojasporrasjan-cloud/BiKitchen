@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Bot, RefreshCw, AlertTriangle } from 'lucide-react';
 import TarjetaDeEnvio from './TarjetaDeEnvio';
+import VentasPorEnvio from './VentasPorEnvio';
 import { leerEnviosAutomaticos } from '../../utils/kommoClient';
 import { TIPOS_DE_ENVIO, estadoEnRegistro } from '../../utils/registroDeEnvios';
 import { renovacionesDelDia, destinatarioDeRenovacion } from '../../utils/envioDeCambios';
@@ -154,6 +155,9 @@ export default function EnviosAutomaticos({ orders = [], loading = false }) {
                         {' '}Al llegar al tope, los cierres y &quot;volver a invitar&quot; no salen.
                     </p>
                 </div>
+            )}
+            {datos && (
+                <VentasPorEnvio ventas={datos.ventas} onActualizado={(ventas) => setDatos(d => ({ ...d, ventas }))} />
             )}
             <div className="grid gap-3 lg:grid-cols-2">
                 {TIPOS_DE_ENVIO.map(tipo => (
