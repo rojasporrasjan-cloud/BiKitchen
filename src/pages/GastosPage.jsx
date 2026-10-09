@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { Receipt } from 'lucide-react';
 import SEOHead from '../components/SEOHead';
 import PantallaGastos from '../components/gastos/PantallaGastos';
-import { pedirGastosConLink } from '../utils/planillaClient';
+import { pedirGastosConLink } from '../utils/gastosClient';
 
 /**
  * /gastos/:codigo — Gina anota cada gasto desde el celular, sin entrar al panel

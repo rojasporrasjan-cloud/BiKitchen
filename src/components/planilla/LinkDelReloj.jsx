@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Tablet, Copy, CheckCircle2, ExternalLink, Eye, Receipt } from 'lucide-react';
-import { pedirALaPlanilla, pedirGastosDelPanel } from '../../utils/planillaClient';
+import { pedirALaPlanilla } from '../../utils/planillaClient';
+import { pedirGastosDelPanel } from '../../utils/gastosClient';
 
 /**
  * Los links que se mandan por WhatsApp: el del reloj (iPad de la cocina), el de

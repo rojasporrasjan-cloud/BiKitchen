@@ -3,7 +3,7 @@ import { Receipt, Lock, Download } from 'lucide-react';
 import PantallaGastos from '../../components/gastos/PantallaGastos';
 import LinkDelReloj from '../../components/planilla/LinkDelReloj';
 import { useAuth } from '../../context/AuthContext';
-import { pedirGastosDelPanel } from '../../utils/planillaClient';
+import { pedirGastosDelPanel } from '../../utils/gastosClient';
 import { categoriaDe } from '../../data/gastos';
 import { totalesDeGastos } from '../../utils/gastos';
 import { fechaCR } from '../../utils/planilla';

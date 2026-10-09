@@ -1,18 +1,15 @@
 /**
- * Llamar a netlify/functions/planilla.js desde el navegador.
+ * Llamar a netlify/functions/gastos.js desde el navegador.
  *
- * El reloj del iPad va sin sesión (con el código del link); el panel manda el
- * token del dueño.
+ * Va aparte de `planillaClient` a propósito (Jan, 9 oct 2026): se publicó un
+ * viernes y no se quiso tocar nada del reloj que el equipo estaba usando.
+ * Mismo comportamiento: 10 s sin respuesta = "sin internet".
  */
 import { auth } from '../firebase/config';
 
-const FUNCION = '/.netlify/functions/planilla';
+const FUNCION = '/.netlify/functions/gastos';
 const ESPERA_MAXIMA_MS = 10000;
 
-/**
- * Sin respuesta en 10 s cuenta como "sin internet" (`error.sinInternet`), para
- * que el reloj no se quede pegado en "Marcando…" con una señal que va y viene.
- */
 const pedir = async (cuerpo, token) => {
     const corte = new AbortController();
     const reloj = setTimeout(() => corte.abort(), ESPERA_MAXIMA_MS);
@@ -36,17 +33,17 @@ const pedir = async (cuerpo, token) => {
         const error = new Error(datos.error || `Error ${res.status}`);
         error.status = res.status;
         error.datos = datos;
-        error.sinInternet = res.status >= 500;      // la función no contestó bien: se reintenta después
+        error.sinInternet = res.status >= 500;
         throw error;
     }
     return datos;
 };
 
-/** Para el reloj del iPad (sin sesión). */
-export const pedirAlReloj = (accion, datos = {}) => pedir({ accion, ...datos });
+/** Con el link de Gina (sin sesión: el código va en `datos.codigo`). */
+export const pedirGastosConLink = (accion, datos = {}) => pedir({ accion, ...datos });
 
-/** Para la planilla del panel (solo el dueño). */
-export const pedirALaPlanilla = async (accion, datos = {}) => {
+/** Desde el panel (con la sesión del dueño). */
+export const pedirGastosDelPanel = async (accion, datos = {}) => {
     const usuario = auth.currentUser;
     if (!usuario) throw new Error('Tu sesión venció. Volvé a entrar al panel.');
     return pedir({ accion, ...datos }, await usuario.getIdToken());

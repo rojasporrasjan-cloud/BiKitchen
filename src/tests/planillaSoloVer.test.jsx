@@ -9,7 +9,8 @@ import { fechaCR, momentoCR } from '../utils/planilla';
  * cambia: sin agregar empleados, sin marcar en grupo, sin corregir marcas.
  * Jan ve lo mismo y además puede cambiar todo.
  */
-vi.mock('../utils/planillaClient', () => ({ pedirALaPlanilla: vi.fn(), pedirAlReloj: vi.fn(), pedirGastosDelPanel: vi.fn() }));
+vi.mock('../utils/planillaClient', () => ({ pedirALaPlanilla: vi.fn(), pedirAlReloj: vi.fn() }));
+vi.mock('../utils/gastosClient', () => ({ pedirGastosDelPanel: vi.fn(), pedirGastosConLink: vi.fn() }));
 
 const hoy = fechaCR();
 const datos = {
