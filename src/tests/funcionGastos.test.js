@@ -108,13 +108,15 @@ describe('el link de gastos de Gina', () => {
 describe('en el panel', () => {
     it('el dueño anota, ve y saca el link', async () => {
         expect((await llamar({ accion: 'guardar', idGasto: 'gasto-0005', gasto: pollo }, 'dueno')).status).toBe(200);
-        expect(gastos()[0].origen).toBe('panel');
+        expect(gastos()[0].origen).toBe('panel-dueno');
         expect((await llamar({ accion: 'link' }, 'dueno')).url).toBe(`https://bikitchencr.com/gastos/${codigoDeGastos()}`);
     });
 
-    it('una admin solo ve; sin sesión no entra', async () => {
+    it('Gina (admin) anota, corrige y borra en el panel; el link solo lo saca Jan; sin sesión no entra', async () => {
         expect((await llamar({ accion: 'lista', desde: '2026-10-05', hasta: '2026-10-11' }, 'gina')).status).toBe(200);
-        expect((await llamar({ accion: 'guardar', idGasto: 'gasto-0006', gasto: pollo }, 'gina')).status).toBe(403);
+        expect((await llamar({ accion: 'guardar', idGasto: 'gasto-0006', gasto: pollo }, 'gina')).status).toBe(200);
+        expect(gastos()[0].origen).toBe('panel-admin');
+        expect((await llamar({ accion: 'borrar', id: 'gasto-0006' }, 'gina')).status).toBe(200);
         expect((await llamar({ accion: 'link' }, 'gina')).status).toBe(403);
         expect((await llamar({ accion: 'lista', desde: '2026-10-05', hasta: '2026-10-11' })).status).toBe(403);
     });

@@ -10,7 +10,8 @@ import { fechaCR } from '../../utils/planilla';
 
 /**
  * Panel → Gastos: lo que Gina anota con su link (y lo que anote Jan), por semana y
- * por categoría, con el Excel. Solo el dueño cambia; las admins solo ven.
+ * por categoría, con el Excel. Gina (admin) y Jan anotan, corrigen y borran; el
+ * link para el celular solo lo saca Jan.
  * Los montos NO se escriben en el repo (es público): viven en Firestore.
  */
 const descargarExcel = async (desde, hasta) => {
@@ -77,7 +78,7 @@ export default function GastosView() {
                     <p className="text-sm font-semibold text-white/90">Lo que se paga cada día y en qué se va la plata</p>
                 </div>
             </header>
-            <PantallaGastos pedir={pedir} soloVer={!dueno}
+            <PantallaGastos pedir={pedir}
                 abajo={(
                     <div className="grid sm:grid-cols-2 gap-4">
                         <ExcelDelMes />

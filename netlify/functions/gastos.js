@@ -6,13 +6,14 @@
  * a meter todos los gastos de ahora en adelante, de una manera sencilla").
  * Jan los ve en el panel → Gastos, y salen en el control de cada semana.
  *
- * CON EL CÓDIGO DEL LINK (sin sesión) o CON SESIÓN DEL DUEÑO:
+ * CON EL CÓDIGO DEL LINK (sin sesión) o CON SESIÓN DE ADMIN (Gina o Jan en el panel):
  *   { accion: 'lista', desde, hasta }                → los gastos de esas fechas
  *   { accion: 'guardar', idGasto, gasto }            → guarda o corrige un gasto
  *   { accion: 'borrar', id }                         → borra un gasto
  * SOLO EL DUEÑO:
  *   { accion: 'link' }                               → el link para Gina
- * Las admins con sesión solo pueden 'lista'.
+ * Jan (9 oct): Gina es la que mete los gastos, así que en el panel las admins
+ * también anotan, corrigen y borran.
  *
  * El link tiene su propio código (no abre el reloj ni la planilla). `idGasto` lo
  * inventa el celular una vez por gasto: un reintento con mala señal no lo duplica.
@@ -93,10 +94,8 @@ export const handler = async (event) => {
             if (quien.error) return json(403, { error: quien.error });
             rol = quien.rol;
         }
-        if (rol === 'admin' && accion !== 'lista') return json(403, { error: 'Solo Jan puede cambiar los gastos desde el panel.' });
-
         if (accion === 'lista') return await lista(entrada);
-        if (accion === 'guardar') return await guardar(entrada, rol === 'link' ? 'link-gina' : 'panel');
+        if (accion === 'guardar') return await guardar(entrada, rol === 'link' ? 'link-gina' : `panel-${rol}`);
         if (accion === 'borrar') return await borrar(entrada);
         if (accion === 'link') {
             if (rol !== 'dueno') return json(403, { error: 'Solo Jan saca el link.' });

@@ -98,6 +98,8 @@ export default function AdminLayout() {
         { to: '/admin/clients', label: 'Clientes', icon: Users },
         // Gina la ve; cambiar tarifas o marcas es solo del dueño (lo decide la pantalla)
         { to: '/admin/planilla', label: 'Planilla', icon: Wallet },
+        // Gina es la que anota los gastos (Jan, 9 oct)
+        { to: '/admin/gastos', label: 'Gastos', icon: Receipt },
 
         // 🍳 Catálogo y Productos
         { to: '/admin/menus', label: 'Menús', icon: UtensilsCrossed },
@@ -132,7 +134,6 @@ export default function AdminLayout() {
         { to: '/admin/cambios-semana', label: 'Cambios de la semana', icon: RefreshCw, superOnly: true },
         { to: '/admin/points-audit', label: 'Auditoría BiPuntos', icon: Award, superOnly: true },
         { to: '/admin/impresion', label: 'Impresión', icon: Printer, superOnly: true },
-        { to: '/admin/gastos', label: 'Gastos', icon: Receipt, superOnly: true },
     ].filter(item => !item.superOnly || isSuperAdmin());
 
     const handleLogout = async () => {
