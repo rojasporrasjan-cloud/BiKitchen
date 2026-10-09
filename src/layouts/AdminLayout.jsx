@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, Outlet, Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Menu as MenuIcon, LogOut, X, LayoutDashboard, ShoppingBag, Users, ClipboardList, Truck, UtensilsCrossed, Gift, Tag, Search, Bell, Image, MessageCircle, FileText, Target, BadgePercent, Settings, Phone, CalendarDays, Send, Award, Printer, Beef, RefreshCw, Wallet } from 'lucide-react';
+import { Menu as MenuIcon, LogOut, X, LayoutDashboard, ShoppingBag, Users, ClipboardList, Truck, UtensilsCrossed, Gift, Tag, Search, Bell, Image, MessageCircle, FileText, Target, BadgePercent, Settings, Phone, CalendarDays, Send, Award, Printer, Beef, RefreshCw, Wallet, Receipt } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import usePedidosPendientes from '../hooks/usePedidosPendientes';
 import { getAllCoupons } from '../utils/firestoreCoupons';
@@ -132,6 +132,7 @@ export default function AdminLayout() {
         { to: '/admin/cambios-semana', label: 'Cambios de la semana', icon: RefreshCw, superOnly: true },
         { to: '/admin/points-audit', label: 'Auditoría BiPuntos', icon: Award, superOnly: true },
         { to: '/admin/impresion', label: 'Impresión', icon: Printer, superOnly: true },
+        { to: '/admin/gastos', label: 'Gastos', icon: Receipt, superOnly: true },
     ].filter(item => !item.superOnly || isSuperAdmin());
 
     const handleLogout = async () => {

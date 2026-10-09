@@ -1,4 +1,4 @@
-/* global process, Buffer */
+/* global process */
 /**
  * Netlify Serverless Function: planilla
  *
@@ -29,8 +29,8 @@
  * la planilla, las marcas de las fechas que se piden. Nunca colecciones enteras.
  */
 
-import crypto from 'node:crypto';
 import { appDeAdmin } from '../../src/utils/firebaseAdminApp.js';
+import { firmaDeLink, mismoCodigo, rolDeSesion, respuesta } from '../../src/utils/accesoServidor.js';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import { fechaCR, momentoCR, siguienteMarca, estadoActual } from '../../src/utils/planilla.js';
@@ -54,56 +54,16 @@ const ESTADO = 'estado_reloj';            // un candado por persona (ver `marcar
 const HORA = /^([01]\d|2[0-3]):[0-5]\d$/;
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
-const json = (statusCode, body) => ({
-    statusCode,
-    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
-    body: JSON.stringify(body)
-});
-
-const firma = (texto) => crypto
-    .createHmac('sha256', process.env.CAMBIOS_SECRETO || '')
-    .update(`${texto}|${VERSION}`)
-    .digest('base64url')
-    .slice(0, 24);
+const json = respuesta;
 
 /** El link del iPad (marcar) y el de Gina (ver la planilla): firmas distintas, uno no abre el otro. */
-export const codigoDelReloj = () => firma('reloj|bikitchen');
-export const codigoDeGina = () => firma('planilla-gina|bikitchen');
+export const codigoDelReloj = () => firmaDeLink('reloj|bikitchen', VERSION);
+export const codigoDeGina = () => firmaDeLink('planilla-gina|bikitchen', VERSION);
 
-const codigoValido = (codigo, deQuien = codigoDelReloj) => {
-    const esperado = Buffer.from(deQuien());
-    const recibido = Buffer.from(String(codigo || ''));
-    return esperado.length === recibido.length && crypto.timingSafeEqual(esperado, recibido);
-};
+const codigoValido = (codigo, deQuien = codigoDelReloj) => mismoCodigo(deQuien(), codigo);
 
-const superAdmins = () => (process.env.SUPER_ADMIN_EMAILS || 'rojasporrasjan@gmail.com')
-    .split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
-
-// Los mismos admins que deja entrar el panel: la lista de correos o el rol 'admin' del usuario
-const correosDeAdmin = () => (process.env.ADMIN_EMAILS || process.env.VITE_ADMIN_EMAILS || '')
-    .split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
-
-/**
- * Quién llama: 'dueno' (todo), 'admin' (solo VER la planilla: Gina en el
- * panel) o un error. El rol de admin se lee del usuario solo si el correo no
- * está en las listas (una lectura).
- */
-const quienEs = async (authHeader) => {
-    const idToken = String(authHeader || '').replace(/^Bearer\s+/i, '').trim();
-    if (!idToken || !auth) return { error: 'Falta la sesión.' };
-    let decoded;
-    try {
-        decoded = await auth.verifyIdToken(idToken);
-    } catch {
-        return { error: 'La sesión venció. Volvé a entrar.' };
-    }
-    const correo = String(decoded.email || '').toLowerCase();
-    if (superAdmins().includes(correo)) return { rol: 'dueno' };
-    if (correosDeAdmin().includes(correo)) return { rol: 'admin' };
-    const usuario = await db.collection('users').doc(decoded.uid).get();
-    const rol = String(usuario.exists ? usuario.data().role || '' : '').toLowerCase();
-    return rol === 'admin' ? { rol: 'admin' } : { error: 'Esta pantalla es solo para administradores.' };
-};
+/** Quién llama: 'dueno' (todo), 'admin' (solo VER la planilla: Gina en el panel) o un error. */
+const quienEs = (authHeader) => rolDeSesion({ auth, db, authHeader });
 
 const SOLO_VER = ['empleados', 'marcas'];
 

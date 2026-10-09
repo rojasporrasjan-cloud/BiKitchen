@@ -1,9 +1,20 @@
 import React, { useState } from 'react';
-import { Tablet, Copy, CheckCircle2, ExternalLink, Eye } from 'lucide-react';
-import { pedirALaPlanilla } from '../../utils/planillaClient';
+import { Tablet, Copy, CheckCircle2, ExternalLink, Eye, Receipt } from 'lucide-react';
+import { pedirALaPlanilla, pedirGastosDelPanel } from '../../utils/planillaClient';
 
-/** Los dos links: el del reloj (iPad de la cocina) y el de Gina (ver la planilla, sin cambiar nada). */
+/**
+ * Los links que se mandan por WhatsApp: el del reloj (iPad de la cocina), el de
+ * Gina para ver la planilla y el de Gina para anotar los gastos.
+ */
 const LINKS = {
+    gastos: {
+        accion: 'link',
+        pedir: pedirGastosDelPanel,
+        Icono: Receipt,
+        titulo: 'Link de gastos para Gina',
+        texto: 'Gina abre este link en su celular y anota cada pago en 10 segundos: monto, en qué y qué fue. Lo que anote aparece aquí. Puede corregir y borrar lo suyo.',
+        fondo: 'bg-gradient-to-br from-sky-700 to-indigo-700'
+    },
     reloj: {
         accion: 'link',
         Icono: Tablet,
@@ -20,8 +31,8 @@ const LINKS = {
     }
 };
 
-export default function LinkDelReloj({ paraGina = false }) {
-    const { accion, Icono, titulo, texto, fondo } = LINKS[paraGina ? 'gina' : 'reloj'];
+export default function LinkDelReloj({ paraGina = false, cual }) {
+    const { accion, Icono, titulo, texto, fondo, pedir = pedirALaPlanilla } = LINKS[cual || (paraGina ? 'gina' : 'reloj')];
     const [url, setUrl] = useState('');
     const [error, setError] = useState('');
     const [cargando, setCargando] = useState(false);
@@ -31,7 +42,7 @@ export default function LinkDelReloj({ paraGina = false }) {
         setCargando(true);
         setError('');
         try {
-            setUrl((await pedirALaPlanilla(accion)).url);
+            setUrl((await pedir(accion)).url);
         } catch (e) {
             setError(e.message);
         } finally {
@@ -50,9 +61,9 @@ export default function LinkDelReloj({ paraGina = false }) {
     };
 
     return (
-        <section className={`p-5 ${fondo} text-white rounded-3xl shadow-lg`} aria-labelledby={`titulo-${accion}`}>
-            <h2 id={`titulo-${accion}`} className="flex items-center gap-2 text-lg font-black text-white">
-                <Icono size={20} className={paraGina ? 'text-emerald-200' : 'text-bikitchen-orange'} aria-hidden="true" /> {titulo}
+        <section className={`p-5 ${fondo} text-white rounded-3xl shadow-lg`} aria-labelledby={`titulo-link-${titulo}`}>
+            <h2 id={`titulo-link-${titulo}`} className="flex items-center gap-2 text-lg font-black text-white">
+                <Icono size={20} className={fondo.includes('stone') ? 'text-bikitchen-orange' : 'text-white/80'} aria-hidden="true" /> {titulo}
             </h2>
             <p className="mt-1 text-sm text-white/75">{texto}</p>
             {url ? (

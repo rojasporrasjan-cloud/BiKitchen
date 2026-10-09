@@ -24,6 +24,7 @@ Disallow: /cambios
 Disallow: /packs-mensuales/
 Disallow: /reloj/
 Disallow: /planilla/
+Disallow: /gastos/
 
 # APIs y funciones
 Disallow: /api/

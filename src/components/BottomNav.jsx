@@ -32,7 +32,8 @@ export default function BottomNav() {
   const isAdminRoute = location.pathname.startsWith('/admin');
   const isProfileRoute = location.pathname === '/mi-cuenta';
   // El link de Gina (packs mensuales) es una herramienta interna, no la tienda
-  const isGinaRoute = location.pathname.startsWith('/packs-mensuales/');
+  // Igual el reloj del iPad, la planilla de Gina y su link de gastos
+  const isGinaRoute = /^\/(packs-mensuales|reloj|planilla|gastos)\//.test(location.pathname);
   // El link personal de cambios tiene su propia barra fija (contador + Enviar):
   // la de navegación se le montaba encima
   const isCambiosRoute = location.pathname.startsWith('/cambios/');

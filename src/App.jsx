@@ -58,6 +58,8 @@ const PacksGinaPage = lazyWithRetry(() => import('./pages/PacksGinaPage'));
 const RelojPage = lazyWithRetry(() => import('./pages/RelojPage'));
 // La planilla para Gina (solo ver), por link
 const PlanillaGinaPage = lazyWithRetry(() => import('./pages/PlanillaGinaPage'));
+// Gina anota los gastos desde el celular, por link
+const GastosPage = lazyWithRetry(() => import('./pages/GastosPage'));
 const GiftCardsPage = lazyWithRetry(() => import('./pages/GiftCardsPage'));
 const FidelidadPage = lazyWithRetry(() => import('./pages/FidelidadPage'));
 const RewardStore = lazyWithRetry(() => import('./pages/RewardStore'));
@@ -104,6 +106,7 @@ const CambiosSemanaView = lazyWithRetry(() => import('./pages/admin/CambiosSeman
 const PointsAuditView = lazyWithRetry(() => import('./pages/admin/PointsAuditView'));
 const PrinterView = lazyWithRetry(() => import('./pages/admin/PrinterView'));
 const PlanillaView = lazyWithRetry(() => import('./pages/admin/PlanillaView'));
+const GastosView = lazyWithRetry(() => import('./pages/admin/GastosView'));
 const DriverPortalView = lazyWithRetry(() => import('./pages/driver/DriverPortalView'));
 
 import SmoothScroll from './components/SmoothScroll';
@@ -215,7 +218,7 @@ function PublicRouteExtras() {
   // El link de Gina es una herramienta interna: sin promos, carrito ni botones flotantes
   if (/^\/packs-mensuales\//.test(pathname)) return null;
   // El reloj del iPad tampoco: es una pantalla de cocina
-  if (/^\/(reloj|planilla)\//.test(pathname)) return null;
+  if (/^\/(reloj|planilla|gastos)\//.test(pathname)) return null;
   return (
     <>
       <ShippingDiscountBanner />
@@ -274,6 +277,7 @@ function AnimatedRoutes() {
             <Route path="/packs-mensuales/:codigo" element={<PacksGinaPage />} />
             <Route path="/reloj/:codigo" element={<RelojPage />} />
             <Route path="/planilla/:codigo" element={<PlanillaGinaPage />} />
+            <Route path="/gastos/:codigo" element={<GastosPage />} />
             <Route path="/gift-cards" element={<GiftCardsPage />} />
             <Route path="/tarjetas-regalo" element={<GiftCardsPage />} />
             <Route path="/regalar" element={<GiftCardsPage />} />
@@ -337,6 +341,7 @@ function AnimatedRoutes() {
               <Route path="points-audit" element={<PointsAuditView />} />
               <Route path="impresion" element={<PrinterView />} />
               <Route path="planilla" element={<PlanillaView />} />
+              <Route path="gastos" element={<GastosView />} />
             </Route>
 
             {/* 404 - Catch all */}

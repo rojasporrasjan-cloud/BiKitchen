@@ -1,24 +1,24 @@
 /**
- * Llamar a netlify/functions/planilla.js desde el navegador.
+ * Llamar a las funciones de Netlify desde el navegador: planilla (reloj, planilla)
+ * y gastos (link de Gina, panel).
  *
- * El reloj del iPad va sin sesión (con el código del link); el panel manda el
- * token del dueño.
+ * Los links (reloj, gastos de Gina) van sin sesión, con el código del link; el
+ * panel manda el token del dueño.
  */
 import { auth } from '../firebase/config';
 
-const FUNCION = '/.netlify/functions/planilla';
 const ESPERA_MAXIMA_MS = 10000;
 
 /**
  * Sin respuesta en 10 s cuenta como "sin internet" (`error.sinInternet`), para
  * que el reloj no se quede pegado en "Marcando…" con una señal que va y viene.
  */
-const pedir = async (cuerpo, token) => {
+const pedir = async (cuerpo, token, funcion = 'planilla') => {
     const corte = new AbortController();
     const reloj = setTimeout(() => corte.abort(), ESPERA_MAXIMA_MS);
     let res;
     try {
-        res = await fetch(FUNCION, {
+        res = await fetch(`/.netlify/functions/${funcion}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
             body: JSON.stringify(cuerpo),
@@ -45,9 +45,17 @@ const pedir = async (cuerpo, token) => {
 /** Para el reloj del iPad (sin sesión). */
 export const pedirAlReloj = (accion, datos = {}) => pedir({ accion, ...datos });
 
-/** Para la planilla del panel (solo el dueño). */
-export const pedirALaPlanilla = async (accion, datos = {}) => {
+const token = async () => {
     const usuario = auth.currentUser;
     if (!usuario) throw new Error('Tu sesión venció. Volvé a entrar al panel.');
-    return pedir({ accion, ...datos }, await usuario.getIdToken());
+    return usuario.getIdToken();
 };
+
+/** Para la planilla del panel (solo el dueño). */
+export const pedirALaPlanilla = async (accion, datos = {}) => pedir({ accion, ...datos }, await token());
+
+/** Gastos con el link de Gina (sin sesión: el código va en `datos.codigo`). */
+export const pedirGastosConLink = (accion, datos = {}) => pedir({ accion, ...datos }, null, 'gastos');
+
+/** Gastos desde el panel (con la sesión del dueño). */
+export const pedirGastosDelPanel = async (accion, datos = {}) => pedir({ accion, ...datos }, await token(), 'gastos');
